@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel - Compliance Review</title>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <!-- Material Components Web (CSS only approach for simplicity) -->
+    <style>
+        :root {
+            --md-sys-color-primary: #0b57d0; /* Google Blue 600 */
+            --md-sys-color-on-primary: #ffffff;
+            --md-sys-color-primary-container: #d3e3fd;
+            --md-sys-color-on-primary-container: #041e49;
+            --md-sys-color-secondary: #00639b;
+            --md-sys-color-surface: #ffffff;
+            --md-sys-color-surface-container: #f0f4f8;
+            --md-sys-color-outline: #747775;
+            --md-sys-color-outline-variant: #c4c7c5;
+            
+            --google-red: #ea4335;
+            --google-yellow: #fbbc04;
+            --google-green: #34a853;
+            --google-blue: #4285f4;
+            
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-full: 9999px;
+            
+            --shadow-1: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            --shadow-2: 0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f8f9fa; /* Google grey background */
+            color: #1f1f1f;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        h1, h2, h3, .google-sans { font-family: 'Google Sans', sans-serif; }
+
+        /* AppBar */
+        header {
+            background-color: #ffffff;
+            height: 64px;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #e0e0e0;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .logo-area { display: flex; align-items: center; gap: 8px; }
+        .logo-icon { color: var(--md-sys-color-primary); font-size: 28px; }
+        .logo-text { font-size: 22px; color: #444746; font-weight: 400; }
+        
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar (Input) */
+        .sidebar {
+            width: 360px;
+            background-color: #ffffff;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+            padding: 24px;
+            gap: 24px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background-color: #f0f4f8;
+            border-radius: var(--radius-full);
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            border: none;
+            background: none;
+            padding: 8px 12px;
+            border-radius: var(--radius-full);
+            font-family: 'Google Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            color: #444746;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .tab-btn.active {
+            background-color: #ffffff;
+            color: #0b57d0;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* Form Fields */
+        .form-group { display: flex; flex-direction: column; gap: 8px; }
+        .label { font-size: 12px; color: #444746; font-weight: 500; margin-left: 4px; }
+        
+        .input-field {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #747775;
+            border-radius: 4px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 16px;
+            color: #1f1f1f;
+            transition: border 0.2s;
+            outline: none;
+        }
+
+        .input-field:focus {
+            border: 2px solid var(--md-sys-color-primary);
+            padding: 11px 15px; /* Adjust for border width */
+        }
+
+        .select-field {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%231f1f1f%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px top 50%;
+            background-size: 10px auto;
+        }
+
+        .file-drop-zone {
+            border: 2px dashed #c4c7c5;
+            border-radius: 8px;
+            height: 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #444746;
+            gap: 8px;
+        }
+
+        .file-drop-zone:hover {
+            background-color: #f0f4f8;
+            border-color: var(--md-sys-color-primary);
+            color: var(--md-sys-color-primary);
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background-color: var(--md-sys-color-primary);
+            color: white;
+            border: none;
+            border-radius: var(--radius-full);
+            padding: 10px 24px;
+            font-family: 'Google Sans', sans-serif;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: var(--shadow-1);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            box-shadow: var(--shadow-2);
+            background-color: #0b57d0; /* Darker blue */
+        }
+
+        .btn-primary:disabled {
+            background-color: #1f1f1f1f; /* 12% opacity */
+            color: #1f1f1f61; /* 38% opacity */
+            box-shadow: none;
+            cursor: default;
+        }
+
+        /* Content Area */
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: #f8f9fa;
+        }
+
+        .viewer-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow: auto;
+        }
+
+        .media-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-1);
+            overflow: hidden;
+            max-width: 100%;
+            max-height: 100%;
+            position: relative;
+        }
+
+        /* Results Panel (Right side) */
+        .results-panel {
+            width: 400px;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: width 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+        
+        .results-panel.resizing {
+            transition: none;
+        }
+
+        /* Resizer */
+        .resizer {
+            width: 1px;
+            background-color: #e0e0e0;
+            cursor: col-resize;
+            position: relative;
+            flex-shrink: 0;
+            z-index: 50;
+            transition: background-color 0.2s, width 0.2s;
+        }
+
+        /* Hit area extension */
+        .resizer::after {
+            content: "";
+            position: absolute;
+            left: -4px; right: -4px;
+            top: 0; bottom: 0;
+            z-index: 10;
+        }
+
+        .resizer:hover, .resizer.active {
+            background-color: var(--md-sys-color-primary);
+            width: 4px;
+        }
+
+        .results-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .results-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* Issue Cards */
+        .issue-card {
+            border: 1px solid #e0e0e0;
+            border-radius: var(--radius-md);
+            padding: 16px;
+            background: white;
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .issue-card:hover {
+            box-shadow: var(--shadow-1);
+            border-color: transparent;
+        }
+        
+        .issue-card.selected {
+            border: 2px solid var(--md-sys-color-primary);
+            background-color: #f0f8ff;
+        }
+
+        .issue-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+        }
+        
+        .issue-card.severity-critical::before { background-color: var(--google-red); }
+        .issue-card.severity-high::before { background-color: #f97316; } /* Orange */
+        .issue-card.severity-medium::before { background-color: var(--google-yellow); }
+        .issue-card.severity-low::before { background-color: var(--google-green); }
+
+        .description-text {
+            font-size: 14px;
+            color: #1f1f1f;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-word;
+        }
+
+        .issue-card.selected .description-text {
+            -webkit-line-clamp: unset;
+            overflow: visible;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            height: 24px;
+            padding: 0 8px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 500;
+            background-color: #f1f3f4;
+            color: #444746;
+            margin-right: 8px;
+        }
+
+        /* Annotations */
+        .annotation-marker {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255,255,255,0.9);
+            border: 2px solid #ea4335;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #ea4335;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 5;
+            transition: transform 0.2s;
+        }
+        
+        .annotation-marker.active {
+            transform: translate(-50%, -50%) scale(1.3);
+            z-index: 10;
+            background-color: #ea4335;
+            color: white;
+            border-color: white;
+        }
+        
+        .marker-critical { border-color: var(--google-red); color: var(--google-red); }
+        .marker-high { border-color: #f97316; color: #f97316; }
+        .marker-medium { border-color: var(--google-yellow); color: var(--google-yellow); }
+        .marker-low { border-color: var(--google-green); color: var(--google-green); }
+
+        /* Loading */
+        .linear-progress {
+            position: fixed;
+            top: 64px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background-color: #e0e0e0;
+            overflow: hidden;
+            display: none;
+            z-index: 20;
+        }
+
+        .linear-progress.active { display: block; }
+
+        .linear-progress .bar {
+            height: 100%;
+            background-color: var(--md-sys-color-primary);
+            animation: indeterminate 2s infinite linear;
+            transform-origin: 0% 50%;
+        }
+
+        @keyframes indeterminate {
+            0% { transform:  translateX(0) scaleX(0); }
+            40% { transform:  translateX(0) scaleX(0.4); }
+            100% { transform:  translateX(100%) scaleX(0.5); }
+        }
+
+        /* Issue Progress Tracker */
+        #issueProgressTracker {
+            padding: 16px;
+            border-bottom: 1px solid #e0e0e0;
+            background-color: #f8f9fa;
+        }
+
+        .progress-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: white;
+            font-size: 14px;
+            color: #444746;
+            transition: all 0.2s;
+        }
+
+        .progress-item .icon-area {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .progress-item.pending .icon-area .material-icons { color: #747775; }
+
+        .progress-item.loading .icon-area .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #e0e0e0;
+            border-top-color: var(--md-sys-color-primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .progress-item.complete .icon-area .material-icons { color: var(--google-green); }
+        .progress-item.error .icon-area .material-icons { color: var(--google-red); }
+
+        .progress-item .description { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .progress-item .status-badge {
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .progress-item.pending .status-badge { background-color: #e0e0e0; color: #747775; }
+        .progress-item.loading .status-badge { background-color: var(--md-sys-color-primary-container); color: var(--md-sys-color-primary); }
+        .progress-item.complete .status-badge { background-color: #e6f4ea; color: var(--google-green); }
+        .progress-item.error .status-badge { background-color: #fce8e6; color: var(--google-red); }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Utils */
+        .hidden { display: none !important; }
+        .text-sm { font-size: 14px; }
+        .text-xs { font-size: 12px; }
+        .text-grey { color: #5f6368; }
+        .mt-2 { margin-top: 8px; }
+        .mb-4 { margin-bottom: 16px; }
+        
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #747775;
+            gap: 16px;
+        }
+        
+        .empty-icon { font-size: 64px; opacity: 0.2; }
+
+    </style>
+</head>
+<body>
+
+    <!-- Progress Bar -->
+    <div id="progressBar" class="linear-progress">
+        <div class="bar"></div>
+    </div>
+
+    <!-- App Bar -->
+    <header>
+        <div class="logo-area">
+            <span class="material-icons logo-icon">shield</span>
+            <span class="logo-text">Sentinel</span>
+        </div>
+    </header>
+
+    <div class="main-container">
+        
+        <!-- Sidebar Setup -->
+        <aside class="sidebar">
+            <h2 class="google-sans" style="font-size: 18px; margin-bottom: 8px;">Analysis Setup</h2>
+            
+            <!-- Source Tabs -->
+            <div class="form-group">
+                <span class="label">Source Type</span>
+                <div class="tabs">
+                    <button class="tab-btn active" data-type="video">Video</button>
+                    <button class="tab-btn" data-type="image-url">Image URL</button>
+                    <button class="tab-btn" data-type="image-upload">Upload</button>
+                </div>
+            </div>
+
+            <!-- Inputs -->
+            <div id="inputContainer">
+                <!-- Video Input -->
+                <div id="videoInput" class="form-group">
+                    <span class="label">YouTube URL</span>
+                    <input type="text" id="videoUrl" class="input-field" placeholder="youtube.com/watch?v=...">
+                </div>
+
+                <!-- Image URL Input -->
+                <div id="imageUrlInput" class="form-group hidden">
+                    <span class="label">Image URL</span>
+                    <input type="text" id="imageUrl" class="input-field" placeholder="https://example.com/image.jpg">
+                </div>
+
+                <!-- File Upload -->
+                <div id="fileInput" class="form-group hidden">
+                    <span class="label">Upload Image</span>
+                    <div class="file-drop-zone" onclick="document.getElementById('fileField').click()">
+                        <span class="material-icons" style="font-size: 32px;">cloud_upload</span>
+                        <span style="font-size: 14px;">Click to select file</span>
+                        <input type="file" id="fileField" hidden accept="image/*">
+                        <span id="fileName" class="text-xs text-grey" style="display:none"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings -->
+            <div class="form-group">
+                <span class="label">Analysis Model</span>
+                <select id="analysisSpeed" class="input-field select-field">
+                    <option value="fast">Fast (Gemini Flash)</option>
+                    <option value="powerful">Powerful (Gemini 3.0 Pro)</option>
+                </select>
+                <span class="text-xs text-grey" style="margin-left: 4px;">Powerful mode provides deeper medical reasoning.</span>
+            </div>
+
+            <div id="frameRateGroup" class="form-group">
+                <span class="label">Video Sampling</span>
+                <select id="frameRate" class="input-field select-field">
+                    <option value="1.0">Standard (1 FPS)</option>
+                    <option value="0.5">Eco (0.5 FPS)</option>
+                    <option value="2.0">Detailed (2 FPS)</option>
+                </select>
+            </div>
+
+            <div style="flex: 1"></div>
+
+            <!-- Error Box -->
+            <div id="errorBox" style="background-color: #fce8e6; color: #c5221f; padding: 12px; border-radius: 8px; font-size: 14px; display: none; margin-bottom: 16px;">
+                Error message here
+            </div>
+
+            <button id="analyzeBtn" class="btn-primary">
+                <span class="material-icons">auto_awesome</span>
+                Analyze Content
+            </button>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="content-area">
+            <div class="viewer-container">
+                <div id="emptyState" class="empty-state">
+                    <span class="material-icons empty-icon">analytics</span>
+                    <p style="font-size: 16px;">Ready to analyze content</p>
+                    <p class="text-xs">Select a source and click Analyze to begin</p>
+                </div>
+
+                <div id="mediaWrapper" class="media-card hidden">
+                    <!-- Media injected here -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Resizer -->
+        <div id="resizer" class="resizer"></div>
+
+        <!-- Results Panel -->
+        <aside class="results-panel" id="resultsPanel">
+            <div class="results-header">
+                <h2 class="google-sans" style="font-size: 20px;">Analysis Results</h2>
+                <div id="summaryCard" class="hidden mt-2">
+                    <p id="summaryText" class="text-sm text-grey" style="line-height: 1.5;"></p>
+                </div>
+            </div>
+            
+            <div id="issueProgressTracker" class="hidden">
+                <h3 class="google-sans" style="font-size: 16px; margin-bottom: 12px; color: #444746; padding: 16px 24px;">Locating Issues...</h3>
+                <div id="issueProgressItems" style="display: flex; flex-direction: column; gap: 8px; padding: 0 16px 16px;">
+                    <!-- Individual progress items will be injected here -->
+                </div>
+            </div>
+
+            <div id="resultsList" class="results-list">
+                <!-- Issues injected here -->
+            </div>
+        </aside>
+
+    </div>
+
+    <script>
+        // --- State ---
+        const state = {
+            type: 'video',
+            file: null
+        };
+
+        const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
+
+        // --- DOM ---
+        const els = {
+            tabs: document.querySelectorAll('.tab-btn'),
+            inputs: {
+                video: document.getElementById('videoInput'),
+                url: document.getElementById('imageUrlInput'),
+                file: document.getElementById('fileInput')
+            },
+            fields: {
+                video: document.getElementById('videoUrl'),
+                url: document.getElementById('imageUrl'),
+                file: document.getElementById('fileField'),
+                speed: document.getElementById('analysisSpeed'),
+                fps: document.getElementById('frameRate')
+            },
+            fileName: document.getElementById('fileName'),
+            btn: document.getElementById('analyzeBtn'),
+            progress: document.getElementById('progressBar'),
+            error: document.getElementById('errorBox'),
+            media: document.getElementById('mediaWrapper'),
+            empty: document.getElementById('emptyState'),
+            list: document.getElementById('resultsList'),
+            summary: {
+                card: document.getElementById('summaryCard'),
+                text: document.getElementById('summaryText')
+            },
+            issueProgress: {
+                tracker: document.getElementById('issueProgressTracker'),
+                items: document.getElementById('issueProgressItems')
+            }
+        };
+
+        // --- Interaction ---
+        
+        // Resizer Logic
+        const resizer = document.getElementById('resizer');
+        const resultsPanel = document.getElementById('resultsPanel');
+        let isResizing = false;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('active');
+            resultsPanel.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = document.body.clientWidth - e.clientX;
+            // Limit width between 300px and 60% of screen
+            if (newWidth >= 300 && newWidth <= window.innerWidth * 0.6) {
+                resultsPanel.style.width = `${newWidth}px`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                resultsPanel.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+
+        // Tab Switching
+        els.tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // UI update
+                els.tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Logic
+                state.type = tab.dataset.type;
+                
+                // Hide all inputs
+                Object.values(els.inputs).forEach(el => el.classList.add('hidden'));
+                
+                // Show relevant
+                if (state.type === 'video') {
+                    els.inputs.video.classList.remove('hidden');
+                    document.getElementById('frameRateGroup').classList.remove('hidden');
+                } else if (state.type === 'image-url') {
+                    els.inputs.url.classList.remove('hidden');
+                    document.getElementById('frameRateGroup').classList.add('hidden');
+                } else {
+                    els.inputs.file.classList.remove('hidden');
+                    document.getElementById('frameRateGroup').classList.add('hidden');
+                }
+                
+                hideError();
+            });
+        });
+
+        // File Selection
+        els.fields.file.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                state.file = e.target.files[0];
+                els.fileName.textContent = state.file.name;
+                els.fileName.style.display = 'block';
+            }
+        });
+
+        // Analyze
+        els.btn.addEventListener('click', async () => {
+            hideError();
+            els.progress.classList.add('active');
+            els.btn.disabled = true;
+            resetResults();
+
+            try {
+                // Validation & Payload
+                let endpoint = '/api/v1/analyze';
+                let body = {};
+                let isUpload = false;
+
+                if (state.type === 'video') {
+                    if (!els.fields.video.value) throw new Error("Please enter a YouTube URL");
+                    body = {
+                        video_url: els.fields.video.value,
+                        speed: els.fields.speed.value,
+                        frame_rate: parseFloat(els.fields.fps.value)
+                    };
+                } else if (state.type === 'image-url') {
+                    if (!els.fields.url.value) throw new Error("Please enter an Image URL");
+                    body = {
+                        image_url: els.fields.url.value,
+                        speed: els.fields.speed.value
+                    };
+                } else {
+                    if (!state.file) throw new Error("Please select a file");
+                    isUpload = true;
+                }
+
+                let data;
+                if (isUpload) {
+                    data = await handleUpload(state.file, els.fields.speed.value);
+                } else {
+                    const res = await fetch(`${API_URL}${endpoint}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(body)
+                    });
+                    if (!res.ok) throw new Error("Analysis failed");
+                    data = await res.json();
+                }
+
+                renderResults(data);
+
+            } catch (e) {
+                showError(e.message);
+            } finally {
+                els.progress.classList.remove('active');
+                els.btn.disabled = false;
+            }
+        });
+
+        async function handleUpload(file, speed) {
+            els.issueProgress.tracker.classList.remove('hidden');
+            els.issueProgress.items.innerHTML = '';
+
+            // Step 1: Initial Analysis
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('speed', speed);
+
+            const res1 = await fetch(`${API_URL}/api/v1/analyze/initial`, {
+                method: 'POST',
+                body: formData
+            });
+            if (!res1.ok) throw new Error("Upload failed");
+            const data1 = await res1.json();
+
+            // Step 2: Locations (Parallel)
+            if (data1.issues.length > 0) {
+                const progressElements = [];
+                data1.issues.forEach((issue, idx) => {
+                    const item = document.createElement('div');
+                    item.id = `progress-item-${idx}`;
+                    item.className = 'progress-item pending';
+                    item.innerHTML = `
+                        <div class="icon-area"><span class="material-icons">radio_button_unchecked</span></div>
+                        <div class="description">${issue.description.substring(0, 70)}...</div>
+                        <span class="status-badge">Pending</span>
+                    `;
+                    els.issueProgress.items.appendChild(item);
+                    progressElements.push(item);
+                });
+
+                const enrichedIssues = await Promise.all(data1.issues.map(async (issue, idx) => {
+                    const item = progressElements[idx];
+                    item.classList.remove('pending');
+                    item.classList.add('loading');
+                    item.querySelector('.icon-area').innerHTML = '<div class="spinner"></div>';
+                    item.querySelector('.status-badge').textContent = 'Locating...';
+
+                    try {
+                        const res2 = await fetch(`${API_URL}/api/v1/analyze/location`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                issue_id: issue.issue_id,
+                                issue_description: issue.description
+                            })
+                        });
+                        if (res2.ok) {
+                            const locData = await res2.json();
+                            item.classList.remove('loading');
+                            item.classList.add('complete');
+                            item.querySelector('.icon-area').innerHTML = '<span class="material-icons">check_circle</span>';
+                            item.querySelector('.status-badge').textContent = 'Complete';
+                            return { ...issue, location: locData.location };
+                        }
+                    } catch(e) {
+                        console.error("Error locating issue:", e);
+                    }
+                    item.classList.remove('loading');
+                    item.classList.add('error');
+                    item.querySelector('.icon-area').innerHTML = '<span class="material-icons">error</span>';
+                    item.querySelector('.status-badge').textContent = 'Failed';
+                    return { ...issue, location: null };
+                }));
+                data1.issues = enrichedIssues;
+            }
+            
+            els.issueProgress.tracker.classList.add('hidden');
+            return data1;
+        }
+
+        // --- Rendering ---
+        function renderResults(data) {
+            // 1. Media
+            els.empty.classList.add('hidden');
+            els.media.classList.remove('hidden');
+            els.media.innerHTML = '';
+
+            if (state.type === 'video') {
+                const vidId = extractVideoID(data.video_url);
+                els.media.innerHTML = `
+                    <iframe width="100%" height="400" style="min-width: 600px; aspect-ratio: 16/9;"
+                        src="https://www.youtube.com/embed/${vidId}" 
+                        frameborder="0" allowfullscreen>
+                    </iframe>
+                `;
+            } else {
+                const img = document.createElement('img');
+                img.src = state.type === 'image-upload' ? URL.createObjectURL(state.file) : data.video_url;
+                img.style.maxWidth = '100%';
+                img.style.maxHeight = '70vh';
+                img.style.display = 'block';
+                
+                const wrapper = document.createElement('div');
+                wrapper.style.position = 'relative';
+                wrapper.appendChild(img);
+                
+                img.onload = () => {
+                    data.issues.forEach((issue, idx) => {
+                        if (issue.location) {
+                            const marker = document.createElement('div');
+                            marker.className = `annotation-marker marker-${issue.severity}`;
+                            marker.textContent = idx + 1;
+                            marker.style.left = `${issue.location.x * 100}%`;
+                            marker.style.top = `${issue.location.y * 100}%`;
+                            marker.id = `marker-${idx}`;
+                            
+                            marker.addEventListener('click', () => {
+                                document.getElementById(`issue-${idx}`).scrollIntoView({behavior:'smooth'});
+                                highlightIssue(idx);
+                            });
+                            
+                            wrapper.appendChild(marker);
+                        }
+                    });
+                };
+                
+                els.media.appendChild(wrapper);
+            }
+
+            // 2. Summary
+            els.summary.card.classList.remove('hidden');
+            els.summary.text.textContent = data.summary;
+
+            // 3. Issues
+            els.list.innerHTML = '';
+            if (data.issues.length === 0) {
+                els.list.innerHTML = `<div style="text-align:center; padding: 20px; color:#34a853">No issues found. Great job!</div>`;
+            } else {
+                data.issues.forEach((issue, idx) => {
+                    const card = document.createElement('div');
+                    card.className = `issue-card severity-${issue.severity}`;
+                    card.id = `issue-${idx}`;
+                    card.onclick = () => highlightIssue(idx);
+                    
+                    const timeOrLoc = issue.start_timestamp !== 'N/A' ? issue.start_timestamp : '';
+                    
+                    card.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <div style="display:flex; gap:4px; align-items:center;">
+                                <span class="chip" style="font-weight:700;">${idx+1}</span>
+                                <span class="chip">${formatCat(issue.category)}</span>
+                            </div>
+                            <span style="font-size:12px; font-weight:500; color:#0b57d0;">${timeOrLoc}</span>
+                        </div>
+                        <p class="description-text">${issue.description}</p>
+                    `;
+                    els.list.appendChild(card);
+                });
+            }
+        }
+
+        function highlightIssue(idx) {
+            // Auto-expand panel if narrow
+            const currentWidth = resultsPanel.getBoundingClientRect().width;
+            if (currentWidth < 450) {
+                resultsPanel.style.width = '450px';
+            }
+
+            // Cards
+            document.querySelectorAll('.issue-card').forEach(c => c.classList.remove('selected'));
+            const card = document.getElementById(`issue-${idx}`);
+            if(card) card.classList.add('selected');
+
+            // Markers
+            document.querySelectorAll('.annotation-marker').forEach(m => m.classList.remove('active'));
+            const marker = document.getElementById(`marker-${idx}`);
+            if(marker) marker.classList.add('active');
+        }
+
+        function extractVideoID(url) {
+            try {
+                if (url.includes('v=')) return url.split('v=')[1].split('&')[0];
+                if (url.includes('youtu.be/')) return url.split('youtu.be/')[1];
+            } catch(e){}
+            return '';
+        }
+
+        function formatCat(s) {
+            return s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        }
+
+        function showError(msg) {
+            els.error.textContent = msg;
+            els.error.style.display = 'block';
+        }
+        function hideError() {
+            els.error.style.display = 'none';
+        }
+        function resetResults() {
+            els.media.innerHTML = '';
+            els.media.classList.add('hidden');
+            els.empty.classList.remove('hidden');
+            els.list.innerHTML = '';
+            els.summary.card.classList.add('hidden');
+            els.issueProgress.tracker.classList.add('hidden'); // Also hide this
+        }
+
+    </script>
+</body>
+</html>

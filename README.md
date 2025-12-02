@@ -1,53 +1,156 @@
-# New Project Template
+# Sentinel - Medical Literature Review Tool
 
-This repository contains a template that can be used to seed a repository for a
-new Google open source project.
+A comprehensive medical content analysis tool that uses Google's Gemini AI to review YouTube videos and images for medical accuracy, citation quality, and presentation issues.
 
-See [go/releasing](http://go/releasing) (available externally at
-https://opensource.google/documentation/reference/releasing) for more information about
-releasing a new Google open source project.
+## Features
 
-This template uses the Apache license, as is Google's default.  See the
-documentation for instructions on using alternate license.
+- **Video Analysis**: Analyze YouTube medical videos for accuracy issues with timestamps
+- **Image Analysis**: Review medical diagrams and images with visual annotations
+- **Comprehensive Review**: Identifies medical inaccuracies, missing citations, presentation concerns, and quality issues
+- **Interactive UI**: Google Material Design-inspired interface with real-time feedback
 
-## How to use this template
+## Tech Stack
 
-1. Clone it from GitHub.
-    * There is no reason to fork it.
-1. Create a new local repository and copy the files from this repo into it.
-1. Modify README.md and docs/contributing.md to represent your project, not the
-   template project.
-1. Develop your new project!
+- **Backend**: FastAPI (Python)
+- **Frontend**: HTML/CSS/JavaScript (Material Design)
+- **AI**: Google Gemini AI API
+- **Deployment**: Vercel
 
-``` shell
-git clone https://github.com/google/new-project
-mkdir my-new-thing
-cd my-new-thing
-git init
-cp -r ../new-project/* ../new-project/.github .
-git add *
-git commit -a -m 'Boilerplate for new Google open source project'
+## Local Development
+
+### Prerequisites
+
+- Python 3.9+
+- Google Gemini API key
+
+### Setup
+
+1. Clone the repository:
+```bash
+git clone <your-repo-url>
+cd sentinel
 ```
 
-## Source Code Headers
+2. Create and activate virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-Every file containing source code must include copyright and license
-information. This includes any JS/CSS files that you might be serving out to
-browsers. (This is to help well-intentioned people avoid accidental copying that
-doesn't comply with the license.)
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-Apache header:
+4. Create `.env` file from example:
+```bash
+cp .env.example .env
+```
 
-    Copyright 2024 Google LLC
+5. Add your Gemini API key to `.env`:
+```
+GEMINI_API_KEY=your_api_key_here
+```
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+6. Run the development server:
+```bash
+python -m api.main
+```
 
-        https://www.apache.org/licenses/LICENSE-2.0
+7. Open `frontend/index.html` in your browser or serve it locally:
+```bash
+cd frontend
+python -m http.server 8080
+```
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+The API will be available at `http://localhost:8000` and the frontend at `http://localhost:8080`.
+
+## Deploying to Vercel
+
+### Quick Deploy
+
+1. **Push to GitHub** (if you haven't already):
+```bash
+git push origin main
+```
+
+2. **Import to Vercel**:
+   - Go to [vercel.com](https://vercel.com)
+   - Click "New Project"
+   - Import your GitHub repository
+   - Vercel will automatically detect the configuration from `vercel.json`
+
+3. **Add Environment Variables** in Vercel:
+   - Go to Project Settings → Environment Variables
+   - Add `GEMINI_API_KEY` with your API key
+
+4. **Deploy**:
+   - Click "Deploy"
+   - Vercel will build and deploy your application
+
+### Manual Configuration
+
+If you need to configure manually:
+
+1. **Framework Preset**: Other
+2. **Build Command**: (leave empty)
+3. **Output Directory**: (leave empty)
+4. **Install Command**: `pip install -r requirements.txt`
+
+### Environment Variables
+
+Set these in Vercel's project settings:
+
+- `GEMINI_API_KEY`: Your Google Gemini API key (required)
+- `LOG_LEVEL`: `INFO` (optional, defaults to INFO)
+- `CORS_ORIGINS`: `*` (optional, for CORS configuration)
+
+## Project Structure
+
+```
+sentinel/
+├── api/                    # FastAPI backend
+│   ├── routes/            # API route handlers
+│   ├── services/          # Business logic (Gemini client, etc.)
+│   ├── models/            # Pydantic schemas
+│   ├── config.py          # Configuration management
+│   └── main.py            # FastAPI application entry point
+├── frontend/              # Static frontend
+│   └── index.html         # Single-page application
+├── requirements.txt       # Python dependencies
+├── vercel.json           # Vercel deployment configuration
+├── .env.example          # Environment variables template
+└── README.md             # This file
+```
+
+## API Endpoints
+
+- `GET /` - API information
+- `GET /health` - Health check
+- `POST /api/v1/analyze` - Analyze video or image URL
+- `POST /api/v1/analyze/initial` - Initial image analysis (without locations)
+- `POST /api/v1/analyze/location` - Find issue location in image
+
+## Usage
+
+### Analyze a YouTube Video
+
+1. Select "YouTube Video" from the content type dropdown
+2. Paste the YouTube URL
+3. Optionally adjust the frame rate (lower = fewer tokens used)
+4. Click "Analyze"
+
+### Analyze an Image
+
+1. Select "Image URL" or "Upload Image"
+2. Provide the image URL or select a file
+3. Click "Analyze"
+4. Click on numbered markers to see issue details
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+MIT License - see LICENSE file for details
