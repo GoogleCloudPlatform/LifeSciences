@@ -1,13 +1,23 @@
-# Sentinel - Medical Literature Review Tool
+# Sentinel: Pharma Regulatory & Ad Content Checker
 
-A comprehensive medical content analysis tool that uses Google's Gemini AI to review YouTube videos and images for medical accuracy, citation quality, and presentation issues.
+**Sentinel** is a content analysis solution specifically designed for pharmaceutical regulatory affairs and marketing compliance teams. Powered by **Google Gemini AI**, Sentinel automates the rigorous review of promotional advertisements and regulatory documentation  accuracy, citation integrity, and adherence to industry presentation standards, and flag potential compliance issues for review.
 
 ## Features
 
-- **Video Analysis**: Analyze YouTube medical videos for accuracy issues with timestamps
-- **Image Analysis**: Review medical diagrams and images with visual annotations
-- **Comprehensive Review**: Identifies medical inaccuracies, missing citations, presentation concerns, and quality issues
-- **Interactive UI**: Google Material Design-inspired interface with real-time feedback
+* **Pharma Ad Video Compliance**: Perform analysis of video advertisements. Sentinel flags potential  inaccuracies and compliance risks with  **timestamped markers**  editing.
+* **Regulatory Image & Diagram Audit**: Review complex medical diagrams, infographics, and charts. The tool provides visual annotations to highlight inconsistencies or formatting issues within regulatory submissions.
+* **Interactive Professional UI**: A clean, efficient interface built on Google Material Design principles, providing compliance teams with real-time feedback and audit-ready reports.
+
+---
+
+> [!IMPORTANT]
+> **A Note for Developers and Administrators:**
+> By default, Vertex AI may collect data to improve service quality. Data collection and logging are **only disabled** if the user explicitly disables **Vertex AI data caching** within the Google Cloud project settings. 
+
+For technical details on how to configure these settings, please refer to the official [Vertex AI Zero Data Retention Documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention).
+
+
+---
 
 ## Tech Stack
 
