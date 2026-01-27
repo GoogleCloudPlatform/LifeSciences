@@ -1,14 +1,24 @@
-# Sentinel: Pharma Regulatory & Ad Content Checker
+# Sentinel: Pharma Ad Content Checker
 
-**Sentinel** is a content analysis solution specifically designed for pharmaceutical regulatory affairs and marketing compliance teams. Powered by **Google Gemini AI**, Sentinel automates the rigorous review of promotional advertisements and regulatory documentation  accuracy, citation integrity, and adherence to industry presentation standards, and flag potential compliance issues for review.
+Sentinel is content analysis starter code to support pharmaceutical regulatory affairs and marketing teams. Sentinel starter code can be used as a starting point to construct more efficient workflow applications in the Pharma Industry. Leveraging the power of Google Gemini AI, Sentinel code can help build automation workflows for the review process for promotional advertisements. Its core function is to flag potential issues, verify citation integrity, and check adherence to established industry standards, thereby identifying and annotating areas for expert review. 
 
-## Features
+**Key Features and Functionality:**
 
-* **Pharma Ad Video Compliance**: Perform analysis of video advertisements. Sentinel flags potential  inaccuracies and compliance risks with  **timestamped markers**  editing.
-* **Regulatory Image & Diagram Audit**: Review complex medical diagrams, infographics, and charts. The tool provides visual annotations to highlight inconsistencies or formatting issues within regulatory submissions.
-* **Interactive Professional UI**: A clean, efficient interface built on Google Material Design principles, providing compliance teams with real-time feedback and audit-ready reports.
+*   **Pharma Ad Video Checker:** Sentinel code performs analysis of video advertisements. It is designed to identify and flag potential issues, providing timestamped markers to facilitate precise editing and review.
+*   **Ad Infographic Checker:** The code offers capabilities for reviewing advertisements, and infographics. It provides annotations that highlight potential issues hence speeding up the checking process.
+*   **Interactive Professional User Interface (UI):** Sentinel features a clean, efficient interface. This UI provides regulatory and marketing teams with real-time feedback and generates reports, enhancing workflow efficiency and transparency using the Sentinel code.
 
----
+**Target Users:**
+
+Sentinel code is designed for pharmaceutical regulatory affairs and marketing teams responsible for checking promotional materials.
+
+**Technology and Architecture:**
+
+Sentinel code is built with a FastAPI (Python) backend, an HTML/CSS/JavaScript frontend utilizing Google Material Design, and integrates with the Google Gemini AI API for its analytical capabilities. It is designed for deployment on Vercel.
+
+**Important Note:**
+
+Sentinel code is a content analysis starter code and is **not intended for any medical purpose**, including diagnosis, prevention, monitoring, treatment, or alleviation of disease, injury, or disability, nor for the investigation, replacement, or modification of anatomy or physiological processes, or for the control of conception. Its function is solely to assist regulatory and marketing teams in identifying potential issues in pharmaceutical content. All outputs from sentinel code should be considered preliminary, require independent verification and further investigation through established company process and methodologies. This code is not intended to be used without appropriate validation, adaptation and/or making meaningful modifications by developers for their specific use cases.
 
 > [!IMPORTANT]
 > **A Note for Developers and Administrators:**
@@ -17,16 +27,7 @@
 For technical details on how to configure these settings, please refer to the official [Vertex AI Zero Data Retention Documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention).
 
 
----
 
-## Tech Stack
-
-- **Backend**: FastAPI (Python)
-- **Frontend**: HTML/CSS/JavaScript (Material Design)
-- **AI**: Google Gemini AI API
-- **Deployment**: Vercel
-
-## Local Development
 
 ### Prerequisites
 
@@ -37,7 +38,7 @@ For technical details on how to configure these settings, please refer to the of
 
 1. Clone the repository:
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/GoogleCloudPlatform/LifeSciences/Sentinel
 cd sentinel
 ```
 
