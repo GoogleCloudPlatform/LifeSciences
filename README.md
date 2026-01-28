@@ -1,5 +1,7 @@
 # Sentinel: Pharma Ad Content Checker
 
+
+
 Sentinel is content analysis starter code to support pharmaceutical regulatory affairs and marketing teams. Sentinel starter code can be used as a starting point to construct more efficient workflow applications in the Pharma Industry. Leveraging the power of Google Gemini AI, Sentinel code can help build automation workflows for the review process for promotional advertisements. Its core function is to flag potential issues, verify citation integrity, and check adherence to established industry standards, thereby identifying and annotating areas for expert review. 
 
 **Key Features and Functionality:**
@@ -18,7 +20,8 @@ Sentinel code is built with a FastAPI (Python) backend, an HTML/CSS/JavaScript f
 
 **Important Note:**
 
-Sentinel code is a content analysis starter code and is **not intended for any medical purpose**, including diagnosis, prevention, monitoring, treatment, or alleviation of disease, injury, or disability, nor for the investigation, replacement, or modification of anatomy or physiological processes, or for the control of conception. Its function is solely to assist regulatory and marketing teams in identifying potential issues in pharmaceutical content. All outputs from sentinel code should be considered preliminary, require independent verification and further investigation through established company process and methodologies. This code is not intended to be used without appropriate validation, adaptation and/or making meaningful modifications by developers for their specific use cases.
+Sentinel code is a content analysis starter code and is for administrative and operational support only. It is**not intended for any medical purpose**, including diagnosis, prevention, monitoring, treatment, or alleviation of disease, injury, or disability, nor for the investigation, replacement, or modification of anatomy or physiological processes, or for the control of conception. Its function is solely to assist regulatory and marketing teams in identifying potential issues in pharmaceutical content. All outputs from sentinel code should be considered preliminary, require independent verification and further investigation through established company process and methodologies. This code is not intended to be used without appropriate validation, adaptation and/or making meaningful modifications by developers for their specific workflows. This code is intended as a developer accelerator and proof-of-concept. It has not undergone software validation (CSV), penetration testing, or quality assurance required for production environments in regulated industries. Deploying this code into a production workflow without significant modification, security hardening, and appropriate validation is at the user's sole risk.
+
 
 > [!IMPORTANT]
 > **A Note for Developers and Administrators:**
