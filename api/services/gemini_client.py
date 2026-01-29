@@ -1,10 +1,10 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,16 +19,23 @@ This module provides a client interface to Google's Gemini API for analyzing
 YouTube videos, images, and extracting medical literature review insights.
 """
 
-import io
+import asyncio
 import logging
 import tempfile
+import uuid
 from typing import Optional
 
 from google import genai
+from google.cloud import storage
 from google.genai import types
-from PIL import Image
 
 from api.config import settings
+from api.services.prompts import (
+    FIND_ISSUE_LOCATION_PROMPT,
+    IMAGE_ANALYSIS_SINGLE_STEP_PROMPT,
+    IMAGE_ANALYSIS_WITHOUT_LOCATION_PROMPT,
+    VIDEO_ANALYSIS_PROMPT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,29 +48,71 @@ class GeminiClient:
     video and image analysis and content generation for medical literature review.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-flash-latest"):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        project: Optional[str] = None,
+        location: Optional[str] = None,
+        storage_client: Optional[storage.Client] = None,
+    ):
         """
         Initialize the Gemini client.
 
         Args:
             api_key: Google Gemini API key. If not provided, uses settings.
-            model_name: Name of the Gemini model to use.
+            project: Google Cloud Project ID. If not provided, uses settings.
+            location: Google Cloud Location. If not provided, uses settings.
+            storage_client: Optional Google Cloud Storage client. If provided, reuses this client.
         """
         self.api_key = api_key or settings.gemini_api_key
-        self.client = genai.Client(api_key=self.api_key)
-        self.model = model_name  # Model selection based on user preference
+        self.project = project or settings.google_cloud_project
+        self.location = location or settings.google_cloud_location
 
-    def analyze_video(self, video_url: str, frame_rate: float = 1.0) -> str:
+        if settings.google_genai_use_vertexai:
+            logger.info(
+                f"Initializing Gemini Client with Vertex AI (Project: {self.project}, Location: {self.location})"
+            )
+            self.client = genai.Client(
+                vertexai=True, project=self.project, location=self.location
+            ).aio
+            self.storage_client = storage_client or storage.Client(project=self.project)
+        elif self.api_key:
+            logger.info("Initializing Gemini Client with API Key (AI Studio)")
+            self.client = genai.Client(api_key=self.api_key).aio
+            self.storage_client = None
+        else:
+            raise ValueError(
+                "No API key provided and GOOGLE_GENAI_USE_VERTEXAI is not True."
+            )
+
+    async def close(self):
         """
-        Analyze a YouTube video for medical accuracy and potential issues.
+        Close the Gemini client and release resources.
+        """
+        if hasattr(self, "client"):
+            logger.info("Closing Gemini API client session")
+            await self.client.aclose()
 
-        This method sends a YouTube video URL to Gemini with a specialized prompt
+    async def analyze_video(
+        self,
+        video_url: str,
+        frame_rate: float = 1.0,
+        mime_type: str = "video/mp4",
+        model_name: Optional[str] = None,
+        response_schema: Optional[type] = None,
+    ) -> str:
+        """
+        Analyze a video (YouTube or GCS) for medical accuracy and potential issues.
+
+        This method sends a video URL to Gemini with a specialized prompt
         for medical literature review, identifying potential issues, inaccuracies,
         or areas of concern with timestamps.
 
         Args:
-            video_url: YouTube video URL to analyze
+            video_url: YouTube video URL or GCS URI (gs://...)
             frame_rate: Frame rate for video sampling in frames per second (default: 1.0)
+            mime_type: MIME type of the video (default: "video/mp4")
+            model_name: Optional model name override. If not provided, uses settings.gemini_model_fast.
 
         Returns:
             Raw analysis text from Gemini API
@@ -71,59 +120,10 @@ class GeminiClient:
         Raises:
             Exception: If the API request fails
         """
-        logger.info(f"Analyzing video: {video_url} with frame_rate: {frame_rate} fps")
-
-        # Specialized prompt for medical literature review with strict formatting
-        prompt = """You are a comprehensive video review expert analyzing this medical/health content for ANY potential concerns.
-
-Please identify and list ALL potential issues including:
-
-MEDICAL & CONTENT CONCERNS:
-1. Medical inaccuracies or misleading claims - including if its making claims for things the treatment is not proven to do concentrate on what it is approved for.
-2. Statements lacking proper citations or sources
-3. Outdated medical information
-4. Unverified or anecdotal claims presented as fact
-5. Potential contraindications or safety concerns
-6. Dosage or treatment recommendations that may be concerning
-
-PRESENTATION & QUALITY CONCERNS:
-7. Poor presentation style or unprofessional delivery
-8. Problematic wording, phrasing, or terminology
-9. Visual quality issues (poor lighting, unclear graphics, confusing charts)
-10. Audio quality problems (unclear speech, background noise, volume issues)
-11. Accessibility concerns (no captions, poor contrast, fast speech)
-12. Unprofessional conduct or inappropriate behavior
-
-IMPORTANT: Be VERY thorough and critical. Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes style, tone, word choice, presentation quality, visual clarity, audio quality, professionalism, etc.
-
-Format each issue EXACTLY as shown below (one issue per block):
-
-ISSUE:
-Start: [MM:SS]
-End: [MM:SS]
-Severity: [low/medium/high/critical]
-Category: [medical_accuracy/citation_missing/misleading_claim/outdated_information/unverified_statement/contraindication/dosage_concern/presentation_style/wording_concern/visual_quality/audio_quality/accessibility/professionalism/other]
-Description: [Detailed explanation of the issue]
-Context: [Quote or context from video]
-
-Example:
-ISSUE:
-Start: 02:15
-End: 02:45
-Severity: high
-Category: medical_accuracy
-Description: The speaker claims that vitamin C cures cancer, which contradicts established medical evidence.
-Context: "Vitamin C has been proven to cure all types of cancer"
-
-ISSUE:
-Start: 05:20
-End: 05:35
-Severity: low
-Category: wording_concern
-Description: The speaker uses casual language ("like", "um", "you know") excessively, which reduces perceived authority and professionalism.
-Context: Speaker says "So, like, you know, the thing is, um, antibiotics are, like, really important"
-
-Be extremely thorough and list ALL concerns - even minor style, wording, or quality issues. If absolutely no issues exist, state: "NO ISSUES FOUND"."""
+        model = model_name or settings.gemini_model_fast
+        logger.info(
+            f"Analyzing video: {video_url} with model: {model} at {frame_rate} fps"
+        )
 
         try:
             # Construct the content with video and prompt
@@ -133,20 +133,25 @@ Be extremely thorough and list ALL concerns - even minor style, wording, or qual
                 role="user",
                 parts=[
                     types.Part(
-                        file_data=types.FileData(file_uri=video_url)
+                        file_data=types.FileData(
+                            file_uri=video_url, mime_type=mime_type
+                        )
                     ),
-                    types.Part(text=prompt),
+                    types.Part(text=VIDEO_ANALYSIS_PROMPT),
                 ],
             )
 
             # Configure generation with custom settings
             config = types.GenerateContentConfig(
                 temperature=1.0,  # Lower temperature for more focused medical analysis
+                response_mime_type="application/json" if response_schema else None,
+                response_schema=response_schema,
             )
 
-            # Generate content using Gemini API
-            response = self.client.models.generate_content(
-                model=self.model,
+            # Generate content using Gemini API (Async)
+            model = model_name or settings.gemini_model_fast
+            response = await self.client.models.generate_content(
+                model=model,
                 contents=contents,
                 config=config,
             )
@@ -161,7 +166,13 @@ Be extremely thorough and list ALL concerns - even minor style, wording, or qual
             logger.error(f"Error analyzing video {video_url}: {str(e)}")
             raise
 
-    def analyze_image_without_location(self, image_url: str = None, image_data: bytes = None) -> str:
+    async def analyze_image_without_location(
+        self,
+        image_url: str = None,
+        image_data: bytes = None,
+        model_name: Optional[str] = None,
+        response_schema: Optional[type] = None,
+    ) -> str:
         """
         Analyze an image for medical accuracy without providing location coordinates.
         This is the first step in a two-step process.
@@ -169,6 +180,7 @@ Be extremely thorough and list ALL concerns - even minor style, wording, or qual
         Args:
             image_url: HTTPS URL to a publicly accessible image (optional if image_data provided)
             image_data: Raw image bytes (optional if image_url provided)
+            model_name: Optional model name override.
 
         Returns:
             Raw analysis text from Gemini API without location data
@@ -176,55 +188,25 @@ Be extremely thorough and list ALL concerns - even minor style, wording, or qual
         Raises:
             Exception: If the API request fails
         """
-        logger.info(f"Analyzing image without locations (step 1)...")
+        logger.info("Analyzing image without locations (step 1)...")
 
-        # Specialized prompt for image analysis WITHOUT locations
-        prompt = """You are a comprehensive medical image review expert analyzing this medical/health content for ANY potential concerns.
+        return await self._analyze_image_with_prompt(
+            image_url,
+            image_data,
+            IMAGE_ANALYSIS_WITHOUT_LOCATION_PROMPT,
+            model_name=model_name,
+            response_schema=response_schema,
+        )
 
-Please identify and list ALL potential issues including:
-
-MEDICAL & CONTENT CONCERNS:
-1. Medical inaccuracies or misleading information in diagrams/charts
-2. Missing or incorrect labels, annotations, or citations
-3. Outdated medical information or deprecated terminology
-4. Unverified or questionable data presented as fact
-5. Potential safety concerns or contraindications shown
-6. Dosage or treatment information that may be concerning
-
-PRESENTATION & QUALITY CONCERNS:
-7. Poor visual quality (resolution, clarity, lighting)
-8. Confusing or misleading visual design
-9. Problematic wording, phrasing, or terminology in text/labels
-10. Accessibility concerns (poor contrast, small text, unclear symbols)
-11. Unprofessional or inappropriate content
-12. Missing context or explanatory information
-
-IMPORTANT: Be VERY thorough and critical. Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes accuracy, clarity, design quality, accessibility, professionalism, etc.
-
-Format each issue EXACTLY as shown below (one issue per block):
-
-ISSUE:
-Start: N/A
-End: N/A
-Severity: [low/medium/high/critical]
-Category: [medical_accuracy/citation_missing/misleading_claim/outdated_information/unverified_statement/contraindication/dosage_concern/presentation_style/wording_concern/visual_quality/audio_quality/accessibility/professionalism/other]
-Description: [Detailed explanation of the issue]
-Context: [Description of where in the image the issue appears]
-
-Example:
-ISSUE:
-Start: N/A
-End: N/A
-Severity: high
-Category: medical_accuracy
-Description: The anatomical diagram shows the heart with incorrect chamber labeling - left and right ventricles are reversed.
-Context: Main diagram in center of image, ventricle labels
-
-Be extremely thorough and list ALL concerns - even minor design, clarity, or quality issues. If absolutely no issues exist, state: "NO ISSUES FOUND"."""
-
-        return self._analyze_image_with_prompt(image_url, image_data, prompt)
-
-    def find_issue_location(self, image_url: str = None, image_data: bytes = None, issue_description: str = "", issue_context: str = "") -> str:
+    async def find_issue_location(
+        self,
+        image_url: str = None,
+        image_data: bytes = None,
+        issue_description: str = "",
+        issue_context: str = "",
+        model_name: Optional[str] = None,
+        response_schema: Optional[type] = None,
+    ) -> str:
         """
         Find the location of a specific issue in an image.
         This is the second step in a two-step process.
@@ -234,6 +216,7 @@ Be extremely thorough and list ALL concerns - even minor design, clarity, or qua
             image_data: Raw image bytes (optional if image_url provided)
             issue_description: Description of the issue to locate
             issue_context: Context about where the issue appears
+            model_name: Optional model name override.
 
         Returns:
             Raw text containing location coordinates in JSON format
@@ -241,31 +224,28 @@ Be extremely thorough and list ALL concerns - even minor design, clarity, or qua
         Raises:
             Exception: If the API request fails
         """
-        logger.info(f"Finding location for issue...")
+        model = model_name or settings.gemini_model_fast
+        logger.info(f"Finding location for issue with model: {model}...")
 
-        # Specialized prompt for finding a specific issue's location
-        prompt = f"""You are analyzing this medical/health image to locate a specific issue that was previously identified.
+        prompt = FIND_ISSUE_LOCATION_PROMPT.format(
+            issue_description=issue_description, issue_context=issue_context
+        )
 
-ISSUE TO LOCATE:
-Description: {issue_description}
-Context: {issue_context}
+        return await self._analyze_image_with_prompt(
+            image_url,
+            image_data,
+            prompt,
+            model_name=model_name,
+            response_schema=response_schema,
+        )
 
-Your task is to identify the location of this specific issue in the image and provide normalized coordinates (x, y) where the issue appears.
-
-Use values between 0.0 and 1.0, where:
-- x: 0.0 is the left edge, 1.0 is the right edge
-- y: 0.0 is the top edge, 1.0 is the bottom edge
-
-For example, if the issue is in the center of the image, use {{"x": 0.5, "y": 0.5}}.
-
-Respond with ONLY a JSON object in this exact format:
-{{"x": 0.5, "y": 0.3}}
-
-Do not include any other text or explanation."""
-
-        return self._analyze_image_with_prompt(image_url, image_data, prompt)
-
-    def analyze_image(self, image_url: str = None, image_data: bytes = None) -> str:
+    async def analyze_image(
+        self,
+        image_url: str = None,
+        image_data: bytes = None,
+        model_name: Optional[str] = None,
+        response_schema: Optional[type] = None,
+    ) -> str:
         """
         Analyze an image for medical accuracy and potential issues (with locations).
         This is the legacy single-step method that includes location coordinates.
@@ -273,6 +253,7 @@ Do not include any other text or explanation."""
         Args:
             image_url: HTTPS URL to a publicly accessible image (optional if image_data provided)
             image_data: Raw image bytes (optional if image_url provided)
+            model_name: Optional model name override.
 
         Returns:
             Raw analysis text from Gemini API with location data
@@ -280,59 +261,44 @@ Do not include any other text or explanation."""
         Raises:
             Exception: If the API request fails
         """
-        logger.info(f"Analyzing image with locations (single-step)...")
+        logger.info("Analyzing image with locations (single-step)...")
 
-        # Specialized prompt for image analysis with strict formatting including bounding boxes
-        prompt = """You are a comprehensive medical image review expert analyzing this medical/health content for ANY potential concerns.
+        return await self._analyze_image_with_prompt(
+            image_url,
+            image_data,
+            IMAGE_ANALYSIS_SINGLE_STEP_PROMPT,
+            model_name=model_name,
+            response_schema=response_schema,
+        )
 
-Please identify and list ALL potential issues including:
+    async def _upload_to_gcs(
+        self, data: bytes, content_type: str = "image/jpeg"
+    ) -> str:
+        """
+        Upload data to Google Cloud Storage and return the gs:// URI.
+        """
+        bucket_name = settings.gcs_bucket_name
+        folder = settings.gcs_media_folder
+        filename = f"{folder}/{uuid.uuid4()}.jpg"
 
-MEDICAL & CONTENT CONCERNS:
-1. Medical inaccuracies or misleading information in diagrams/charts
-2. Missing or incorrect labels, annotations, or citations
-3. Outdated medical information or deprecated terminology
-4. Unverified or questionable data presented as fact
-5. Potential safety concerns or contraindications shown
-6. Dosage or treatment information that may be concerning
+        bucket = self.storage_client.bucket(bucket_name)
+        blob = bucket.blob(filename)
+        await asyncio.to_thread(
+            blob.upload_from_string, data, content_type=content_type
+        )
 
-PRESENTATION & QUALITY CONCERNS:
-7. Poor visual quality (resolution, clarity, lighting)
-8. Confusing or misleading visual design
-9. Problematic wording, phrasing, or terminology in text/labels
-10. Accessibility concerns (poor contrast, small text, unclear symbols)
-11. Unprofessional or inappropriate content
-12. Missing context or explanatory information
+        uri = f"gs://{bucket_name}/{filename}"
+        logger.info(f"Uploaded file to GCS: {uri}")
+        return uri
 
-IMPORTANT: Be VERY thorough and critical. Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes accuracy, clarity, design quality, accessibility, professionalism, etc.
-
-For each issue, provide the location as normalized coordinates (x, y) where the issue appears in the image. Use values between 0.0 and 1.0, where (0, 0) is top-left and (1, 1) is bottom-right.
-
-Format each issue EXACTLY as shown below (one issue per block):
-
-ISSUE:
-Start: N/A
-End: N/A
-Severity: [low/medium/high/critical]
-Category: [medical_accuracy/citation_missing/misleading_claim/outdated_information/unverified_statement/contraindication/dosage_concern/presentation_style/wording_concern/visual_quality/audio_quality/accessibility/professionalism/other]
-Description: [Detailed explanation of the issue]
-Context: [Description of where in the image the issue appears]
-Location: {"x": 0.5, "y": 0.3}
-
-Example:
-ISSUE:
-Start: N/A
-End: N/A
-Severity: high
-Category: medical_accuracy
-Description: The anatomical diagram shows the heart with incorrect chamber labeling - left and right ventricles are reversed.
-Context: Main diagram in center of image, ventricle labels
-Location: {"x": 0.5, "y": 0.4}
-
-Be extremely thorough and list ALL concerns - even minor design, clarity, or quality issues. If absolutely no issues exist, state: "NO ISSUES FOUND"."""
-
-        return self._analyze_image_with_prompt(image_url, image_data, prompt)
-
-    def _analyze_image_with_prompt(self, image_url: str = None, image_data: bytes = None, prompt: str = "") -> str:
+    async def _analyze_image_with_prompt(
+        self,
+        image_url: str = None,
+        image_data: bytes = None,
+        prompt: str = "",
+        model_name: Optional[str] = None,
+        response_schema: Optional[type] = None,
+    ) -> str:
         """
         Helper method to analyze an image with a custom prompt.
 
@@ -340,6 +306,8 @@ Be extremely thorough and list ALL concerns - even minor design, clarity, or qua
             image_url: HTTPS URL to a publicly accessible image (optional if image_data provided)
             image_data: Raw image bytes (optional if image_url provided)
             prompt: The prompt to use for analysis
+            model_name: Optional model name override.
+            response_schema: Optional response schema for structured output.
 
         Returns:
             Raw analysis text from Gemini API
@@ -348,52 +316,89 @@ Be extremely thorough and list ALL concerns - even minor design, clarity, or qua
             Exception: If the API request fails
         """
         try:
-            # Upload file if we have raw data
-            if image_data:
-                logger.info("Uploading image to Gemini Files API")
-                # Save to temporary file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
-                    tmp_file.write(image_data)
-                    tmp_path = tmp_file.name
+            mime_type = "image/jpeg"
 
-                try:
-                    # Upload the file
-                    uploaded_file = self.client.files.upload(path=tmp_path)
-                    logger.info(f"File uploaded: {uploaded_file.name}")
+            # Handle Vertex AI with GCS
+            if settings.google_genai_use_vertexai:
+                if image_data:
+                    file_uri = await self._upload_to_gcs(image_data, mime_type)
+                elif image_url:
+                    file_uri = image_url
+                else:
+                    raise ValueError("Either image_url or image_data must be provided")
 
-                    # Construct content with uploaded file
-                    contents = types.Content(
-                        role="user",
-                        parts=[
-                            types.Part(file_data=types.FileData(file_uri=uploaded_file.uri)),
-                            types.Part(text=prompt),
-                        ],
-                    )
-                finally:
-                    # Clean up temporary file
-                    import os
-                    if os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
-            elif image_url:
-                # Use URL directly
                 contents = types.Content(
                     role="user",
                     parts=[
-                        types.Part(file_data=types.FileData(file_uri=image_url)),
+                        types.Part(
+                            file_data=types.FileData(
+                                file_uri=file_uri, mime_type=mime_type
+                            )
+                        ),
                         types.Part(text=prompt),
                     ],
                 )
+            # Handle AI Studio (Gemini API)
             else:
-                raise ValueError("Either image_url or image_data must be provided")
+                if image_data:
+                    logger.info("Uploading image to Gemini Files API")
+                    # Save to temporary file
+                    with tempfile.NamedTemporaryFile(
+                        delete=False, suffix=".jpg"
+                    ) as tmp_file:
+                        tmp_file.write(image_data)
+                        tmp_path = tmp_file.name
+
+                    try:
+                        # Upload the file (corrected call for AI Studio)
+                        uploaded_file = await self.client.files.upload(file=tmp_path)
+                        logger.info(f"File uploaded: {uploaded_file.name}")
+
+                        # Construct content with uploaded file
+                        contents = types.Content(
+                            role="user",
+                            parts=[
+                                types.Part(
+                                    file_data=types.FileData(
+                                        file_uri=uploaded_file.uri, mime_type=mime_type
+                                    )
+                                ),
+                                types.Part(text=prompt),
+                            ],
+                        )
+                    finally:
+                        # Clean up temporary file
+                        import os
+
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                elif image_url:
+                    # Use URL directly
+                    contents = types.Content(
+                        role="user",
+                        parts=[
+                            types.Part(
+                                file_data=types.FileData(
+                                    file_uri=image_url, mime_type=mime_type
+                                )
+                            ),
+                            types.Part(text=prompt),
+                        ],
+                    )
+                else:
+                    raise ValueError("Either image_url or image_data must be provided")
 
             # Configure generation with custom settings
             config = types.GenerateContentConfig(
                 temperature=1.0,  # Lower temperature for more focused medical analysis
+                response_mime_type="application/json" if response_schema else None,
+                response_schema=response_schema,
             )
 
-            # Generate content using Gemini API
-            response = self.client.models.generate_content(
-                model=self.model,
+            # Generate content using Gemini API (Async)
+            model = model_name or settings.gemini_model_fast
+            response = await self.client.models.generate_content(
+                model=model,
                 contents=contents,
                 config=config,
             )
@@ -401,7 +406,7 @@ Be extremely thorough and list ALL concerns - even minor design, clarity, or qua
             # Extract text from response
             analysis_text = response.text
 
-            logger.info(f"Successfully analyzed image")
+            logger.info("Successfully analyzed image")
             return analysis_text
 
         except Exception as e:
@@ -410,21 +415,19 @@ Be extremely thorough and list ALL concerns - even minor design, clarity, or qua
 
     def extract_video_id(self, video_url: str) -> str:
         """
-        Extract YouTube video ID from URL.
+        Extract video ID from URL (YouTube ID or GCS filename).
 
         Args:
-            video_url: YouTube video URL
+            video_url: YouTube video URL or GCS URI
 
         Returns:
-            YouTube video ID
-
-        Examples:
-            >>> extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-            'dQw4w9WgXcQ'
-            >>> extract_video_id("https://youtu.be/dQw4w9WgXcQ")
-            'dQw4w9WgXcQ'
+            Video ID or filename
         """
         url_str = str(video_url)
+
+        # Handle GCS URIs
+        if url_str.startswith("gs://"):
+            return url_str.split("/")[-1]
 
         # Handle youtube.com URLs
         if "youtube.com/watch?v=" in url_str:

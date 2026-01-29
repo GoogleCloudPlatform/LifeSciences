@@ -1,10 +1,10 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,11 +13,12 @@
 # limitations under the License.
 
 """
-
 Configuration management for Sentinel API.
 
 This module handles environment variables and application settings using Pydantic.
 """
+
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -27,14 +28,26 @@ class Settings(BaseSettings):
     Application settings loaded from environment variables.
 
     Attributes:
-        gemini_api_key: Google Gemini API key for video analysis
+        google_cloud_project: Google Cloud Project ID for Vertex AI (optional)
+        google_cloud_location: Google Cloud Location for Vertex AI (default: global)
+        gemini_api_key: Google Gemini API key for video analysis (optional if using Vertex AI)
+        gemini_model_fast: Model name for fast processing (default: gemini-3-flash-preview)
+        gemini_model_powerful: Model name for complex processing (default: gemini-3-pro-preview)
+        google_genai_use_vertexai: Whether to explicitly use Vertex AI (default: False)
         api_host: Host address for the API server
         api_port: Port number for the API server
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         cors_origins: Comma-separated list of allowed CORS origins
     """
 
-    gemini_api_key: str
+    google_cloud_project: Optional[str] = None
+    google_cloud_location: str = "global"
+    gemini_api_key: Optional[str] = None
+    gemini_model_fast: str = "gemini-3-flash-preview"
+    gemini_model_powerful: str = "gemini-3-pro-preview"
+    google_genai_use_vertexai: Optional[bool] = False
+    gcs_bucket_name: Optional[str] = None
+    gcs_media_folder: str = "dev"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     log_level: str = "INFO"

@@ -1,10 +1,10 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,11 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Pydantic schemas for API requests and responses.
+
+This module defines the data models used for validating and serializing
+API requests and responses.
+"""
+
 from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class Severity(str, Enum):
@@ -55,6 +62,7 @@ class Location(BaseModel):
         x: Normalized x coordinate (0.0 = left, 1.0 = right)
         y: Normalized y coordinate (0.0 = top, 1.0 = bottom)
     """
+
     x: float = Field(
         ...,
         description="Normalized x coordinate (0.0 to 1.0)",
@@ -86,12 +94,10 @@ class Issue(BaseModel):
     start_timestamp: str = Field(
         ...,
         description="Start timestamp in video (HH:MM:SS or MM:SS format)",
-        examples=["00:02:15", "12:30"],
     )
     end_timestamp: str = Field(
         ...,
         description="End timestamp in video (HH:MM:SS or MM:SS format)",
-        examples=["00:02:45", "13:00"],
     )
     severity: Severity = Field(
         ...,
@@ -134,15 +140,18 @@ class AnalyzeRequest(BaseModel):
         speed: Analysis speed/model selection (fast=Flash, powerful=Pro)
     """
 
-    video_url: Optional[HttpUrl] = Field(
+    video_url: Optional[str] = Field(
         None,
-        description="YouTube video URL to analyze",
-        examples=["https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+        description="YouTube video URL or GCS URI (gs://...)",
+        examples=[
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "gs://bucket/video.mp4",
+        ],
     )
-    image_url: Optional[HttpUrl] = Field(
+    image_url: Optional[str] = Field(
         None,
-        description="Image URL to analyze (HTTPS URL to a publicly accessible image)",
-        examples=["https://example.com/medical-diagram.jpg"],
+        description="Image URL to analyze (HTTPS URL or gs:// URI)",
+        examples=["https://example.com/medical-diagram.jpg", "gs://bucket/image.jpg"],
     )
     frame_rate: Optional[float] = Field(
         default=1.0,
@@ -157,51 +166,16 @@ class AnalyzeRequest(BaseModel):
     )
 
 
-class IssueWithoutLocation(BaseModel):
+class AnalysisResponseSchema(BaseModel):
     """
-    Represents a single issue without location data.
-
-    Attributes:
-        issue_id: Unique identifier for the issue
-        start_timestamp: Start time of the issue in video (format: HH:MM:SS or MM:SS)
-        end_timestamp: End time of the issue in video (format: HH:MM:SS or MM:SS)
-        severity: Severity level of the issue
-        category: Category classification of the issue
-        description: Detailed description of the issue
-        context: Relevant context from the video segment
+    Schema for the LLM to return a list of issues and an optional summary.
+    This model is used as a response_schema for Gemini API calls.
     """
 
-    issue_id: str = Field(
-        ...,
-        description="Unique identifier for this issue",
+    issues: list[Issue] = Field(
+        ..., description="List of medical/content issues identified"
     )
-    start_timestamp: str = Field(
-        ...,
-        description="Start timestamp in video (HH:MM:SS or MM:SS format)",
-        examples=["00:02:15", "12:30"],
-    )
-    end_timestamp: str = Field(
-        ...,
-        description="End timestamp in video (HH:MM:SS or MM:SS format)",
-        examples=["00:02:45", "13:00"],
-    )
-    severity: Severity = Field(
-        ...,
-        description="Severity level of the identified issue",
-    )
-    category: IssueCategory = Field(
-        ...,
-        description="Category of the issue",
-    )
-    description: str = Field(
-        ...,
-        description="Detailed description of the issue",
-        min_length=10,
-    )
-    context: Optional[str] = Field(
-        None,
-        description="Relevant context or quote from the video",
-    )
+    summary: Optional[str] = Field(None, description="A brief summary of the findings")
 
 
 class AnalyzeResponse(BaseModel):
@@ -241,89 +215,6 @@ class AnalyzeResponse(BaseModel):
         ...,
         description="Total count of issues identified",
         ge=0,
-    )
-
-
-class AnalyzeInitialResponse(BaseModel):
-    """
-    Response model for initial analysis without location coordinates.
-
-    Attributes:
-        video_id: YouTube video ID or image identifier
-        video_url: Original video/image URL
-        analysis_timestamp: ISO timestamp when analysis was performed
-        issues: List of identified issues without locations
-        summary: Brief summary of the analysis
-        total_issues: Total number of issues found
-    """
-
-    video_id: str = Field(
-        ...,
-        description="Content identifier",
-    )
-    video_url: str = Field(
-        ...,
-        description="Original content URL",
-    )
-    analysis_timestamp: datetime = Field(
-        ...,
-        description="ISO timestamp when analysis was completed",
-    )
-    issues: list[IssueWithoutLocation] = Field(
-        default_factory=list,
-        description="List of identified issues without location data",
-    )
-    summary: str = Field(
-        ...,
-        description="Brief summary of the analysis results",
-    )
-    total_issues: int = Field(
-        ...,
-        description="Total count of issues identified",
-        ge=0,
-    )
-
-
-class LocationRequest(BaseModel):
-    """
-    Request model for getting location of a specific issue.
-
-    Attributes:
-        image_url: Image URL to analyze (optional if using uploaded image)
-        issue_id: ID of the issue to find location for
-        issue_description: Description of the issue to locate
-    """
-
-    image_url: Optional[HttpUrl] = Field(
-        None,
-        description="Image URL (if previously analyzed via URL)",
-    )
-    issue_id: str = Field(
-        ...,
-        description="Unique identifier for the issue",
-    )
-    issue_description: str = Field(
-        ...,
-        description="Description of the issue to locate in the image",
-    )
-
-
-class LocationResponse(BaseModel):
-    """
-    Response model for issue location endpoint.
-
-    Attributes:
-        issue_id: ID of the issue
-        location: Normalized coordinates of the issue
-    """
-
-    issue_id: str = Field(
-        ...,
-        description="Unique identifier for the issue",
-    )
-    location: Location = Field(
-        ...,
-        description="Normalized coordinates (x, y) of the issue in the image",
     )
 
 

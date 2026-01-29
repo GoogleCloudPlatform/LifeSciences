@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-API route handlers.
-"""
+from api import __version__
 
-from api.routes.analysis import router as analysis_router
-from api.routes.health import router as health_router
-from api.routes.storage import router as storage_router
 
-__all__ = ["analysis_router", "health_router", "storage_router"]
+def test_health_check(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["version"] == __version__
+    assert "timestamp" in data

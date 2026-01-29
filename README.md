@@ -1,7 +1,5 @@
 # Sentinel: Pharma Ad Content Checker
 
-
-
 Sentinel is content analysis starter code to support pharmaceutical regulatory affairs and marketing teams. Sentinel starter code can be used as a starting point to construct more efficient workflow applications in the Pharma Industry. Leveraging the power of Google Gemini AI, Sentinel code can help build automation workflows for the review process for promotional advertisements. Its core function is to flag potential issues, verify citation integrity, and check adherence to established industry standards, thereby identifying and annotating areas for expert review. 
 
 **Key Features and Functionality:**
@@ -16,7 +14,7 @@ Sentinel code is designed for pharmaceutical regulatory affairs and marketing te
 
 **Technology and Architecture:**
 
-Sentinel code is built with a FastAPI (Python) backend, an HTML/CSS/JavaScript frontend utilizing Google Material Design, and integrates with the Google Gemini AI API for its analytical capabilities. It is designed for deployment on Vercel.
+Sentinel code is built with a FastAPI (Python) backend, an HTML/CSS/JavaScript frontend utilizing Google Material Design, and integrates with the Google Gemini AI API for its analytical capabilities. It is designed for deployment on Cloud Run.
 
 **Important Note:**
 
@@ -29,120 +27,142 @@ Sentinel code is a content analysis starter code and is for administrative and o
 For technical details on how to configure these settings, please refer to the official [Vertex AI Zero Data Retention Documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention).
 
 
-
+## Local Development
 
 ### Prerequisites
 
-- Python 3.9+
-- Google Gemini API key
+- Python 3.12+
+- `uv` package manager (**required** - faster than pip/venv)
+- Node.js and npm (for frontend)
+- Google Cloud Project (for Vertex AI - preferred) OR Google Gemini API key (for AI Studio)
+- Google Cloud SDK (for Vertex AI authentication)
 
 ### Setup
 
-1. Clone the repository:
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/GoogleCloudPlatform/LifeSciences/Sentinel
+   cd sentinel
+   ```
+
+2. **Backend Setup**:
+   ```bash
+   # Create and activate a virtual environment
+   uv venv --python "python3.12" ".venv"
+   source .venv/bin/activate
+
+   # Install all dependencies
+   uv sync --all-extras
+   ```
+
+3. **Frontend Setup**:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+4. **Configure Environment Variables**:
+   
+   Copy `.env.example` to `.env`.
+
+   * **Vertex AI (Recommended)**:
+      * Set `GOOGLE_GENAI_USE_VERTEXAI=true`.
+      * Set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`.
+      * Set `GCS_BUCKET_NAME` for image features.
+      * Authenticate: `gcloud auth application-default login`.
+
+   * **AI Studio**:
+      * Set `GEMINI_API_KEY`.
+
+5. **Run the Development Servers**:
+
+   * **Backend**:
+      ```bash
+      uv run python -m api.main
+      ```
+      The API will run at `http://localhost:8000`.
+
+   * **Frontend**:
+      ```bash
+      cd frontend
+      npm run dev
+      ```
+      The frontend will run at `http://localhost:5173`.
+
+### Running Tests
+
+The project uses `pytest` for unit testing the API services and routes.
+
 ```bash
-git clone https://github.com/GoogleCloudPlatform/LifeSciences/Sentinel
-cd sentinel
+uv run pytest
 ```
 
-2. Create and activate virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+## Docker Deployment
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+The application is containerized using a multi-stage Docker build that serves the React frontend via the FastAPI backend.
 
-4. Create `.env` file from example:
-```bash
-cp .env.example .env
-```
+### Build and Run
 
-5. Add your Gemini API key to `.env`:
-```
-GEMINI_API_KEY=your_api_key_here
-```
+1. **Build the Image**:
+   ```bash
+   docker build -t sentinel .
+   ```
 
-6. Run the development server:
-```bash
-python -m api.main
-```
+2. **Run the Container**:
 
-7. Open `frontend/index.html` in your browser or serve it locally:
-```bash
-cd frontend
-python -m http.server 8080
-```
+   * **Run with AI Studio (API Key)**
 
-The API will be available at `http://localhost:8000` and the frontend at `http://localhost:8080`.
+      ```bash
+      docker run -p 8080:8080 --env-file .env sentinel
+      ```
 
-## Deploying to Vercel
+   * **Run with Vertex AI**
 
-### Quick Deploy
+      You need to provide your Google Cloud credentials to the container.
 
-1. **Push to GitHub** (if you haven't already):
-```bash
-git push origin main
-```
+      ```bash
+      # Authenticate locally first
+      gcloud auth application-default login
 
-2. **Import to Vercel**:
-   - Go to [vercel.com](https://vercel.com)
-   - Click "New Project"
-   - Import your GitHub repository
-   - Vercel will automatically detect the configuration from `vercel.json`
+      # Run container with mounted credentials and environment file
+      # We use --user to ensure the container can read the mounted credentials
+      docker run -p 8080:8080 \
+      --user $(id -u):$(id -g) \
+      -v ~/.config/gcloud/application_default_credentials.json:/app/gcp_creds.json \
+      -e GOOGLE_APPLICATION_CREDENTIALS=/app/gcp_creds.json \
+      --env-file .env \
+      sentinel
+      ```
 
-3. **Add Environment Variables** in Vercel:
-   - Go to Project Settings → Environment Variables
-   - Add `GEMINI_API_KEY` with your API key
-
-4. **Deploy**:
-   - Click "Deploy"
-   - Vercel will build and deploy your application
-
-### Manual Configuration
-
-If you need to configure manually:
-
-1. **Framework Preset**: Other
-2. **Build Command**: (leave empty)
-3. **Output Directory**: (leave empty)
-4. **Install Command**: `pip install -r requirements.txt`
-
-### Environment Variables
-
-Set these in Vercel's project settings:
-
-- `GEMINI_API_KEY`: Your Google Gemini API key (required)
-- `LOG_LEVEL`: `INFO` (optional, defaults to INFO)
-- `CORS_ORIGINS`: `*` (optional, for CORS configuration)
 
 ## Project Structure
 
 ```
 sentinel/
 ├── api/                    # FastAPI backend
-│   ├── routes/            # API route handlers
-│   ├── services/          # Business logic (Gemini client, etc.)
+│   ├── routes/            # API route handlers (analysis, storage, health)
+│   ├── services/          # Business logic (Gemini client, analyzer service)
 │   ├── models/            # Pydantic schemas
 │   ├── config.py          # Configuration management
 │   └── main.py            # FastAPI application entry point
-├── frontend/              # Static frontend
-│   └── index.html         # Single-page application
-├── requirements.txt       # Python dependencies
-├── vercel.json           # Vercel deployment configuration
-├── .env.example          # Environment variables template
-└── README.md             # This file
+├── tests/                  # Unit test suite
+├── frontend/              # React frontend
+│   ├── src/               # TypeScript source files
+│   ├── public/            # Static assets
+│   └── index.html         # SPA entry point
+├── Dockerfile              # Multi-stage Docker build
+├── pyproject.toml         # Python dependencies and metadata
+└── README.md               # This file
 ```
 
 ## API Endpoints
 
-- `GET /` - API information
 - `GET /health` - Health check
-- `POST /api/v1/analyze` - Analyze video or image URL
-- `POST /api/v1/analyze/initial` - Initial image analysis (without locations)
-- `POST /api/v1/analyze/location` - Find issue location in image
+- `POST /api/v1/analyze` - Analyze video (URL) or image (URL)
+- `POST /api/v1/analyze/upload` - Analyze uploaded image file
+- `GET /api/v1/storage/list` - List files in GCS
+- `POST /api/v1/storage/upload` - Upload file to GCS
+- `GET /api/v1/storage/file/{path}` - Retrieve/stream file from GCS
 
 ## Usage
 
