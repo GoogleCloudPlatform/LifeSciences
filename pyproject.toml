@@ -12,7 +12,7 @@ license = "Apache-2.0"
 authors = [
     { name = "Sentinel Contributors" }
 ]
-keywords = ["pharmaceutical", "ai", "youtube", "gemini", "advertisement]
+keywords = ["pharmaceutical", "ai", "youtube", "gemini", "advertisement"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Healthcare Industry",
