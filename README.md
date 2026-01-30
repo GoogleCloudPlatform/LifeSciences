@@ -41,8 +41,8 @@ For technical details on how to configure these settings, please refer to the of
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/GoogleCloudPlatform/LifeSciences/Sentinel
-   cd sentinel
+   git clone https://github.com/GoogleCloudPlatform/LifeSciences
+   cd LifeSciences
    ```
 
 2. **Backend Setup**:
