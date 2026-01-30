@@ -43,10 +43,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/GoogleCloudPlatform/LifeSciences/Sentinel"
-Documentation = "https://github.com/GoogleCloudPlatform/LifeSciences/Sentinel#readme"
-Repository = "https://github.com/GoogleCloudPlatform/LifeSciences/Sentinel"
-Issues = "https://github.com/GoogleCloudPlatform/LifeSciences/Sentinel/issues"
+Homepage = "https://github.com/GoogleCloudPlatform/LifeSciences"
+Documentation = "https://github.com/GoogleCloudPlatform/LifeSciences#readme"
+Repository = "https://github.com/GoogleCloudPlatform/LifeSciences"
+Issues = "https://github.com/GoogleCloudPlatform/LifeSciences/issues"
 
 [tool.setuptools]
 packages = ["api"]
