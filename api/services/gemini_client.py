@@ -76,14 +76,10 @@ class GeminiClient:
                 vertexai=True, project=self.project, location=self.location
             ).aio
             self.storage_client = storage_client or storage.Client(project=self.project)
-        elif self.api_key:
+        else:
             logger.info("Initializing Gemini Client with API Key (AI Studio)")
             self.client = genai.Client(api_key=self.api_key).aio
             self.storage_client = None
-        else:
-            raise ValueError(
-                "No API key provided and GOOGLE_GENAI_USE_VERTEXAI is not True."
-            )
 
     async def close(self):
         """
