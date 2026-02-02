@@ -20,6 +20,7 @@ This module handles environment variables and application settings using Pydanti
 
 from typing import Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,7 +46,7 @@ class Settings(BaseSettings):
     gemini_api_key: Optional[str] = None
     gemini_model_fast: str = "gemini-3-flash-preview"
     gemini_model_powerful: str = "gemini-3-pro-preview"
-    google_genai_use_vertexai: Optional[bool] = False
+    google_genai_use_vertexai: bool = False
     gcs_bucket_name: Optional[str] = None
     gcs_media_folder: str = "dev"
     api_host: str = "0.0.0.0"
@@ -58,6 +59,24 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
+
+    @model_validator(mode="after")
+    def validate_genai_config(self):
+        if self.google_genai_use_vertexai:
+            if not self.google_cloud_project:
+                raise ValueError(
+                    "GOOGLE_CLOUD_PROJECT is required when GOOGLE_GENAI_USE_VERTEXAI is True"
+                )
+            if not self.google_cloud_location:
+                raise ValueError(
+                    "GOOGLE_CLOUD_LOCATION is required when GOOGLE_GENAI_USE_VERTEXAI is True"
+                )
+        else:
+            if not self.gemini_api_key:
+                raise ValueError(
+                    "GEMINI_API_KEY is required when GOOGLE_GENAI_USE_VERTEXAI is False"
+                )
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:
