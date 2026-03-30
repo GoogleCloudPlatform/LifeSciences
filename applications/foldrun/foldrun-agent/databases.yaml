@@ -1,0 +1,294 @@
+# Database manifest for FoldRun models.
+#
+# Each entry defines a database to download to NFS via Cloud Batch.
+# The generic downloader reads this YAML and submits one Batch job per entry.
+#
+# Fields:
+#   models:       List of models that use this database. Used for --models filtering.
+#                 Shared databases (e.g. uniref90) list multiple models so that
+#                 installing any one model pulls in its dependencies. Downloaded once,
+#                 no duplication on NFS.
+#   display_name: Human-readable name shown in logs.
+#   nfs_path:     Subdirectory under NFS_MOUNT_POINT (e.g. /mnt/nfs/foldrun/<nfs_path>).
+#   machine_type: Cloud Batch VM type (default: n1-standard-4).
+#
+# Standard download (90% of cases):
+#   source:       URL to download (via aria2c).
+#   extract:      Extraction method: gunzip, tar, tar_strip, none (default: none).
+#
+# Custom script (escape hatch for edge cases):
+#   script:       Full bash script. {dest} is replaced with the NFS destination path.
+#                 When script is provided, source/extract are ignored.
+
+databases:
+  # ===========================================================================
+  # Shared protein MSA databases (used by AF2, OF3, and Boltz)
+  # ===========================================================================
+  uniref90:
+    models: [af2, of3, boltz]
+    display_name: UniRef90
+    nfs_path: uniref90
+    machine_type: n2d-standard-8
+    local_ssd_count: 1
+    script: |
+      # 1. Prepare Scratch Space
+      if [ ! -d /mnt/scratch ]; then
+        echo "/mnt/scratch not found, falling back to NFS for scratch..."
+        mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
+      fi
+      # 2. Download to SSD
+      echo "Downloading UniRef90 to Local SSD..."
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref90/uniref90.fasta.gz' --dir=/mnt/scratch --out=uniref90.fasta.gz || \
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://ftp.ebi.ac.uk/pub/databases/uniprot/uniref/uniref90/uniref90.fasta.gz' --dir=/mnt/scratch --out=uniref90.fasta.gz
+      # 3. Fast Parallel Decompression on SSD
+      echo "Decompressing with pigz..."
+      apt-get update -qq && apt-get install -y -qq pigz
+      unpigz -c /mnt/scratch/uniref90.fasta.gz > /mnt/scratch/uniref90.fasta
+      # 4. Sync to NFS
+      echo "Moving to NFS..."
+      mv /mnt/scratch/uniref90.fasta {dest}/uniref90.fasta
+
+  mgnify:
+    models: [af2, of3, boltz]
+    display_name: MGnify
+    nfs_path: mgnify
+    machine_type: n2d-standard-8
+    local_ssd_count: 1
+    script: |
+      # 1. Prepare Scratch Space
+      if [ ! -d /mnt/scratch ]; then
+        echo "/mnt/scratch not found, falling back to NFS for scratch..."
+        mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
+      fi
+      # 2. Download to SSD
+      echo "Downloading MGnify to Local SSD..."
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://storage.googleapis.com/alphafold-databases/v2.3/mgy_clusters_2022_05.fa.gz' --dir=/mnt/scratch --out=mgy.fa.gz
+      # 3. Fast Parallel Decompression on SSD
+      echo "Decompressing with pigz..."
+      apt-get update -qq && apt-get install -y -qq pigz
+      unpigz -c /mnt/scratch/mgy.fa.gz > /mnt/scratch/mgy_clusters_2022_05.fa
+      # 4. Sync to NFS
+      echo "Moving to NFS..."
+      mv /mnt/scratch/mgy_clusters_2022_05.fa {dest}/mgy_clusters_2022_05.fa
+
+  pdb_seqres:
+    models: [af2, of3, boltz]
+    display_name: PDB SeqRes
+    nfs_path: pdb_seqres
+    script: |
+      aria2c --continue=true 'https://files.rcsb.org/pub/pdb/derived_data/pdb_seqres.txt' --dir={dest}
+      grep --after-context=1 --no-group-separator '>.* mol:protein' {dest}/pdb_seqres.txt > {dest}/pdb_seqres_filtered.txt
+      mv {dest}/pdb_seqres_filtered.txt {dest}/pdb_seqres.txt
+
+  uniprot:
+    models: [af2, of3]
+    display_name: UniProt
+    nfs_path: uniprot
+    machine_type: n2d-standard-8
+    local_ssd_count: 1
+    script: |
+      if [ ! -d /mnt/scratch ]; then
+        mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
+      fi
+      apt-get update -qq && apt-get install -y -qq pigz
+      echo "Downloading UniProt components directly to SSD..."
+      aria2c --continue=true 'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz' --dir=/mnt/scratch || \
+      aria2c --continue=true 'https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz' --dir=/mnt/scratch
+      aria2c --continue=true 'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz' --dir=/mnt/scratch || \
+      aria2c --continue=true 'https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz' --dir=/mnt/scratch
+      echo "Decompressing with pigz..."
+      unpigz -f /mnt/scratch/uniprot_trembl.fasta.gz
+      unpigz -f /mnt/scratch/uniprot_sprot.fasta.gz
+      echo "Merging UniProt sequences..."
+      cat /mnt/scratch/uniprot_trembl.fasta /mnt/scratch/uniprot_sprot.fasta > /mnt/scratch/uniprot.fasta
+      echo "Syncing final artifact to NFS..."
+      mv /mnt/scratch/uniprot.fasta {dest}/uniprot.fasta
+
+  pdb_mmcif:
+    models: [af2, of3]
+    display_name: PDB mmCIF
+    nfs_path: pdb_mmcif
+    machine_type: n2d-standard-8
+    local_ssd_count: 1
+    script: |
+      # 1. Prepare Scratch Space
+      if [ ! -d /mnt/scratch ]; then
+        echo "/mnt/scratch not found, falling back to NFS for scratch..."
+        mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
+      fi
+      mkdir -p /mnt/scratch/raw /mnt/scratch/mmcif_files
+      mkdir -p {dest}/mmcif_files
+      export GCS_SYNC_SOURCE=/mnt/scratch/mmcif_files/
+
+      # 2. Sync from RCSB to SSD (Background)
+      echo "Syncing structures from RCSB (in background)..."
+      apt-get update -qq && apt-get install -y -qq rsync pigz
+      rsync --recursive --links --perms --times --compress --info=progress2 \
+        --port=33444 rsync.rcsb.org::ftp_data/structures/divided/mmCIF/ /mnt/scratch/raw &
+      RSYNC_PID=$!
+
+      # 3. Incremental Processing Loop
+      echo "Processing and syncing files as they are downloaded..."
+      while kill -0 $RSYNC_PID 2>/dev/null; do
+        # Decompress finished files (not starting with .)
+        find /mnt/scratch/raw -name '[!.]*.cif.gz' -exec unpigz -f {} + 2>/dev/null || true
+        # Move to flat directory
+        find /mnt/scratch/raw -name '[!.]*.cif' -exec mv -t /mnt/scratch/mmcif_files/ {} + 2>/dev/null || true
+        # Incremental sync to NFS
+        rsync -ah /mnt/scratch/mmcif_files/ {dest}/mmcif_files/ 2>/dev/null || true
+        sleep 30
+      done
+
+      # 4. Final Cleanup Pass
+      echo "Finalizing decompression and move..."
+      find /mnt/scratch/raw -name '*.cif.gz' -exec unpigz -f {} +
+      find /mnt/scratch/raw -name '*.cif' -exec mv -t /mnt/scratch/mmcif_files/ {} +
+      rm -rf /mnt/scratch/raw
+
+      # 5. Final high-bandwidth Sync to NFS
+      echo "Syncing final files to NFS..."
+      rsync -ah --info=progress2 /mnt/scratch/mmcif_files/ {dest}/mmcif_files/
+      
+      # 6. Additional metadata
+      echo "Downloading obsolete metadata..."
+      aria2c --continue=true 'https://files.wwpdb.org/pub/pdb/data/status/obsolete.dat' --dir={dest}
+
+  # ===========================================================================
+  # AlphaFold2 only
+  # ===========================================================================
+  alphafold_params:
+    models: [af2]
+    display_name: AlphaFold2 Parameters
+    nfs_path: alphafold2/params
+    source: https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar
+    extract: tar
+
+  small_bfd:
+    models: [af2]
+    display_name: Small BFD (Reduced)
+    nfs_path: small_bfd
+    source: https://storage.googleapis.com/alphafold-databases/reduced_dbs/bfd-first_non_consensus_sequences.fasta.gz
+    extract: gunzip
+
+  bfd:
+    models: [af2]
+    display_name: BFD (Big Fantastic Database)
+    nfs_path: bfd
+    source: https://storage.googleapis.com/alphafold-databases/casp14_versions/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt.tar.gz
+    extract: tar
+
+  pdb70:
+    models: [af2]
+    display_name: PDB70
+    nfs_path: pdb70
+    machine_type: n2d-standard-8
+    local_ssd_count: 1
+    script: |
+      if [ ! -d /mnt/scratch ]; then
+        mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
+      fi
+      echo "Downloading PDB70 to SSD..."
+      aria2c --continue=true 'https://wwwuser.gwdg.de/~compbiol/data/hhsuite/databases/hhsuite_dbs/old-releases/pdb70_from_mmcif_200401.tar.gz' --dir=/mnt/scratch --out=pdb70.tar.gz
+      echo "Extracting on SSD..."
+      tar -xf /mnt/scratch/pdb70.tar.gz -C /mnt/scratch
+      rm /mnt/scratch/pdb70.tar.gz
+      echo "Moving to NFS..."
+      mv /mnt/scratch/* {dest}/
+
+  uniref30:
+    models: [af2]
+    display_name: UniRef30
+    nfs_path: uniref30
+    machine_type: n2d-standard-8
+    local_ssd_count: 1
+    script: |
+      if [ ! -d /mnt/scratch ]; then
+        mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
+      fi
+      echo "Downloading UniRef30 to SSD..."
+      aria2c --continue=true 'https://storage.googleapis.com/alphafold-databases/v2.3/UniRef30_2021_03.tar.gz' --dir=/mnt/scratch --out=uniref30.tar.gz
+      echo "Extracting on SSD..."
+      tar -xf /mnt/scratch/uniref30.tar.gz -C /mnt/scratch
+      rm /mnt/scratch/uniref30.tar.gz
+      echo "Moving to NFS..."
+      mv /mnt/scratch/* {dest}/
+
+  # ===========================================================================
+  # OpenFold3 only
+  # ===========================================================================
+  of3_params:
+    models: [of3]
+    display_name: OpenFold3 Parameters
+    nfs_path: of3/params
+    script: |
+      apt-get install -y awscli
+      aws s3 cp --no-sign-request s3://openfold/openfold3_params/of3_ft3_v1.pt {dest}/of3_ft3_v1.pt
+
+  of3_ccd:
+    models: [of3]
+    display_name: OpenFold3 CCD (Chemical Component Dictionary)
+    nfs_path: of3/ccd
+    script: |
+      apt-get install -y awscli
+      aws s3 cp --no-sign-request s3://openfold3-data/components.bcif {dest}/components.bcif
+
+  rfam:
+    models: [of3]
+    display_name: Rfam (RNA MSA)
+    nfs_path: rfam
+    script: |
+      apt-get install -y awscli
+      aws s3 cp --no-sign-request s3://openfold/alignment_databases/rfam.fasta.gz {dest}/rfam.fasta.gz
+      gunzip -f {dest}/rfam.fasta.gz
+
+  rnacentral:
+    models: [of3]
+    display_name: RNAcentral (RNA MSA)
+    nfs_path: rnacentral
+    script: |
+      apt-get install -y awscli
+      aws s3 cp --no-sign-request s3://openfold/alignment_databases/rnacentral.fasta.gz {dest}/rnacentral.fasta.gz
+      gunzip -f {dest}/rnacentral.fasta.gz
+
+# Download modes — which databases to download per model.
+# Use with: python scripts/setup_data.py --models af2 --mode reduced
+# When no mode is specified, all databases for the requested models are downloaded.
+modes:
+  af2:
+    full:
+      - alphafold_params
+      - bfd
+      - mgnify
+      - pdb70
+      - pdb_mmcif
+      - pdb_seqres
+      - uniref30
+      - uniref90
+      - uniprot
+    reduced:
+      - alphafold_params
+      - small_bfd
+      - mgnify
+      - pdb70
+      - pdb_mmcif
+      - pdb_seqres
+      - uniref30
+      - uniref90
+      - uniprot
+  of3:
+    full:
+      - of3_params
+      - of3_ccd
+      - uniref90
+      - mgnify
+      - pdb_seqres
+      - uniprot
+      - pdb_mmcif
+      - rfam
+      - rnacentral
+    core:
+      - of3_params
+      - of3_ccd

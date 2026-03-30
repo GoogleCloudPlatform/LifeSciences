@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoldRun Structure & Analysis - {{ model_name }}</title>
+    <script src="https://3Dmol.csb.pitt.edu/build/3Dmol-min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4285F4 0%, #1a73e8 100%);
+            color: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            height: calc(100vh - 120px);
+        }
+
+        .viewer-panel {
+            background: white;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #ddd;
+        }
+
+        .analysis-panel {
+            background: #fafafa;
+            overflow-y: auto;
+            padding: 30px;
+        }
+
+        .panel-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 2px solid #4285F4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h2 {
+            color: #4285F4;
+            font-size: 1.3rem;
+        }
+
+        #prediction-selector {
+            padding: 8px 15px;
+            border: 2px solid #4285F4;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: white;
+            color: #4285F4;
+            font-weight: 600;
+            cursor: pointer;
+            min-width: 250px;
+        }
+
+        #prediction-selector:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        #viewer-3d {
+            flex: 1;
+            width: 100%;
+            position: relative;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px 20px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .control-group label {
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        select, button {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            background: white;
+        }
+
+        button {
+            background: #4285F4;
+            color: white;
+            border: none;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .info-card h3 {
+            color: #4285F4;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .info-row {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            padding: 10px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #666;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .info-value {
+            color: #333;
+            font-size: 0.9rem;
+        }
+
+        .quality-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .quality-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .quality-item .value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #4285F4;
+            margin-bottom: 5px;
+        }
+
+        .quality-item .label {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .confidence-bands {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .confidence-band {
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            color: white;
+        }
+
+        .confidence-band.very-low { background: #FF7D45; }
+        .confidence-band.low { background: #FFDB13; color: #333; }
+        .confidence-band.confident { background: #65CBF3; }
+        .confidence-band.very-high { background: #0053D6; }
+
+        .confidence-band .count {
+            font-size: 1.4rem;
+            font-weight: bold;
+        }
+
+        .confidence-band .range {
+            font-size: 0.75rem;
+            opacity: 0.9;
+            margin-top: 3px;
+        }
+
+        .plot-image {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin-top: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #4285F4;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4285F4;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .legend {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 20px;
+        }
+
+        .legend h4 {
+            color: #4285F4;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .legend-label {
+            font-size: 0.85rem;
+            color: #555;
+        }
+
+        .rank-badge {
+            display: inline-block;
+            background: #4285F4;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .rank-badge.rank-1 {
+            background: #FFD700;
+            color: #333;
+        }
+
+        .rank-badge.rank-2 {
+            background: #C0C0C0;
+            color: #333;
+        }
+
+        .rank-badge.rank-3 {
+            background: #CD7F32;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧬 FoldRun Structure & Analysis</h1>
+        <p class="subtitle">Job: {{ job_id or 'N/A' }}</p>
+    </div>
+
+    <div class="main-container">
+        <!-- Left Panel: 3D Viewer -->
+        <div class="viewer-panel">
+            <div class="panel-header">
+                <h2>3D Structure Viewer</h2>
+                <select id="prediction-selector" onchange="switchPrediction()">
+                    <option value="">Loading predictions...</option>
+                </select>
+            </div>
+            <div id="viewer-3d">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading structure...</p>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="control-group">
+                    <label>Style</label>
+                    <select id="style-select" onchange="updateStyle()">
+                        <option value="cartoon">Cartoon</option>
+                        <option value="stick">Stick</option>
+                        <option value="sphere">Sphere</option>
+                        <option value="line">Line</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Color</label>
+                    <select id="color-select" onchange="updateStyle()">
+                        <option value="plddt" selected>pLDDT Confidence</option>
+                        <option value="chain">By Chain</option>
+                        <option value="ss">Secondary Structure</option>
+                    </select>
+                </div>
+                <button onclick="resetView()">Reset View</button>
+                <button onclick="toggleSpin()">Toggle Rotation</button>
+            </div>
+
+            <div class="legend">
+                <h4>pLDDT Confidence Legend</h4>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0053D6;"></div>
+                    <span class="legend-label">Very High (90-100)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #65CBF3;"></div>
+                    <span class="legend-label">Confident (70-90)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FFDB13;"></div>
+                    <span class="legend-label">Low (50-70)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF7D45;"></div>
+                    <span class="legend-label">Very Low (&lt;50)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Analysis -->
+        <div class="analysis-panel">
+            <div id="analysis-content">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading analysis...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let viewer;
+        let analysisData;
+        let predictions = [];
+        let currentPredictionIndex = 0;
+        let isSpinning = false;
+
+        // Initialize 3Dmol viewer
+        function initViewer() {
+            const element = document.getElementById('viewer-3d');
+            const config = { backgroundColor: 'white' };
+            viewer = $3Dmol.createViewer(element, config);
+        }
+
+        // Load analysis data first (contains all predictions)
+        async function loadAnalysis() {
+            try {
+                {% if summary_uri %}
+                const url = `/api/analysis?summary_uri=${encodeURIComponent('{{ summary_uri }}')}`;
+                {% elif job_id %}
+                const url = `/api/analysis?job_id=${encodeURIComponent('{{ job_id }}')}`;
+                {% else %}
+                throw new Error('No job_id or summary_uri provided');
+                {% endif %}
+
+                const response = await fetch(url);
+                analysisData = await response.json();
+
+                // Extract predictions from top_predictions
+                predictions = analysisData.top_predictions || [];
+
+                if (predictions.length === 0) {
+                    throw new Error('No predictions found in analysis');
+                }
+
+                // Populate prediction selector
+                const selector = document.getElementById('prediction-selector');
+                selector.innerHTML = '';
+                predictions.forEach((pred, idx) => {
+                    const option = document.createElement('option');
+                    option.value = idx;
+                    const rankBadge = pred.rank <= 3 ? ` 🏆` : '';
+                    option.textContent = `Rank ${pred.rank}: ${pred.model_name} (pLDDT: ${pred.plddt_mean.toFixed(1)})${rankBadge}`;
+                    selector.appendChild(option);
+                });
+
+                // Load first prediction
+                await switchPrediction();
+            } catch (error) {
+                console.error('Error loading analysis:', error);
+                document.querySelector('#analysis-content').innerHTML =
+                    '<div class="info-card"><p style="color: #e74c3c;">Error loading analysis: ' + error.message + '</p></div>';
+            }
+        }
+
+        // Switch to a different prediction
+        async function switchPrediction() {
+            const selector = document.getElementById('prediction-selector');
+            currentPredictionIndex = parseInt(selector.value) || 0;
+            const prediction = predictions[currentPredictionIndex];
+
+            if (!prediction) return;
+
+            // Show loading
+            document.querySelector('#viewer-3d .loading').style.display = 'block';
+
+            try {
+                // Load structure for this prediction
+                await loadStructure(prediction);
+
+                // Render analysis for this prediction
+                renderAnalysis(prediction);
+            } catch (error) {
+                console.error('Error switching prediction:', error);
+                alert('Error loading prediction: ' + error.message);
+            }
+        }
+
+        // Load PDB structure for a specific prediction
+        async function loadStructure(prediction) {
+            try {
+                // Convert pkl URI to pdb URI
+                const pdbUri = prediction.uri.replace('/raw_prediction.pkl', '/unrelaxed_protein.pdb');
+
+                const response = await fetch(`/api/pdb?uri=${encodeURIComponent(pdbUri)}`);
+                const pdbData = await response.text();
+
+                // Clear existing models
+                viewer.removeAllModels();
+
+                // Add new model
+                viewer.addModel(pdbData, 'pdb');
+                updateStyle();
+                viewer.zoomTo();
+                viewer.render();
+
+                document.querySelector('#viewer-3d .loading').style.display = 'none';
+            } catch (error) {
+                console.error('Error loading structure:', error);
+                document.querySelector('#viewer-3d .loading').innerHTML =
+                    '<p style="color: #e74c3c;">Error loading structure: ' + error.message + '</p>';
+                throw error;
+            }
+        }
+
+        // Render analysis dashboard for a specific prediction
+        function renderAnalysis(prediction) {
+            const container = document.getElementById('analysis-content');
+            let html = '';
+
+            // Prediction Summary
+            html += `
+                <div class="info-card">
+                    <h3>
+                        Prediction Summary
+                        <span class="rank-badge rank-${prediction.rank}">#${prediction.rank}</span>
+                    </h3>
+                    <div class="info-row">
+                        <span class="info-label">Model</span>
+                        <span class="info-value">${prediction.model_name}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Ranking Confidence</span>
+                        <span class="info-value">${prediction.ranking_confidence.toFixed(2)}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Quality Assessment</span>
+                        <span class="info-value">${prediction.quality_assessment.replace(/_/g, ' ').toUpperCase()}</span>
+                    </div>
+                </div>
+            `;
+
+            // Quality Metrics
+            html += `
+                <div class="info-card">
+                    <h3>Quality Metrics</h3>
+                    <div class="quality-grid">
+                        <div class="quality-item">
+                            <div class="value">${prediction.plddt_mean.toFixed(1)}</div>
+                            <div class="label">Mean pLDDT</div>
+                        </div>
+                        <div class="quality-item">
+                            <div class="value">${prediction.plddt_median.toFixed(1)}</div>
+                            <div class="label">Median pLDDT</div>
+                        </div>
+                        <div class="quality-item">
+                            <div class="value">${prediction.plddt_min.toFixed(1)}</div>
+                            <div class="label">Min pLDDT</div>
+                        </div>
+                        <div class="quality-item">
+                            <div class="value">${prediction.plddt_max.toFixed(1)}</div>
+                            <div class="label">Max pLDDT</div>
+                        </div>
+                    </div>
+            `;
+
+            // Confidence Distribution (residue counts)
+            if (prediction.plddt_distribution) {
+                const dist = prediction.plddt_distribution;
+                html += `
+                    <div class="confidence-bands">
+                        <div class="confidence-band very-low">
+                            <div class="count">${dist.very_low_confidence || 0}</div>
+                            <div class="range">&lt; 50</div>
+                        </div>
+                        <div class="confidence-band low">
+                            <div class="count">${dist.low_confidence || 0}</div>
+                            <div class="range">50-70</div>
+                        </div>
+                        <div class="confidence-band confident">
+                            <div class="count">${dist.high_confidence || 0}</div>
+                            <div class="range">70-90</div>
+                        </div>
+                        <div class="confidence-band very-high">
+                            <div class="count">${dist.very_high_confidence || 0}</div>
+                            <div class="range">90-100</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+
+            // pLDDT Plot
+            if (prediction.plots && prediction.plots.plddt_plot) {
+                html += `
+                    <div class="info-card">
+                        <h3>Per-Residue pLDDT Plot</h3>
+                        <img src="/api/image?uri=${encodeURIComponent(prediction.plots.plddt_plot)}"
+                             class="plot-image"
+                             alt="pLDDT plot"
+                             onerror="this.style.display='none'; this.parentElement.innerHTML += '<p style=\\'color: #e74c3c;\\'>Error loading plot image</p>'">
+                    </div>
+                `;
+            }
+
+            // Job Summary (from overall analysis data)
+            if (analysisData.summary) {
+                html += `
+                    <div class="info-card">
+                        <h3>Overall Job Summary</h3>
+                        <div class="info-row">
+                            <span class="info-label">Total Predictions</span>
+                            <span class="info-value">${analysisData.summary.total_predictions}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Analyzed Successfully</span>
+                            <span class="info-value">${analysisData.summary.analyzed_successfully}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Job ID</span>
+                            <span class="info-value" style="font-size: 0.8rem; word-break: break-all;">${analysisData.job_id}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Update visualization style
+        function updateStyle() {
+            const styleType = document.getElementById('style-select').value;
+            const colorType = document.getElementById('color-select').value;
+
+            viewer.setStyle({}, {}); // Clear existing styles
+
+            let style = {};
+
+            // Set style type
+            if (styleType === 'cartoon') {
+                style.cartoon = {};
+            } else if (styleType === 'stick') {
+                style.stick = {};
+            } else if (styleType === 'sphere') {
+                style.sphere = { radius: 0.5 };
+            } else if (styleType === 'line') {
+                style.line = {};
+            }
+
+            // Set color scheme
+            if (colorType === 'plddt') {
+                const colorMap = {
+                    prop: 'b',
+                    map: [
+                        { stop: 0, color: '#FF7D45' },
+                        { stop: 50, color: '#FFDB13' },
+                        { stop: 70, color: '#65CBF3' },
+                        { stop: 90, color: '#0053D6' }
+                    ]
+                };
+
+                if (style.cartoon) {
+                    style.cartoon.colorscheme = colorMap;
+                } else {
+                    style.colorscheme = colorMap;
+                }
+            } else if (colorType === 'chain') {
+                style.colorscheme = 'chain';
+            } else if (colorType === 'ss') {
+                style.colorscheme = 'ss';
+            }
+
+            viewer.setStyle({}, style);
+            viewer.render();
+        }
+
+        // Reset camera view
+        function resetView() {
+            viewer.zoomTo();
+            viewer.render();
+        }
+
+        // Toggle auto-rotation
+        function toggleSpin() {
+            isSpinning = !isSpinning;
+            if (isSpinning) {
+                viewer.spin(true);
+            } else {
+                viewer.spin(false);
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            initViewer();
+            loadAnalysis();
+        });
+    </script>
+</body>
+</html>

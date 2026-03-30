@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoldRun Structure & Analysis - {{ model_name }}</title>
+    <script src="https://3Dmol.csb.pitt.edu/build/3Dmol-min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4285F4 0%, #1a73e8 100%);
+            color: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .header .job-link {
+            color: white;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-underline-offset: 2px;
+            transition: opacity 0.2s;
+        }
+
+        .header .job-link:hover {
+            opacity: 0.8;
+            text-decoration-style: solid;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            height: calc(100vh - 120px);
+        }
+
+        .viewer-panel {
+            background: white;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #ddd;
+        }
+
+        .analysis-panel {
+            background: #fafafa;
+            overflow-y: auto;
+            padding: 30px;
+        }
+
+        .panel-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 2px solid #4285F4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h2 {
+            color: #4285F4;
+            font-size: 1.3rem;
+        }
+
+        #prediction-selector {
+            padding: 8px 15px;
+            border: 2px solid #4285F4;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: white;
+            color: #4285F4;
+            font-weight: 600;
+            cursor: pointer;
+            min-width: 250px;
+        }
+
+        #prediction-selector:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        #viewer-3d {
+            flex: 1;
+            width: 100%;
+            position: relative;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px 20px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .control-group label {
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        select, button {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            background: white;
+        }
+
+        button {
+            background: #4285F4;
+            color: white;
+            border: none;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .info-card h3 {
+            color: #4285F4;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .info-row {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            padding: 10px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #666;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .info-value {
+            color: #333;
+            font-size: 0.9rem;
+        }
+
+        .quality-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .quality-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .quality-item .value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #4285F4;
+            margin-bottom: 5px;
+        }
+
+        .quality-item .label {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .confidence-bands {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .confidence-band {
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            color: white;
+        }
+
+        .confidence-band.very-low { background: #FF7D45; }
+        .confidence-band.low { background: #FFDB13; color: #333; }
+        .confidence-band.confident { background: #65CBF3; }
+        .confidence-band.very-high { background: #0053D6; }
+
+        .confidence-band .count {
+            font-size: 1.4rem;
+            font-weight: bold;
+        }
+
+        .confidence-band .range {
+            font-size: 0.75rem;
+            opacity: 0.9;
+            margin-top: 3px;
+        }
+
+        .plot-image {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin-top: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #4285F4;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4285F4;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .legend {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 20px;
+        }
+
+        .legend h4 {
+            color: #4285F4;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .legend-label {
+            font-size: 0.85rem;
+            color: #555;
+        }
+
+        .rank-badge {
+            display: inline-block;
+            background: #4285F4;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .rank-badge.rank-1 {
+            background: #FFD700;
+            color: #333;
+        }
+
+        .rank-badge.rank-2 {
+            background: #C0C0C0;
+            color: #333;
+        }
+
+        .rank-badge.rank-3 {
+            background: #CD7F32;
+            color: white;
+        }
+
+        .job-info-summary {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            font-size: 0.82rem;
+        }
+
+        .job-info-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 3px 10px;
+            border-radius: 12px;
+            white-space: nowrap;
+        }
+
+        .job-info-label {
+            opacity: 0.7;
+            font-size: 0.75rem;
+        }
+
+        .job-info-value {
+            font-weight: 600;
+        }
+
+        .job-status {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .job-status.succeeded {
+            background: #10b981;
+            color: white;
+        }
+
+        .job-status.running {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .job-status.failed {
+            background: #ef4444;
+            color: white;
+        }
+
+        /* Markdown content styling */
+        .markdown-content {
+            line-height: 1.7;
+            color: #444;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3,
+        .markdown-content h4 {
+            color: #4285F4;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .markdown-content h1 {
+            font-size: 1.4rem;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 8px;
+        }
+
+        .markdown-content h2 {
+            font-size: 1.2rem;
+        }
+
+        .markdown-content h3 {
+            font-size: 1.1rem;
+        }
+
+        .markdown-content h4 {
+            font-size: 1.0rem;
+        }
+
+        .markdown-content p {
+            margin: 12px 0;
+        }
+
+        .markdown-content ul,
+        .markdown-content ol {
+            margin: 12px 0;
+            padding-left: 25px;
+        }
+
+        .markdown-content li {
+            margin: 6px 0;
+        }
+
+        .markdown-content strong {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .markdown-content em {
+            font-style: italic;
+        }
+
+        .markdown-content code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .markdown-content pre {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 12px 0;
+        }
+
+        .markdown-content pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .markdown-content blockquote {
+            border-left: 4px solid #4285F4;
+            padding-left: 15px;
+            margin: 12px 0;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧬 FoldRun Structure & Analysis</h1>
+        {% if job_id %}
+        <p class="subtitle">Job: <a href="https://console.cloud.google.com/vertex-ai/pipelines/locations/{{ region }}/runs/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link">{{ job_id }}</a>{% if gcs_console_url %} &middot; <a href="{{ gcs_console_url }}" target="_blank" class="job-link">View files in GCS</a>{% endif %}</p>
+        <div id="job-info-summary" class="job-info-summary"></div>
+        {% else %}
+        <p class="subtitle">Job: N/A</p>
+        {% endif %}
+    </div>
+
+    <div class="main-container">
+        <!-- Left Panel: 3D Viewer -->
+        <div class="viewer-panel">
+            <div class="panel-header">
+                <h2>3D Structure Viewer</h2>
+                <select id="prediction-selector" onchange="switchPrediction()">
+                    <option value="">Loading predictions...</option>
+                </select>
+            </div>
+            <div id="viewer-3d">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading structure...</p>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="control-group">
+                    <label>Style</label>
+                    <select id="style-select" onchange="updateStyle()">
+                        <option value="cartoon">Cartoon</option>
+                        <option value="stick">Stick</option>
+                        <option value="sphere">Sphere</option>
+                        <option value="line">Line</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Color</label>
+                    <select id="color-select" onchange="updateStyle()">
+                        <option value="plddt" selected>pLDDT Confidence</option>
+                        <option value="chain">By Chain</option>
+                        <option value="ss">Secondary Structure</option>
+                    </select>
+                </div>
+                <button onclick="resetView()">Reset View</button>
+                <button onclick="toggleSpin()">Toggle Rotation</button>
+            </div>
+
+            <div class="legend">
+                <h4>pLDDT Confidence Legend</h4>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0053D6;"></div>
+                    <span class="legend-label">Very High (90-100)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #65CBF3;"></div>
+                    <span class="legend-label">Confident (70-90)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FFDB13;"></div>
+                    <span class="legend-label">Low (50-70)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF7D45;"></div>
+                    <span class="legend-label">Very Low (&lt;50)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Analysis -->
+        <div class="analysis-panel">
+            <div id="analysis-content">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading analysis...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let viewer;
+        let analysisData;
+        let predictions = [];
+        let currentPredictionIndex = 0;
+        let isSpinning = false;
+
+        // Initialize 3Dmol viewer
+        function initViewer() {
+            const element = document.getElementById('viewer-3d');
+            const config = { backgroundColor: 'white' };
+            viewer = $3Dmol.createViewer(element, config);
+        }
+
+        // Load analysis data first (contains all predictions)
+        async function loadAnalysis() {
+            try {
+                {% if summary_uri %}
+                const url = `/api/analysis?summary_uri=${encodeURIComponent('{{ summary_uri }}')}`;
+                {% elif job_id %}
+                const url = `/api/analysis?job_id=${encodeURIComponent('{{ job_id }}')}`;
+                {% else %}
+                throw new Error('No job_id or summary_uri provided');
+                {% endif %}
+
+                const response = await fetch(url);
+                analysisData = await response.json();
+
+                // Extract predictions from all_predictions_summary (shows all models, not just top 10)
+                predictions = analysisData.all_predictions_summary || [];
+
+                if (predictions.length === 0) {
+                    throw new Error('No predictions found in analysis');
+                }
+
+                // Detect model type: OF3 has model_type or cif_uri fields
+                const isOF3 = analysisData.model_type === 'openfold3' ||
+                              (predictions[0] && predictions[0].cif_uri);
+
+                // Sort predictions by rank (ascending)
+                predictions.sort((a, b) => a.rank - b.rank);
+
+                // Populate prediction selector
+                const selector = document.getElementById('prediction-selector');
+                selector.innerHTML = '';
+                predictions.forEach((pred, idx) => {
+                    const option = document.createElement('option');
+                    option.value = idx;
+                    const rankBadge = pred.rank <= 3 ? ` 🏆` : '';
+                    if (isOF3) {
+                        const name = pred.sample_name || `Sample ${pred.rank}`;
+                        const score = pred.ranking_score !== undefined ? pred.ranking_score.toFixed(4) : 'N/A';
+                        option.textContent = `Rank ${pred.rank}: ${name} (score: ${score})${rankBadge}`;
+                    } else {
+                        option.textContent = `Rank ${pred.rank}: ${pred.model_name} (pLDDT: ${pred.plddt_mean.toFixed(1)})${rankBadge}`;
+                    }
+                    selector.appendChild(option);
+                });
+
+                // Load first prediction
+                await switchPrediction();
+
+                // Populate job info summary
+                populateJobInfo();
+            } catch (error) {
+                console.error('Error loading analysis:', error);
+                document.querySelector('#analysis-content').innerHTML =
+                    '<div class="info-card"><p style="color: #e74c3c;">Error loading analysis: ' + error.message + '</p></div>';
+            }
+        }
+
+        // Populate job info summary in header
+        function populateJobInfo() {
+            const jobInfoDiv = document.getElementById('job-info-summary');
+            if (!jobInfoDiv || !analysisData.summary) return;
+
+            const proteinInfo = analysisData.summary.protein_info || {};
+            const jobMetadata = proteinInfo.job_metadata;
+            if (!jobMetadata) return;
+
+            let html = '';
+
+            // Model type badge
+            const modelType = proteinInfo.model_type || analysisData.model_type;
+            if (modelType) {
+                const badge = modelType === 'openfold3' ? 'OpenFold3' : 'AlphaFold2';
+                html += `<div class="job-info-item"><span class="job-info-value">${badge}</span></div>`;
+            }
+
+            // Status
+            if (jobMetadata.state) {
+                const state = jobMetadata.state.replace('PIPELINE_STATE_', '');
+                const statusClass = state.toLowerCase().includes('succeed') ? 'succeeded' :
+                                  state.toLowerCase().includes('running') ? 'running' : 'failed';
+                html += `<div class="job-info-item"><span class="job-status ${statusClass}">${state}</span></div>`;
+            }
+
+            // Duration
+            if (jobMetadata.duration_formatted) {
+                html += `<div class="job-info-item"><span class="job-info-label">Duration:</span> <span class="job-info-value">${jobMetadata.duration_formatted}</span></div>`;
+            }
+
+            // Chain composition (compact)
+            const chainComp = proteinInfo.chain_composition;
+            if (chainComp && chainComp.length > 0) {
+                const parts = chainComp.map(c => {
+                    if (c.molecule_type === 'ligand') {
+                        return `${c.chain_id}: ${(c.comp_ids || []).join(',')}`;
+                    }
+                    return `${c.chain_id}: ${c.molecule_type} (${c.residue_count})`;
+                });
+                html += `<div class="job-info-item"><span class="job-info-label">Chains:</span> <span class="job-info-value">${parts.join(' | ')}</span></div>`;
+            }
+
+            // Labels (compact — skip redundant/internal ones)
+            if (jobMetadata.labels) {
+                const skipLabels = new Set(['vertex-ai-pipelines-run-billing', 'submitted_by', 'model_type']);
+                Object.entries(jobMetadata.labels).forEach(([key, value]) => {
+                    if (key.startsWith('vertex-ai') || skipLabels.has(key)) return;
+
+                    const displayKey = key.split(/[-_]/).map(word =>
+                        word.charAt(0).toUpperCase() + word.slice(1)
+                    ).join(' ');
+
+                    html += `
+                        <div class="job-info-item">
+                            <span class="job-info-label">${displayKey}:</span>
+                            <span class="job-info-value">${value}</span>
+                        </div>
+                    `;
+                });
+            }
+
+            jobInfoDiv.innerHTML = html;
+        }
+
+        // Switch to a different prediction
+        async function switchPrediction() {
+            const selector = document.getElementById('prediction-selector');
+            currentPredictionIndex = parseInt(selector.value) || 0;
+            const prediction = predictions[currentPredictionIndex];
+
+            if (!prediction) return;
+
+            // Show loading
+            document.querySelector('#viewer-3d .loading').style.display = 'block';
+
+            try {
+                // Load structure for this prediction
+                await loadStructure(prediction);
+
+                // Render analysis for this prediction
+                renderAnalysis(prediction);
+            } catch (error) {
+                console.error('Error switching prediction:', error);
+                alert('Error loading prediction: ' + error.message);
+            }
+        }
+
+        // Load structure for a specific prediction (PDB for AF2, CIF for OF3)
+        async function loadStructure(prediction) {
+            try {
+                let structureData, format;
+
+                if (prediction.cif_uri) {
+                    // OF3: load CIF
+                    const response = await fetch(`/api/cif?uri=${encodeURIComponent(prediction.cif_uri)}`);
+                    structureData = await response.text();
+                    format = 'cif';
+                } else {
+                    // AF2: convert pkl URI to pdb URI
+                    const pdbUri = prediction.uri.replace('/raw_prediction.pkl', '/unrelaxed_protein.pdb');
+                    const response = await fetch(`/api/pdb?uri=${encodeURIComponent(pdbUri)}`);
+                    structureData = await response.text();
+                    format = 'pdb';
+                }
+
+                // Clear existing models
+                viewer.removeAllModels();
+
+                // Add new model
+                viewer.addModel(structureData, format);
+                updateStyle();
+                viewer.zoomTo();
+                viewer.render();
+
+                document.querySelector('#viewer-3d .loading').style.display = 'none';
+            } catch (error) {
+                console.error('Error loading structure:', error);
+                document.querySelector('#viewer-3d .loading').innerHTML =
+                    '<p style="color: #e74c3c;">Error loading structure: ' + error.message + '</p>';
+                throw error;
+            }
+        }
+
+        // Render analysis dashboard for a specific prediction
+        function renderAnalysis(prediction) {
+            const container = document.getElementById('analysis-content');
+            const isOF3 = prediction.cif_uri !== undefined;
+            let html = '';
+
+            // Prediction Summary
+            if (isOF3) {
+                html += `
+                    <div class="info-card">
+                        <h3>
+                            Prediction Summary
+                            <span class="rank-badge rank-${prediction.rank}">#${prediction.rank}</span>
+                            <span style="font-size: 0.75em; color: #666; margin-left: 8px;">OpenFold3</span>
+                        </h3>
+                        <div class="info-row">
+                            <span class="info-label">Sample</span>
+                            <span class="info-value">${prediction.sample_name || 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Ranking Score</span>
+                            <span class="info-value">${prediction.ranking_score !== undefined ? prediction.ranking_score.toFixed(4) : 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">pTM</span>
+                            <span class="info-value">${prediction.ptm !== undefined ? prediction.ptm.toFixed(4) : 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">ipTM</span>
+                            <span class="info-value">${prediction.iptm !== undefined ? prediction.iptm.toFixed(4) : 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Clash</span>
+                            <span class="info-value">${prediction.has_clash ? 'Yes' : 'No'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Quality Assessment</span>
+                            <span class="info-value">${prediction.quality_assessment.replace(/_/g, ' ').toUpperCase()}</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="info-card">
+                        <h3>
+                            Prediction Summary
+                            <span class="rank-badge rank-${prediction.rank}">#${prediction.rank}</span>
+                        </h3>
+                        <div class="info-row">
+                            <span class="info-label">Model</span>
+                            <span class="info-value">${prediction.model_name}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Ranking Confidence</span>
+                            <span class="info-value">${prediction.ranking_confidence.toFixed(2)}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Quality Assessment</span>
+                            <span class="info-value">${prediction.quality_assessment.replace(/_/g, ' ').toUpperCase()}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Quality Metrics
+            html += `
+                <div class="info-card">
+                    <h3>Quality Metrics</h3>
+                    <div class="quality-grid">
+                        <div class="quality-item">
+                            <div class="value">${prediction.plddt_mean.toFixed(1)}</div>
+                            <div class="label">Mean pLDDT</div>
+                        </div>`;
+
+            if (isOF3) {
+                html += `
+                        <div class="quality-item">
+                            <div class="value">${prediction.ranking_score !== undefined ? prediction.ranking_score.toFixed(4) : 'N/A'}</div>
+                            <div class="label">Ranking Score</div>
+                        </div>
+                        <div class="quality-item">
+                            <div class="value">${prediction.ptm !== undefined ? prediction.ptm.toFixed(4) : 'N/A'}</div>
+                            <div class="label">pTM</div>
+                        </div>
+                        <div class="quality-item">
+                            <div class="value">${prediction.iptm !== undefined ? prediction.iptm.toFixed(4) : 'N/A'}</div>
+                            <div class="label">ipTM</div>
+                        </div>`;
+            } else {
+                html += `
+                        <div class="quality-item">
+                            <div class="value">${prediction.plddt_median?.toFixed(1) || 'N/A'}</div>
+                            <div class="label">Median pLDDT</div>
+                        </div>
+                        <div class="quality-item">
+                            <div class="value">${prediction.plddt_min?.toFixed(1) || 'N/A'}</div>
+                            <div class="label">Min pLDDT</div>
+                        </div>
+                        <div class="quality-item">
+                            <div class="value">${prediction.plddt_max?.toFixed(1) || 'N/A'}</div>
+                            <div class="label">Max pLDDT</div>
+                        </div>`;
+            }
+
+            html += `
+                    </div>
+            `;
+
+            // Confidence Distribution (residue counts)
+            if (prediction.plddt_distribution) {
+                const dist = prediction.plddt_distribution;
+                html += `
+                    <div class="confidence-bands">
+                        <div class="confidence-band very-low">
+                            <div class="count">${dist.very_low_confidence || 0}</div>
+                            <div class="range">&lt; 50</div>
+                        </div>
+                        <div class="confidence-band low">
+                            <div class="count">${dist.low_confidence || 0}</div>
+                            <div class="range">50-70</div>
+                        </div>
+                        <div class="confidence-band confident">
+                            <div class="count">${dist.high_confidence || 0}</div>
+                            <div class="range">70-90</div>
+                        </div>
+                        <div class="confidence-band very-high">
+                            <div class="count">${dist.very_high_confidence || 0}</div>
+                            <div class="range">90-100</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+
+            // Per-Chain pLDDT Breakdown (OF3 with ligands)
+            if (isOF3 && prediction.per_chain_plddt && Object.keys(prediction.per_chain_plddt).length > 1) {
+                html += `<div class="info-card"><h3>Per-Chain Confidence</h3>`;
+                html += `<table style="width:100%;border-collapse:collapse;font-size:0.9em;">`;
+                html += `<tr style="border-bottom:2px solid #ddd;"><th style="text-align:left;padding:6px;">Chain</th><th>Type</th><th>Components</th><th>Mean pLDDT</th><th>Range</th><th>Atoms</th></tr>`;
+                for (const [cid, stats] of Object.entries(prediction.per_chain_plddt)) {
+                    const molType = stats.molecule_type || 'unknown';
+                    const comps = (stats.comp_ids || []).slice(0, 3).join(', ');
+                    const bgColor = molType === 'ligand' ? '#fff3cd' : (molType === 'protein' ? '#d4edda' : '#d1ecf1');
+                    html += `<tr style="border-bottom:1px solid #eee;background:${bgColor};">`;
+                    html += `<td style="padding:6px;font-weight:bold;">${cid}</td>`;
+                    html += `<td style="text-align:center;">${molType}</td>`;
+                    html += `<td style="text-align:center;">${comps}</td>`;
+                    html += `<td style="text-align:center;font-weight:bold;">${stats.mean.toFixed(1)}</td>`;
+                    html += `<td style="text-align:center;">${stats.min.toFixed(1)} - ${stats.max.toFixed(1)}</td>`;
+                    html += `<td style="text-align:center;">${stats.atom_count}</td>`;
+                    html += `</tr>`;
+                }
+                html += `</table></div>`;
+            }
+
+            // pLDDT Plot
+            if (prediction.plots && prediction.plots.plddt_plot) {
+                html += `
+                    <div class="info-card">
+                        <h3>Per-Residue pLDDT Plot</h3>
+                        <img src="/api/image?uri=${encodeURIComponent(prediction.plots.plddt_plot)}"
+                             class="plot-image"
+                             alt="pLDDT plot"
+                             onerror="this.style.display='none'; this.parentElement.innerHTML += '<p style=\\'color: #e74c3c;\\'>Error loading plot image</p>'">
+                    </div>
+                `;
+            }
+
+            // PAE Plot (AF2) or PDE Plot (OF3)
+            if (prediction.plots && prediction.plots.pae_plot) {
+                html += `
+                    <div class="info-card">
+                        <h3>Predicted Aligned Error (PAE) Plot</h3>
+                        <img src="/api/image?uri=${encodeURIComponent(prediction.plots.pae_plot)}"
+                             class="plot-image"
+                             alt="PAE plot"
+                             onerror="this.style.display='none'; this.parentElement.innerHTML += '<p style=\\'color: #e74c3c;\\'>Error loading plot image</p>'">
+                    </div>
+                `;
+            }
+
+            if (prediction.plots && prediction.plots.pde_plot) {
+                html += `
+                    <div class="info-card">
+                        <h3>Predicted Distance Error (PDE) Plot</h3>
+                        <img src="/api/image?uri=${encodeURIComponent(prediction.plots.pde_plot)}"
+                             class="plot-image"
+                             alt="PDE plot"
+                             onerror="this.style.display='none'; this.parentElement.innerHTML += '<p style=\\'color: #e74c3c;\\'>Error loading plot image</p>'">
+                    </div>
+                `;
+            }
+
+            // ipTM Matrix Plot (OF3 multi-chain)
+            if (prediction.plots && prediction.plots.iptm_matrix_plot) {
+                html += `
+                    <div class="info-card">
+                        <h3>Chain-Pair ipTM Matrix</h3>
+                        <img src="/api/image?uri=${encodeURIComponent(prediction.plots.iptm_matrix_plot)}"
+                             class="plot-image"
+                             alt="ipTM matrix plot"
+                             onerror="this.style.display='none'; this.parentElement.innerHTML += '<p style=\\'color: #e74c3c;\\'>Error loading plot image</p>'">
+                    </div>
+                `;
+            }
+
+            // Expert Analysis (Gemini) - Show on all model pages for convenience
+            if (analysisData.expert_analysis && analysisData.expert_analysis.status === 'success') {
+                // Use marked.js to convert markdown to HTML
+                const analysisHtml = marked.parse(analysisData.expert_analysis.analysis);
+
+                html += `
+                    <div class="info-card" style="background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%); border-left: 4px solid #4285F4;">
+                        <h3 style="color: #4285F4; display: flex; align-items: center; gap: 10px;">
+                            🤖 Expert Analysis
+                            <span style="font-size: 0.7rem; font-weight: normal; color: #888; background: white; padding: 3px 8px; border-radius: 12px;">
+                                ${analysisData.expert_analysis.model}
+                            </span>
+                        </h3>
+                        <div class="markdown-content">
+                            ${analysisHtml}
+                        </div>
+                        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 0.8rem; color: #888;">
+                            Generated by AI (${analysisData.expert_analysis.model}) on ${new Date(analysisData.expert_analysis.generated_at).toLocaleString()}.
+                            This analysis has not been peer-reviewed and should be validated experimentally.
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Job Summary (from overall analysis data)
+            if (analysisData.summary) {
+                html += `
+                    <div class="info-card">
+                        <h3>Overall Job Summary</h3>
+                        <div class="info-row">
+                            <span class="info-label">Total Predictions</span>
+                            <span class="info-value">${analysisData.summary.statistics?.total_predictions || analysisData.summary.protein_info?.total_predictions || 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Analyzed Successfully</span>
+                            <span class="info-value">${analysisData.summary.statistics?.analyzed_successfully || 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Job ID</span>
+                            <span class="info-value" style="font-size: 0.8rem; word-break: break-all;">${analysisData.job_id}</span>
+                        </div>
+                `;
+
+                // Add all job metadata labels if available
+                const jobMetadata = analysisData.summary?.protein_info?.job_metadata;
+                if (jobMetadata?.labels) {
+                    const allLabels = Object.entries(jobMetadata.labels).sort((a, b) => a[0].localeCompare(b[0]));
+
+                    if (allLabels.length > 0) {
+                        allLabels.forEach(([key, value]) => {
+                            // Skip seq_len and seq_name - we show these better formatted at the bottom
+                            if (key === 'seq_len' || key === 'seq_name') return;
+
+                            // Skip vertex internal labels
+                            if (key.startsWith('vertex-ai')) return;
+
+                            // Format label key for display (convert dashes/underscores to spaces, capitalize)
+                            const displayKey = key.split(/[-_]/).map(word =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            ).join(' ');
+
+                            html += `
+                            <div class="info-row">
+                                <span class="info-label">${displayKey}</span>
+                                <span class="info-value">${value}</span>
+                            </div>
+                            `;
+                        });
+                    }
+                }
+
+                // Add sequence information at the bottom
+                const proteinInfo = analysisData.summary?.protein_info;
+                if (proteinInfo) {
+                    // Sequence length
+                    if (proteinInfo.sequence_length) {
+                        html += `
+                        <div class="info-row">
+                            <span class="info-label">Sequence Length</span>
+                            <span class="info-value">${proteinInfo.sequence_length} residues</span>
+                        </div>
+                        `;
+                    }
+
+                    // FASTA header
+                    if (proteinInfo.fasta_header) {
+                        html += `
+                        <div class="info-row">
+                            <span class="info-label">Sequence Name</span>
+                            <span class="info-value">${proteinInfo.fasta_header}</span>
+                        </div>
+                        `;
+                    }
+
+                    // FASTA sequence (at the very bottom, with monospace font and word wrap)
+                    if (proteinInfo.fasta_sequence) {
+                        html += `
+                        <div class="info-row" style="grid-template-columns: 180px 1fr; align-items: start;">
+                            <span class="info-label">Sequence</span>
+                            <span class="info-value" style="font-family: 'Courier New', monospace; word-break: break-all; font-size: 0.85rem; line-height: 1.6;">${proteinInfo.fasta_sequence}</span>
+                        </div>
+                        `;
+                    }
+                }
+
+                html += `
+                    </div>
+                `;
+            }
+
+            // Input Query JSON (OF3 only — copyable for resubmission)
+            if (isOF3 && analysisData.summary && analysisData.summary.protein_info) {
+                const pi = analysisData.summary.protein_info;
+                const queryJson = pi.input_query_json;
+                if (queryJson) {
+                    const jsonStr = JSON.stringify(queryJson, null, 2);
+                    html += `
+                        <div class="info-card">
+                            <h3>
+                                Input Query
+                                <button onclick="navigator.clipboard.writeText(document.getElementById('query-json-pre').textContent).then(() => this.textContent = 'Copied!').catch(() => {}); setTimeout(() => this.textContent = 'Copy JSON', 1500)"
+                                    style="float:right;font-size:0.75em;padding:4px 12px;background:#4285F4;color:white;border:none;border-radius:4px;cursor:pointer;">Copy JSON</button>
+                            </h3>
+                            <pre id="query-json-pre" style="background:#f8f9fa;padding:12px;border-radius:4px;font-size:0.82em;white-space:pre-wrap;word-break:break-word;max-height:400px;overflow-y:auto;border:1px solid #e0e0e0;">${jsonStr}</pre>
+                        </div>
+                    `;
+                }
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Check if current prediction is OF3 with ligands
+        function hasLigandChains() {
+            if (!predictions || !predictions[currentPredictionIndex]) return false;
+            const pred = predictions[currentPredictionIndex];
+            const chainInfo = pred.chain_info || [];
+            return chainInfo.some(ci => ci.molecule_type === 'ligand');
+        }
+
+        // Update visualization style
+        function updateStyle() {
+            const styleType = document.getElementById('style-select').value;
+            const colorType = document.getElementById('color-select').value;
+            const isLigandComplex = hasLigandChains();
+
+            // Clear existing styles
+            viewer.setStyle({}, {});
+
+            // Set color scheme based on pLDDT
+            if (colorType === 'plddt') {
+                // Apply pLDDT coloring per-atom based on B-factor values
+                // Very Low: <50 (orange), Low: 50-70 (yellow),
+                // Confident: 70-90 (light blue), Very High: 90-100 (dark blue)
+
+                const atoms = viewer.selectedAtoms({});
+                atoms.forEach(atom => {
+                    const plddt = atom.b || 0; // B-factor contains pLDDT score
+                    let color;
+
+                    if (plddt < 50) {
+                        color = '#FF7D45'; // Very Low - orange
+                    } else if (plddt < 70) {
+                        color = '#FFDB13'; // Low - yellow
+                    } else if (plddt < 90) {
+                        color = '#65CBF3'; // Confident - light blue
+                    } else {
+                        color = '#0053D6'; // Very High - dark blue
+                    }
+
+                    // Set atom color
+                    atom.color = color;
+                });
+
+                // Apply style — protein gets user-selected style, ligands get stick+sphere
+                let style = {};
+                if (styleType === 'cartoon') {
+                    style.cartoon = {};
+                } else if (styleType === 'stick') {
+                    style.stick = {};
+                } else if (styleType === 'sphere') {
+                    style.sphere = { radius: 0.5 };
+                } else if (styleType === 'line') {
+                    style.line = {};
+                }
+
+                if (isLigandComplex) {
+                    // Protein chains: user-selected style
+                    viewer.setStyle({hetflag: false}, style);
+                    // Ligand/HETATM: always stick + ball for visibility
+                    viewer.setStyle({hetflag: true}, {stick: {radius: 0.15}, sphere: {radius: 0.4}});
+                } else {
+                    viewer.setStyle({}, style);
+                }
+            } else {
+                // For other color schemes, use built-in colorschemes
+                let style = {};
+
+                if (styleType === 'cartoon') {
+                    style.cartoon = { colorscheme: colorType };
+                } else if (styleType === 'stick') {
+                    style.stick = { colorscheme: colorType };
+                } else if (styleType === 'sphere') {
+                    style.sphere = { radius: 0.5, colorscheme: colorType };
+                } else if (styleType === 'line') {
+                    style.line = { colorscheme: colorType };
+                }
+
+                if (isLigandComplex) {
+                    viewer.setStyle({hetflag: false}, style);
+                    viewer.setStyle({hetflag: true}, {stick: {radius: 0.15, colorscheme: 'default'}, sphere: {radius: 0.4, colorscheme: 'default'}});
+                } else {
+                    viewer.setStyle({}, style);
+                }
+            }
+
+            viewer.render();
+        }
+
+        // Reset camera view
+        function resetView() {
+            viewer.zoomTo();
+            viewer.render();
+        }
+
+        // Toggle auto-rotation
+        function toggleSpin() {
+            isSpinning = !isSpinning;
+            if (isSpinning) {
+                viewer.spin(true);
+            } else {
+                viewer.spin(false);
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            initViewer();
+            loadAnalysis();
+        });
+    </script>
+</body>
+</html>

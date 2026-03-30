@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoldRun Structure Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #4285F4 0%, #1a73e8 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #4285F4;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, #4285F4 0%, #1a73e8 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .feature-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+        }
+
+        .feature-card p {
+            opacity: 0.95;
+            line-height: 1.6;
+        }
+
+        .info-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+
+        .info-section h2 {
+            color: #4285F4;
+            margin-bottom: 15px;
+        }
+
+        .info-section p {
+            color: #555;
+            line-height: 1.8;
+            margin-bottom: 10px;
+        }
+
+        .info-section ul {
+            margin-left: 20px;
+            margin-top: 15px;
+        }
+
+        .info-section li {
+            color: #555;
+            line-height: 1.8;
+            margin-bottom: 8px;
+        }
+
+        code {
+            background: #e9ecef;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .logo {
+            text-align: center;
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🧬</div>
+        <h1>FoldRun Structure Viewer</h1>
+        <p class="subtitle">Protein structure prediction on Google Cloud, powered by AlphaFold2</p>
+
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h3>3D Visualization</h3>
+                <p>View protein structures with pLDDT confidence coloring and interactive 3D rotation</p>
+            </div>
+            <div class="feature-card">
+                <h3>Quality Metrics</h3>
+                <p>Analyze prediction quality with pLDDT distributions and PAE heatmaps</p>
+            </div>
+            <div class="feature-card">
+                <h3>Job Analysis</h3>
+                <p>Comprehensive analysis dashboard with timing, GPU metrics, and download links</p>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <h2>How to Use</h2>
+            <p>This viewer displays AlphaFold2 prediction results from Vertex AI pipelines. Access it through the FoldRun agent:</p>
+            <ul>
+                <li><code>open_structure_viewer</code> - Open viewer for a completed job</li>
+                <li><code>get_prediction_results</code> - Get results and open viewer automatically</li>
+            </ul>
+
+            <h2 style="margin-top: 25px;">Features</h2>
+            <p>The viewer provides multiple visualization modes:</p>
+            <ul>
+                <li><strong>Structure View:</strong> 3D protein structure with pLDDT coloring</li>
+                <li><strong>Analysis Dashboard:</strong> Quality metrics, plots, and job metadata</li>
+                <li><strong>Combined View:</strong> Side-by-side structure and analysis</li>
+            </ul>
+
+            <h2 style="margin-top: 25px;">pLDDT Confidence Bands</h2>
+            <ul>
+                <li><strong style="color: #FF7D45;">Very Low (&lt;50):</strong> Low confidence</li>
+                <li><strong style="color: #FFDB13;">Low (50-70):</strong> Moderate confidence</li>
+                <li><strong style="color: #65CBF3;">Confident (70-90):</strong> Good confidence</li>
+                <li><strong style="color: #0053D6;">Very High (&gt;90):</strong> Excellent confidence</li>
+            </ul>
+        </div>
+
+        <div class="info-section" style="margin-top: 25px; font-size: 0.85rem;">
+            <h2>Data Handling</h2>
+            <ul>
+                <li>Protein sequences and prediction results are stored in your GCP project's Cloud Storage bucket.</li>
+                <li>Sequences are processed by Vertex AI Pipelines within your project.</li>
+                <li>AI-generated analysis uses Google Gemini via your project's Vertex AI endpoint.</li>
+                <li>No data is sent to external services outside of Google Cloud.</li>
+                <li>Data persists until you delete it using the agent's cleanup tools.</li>
+            </ul>
+        </div>
+
+        <p style="text-align: center; color: #999; font-size: 0.85rem; margin-top: 30px;">
+            FoldRun — Protein Structure Prediction on Google Cloud
+        </p>
+    </div>
+</body>
+</html>
