@@ -1,6 +1,6 @@
-# How to Contribute
+# How to contribute
 
-We would love to accept your patches and contributions to this project.
+We'd love to accept your patches and contributions to this project.
 
 ## Before you begin
 
@@ -18,15 +18,16 @@ was for a different project), you probably don't need to do it again.
 Visit <https://cla.developers.google.com/> to see your current agreements or to
 sign a new one.
 
-### Review our Community Guidelines
+### Review our community guidelines
 
-This project follows [Google's Open Source Community
-Guidelines](https://opensource.google/conduct/).
+This project follows
+[Google's Open Source Community Guidelines](https://opensource.google/conduct/).
 
 ## Contribution process
 
-### Code Reviews
+### Code reviews
 
 All submissions, including submissions by project members, require review. We
-use [GitHub pull requests](https://docs.github.com/articles/about-pull-requests)
-for this purpose.
+use GitHub pull requests for this purpose. Consult
+[GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
+information on using pull requests.
