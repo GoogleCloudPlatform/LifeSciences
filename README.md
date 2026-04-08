@@ -135,6 +135,133 @@ The application is containerized using a multi-stage Docker build that serves th
       ```
 
 
+
+## Cloud Run Deployment
+
+Deploying Sentinel to Google Cloud Run is the recommended way to run the application in a production-like environment.
+
+### Prerequisites
+
+- Google Cloud Project with billing enabled
+- `gcloud` CLI installed and authenticated
+- APIs enabled: Cloud Run, Artifact Registry, Vertex AI, IAP, Cloud Resource Manager, Cloud Storage
+- GCS Bucket for storing image features
+
+### Deployment Steps
+
+Follow these steps to build and deploy the Sentinel application using Cloud Run and Artifact Registry.
+
+1. **Set Environment Variables**:
+   ```bash
+   export PROJECT_ID=[YOUR_PROJECT_ID]
+   export REGION=us-central1
+   export BUCKET_NAME=sentinel-images-$PROJECT_ID
+   
+   gcloud config set project $PROJECT_ID
+   export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+   ```
+
+2. **Enable APIs**:
+   Enable the necessary Google Cloud APIs.
+   ```bash
+   gcloud services enable \
+     run.googleapis.com \
+     artifactregistry.googleapis.com \
+     aiplatform.googleapis.com \
+     iap.googleapis.com \
+     storage.googleapis.com \
+     cloudresourcemanager.googleapis.com
+   ```
+
+3. **Create Artifact Registry Repository**:
+   Create a Docker repository to store your container images.
+   ```bash
+   gcloud artifacts repositories create docker-repo \
+     --repository-format=docker \
+     --location=$REGION \
+     --description="Docker repository"
+   ```
+
+4. **Build and Push Image**:
+   Build the container image locally and push it to Artifact Registry.
+   ```bash
+   # Configure Docker authentication
+   gcloud auth configure-docker $REGION-docker.pkg.dev
+
+   # Build and Tag
+   export IMAGE_URI=$REGION-docker.pkg.dev/$PROJECT_ID/docker-repo/sentinel:latest
+   docker build -t $IMAGE_URI .
+
+   # Push to Artifact Registry
+   docker push $IMAGE_URI
+   ```
+
+5. **Create a GCS Bucket**:
+   Sentinel requires a Google Cloud Storage bucket to store image features for analysis.
+   ```bash
+   gcloud storage buckets create gs://$BUCKET_NAME --location=$REGION
+   ```
+
+6. **Create Service Account**:
+   Create a dedicated Service Account for the application.
+   ```bash
+   export SA_NAME=sentinel-sa
+   export SA_EMAIL=$SA_NAME@$PROJECT_ID.iam.gserviceaccount.com
+
+   gcloud iam service-accounts create $SA_NAME --display-name="Sentinel Application Service Account"
+   ```
+
+7. **Grant Storage Permissions**:
+   Grant the Service Account access to the GCS Bucket for reading and writing images.
+   ```bash
+   gcloud storage buckets add-iam-policy-binding gs://$BUCKET_NAME \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/storage.objectUser"
+   ```
+
+8. **Grant Vertex AI Permissions**:
+   Grant the Service Account access to Vertex AI for using the Gemini API.
+   ```bash
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/aiplatform.user"
+   ```
+
+9. **Deploy with IAP**:
+   Deploy the service with Identity-Aware Proxy (IAP) enabled for secure access, using the custom Service Account.
+   ```bash
+   gcloud beta run deploy sentinel \
+     --image $IMAGE_URI \
+     --region $REGION \
+     --no-allow-unauthenticated \
+     --iap \
+     --service-account $SA_EMAIL \
+     --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GCS_BUCKET_NAME=$BUCKET_NAME"
+   ```
+
+10. **Configure IAP Access**:
+    Grant the IAP Service Agent permission to invoke your Cloud Run service.
+    ```bash
+    gcloud run services add-iam-policy-binding sentinel \
+      --region $REGION \
+      --member="serviceAccount:service-$PROJECT_NUMBER@gcp-sa-iap.iam.gserviceaccount.com" \
+      --role="roles/run.invoker"
+    ```
+
+11. **Grant User Access**:
+    Authorize users or groups to access the application behind IAP.
+      ```bash
+      gcloud beta iap web add-iam-policy-binding \
+      --resource-type=cloud-run \
+      --service=sentinel \
+      --region=$REGION \
+      --member="user:[USER_EMAIL]" \
+      --role="roles/iap.httpsResourceAccessor"
+      ```
+      *Replace `[USER_EMAIL]` with the email address of the user you want to grant access to (e.g., `user@example.com`). You can also use `--member="group:[GROUP_EMAIL]"` for groups.*
+      
+      **Note:** You must add authorized users (including yourself) to access the application URL.
+
 ## Project Structure
 
 ```
