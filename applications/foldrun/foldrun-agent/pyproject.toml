@@ -1,0 +1,98 @@
+[project]
+name = "foldrun-agent"
+version = "0.1.0"
+description = "AI Agent for AlphaFold2 protein structure prediction using Google ADK"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    {name = "FoldRun Contributors"}
+]
+
+dependencies = [
+    # ADK and AI Platform
+    "google-adk>=1.28.0",
+    "google-cloud-aiplatform[agent_engines,adk]>=1.143.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0",
+    "nest_asyncio>=1.5.0",
+    # GCP services (previously in MCP server)
+    "google-cloud-storage>=2.18.0",
+    "google-cloud-filestore>=1.8.0",
+    "google-cloud-pipeline-components>=2.20.0",
+    "google-cloud-run>=0.10.0",
+    "google-cloud-compute>=1.19.0",
+    "google-cloud-logging>=3.0.0",
+    "google-cloud-batch>=0.17.0",
+    "google-cloud-artifact-registry>=1.11.0",
+    "google-cloud-service-usage>=1.8.0",
+    "google-cloud-resource-manager>=1.12.0",
+    # Pipeline and bio
+    "kfp>=2.10.0",
+    "biopython>=1.81",
+    "numpy>=1.24.0",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+adk = "google.adk.cli:main"
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "foldrun_app",
+    "foldrun_app.core",
+    "foldrun_app.models",
+    "foldrun_app.models.af2",
+    "foldrun_app.models.af2.tools",
+    "foldrun_app.models.af2.utils",
+    "foldrun_app.models.af2.pipeline",
+    "foldrun_app.models.af2.pipeline.components",
+    "foldrun_app.models.af2.pipeline.pipelines",
+    "foldrun_app.skills",
+    "foldrun_app.skills.job_submission",
+    "foldrun_app.skills.job_management",
+    "foldrun_app.skills.results_analysis",
+    "foldrun_app.skills.database_queries",
+    "foldrun_app.skills.storage_management",
+    "foldrun_app.skills.visualization",
+]
+
+[tool.setuptools.package-data]
+"foldrun_app.models.af2" = ["data/*.json"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "integration: tests that call real LLM (deselect with '-m not integration')",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-asyncio>=1.3.0",
+    "pytest-mock>=3.15.1",
+]

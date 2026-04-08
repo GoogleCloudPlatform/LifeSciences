@@ -1,0 +1,240 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+  # ============================================================================
+  # 1. FoldRun Viewer (Cloud Run Service)
+  # ============================================================================
+  - id: 'pull-viewer'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest || exit 0']
+    waitFor: ['-']
+
+  - id: 'build-viewer'
+    name: 'gcr.io/cloud-builders/docker'
+    dir: 'src/foldrun-viewer'
+    args: [
+      'build',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest',
+      '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest',
+      '.'
+    ]
+    waitFor: ['pull-viewer']
+
+  - id: 'push-viewer'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest']
+    waitFor: ['build-viewer']
+
+  - id: 'deploy-viewer'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        gcloud run deploy foldrun-viewer \
+          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest \
+          --region ${_REGION} \
+          --set-env-vars PROJECT_ID=$PROJECT_ID,BUCKET_NAME=${_BUCKET_NAME},REGION=${_REGION}
+
+        # Capture the viewer URL for the agent deploy step
+        gcloud run services describe foldrun-viewer \
+          --region ${_REGION} \
+          --format 'value(status.url)' > /workspace/viewer_url.txt
+        echo "Viewer URL: $$(cat /workspace/viewer_url.txt)"
+    waitFor: ['push-viewer']
+
+  # ============================================================================
+  # 2. AF2 Analysis Job (Cloud Run Job)
+  # ============================================================================
+  - id: 'pull-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/af2-analysis-job:latest || exit 0']
+    waitFor: ['-']
+
+  - id: 'build-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    dir: 'src/af2-analysis-job'
+    args: [
+      'build',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/af2-analysis-job:latest',
+      '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/af2-analysis-job:latest',
+      '.'
+    ]
+    waitFor: ['pull-analysis-job']
+
+  - id: 'push-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/af2-analysis-job:latest']
+    waitFor: ['build-analysis-job']
+
+  - id: 'deploy-analysis-job'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'af2-analysis-job'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/af2-analysis-job:latest'
+      - '--region'
+      - '${_REGION}'
+      - '--set-env-vars'
+      - 'GCS_BUCKET=${_BUCKET_NAME},PROJECT_ID=$PROJECT_ID,REGION=${_REGION}'
+    waitFor: ['push-analysis-job']
+
+  # ============================================================================
+  # 2b. OF3 Analysis Job (Cloud Run Job)
+  # ============================================================================
+  - id: 'pull-of3-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/of3-analysis-job:latest || exit 0']
+    waitFor: ['-']
+
+  - id: 'build-of3-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    dir: 'src/of3-analysis-job'
+    args: [
+      'build',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/of3-analysis-job:latest',
+      '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/of3-analysis-job:latest',
+      '.'
+    ]
+    waitFor: ['pull-of3-analysis-job']
+
+  - id: 'push-of3-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/of3-analysis-job:latest']
+    waitFor: ['build-of3-analysis-job']
+
+  - id: 'deploy-of3-analysis-job'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'of3-analysis-job'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/of3-analysis-job:latest'
+      - '--region'
+      - '${_REGION}'
+      - '--set-env-vars'
+      - 'GCS_BUCKET=${_BUCKET_NAME},PROJECT_ID=$PROJECT_ID,REGION=${_REGION}'
+    waitFor: ['push-of3-analysis-job']
+
+  # ============================================================================
+  # 3. AlphaFold Components (Pipeline Container Image)
+  # ============================================================================
+  - id: 'pull-alphafold-components'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest || exit 0']
+    waitFor: ['-']
+
+  - id: 'build-alphafold-components'
+    name: 'gcr.io/cloud-builders/docker'
+    dir: 'src/alphafold-components'
+    args: [
+      'build',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest',
+      '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest',
+      '.'
+    ]
+    waitFor: ['pull-alphafold-components']
+
+  - id: 'push-alphafold-components'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest']
+    waitFor: ['build-alphafold-components']
+
+  # ============================================================================
+  # 3b. OpenFold3 Components (Pipeline Container Image)
+  # ============================================================================
+  - id: 'build-openfold3-components'
+    name: 'gcr.io/cloud-builders/docker'
+    dir: 'src/openfold3-components'
+    args: [
+      'build',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest',
+      '.'
+    ]
+    waitFor: ['-']
+
+  - id: 'push-openfold3-components'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest']
+    waitFor: ['build-openfold3-components']
+
+  # ============================================================================
+  # 4. Agentic AF2 Agent (Vertex AI Reasoning Engine)
+  # ============================================================================
+  - id: 'deploy-agent-engine'
+    name: 'python:3.12-slim'
+    dir: 'foldrun-agent'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        apt-get update && apt-get install -y curl
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$$HOME/.local/bin:$$PATH"
+        uv sync
+
+        # Export requirements for Agent Engine (strip hashes/dev dependencies)
+        (uv export --no-hashes --no-header --no-dev --no-emit-project --no-annotate > foldrun_app/app_utils/.requirements.txt 2>/dev/null || \
+         uv export --no-hashes --no-header --no-dev --no-emit-project > foldrun_app/app_utils/.requirements.txt)
+
+        # Set env vars needed by agent module at import time
+        export GCP_PROJECT_ID=$PROJECT_ID
+        export GCP_REGION=${_REGION}
+        export GCS_BUCKET_NAME=${_BUCKET_NAME}
+        export GCS_DATABASES_BUCKET=${_DATABASES_BUCKET}
+        export FILESTORE_ID=${_FILESTORE_ID}
+        export ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest
+        export OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
+
+        # Read viewer URL captured from the deploy-viewer step
+        VIEWER_URL=$$(cat /workspace/viewer_url.txt)
+        export AF2_VIEWER_URL=$$VIEWER_URL
+
+        # Deploy using the custom script inside the python project
+        uv run -m foldrun_app.app_utils.deploy \
+          --project=$PROJECT_ID \
+          --location=${_REGION} \
+          --service-account=${_AGENT_SA_EMAIL} \
+          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}
+    waitFor: ['deploy-viewer', 'push-alphafold-components', 'push-openfold3-components']
+
+  # ============================================================================
+  # 5. Data Download — handled locally by deploy-all.sh (step 5), not here.
+  #    Cloud Build doesn't have NFS access; deploy-all.sh submits Cloud Batch
+  #    jobs that mount Filestore directly.
+  # ============================================================================
+
+substitutions:
+  _REGION: us-central1
+  _AR_REPO: foldrun-repo
+  _BUCKET_NAME: required_bucket_name
+  _DATABASES_BUCKET: required_databases_bucket_name
+  _FILESTORE_ID: foldrun-nfs
+  _AGENT_SA_EMAIL: required_sa_email
+  _PIPELINES_SA_EMAIL: required_pipelines_sa_email
+timeout: 3600s
+options:
+  logging: CLOUD_LOGGING_ONLY

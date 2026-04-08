@@ -1,0 +1,115 @@
+[
+  {
+    "type": "OF3SubmitPredictionTool",
+    "name": "of3_submit_prediction",
+    "description": "Submit OpenFold3 structure prediction job to Vertex AI. Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted to OF3 JSON) or native OF3 JSON input.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "string",
+          "description": "Input sequence in FASTA format, OF3 JSON format, or path to input file. FASTA is automatically converted to OF3 JSON."
+        },
+        "job_name": {
+          "type": "string",
+          "description": "Human-readable job name for tracking (optional)"
+        },
+        "num_model_seeds": {
+          "type": "integer",
+          "description": "Number of model seeds for prediction diversity (default: 1). More seeds = more independent predictions."
+        },
+        "num_diffusion_samples": {
+          "type": "integer",
+          "description": "Number of diffusion samples per seed (default: 5). More samples = more structural diversity per seed."
+        },
+        "gpu_type": {
+          "type": "string",
+          "description": "GPU type: 'auto' (default, A100 for <=2000 tokens, A100_80GB for >2000), 'A100', or 'A100_80GB'. No L4 support — OF3 requires minimum 40GB VRAM.",
+          "enum": [
+            "auto",
+            "A100",
+            "A100_80GB"
+          ]
+        },
+        "enable_flex_start": {
+          "type": "boolean",
+          "description": "Enable DWS FLEX_START scheduling to queue job when GPUs unavailable (default: true)"
+        }
+      },
+      "required": [
+        "input"
+      ]
+    }
+  },
+  {
+    "type": "OF3JobAnalysisTool",
+    "name": "of3_analyze_parallel",
+    "description": "Trigger parallel analysis of OpenFold3 predictions via Cloud Run Jobs. Generates pLDDT plots, PDE heatmaps, ipTM matrix, and Gemini expert analysis.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "OpenFold3 pipeline job ID (required)"
+        },
+        "overwrite": {
+          "type": "boolean",
+          "description": "Overwrite existing analysis (default: false)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "OF3GetAnalysisResultsTool",
+    "name": "of3_get_analysis_results",
+    "description": "Retrieve OpenFold3 analysis results from Cloud Run. Returns ranking_score, pTM, ipTM, chain_pair_iptm, pLDDT, and Gemini expert analysis.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "OpenFold3 pipeline job ID (required)"
+        },
+        "wait": {
+          "type": "boolean",
+          "description": "Poll until analysis completes (default: false)"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Max wait time in seconds (default: 10)"
+        },
+        "poll_interval": {
+          "type": "integer",
+          "description": "Seconds between polls (default: 2)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "OF3OpenViewerTool",
+    "name": "of3_open_viewer",
+    "description": "Open the FoldRun 3D structure viewer for OpenFold3 predictions. Shows CIF structure with pLDDT coloring, ranking scores, ipTM matrix, and analysis plots.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "OpenFold3 pipeline job ID (required)"
+        },
+        "open_browser": {
+          "type": "boolean",
+          "description": "Automatically open in browser (default: true)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  }
+]

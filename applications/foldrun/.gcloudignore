@@ -1,0 +1,44 @@
+# Virtual environments
+.venv/
+venv/
+
+# Terraform providers and state
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate*
+terraform/backend.tf
+
+# Python caches and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE and tooling
+.vscode/
+.idea/
+.ruff_cache/
+.claude/
+
+# Local development
+.python-version
+
+# OS
+.DS_Store
+
+# Build artifacts
+build/
+dist/
+*.egg
+*.whl
+
+# Lock files
+uv.lock
+
+# Git
+.git/

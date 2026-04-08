@@ -1,0 +1,14 @@
+# Google Agent Development Kit (ADK)
+google-adk>=1.2.0
+
+# Environment management
+python-dotenv>=1.0.0
+
+# Rich console output for better CLI experience
+rich>=13.0.0
+
+# Async support
+asyncio
+
+# Optional: For enhanced logging
+structlog>=24.0.0

@@ -1,0 +1,606 @@
+[
+  {
+    "type": "AF2SubmitMonomerTool",
+    "name": "af2_submit_monomer",
+    "description": "Submit AlphaFold2 monomer protein structure prediction job to Vertex AI. Use this for single-chain proteins.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "string",
+          "description": "Protein sequence in FASTA format or path to FASTA file"
+        },
+        "job_name": {
+          "type": "string",
+          "description": "Human-readable job name for tracking (optional)"
+        },
+        "max_template_date": {
+          "type": "string",
+          "description": "Maximum template search date in YYYY-MM-DD format (default: 2030-01-01)"
+        },
+        "use_small_bfd": {
+          "type": "boolean",
+          "description": "Use small BFD database for faster runtime (default: true)"
+        },
+        "run_relaxation": {
+          "type": "boolean",
+          "description": "Run AMBER relaxation on predicted structure (default: true)"
+        },
+        "gpu_type": {
+          "type": "string",
+          "description": "GPU type: 'auto' (default, selects based on sequence length), L4 (small <500 residues), A100 (medium 500-1500 residues), or A100_80GB (large >1500 residues). DWS FLEX_START enabled by default.",
+          "enum": [
+            "auto",
+            "L4",
+            "A100",
+            "A100_80GB"
+          ]
+        },
+        "msa_method": {
+          "type": "string",
+          "description": "MSA generation method: 'auto' (default, uses mmseqs2 GPU when use_small_bfd=true, jackhmmer CPU otherwise), 'mmseqs2' (GPU-accelerated, requires use_small_bfd=true), or 'jackhmmer' (CPU-based, works with all databases).",
+          "enum": [
+            "auto",
+            "mmseqs2",
+            "jackhmmer"
+          ]
+        },
+        "vertex_repo_path": {
+          "type": "string",
+          "description": "Path to vertex-ai-alphafold-inference-pipeline repository (optional)"
+        },
+        "enable_flex_start": {
+          "type": "boolean",
+          "description": "Enable DWS FLEX_START scheduling to queue job when GPUs unavailable (default: true)"
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    }
+  },
+  {
+    "type": "AF2SubmitMultimerTool",
+    "name": "af2_submit_multimer",
+    "description": "Submit AlphaFold2 multimer/complex protein structure prediction job to Vertex AI. Use this for multi-chain proteins or protein complexes.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "string",
+          "description": "Multi-chain protein sequence in FASTA format or path to FASTA file"
+        },
+        "job_name": {
+          "type": "string",
+          "description": "Human-readable job name for tracking (optional)"
+        },
+        "max_template_date": {
+          "type": "string",
+          "description": "Maximum template search date in YYYY-MM-DD format (default: 2030-01-01)"
+        },
+        "use_small_bfd": {
+          "type": "boolean",
+          "description": "Use small BFD database (default: true)"
+        },
+        "run_relaxation": {
+          "type": "boolean",
+          "description": "Run AMBER relaxation (default: true)"
+        },
+        "gpu_type": {
+          "type": "string",
+          "description": "GPU type: 'auto' (default, selects based on total sequence length), A100 (multimer <1000 total residues), or A100_80GB (multimer >=1000 total residues). DWS FLEX_START enabled by default.",
+          "enum": [
+            "auto",
+            "L4",
+            "A100",
+            "A100_80GB"
+          ]
+        },
+        "msa_method": {
+          "type": "string",
+          "description": "MSA generation method: 'auto' (default, uses mmseqs2 GPU when use_small_bfd=true, jackhmmer CPU otherwise), 'mmseqs2' (GPU-accelerated, requires use_small_bfd=true), or 'jackhmmer' (CPU-based, works with all databases).",
+          "enum": [
+            "auto",
+            "mmseqs2",
+            "jackhmmer"
+          ]
+        },
+        "num_predictions_per_model": {
+          "type": "integer",
+          "description": "Number of predictions per model (1-25, default: 5)"
+        },
+        "vertex_repo_path": {
+          "type": "string",
+          "description": "Path to vertex-ai-alphafold-inference-pipeline repository (optional)"
+        },
+        "enable_flex_start": {
+          "type": "boolean",
+          "description": "Enable DWS FLEX_START scheduling to queue job when GPUs unavailable (default: true)"
+        }
+      },
+      "required": [
+        "sequence"
+      ]
+    }
+  },
+  {
+    "type": "AF2BatchSubmitTool",
+    "name": "af2_submit_batch",
+    "description": "Submit multiple AlphaFold2 prediction jobs in batch. Each job in the batch can have different configurations.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "batch_config": {
+          "type": "array",
+          "description": "List of job configurations",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "type": "string"
+              },
+              "job_name": {
+                "type": "string"
+              },
+              "is_multimer": {
+                "type": "boolean"
+              },
+              "gpu_type": {
+                "type": "string"
+              },
+              "max_template_date": {
+                "type": "string"
+              },
+              "use_small_bfd": {
+                "type": "boolean"
+              },
+              "run_relaxation": {
+                "type": "boolean"
+              },
+              "num_predictions_per_model": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "batch_config"
+      ]
+    }
+  },
+  {
+    "type": "AF2JobStatusTool",
+    "name": "af2_check_job_status",
+    "description": "Check the status and progress of an AlphaFold2 prediction job. Returns current state, task progress, and prediction metrics if available.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Full job ID or job name from Vertex AI"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "AF2ListJobsTool",
+    "name": "af2_list_jobs",
+    "description": "List AlphaFold2 prediction jobs with detailed metadata similar to Vertex AI console. Supports filtering by state, job type, GPU type, sequence name, sequence length range, and custom labels. Returns comprehensive job information including duration, timestamps, labels, and console URLs.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "filter": {
+          "type": "string",
+          "description": "Advanced filter string (e.g., 'state=\"PIPELINE_STATE_RUNNING\"')"
+        },
+        "label_filter": {
+          "type": "object",
+          "description": "Filter by custom labels (e.g., {'submitted_by': 'foldrun-agent'})"
+        },
+        "state": {
+          "type": "string",
+          "description": "Filter by job state: running, failed, succeeded, pending, cancelled",
+          "enum": [
+            "running",
+            "failed",
+            "succeeded",
+            "pending",
+            "cancelled"
+          ]
+        },
+        "job_type": {
+          "type": "string",
+          "description": "Filter by job type: monomer or multimer",
+          "enum": [
+            "monomer",
+            "multimer"
+          ]
+        },
+        "gpu_type": {
+          "type": "string",
+          "description": "Filter by GPU type: l4, a100, or a100-80gb",
+          "enum": [
+            "l4",
+            "a100",
+            "a100-80gb"
+          ]
+        },
+        "seq_name": {
+          "type": "string",
+          "description": "Filter by sequence name (partial match, case-insensitive)"
+        },
+        "min_seq_length": {
+          "type": "integer",
+          "description": "Filter by minimum sequence length (e.g., 100 for sequences >= 100 residues)"
+        },
+        "max_seq_length": {
+          "type": "integer",
+          "description": "Filter by maximum sequence length (e.g., 500 for sequences <= 500 residues)"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of jobs to return (default: 20)"
+        },
+        "check_analysis": {
+          "type": "boolean",
+          "description": "Check if analysis exists for succeeded jobs (default: false). WARNING: Can be slow for many jobs, only enable if you need to know which jobs have analysis results."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "AF2GetResultsTool",
+    "name": "af2_get_results",
+    "description": "Retrieve and download AlphaFold2 prediction results including PDB files, ranking confidence scores, and MSA information.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Job ID"
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "Local directory to save results (optional)"
+        },
+        "include_raw_predictions": {
+          "type": "boolean",
+          "description": "Include raw prediction pickle files (default: false)"
+        },
+        "download_files": {
+          "type": "boolean",
+          "description": "Whether to download files (default: true)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "AF2GetJobDetailsTool",
+    "name": "af2_get_job_details",
+    "description": "Get detailed job information including original FASTA sequence, submission parameters, and per-task worker pool configurations (GPU types, scheduling strategy). Use this to retrieve job metadata for failed jobs that you want to resubmit with different settings. Returns complete job configuration including separate task_configurations for predict, relax, and other pipeline tasks showing their individual GPU types and FLEX_START settings.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Job ID to retrieve details for"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "AF2DeleteJobTool",
+    "name": "af2_delete_job",
+    "description": "Delete a pipeline job from Vertex AI. This removes the job metadata and history. WARNING: This action cannot be undone. Note: This does NOT delete output files in GCS - those must be deleted separately. Requires confirm=true as a safety check.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Job ID to delete"
+        },
+        "confirm": {
+          "type": "boolean",
+          "description": "Must be set to true to confirm deletion (safety check)"
+        }
+      },
+      "required": [
+        "job_id",
+        "confirm"
+      ]
+    }
+  },
+  {
+    "type": "AF2CheckGPUQuotaTool",
+    "name": "af2_check_gpu_quota",
+    "description": "Check GPU quota limits and current usage in the configured region. Shows available capacity for L4, A100 (40GB), and A100 (80GB) GPUs, both on-demand and preemptible/spot instances. Use this before submitting jobs to understand GPU availability and whether FLEX_START is needed. Returns quota limits, current usage, available capacity, and recommendations.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": "string",
+          "description": "Region to check quotas for (default: configured region)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "AF2CleanupGCSFilesTool",
+    "name": "af2_cleanup_gcs_files",
+    "description": "Find and delete GCS files. Two modes: (1) Job-based: provide job_id to find/delete files for that job, or (2) Bulk deletion: provide gcs_paths list (from af2_find_orphaned_files) to delete specific files/directories directly. Mode 2 supports directory paths (ending with /) which are automatically expanded to all files within. Both modes support search_only=true to preview first. Handles both pipeline outputs and FASTA files.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Job ID or name (mode 1: job-based cleanup)"
+        },
+        "gcs_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of GCS paths to delete (mode 2: bulk deletion). Supports directory paths ending with / (e.g., 'gs://bucket/pipeline_runs/20251112_172826/') and individual file paths. Directory paths are expanded to include all files. Use with output from af2_find_orphaned_files."
+        },
+        "search_only": {
+          "type": "boolean",
+          "description": "If true, only list files without deleting (default: true)"
+        },
+        "confirm_delete": {
+          "type": "boolean",
+          "description": "Must be true to actually delete files (safety check)"
+        },
+        "include_fasta": {
+          "type": "boolean",
+          "description": "Also delete FASTA file (default: false, only for job_id mode)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "AF2FindOrphanedGCSFilesTool",
+    "name": "af2_find_orphaned_files",
+    "description": "Find all GCS files that don't have corresponding Vertex AI jobs (orphaned files from deleted jobs). Scans pipeline_runs/ and fasta/ directories, compares with active Vertex AI jobs, and reports orphaned files with sizes. Returns list of orphaned directories/files and potential storage cost savings. Use this to identify cleanup opportunities.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "check_fasta": {
+          "type": "boolean",
+          "description": "Also check for orphaned FASTA files (default: true)"
+        },
+        "max_jobs_to_check": {
+          "type": "integer",
+          "description": "Maximum number of jobs to retrieve from Vertex AI (default: 1000)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "AF2AnalysisTool",
+    "name": "af2_analyze_quality",
+    "description": "Analyze quality metrics of AlphaFold2 prediction including pLDDT scores, PAE scores, and confidence distributions. Supports single prediction analysis or batch comparison of all predictions from a job.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Job ID (optional if raw_prediction_path provided)"
+        },
+        "model_index": {
+          "type": "integer",
+          "description": "Specific model to analyze (1-5), or null for best (optional)"
+        },
+        "raw_prediction_path": {
+          "type": "string",
+          "description": "Direct path to raw prediction pickle file (optional)"
+        },
+        "analyze_all": {
+          "type": "boolean",
+          "description": "Analyze all predictions and compare (default: false). Returns comparison metrics, rankings, and recommendations."
+        },
+        "top_n": {
+          "type": "integer",
+          "description": "When analyze_all=true, return detailed analysis for top N predictions (default: 5)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "type": "AF2VisualizationTool",
+    "name": "af2_visualize_structure",
+    "description": "Generate 3D visualization of predicted structure with pLDDT confidence coloring.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "pdb_path": {
+          "type": "string",
+          "description": "Path to PDB file (local or GCS)"
+        },
+        "raw_prediction_path": {
+          "type": "string",
+          "description": "Path to raw prediction pickle for pLDDT coloring (optional)"
+        },
+        "output_path": {
+          "type": "string",
+          "description": "Output path for visualization (optional)"
+        },
+        "output_format": {
+          "type": "string",
+          "description": "Output format: pdb_colored, html, or both (default: pdb_colored)",
+          "enum": [
+            "pdb_colored",
+            "html",
+            "both"
+          ]
+        }
+      },
+      "required": [
+        "pdb_path"
+      ]
+    }
+  },
+  {
+    "type": "AF2GetAnalysisResultsTool",
+    "name": "af2_get_analysis_results",
+    "description": "Get async analysis results from Cloud Run. Aggregates individual analysis results from GCS and returns comprehensive summary with statistics, rankings, and recommendations. Can optionally wait/poll until analysis completes.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Job ID (required)"
+        },
+        "wait": {
+          "type": "boolean",
+          "description": "Poll until analysis completes (default: false)"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Max wait time in seconds (default: 300)"
+        },
+        "poll_interval": {
+          "type": "integer",
+          "description": "Seconds between polls (default: 5)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "AF2JobAnalysisTool",
+    "name": "af2_analyze_parallel",
+    "description": "Trigger parallel analysis via Cloud Run Jobs (25 tasks simultaneously). Uses Cloud Run Jobs for true parallel batch processing of predictions. Each task analyzes one prediction independently without HTTP constraints. Performance: ~60 seconds for 25 predictions vs ~52 minutes sequential. Cost: ~$0.015 per job. Results written to GCS - use get_analysis_results to retrieve.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Job ID (required)"
+        },
+        "top_n": {
+          "type": "integer",
+          "description": "Number of top predictions to return in summary (default: 10)"
+        },
+        "overwrite": {
+          "type": "boolean",
+          "description": "Overwrite existing analysis if present (default: false)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "AlphaFoldDBGetPrediction",
+    "name": "alphafold_db_get_prediction",
+    "description": "Query AlphaFold Database (EMBL-EBI) for pre-computed protein structure predictions. Returns full prediction data including pLDDT scores, PAE, and download links. Use this to check if a structure already exists before running expensive Vertex AI jobs. Requires UniProt accession (e.g., 'P69905'), entry name (e.g., 'HBA_HUMAN'), or CRC64 checksum. For custom/novel sequences not in AlphaFold DB, use af2_submit_monomer or af2_submit_multimer instead.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "qualifier": {
+          "type": "string",
+          "description": "UniProt accession (e.g., 'P69905'), entry name (e.g., 'HBA_HUMAN'), or CRC64 checksum"
+        },
+        "sequence_checksum": {
+          "type": "string",
+          "description": "Optional CRC64 checksum of the UniProt sequence for validation"
+        }
+      },
+      "required": [
+        "qualifier"
+      ]
+    }
+  },
+  {
+    "type": "AlphaFoldDBGetSummary",
+    "name": "alphafold_db_get_summary",
+    "description": "Query AlphaFold Database (EMBL-EBI) for lightweight summary of pre-computed protein structure models. Returns sequence length, coverage, confidence scores, oligomeric state, and model metadata. Faster than alphafold_db_get_prediction for quick lookups. Use this to check if a protein is in AlphaFold DB before submitting Vertex AI jobs.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "qualifier": {
+          "type": "string",
+          "description": "UniProt accession, entry name, or CRC64 checksum"
+        }
+      },
+      "required": [
+        "qualifier"
+      ]
+    }
+  },
+  {
+    "type": "AlphaFoldDBGetAnnotations",
+    "name": "alphafold_db_get_annotations",
+    "description": "Query AlphaFold Database (EMBL-EBI) for variant annotations and predicted mutation effects. Returns information about missense mutations, predicted pathogenicity, and functional effects. Currently supports 'MUTAGEN' annotation type. Use this to explore how mutations might affect protein structure and function.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "qualifier": {
+          "type": "string",
+          "description": "UniProt accession, entry name, or CRC64 checksum"
+        },
+        "type": {
+          "type": "string",
+          "description": "Annotation type (default: 'MUTAGEN')",
+          "enum": [
+            "MUTAGEN"
+          ]
+        }
+      },
+      "required": [
+        "qualifier"
+      ]
+    }
+  },
+  {
+    "type": "AF2OpenViewerTool",
+    "name": "af2_open_viewer",
+    "description": "Open the AlphaFold 3D structure viewer in a web browser to visualize prediction results. Displays interactive 3D protein structure with pLDDT confidence coloring, quality metrics, analysis plots, and download links. Works with completed prediction jobs.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "Pipeline job ID (e.g., 'alphafold-inference-pipeline-20250421110959')"
+        },
+        "pdb_uri": {
+          "type": "string",
+          "description": "GCS URI to PDB file (optional, defaults to ranked_0.pdb from job)"
+        },
+        "summary_uri": {
+          "type": "string",
+          "description": "GCS URI to analysis summary.json (optional, auto-constructed from job_id)"
+        },
+        "model_name": {
+          "type": "string",
+          "description": "Display name for the model (default: 'Best Model')"
+        },
+        "open_browser": {
+          "type": "boolean",
+          "description": "Automatically open in browser (default: true)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  }
+]

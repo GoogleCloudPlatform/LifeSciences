@@ -19,4 +19,5 @@ Each folder in this directory contains a different sample application.
 
 | Application | Description |
 | --- | --- |
+| [FoldRun](foldrun) | An agentic interface for protein structure prediction. |
 | [Sentinel](sentinel) | Evaluate whether documents and videos are compliant with medical regulations. |
