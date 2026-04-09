@@ -13,6 +13,7 @@ This repository contains sample applications for Pharma and Life Sciences. Navig
 .
 ├── applications
 │   ├── sentinel
+|   ├── foldrun
 │   └── README.md
 └── README.md
 ```
