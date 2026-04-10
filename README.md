@@ -5,18 +5,22 @@
 This repository contains a collection of demo applications that demonstrate the use of Google Cloud Platform (GCP) services for Pharma and Life Sciences.
 
 ## Getting Started
-This repository contains sample applications for Pharma and Life Sciences. Navigate to the [applications](applications/) directory to find the sample applications.
+
+To get started with a sample application:
+
+1. Browse the [Applications](#applications) section below to find the application you are interested in.
+2. Click the link to navigate to the application's directory.
+3. Follow the instructions in the application's specific `README.md` for setup and running details.
+
+For general prerequisites and setup instructions common to all applications, you can also refer to the [Applications README](applications/README.md).
 
 
-## Repository Structure
-```bash
-.
-├── applications
-│   ├── sentinel
-|   ├── foldrun
-│   └── README.md
-└── README.md
-```
+## Applications
+
+| Application | Description |
+| --- | --- |
+| [FoldRun](applications/foldrun) | An agentic interface for protein structure prediction. |
+| [Sentinel](applications/sentinel) | Evaluate whether documents and videos are compliant with medical regulations. |
 
 
 ## Getting help
