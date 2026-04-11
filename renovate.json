@@ -1,6 +1,40 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
-  ]
+    "config:recommended",
+    "group:allNonMajor",
+    ":dependencyDashboard"
+  ],
+  "schedule": ["before 9am on Monday"],
+  "timezone": "America/Denver",
+  "prConcurrentLimit": 3,
+  "packageRules": [
+    {
+      "description": "Group all non-security dependency updates into a single weekly PR",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "groupName": "all non-major dependencies",
+      "schedule": ["before 9am on Monday"]
+    },
+    {
+      "description": "Group major updates separately (weekly)",
+      "matchUpdateTypes": ["major"],
+      "groupName": "major updates",
+      "schedule": ["before 9am on Monday"]
+    },
+    {
+      "description": "Security/vulnerability updates: create PRs immediately",
+      "matchCategories": ["security"],
+      "groupName": null,
+      "schedule": ["at any time"],
+      "prPriority": 10,
+      "labels": ["security", "zero-day"],
+      "automerge": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "labels": ["security", "zero-day"],
+    "prPriority": 10
+  }
 }
