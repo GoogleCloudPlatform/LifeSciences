@@ -49,6 +49,13 @@ resource "google_cloud_run_v2_job" "af2_analysis_job" {
       max_retries     = 0
       timeout         = "600s"
       service_account = google_service_account.foldrun_analysis.email
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.foldrun_vpc.name
+          subnetwork = google_compute_subnetwork.foldrun_subnet.name
+        }
+        egress = "ALL_TRAFFIC"
+      }
       containers {
         image = "us-docker.pkg.dev/cloudrun/container/hello"
 
@@ -100,6 +107,13 @@ resource "google_cloud_run_v2_job" "of3_analysis_job" {
       max_retries     = 0
       timeout         = "600s"
       service_account = google_service_account.foldrun_analysis.email
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.foldrun_vpc.name
+          subnetwork = google_compute_subnetwork.foldrun_subnet.name
+        }
+        egress = "ALL_TRAFFIC"
+      }
       containers {
         image = "us-docker.pkg.dev/cloudrun/container/hello"
 

@@ -23,6 +23,8 @@ REGION=${REGION:-us-central1}
 SERVICE_NAME="foldrun-viewer"
 IMAGE_NAME="foldrun-viewer"
 BUCKET_NAME=${BUCKET_NAME:-${PROJECT_ID}-foldrun-data}
+VPC_NAME=${VPC_NAME:-foldrun-network}
+SUBNET_NAME=${SUBNET_NAME:-${VPC_NAME}-subnet}
 
 # Artifact Registry repository
 AR_REPO="foldrun-repo"
@@ -57,8 +59,10 @@ echo "This may take a few minutes..."
 echo ""
 
 gcloud builds submit \
-    --tag ${IMAGE_PATH} \
+    --config cloudbuild.yaml \
     --timeout=10m \
+    --service-account="projects/${PROJECT_ID}/serviceAccounts/foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --substitutions=_IMAGE_PATH=${IMAGE_PATH} \
     .
 
 echo ""
@@ -73,12 +77,17 @@ gcloud run deploy ${SERVICE_NAME} \
     --image ${IMAGE_PATH} \
     --region ${REGION} \
     --platform managed \
-    --allow-unauthenticated \
+    --ingress all \
+    --iap \
+    --service-account "foldrun-viewer-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
     --set-env-vars "PROJECT_ID=${PROJECT_ID},BUCKET_NAME=${BUCKET_NAME},REGION=${REGION}" \
     --memory 512Mi \
     --cpu 1 \
     --max-instances 10 \
     --min-instances 0 \
+    --network ${VPC_NAME} \
+    --subnet ${SUBNET_NAME} \
+    --vpc-egress all-traffic \
     --timeout 300
 
 echo ""

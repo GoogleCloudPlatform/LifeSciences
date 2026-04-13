@@ -22,6 +22,8 @@ PROJECT_ID=${PROJECT_ID:-$(gcloud config get-value project)}
 REGION=${REGION:-us-central1}
 JOB_NAME=${JOB_NAME:-af2-analysis-job}
 ARTIFACT_REGISTRY_REPO=${ARTIFACT_REGISTRY_REPO:-foldrun-repo}
+VPC_NAME=${VPC_NAME:-foldrun-network}
+SUBNET_NAME=${SUBNET_NAME:-${VPC_NAME}-subnet}
 
 # Artifact Registry image path
 IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}/${JOB_NAME}"
@@ -51,7 +53,12 @@ fi
 cd "$(dirname "$0")"
 
 echo "Step 1: Building container image..."
-gcloud builds submit --tag $IMAGE_PATH --project $PROJECT_ID
+gcloud builds submit \
+    --config cloudbuild.yaml \
+    --project $PROJECT_ID \
+    --service-account="projects/${PROJECT_ID}/serviceAccounts/foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --substitutions=_IMAGE_PATH=${IMAGE_PATH} \
+    .
 
 echo ""
 echo "Step 2: Creating/Updating Cloud Run Job..."
@@ -70,6 +77,11 @@ gcloud run jobs deploy $JOB_NAME \
   --max-retries 0 \
   --task-timeout 600 \
   --parallelism 25 \
+  --tasks 25 \
+  --service-account "foldrun-analysis-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --network $VPC_NAME \
+  --subnet $SUBNET_NAME \
+  --vpc-egress all-traffic \
   --set-env-vars GCS_BUCKET=$BUCKET_NAME,PROJECT_ID=$PROJECT_ID,REGION=$REGION \
   --project $PROJECT_ID
 

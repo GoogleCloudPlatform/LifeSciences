@@ -64,6 +64,13 @@ resource "google_cloud_run_v2_service" "foldrun_viewer" {
         }
       }
     }
+    vpc_access {
+      network_interfaces {
+        network    = google_compute_network.foldrun_vpc.name
+        subnetwork = google_compute_subnetwork.foldrun_subnet.name
+      }
+      egress = "ALL_TRAFFIC"
+    }
     scaling {
       min_instance_count = 0
       max_instance_count = 10
