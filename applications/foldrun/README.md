@@ -178,7 +178,7 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | Resource | Name | Purpose |
 |----------|------|---------|
 | VPC + Subnet | `foldrun-network` | Private network for Filestore + pipelines |
-| Filestore | `foldrun-nfs` | NFS for genetic databases (~500GB) |
+| Filestore | `foldrun-nfs` | NFS for genetic databases (~1TB, 2.5TB Basic SSD) |
 | GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, analysis results |
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups |
 | Artifact Registry | `foldrun-repo` | Container images |
@@ -207,14 +207,16 @@ uv run adk web foldrun_app
 
 | Component | Estimated Monthly Cost |
 |-----------|----------------------|
-| Filestore (1TB Basic HDD) | ~$200/mo |
-| GCS (500GB databases) | ~$10/mo |
+| Filestore (2.5TB Basic SSD) | ~$820/mo |
+| GCS (~1TB database backups) | ~$20/mo |
+| Artifact Registry (~16GB) | ~$2/mo |
 | Agent Engine (idle) | ~$0 (pay per query) |
 | Cloud Run (viewer, idle) | ~$0 (scale to zero) |
-| GPU predictions (per job) | $2-15 per job (L4: ~$2, A100: ~$8-15) |
+| AF2 prediction (per job, L4) | ~$4 per job (MSA + 5 seeds predict + relax) |
+| OF3 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
 | Gemini API (per analysis) | ~$0.01-0.05 per analysis |
 
-The dominant cost is Filestore ($200/mo). To stop costs, delete the Filestore instance when not in use and re-download databases when needed.
+The dominant cost is Filestore (~$820/mo). Current databases (AF2 + OF3) use ~944 GB of the 2.5 TB provisioned, leaving room for the full BFD database if needed. To stop costs, delete the Filestore instance when not in use and re-download databases when needed.
 
 ## Project Structure
 
