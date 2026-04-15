@@ -1,0 +1,7 @@
+python-dotenv
+google-cloud-storage
+google-cloud-discoveryengine
+google-genai
+pydantic
+fastapi
+uvicorn
