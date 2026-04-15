@@ -42,6 +42,7 @@ TEXT_SECONDARY = "#5f6368"
 FONT_FAMILY = "Google Sans, Noto Sans, Helvetica, Arial, sans-serif"
 FONT_FAMILY_DISPLAY = "Google Sans Display, Google Sans, Noto Sans, Helvetica, Arial, sans-serif"
 
+# DNA helix path inspired by https://uxwing.com/dna-icon/
 HELIX_PATH = (
     "M120.06,489.41c15.49 -21.5,23.23 -40.69,26.29 -61.04,"
     "1.91 -14.18,2.1 -29.3,1.34 -46.50l8.47,0.44,0 -0.05"
