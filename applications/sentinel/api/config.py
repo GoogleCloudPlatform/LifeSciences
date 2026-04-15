@@ -33,7 +33,7 @@ class Settings(BaseSettings):
         google_cloud_location: Google Cloud Location for Vertex AI (default: global)
         gemini_api_key: Google Gemini API key for video analysis (optional if using Vertex AI)
         gemini_model_fast: Model name for fast processing (default: gemini-3-flash-preview)
-        gemini_model_powerful: Model name for complex processing (default: gemini-3-pro-preview)
+        gemini_model_powerful: Model name for complex processing (default: gemini-3.1-pro-preview)
         google_genai_use_vertexai: Whether to explicitly use Vertex AI (default: False)
         api_host: Host address for the API server
         api_port: Port number for the API server
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     google_cloud_location: str = "global"
     gemini_api_key: Optional[str] = None
     gemini_model_fast: str = "gemini-3-flash-preview"
-    gemini_model_powerful: str = "gemini-3-pro-preview"
+    gemini_model_powerful: str = "gemini-3.1-pro-preview"
     google_genai_use_vertexai: bool = False
     gcs_bucket_name: Optional[str] = None
     gcs_media_folder: str = "dev"
