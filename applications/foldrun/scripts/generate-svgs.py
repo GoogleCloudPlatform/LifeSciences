@@ -147,7 +147,13 @@ def build_sticker(qr_path_data: str, gcp_icon: str) -> str:
   </defs>
 
   <!-- Sticker background circle -->
-  <circle cx="150" cy="150" r="148" fill="white" stroke="#e0e0e0" stroke-width="2"/>
+  <circle cx="150" cy="150" r="148" fill="white"/>
+
+  <!-- Google 4-color border ring (blue=right, green=bottom, yellow=left, red=top) -->
+  <path d="M254.65,45.35 A148,148 0 0,1 254.65,254.65" fill="none" stroke="{GOOGLE_BLUE}" stroke-width="4"/>
+  <path d="M254.65,254.65 A148,148 0 0,1 45.35,254.65" fill="none" stroke="{GOOGLE_GREEN}" stroke-width="4"/>
+  <path d="M45.35,254.65 A148,148 0 0,1 45.35,45.35" fill="none" stroke="{GOOGLE_YELLOW}" stroke-width="4"/>
+  <path d="M45.35,45.35 A148,148 0 0,1 254.65,45.35" fill="none" stroke="{GOOGLE_RED}" stroke-width="4"/>
 
   <!-- DNA helix icon in Google colors (centered, upper portion) -->
   <g transform="translate(115, 20) scale(0.14)">
