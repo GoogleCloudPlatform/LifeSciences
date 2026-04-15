@@ -21,6 +21,7 @@ For general prerequisites and setup instructions common to all applications, you
 | --- | --- |
 | [FoldRun](applications/foldrun) | An agentic interface for protein structure prediction. |
 | [Sentinel](applications/sentinel) | Evaluate whether documents and videos are compliant with medical regulations. |
+| [Gemini Enterprise Doc Parser](applications/gemini_enterprise_doc_parser) | Pipeline to ingest and augment clinical documents via LayoutParser and Gemini. |
 
 
 ## Getting help
