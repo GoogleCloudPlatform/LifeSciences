@@ -218,7 +218,8 @@ steps:
           --project=$PROJECT_ID \
           --location=${_REGION} \
           --service-account=${_AGENT_SA_EMAIL} \
-          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}
+          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL},NETWORK=${_NETWORK_ID},NETWORK_PROJECT_NUMBER=${_NETWORK_PROJECT_NUMBER}
+
     waitFor: ['deploy-viewer', 'push-alphafold-components', 'push-openfold3-components']
 
   # ============================================================================
@@ -299,6 +300,8 @@ steps:
 
 substitutions:
   _REGION: us-central1
+  _NETWORK_ID: ""
+  _NETWORK_PROJECT_NUMBER: ""
   _AR_REPO: foldrun-repo
   _BUCKET_NAME: required_bucket_name
   _DATABASES_BUCKET: required_databases_bucket_name

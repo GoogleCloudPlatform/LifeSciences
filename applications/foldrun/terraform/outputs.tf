@@ -61,3 +61,21 @@ output "pipelines_sa_email" {
   description = "The email of the Pipelines Service Account"
   value       = google_service_account.pipelines.email
 }
+
+output "subnet_id" {
+  description = "The resolved subnetwork ID (full path)"
+  value       = local.subnet_id
+}
+
+output "network_id" {
+  description = "The resolved network ID (full path)"
+  value       = local.network_id
+}
+
+output "network_project_number" {
+  description = "The resolved network project number"
+  value       = local.network_project_number
+}
+
+
+

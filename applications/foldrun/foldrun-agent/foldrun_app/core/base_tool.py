@@ -167,8 +167,33 @@ class BaseTool:
             # Ensure network is fully qualified as required by Vertex AI:
             #   projects/{project_number}/global/networks/{network}
             # Filestore API may return just the name or a project_id-based path.
-            network_name = filestore_network.split("/")[-1]
-            filestore_network = f"projects/{project_number}/global/networks/{network_name}"
+            match = re.match(r"projects/([^/]+)/global/networks/([^/]+)", filestore_network)
+            if match:
+                project_id_or_number = match.group(1)
+                network_name = match.group(2)
+
+                # Convert project_id to number if it's not already a number
+                if not project_id_or_number.isdigit():
+                    if self.config.network_project_number:
+                        project_number = self.config.network_project_number
+                    else:
+                        try:
+                            projects_client = resourcemanager_v3.ProjectsClient()
+                            project_name = f"projects/{project_id_or_number}"
+                            project = projects_client.get_project(name=project_name)
+                            project_number = project.name.split("/")[-1]
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to get project number for {project_id_or_number}: {e}. Using project ID as is."
+                            )
+                            project_number = project_id_or_number
+                else:
+                    project_number = project_id_or_number
+
+                filestore_network = f"projects/{project_number}/global/networks/{network_name}"
+            else:
+                network_name = filestore_network.split("/")[-1]
+                filestore_network = f"projects/{project_number}/global/networks/{network_name}"
 
             logger.info(f"Retrieved Filestore info: IP={filestore_ip}, Network={filestore_network}")
             return filestore_ip, filestore_network

@@ -97,6 +97,10 @@ class CoreConfig:
         return os.getenv("FILESTORE_NETWORK")
 
     @property
+    def network_project_number(self) -> Optional[str]:
+        return os.getenv("NETWORK_PROJECT_NUMBER")
+
+    @property
     def nfs_share(self) -> str:
         return os.getenv("NFS_SHARE", "/datasets")
 

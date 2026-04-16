@@ -18,7 +18,9 @@ Provides NFS-mounted Batch job submission for any model's download tools.
 """
 
 import logging
+import os
 from typing import Any, Dict, Optional
+
 
 from google.cloud import batch_v1
 
@@ -60,9 +62,21 @@ def get_filestore_info(
     ip = instance.networks[0].ip_addresses[0]
     network = instance.networks[0].network
 
-    project_number = get_project_number(project_id)
-    network_name = network.split("/")[-1]
-    network = f"projects/{project_number}/global/networks/{network_name}"
+    parts = network.split("/")
+    if len(parts) >= 5:
+        network_project = parts[1]
+        network_name = parts[4]
+        if network_project.isdigit():
+            network = f"projects/{network_project}/global/networks/{network_name}"
+        else:
+            try:
+                net_project_number = get_project_number(network_project)
+                network = f"projects/{net_project_number}/global/networks/{network_name}"
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get project number for {network_project}: {e}. Using project ID."
+                )
+                network = f"projects/{network_project}/global/networks/{network_name}"
 
     logger.info(f"Retrieved Filestore info: IP={ip}, Network={network}")
     return ip, network
@@ -234,7 +248,9 @@ def submit_batch_job(
     task_group.parallelism = 1
 
     if not subnet_name:
-        subnet_name = resolve_subnet(project_id, region, filestore_network)
+        subnet_name = os.getenv("SUBNET_ID") or resolve_subnet(
+            project_id, region, filestore_network
+        )
 
     if "global/networks/" in filestore_network:
         batch_network = filestore_network
@@ -243,7 +259,11 @@ def submit_batch_job(
             filestore_network.split("/")[-1] if "/" in filestore_network else filestore_network
         )
         batch_network = f"projects/{project_id}/global/networks/{net_name}"
-    batch_subnet = f"projects/{project_id}/regions/{region}/subnetworks/{subnet_name}"
+
+    if subnet_name.startswith("projects/"):
+        batch_subnet = subnet_name
+    else:
+        batch_subnet = f"projects/{project_id}/regions/{region}/subnetworks/{subnet_name}"
 
     instance_template_url = get_or_create_instance_template(
         project_id=project_id,

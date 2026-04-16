@@ -15,15 +15,16 @@
 import os
 import pytest
 
+
 def pytest_configure(config):
     """Set up environment variables for testing."""
     os.environ["GCP_PROJECT_ID"] = "test-project"
     os.environ["GCP_REGION"] = "us-central1"
     os.environ["GCS_BUCKET_NAME"] = "test-bucket"
     os.environ["FILESTORE_ID"] = "test-filestore"
-    
+
     # AF2 required variables
     os.environ["ALPHAFOLD_COMPONENTS_IMAGE"] = "test-af2-image"
-    
+
     # OpenFold3 required variables
     os.environ["OPENFOLD3_COMPONENTS_IMAGE"] = "test-of3-image"

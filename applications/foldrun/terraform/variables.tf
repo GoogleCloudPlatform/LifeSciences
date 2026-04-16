@@ -47,6 +47,32 @@ variable "peering_cidr" {
   default     = "10.1.0.0/16"
 }
 
+variable "network_name" {
+  description = "Name of the existing VPC network to use. If not provided, a new VPC will be created."
+  type        = string
+  default     = ""
+}
+
+variable "subnet_name" {
+  description = "Name of the existing subnetwork to use. If not provided, a new subnetwork will be created."
+  type        = string
+  default     = ""
+}
+
+variable "network_project_id" {
+  description = "The ID of the project where the existing VPC network is located. Useful for Shared VPC. Defaults to var.project_id."
+  type        = string
+  default     = ""
+}
+
+variable "network_project_number" {
+  description = "The number of the project where the existing VPC network is located. Required by Vertex AI for Shared VPC."
+  type        = string
+  default     = ""
+}
+
+
+
 variable "filestore_tier" {
   description = "Tier for the Filestore instance (BASIC_SSD avoids throughput throttling during concurrent database downloads)"
   type        = string

@@ -44,6 +44,12 @@
   - `roles/artifactregistry.admin` — create Artifact Registry repos
   - `roles/serviceusage.serviceUsageAdmin` — enable APIs
 
+**Shared VPC Requirements (if bringing your own network):**
+If you are using a Shared VPC (network belongs to a host project), the following service accounts from this project need the **Compute Network User** (`roles/compute.networkUser`) role on the host project or specific subnet:
+- `service-[PROJECT_NUMBER]@gcp-sa-cloudbatch.iam.gserviceaccount.com` (Cloud Batch Service Agent)
+- `service-[PROJECT_NUMBER]@serverless-robot-prod.iam.gserviceaccount.com` (Cloud Run Service Agent, needed for Cloud Run Direct VPC egress)
+
+
 **GPU Quota (check before starting):**
 - AF2 minimum: **1x NVIDIA L4** in your region (for small proteins)
 - AF2 recommended: **1x NVIDIA A100 40GB** (for larger proteins)
@@ -51,7 +57,10 @@
 - Check your quota: [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu)
 - If you need to request quota increases, do it first — approvals can take hours
 
+
+
 ### Step 1: Authenticate
+
 
 ```bash
 # Login with your Google account
@@ -120,6 +129,58 @@ gcloud storage buckets add-iam-policy-binding gs://THEIR_PROJECT-foldrun-gdbs \
 ```bash
 GCS_SOURCE_BUCKET=THEIR_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 ```
+
+### Step 2c: Shared VPC Configuration (Optional)
+
+If you are deploying FoldRun into a Shared VPC (where the network belongs to a host project), follow these steps to ensure correct permissions:
+
+**1. Create `terraform.tfvars`:**
+In the `applications/foldrun/terraform/` directory, create a `terraform.tfvars` file with your network details:
+```hcl
+network_name           = "your-existing-vpc-name"
+subnet_name            = "your-existing-subnet-name"
+network_project_id     = "your-host-project-id"
+network_project_number = "your-host-project-number"
+```
+
+
+**2. Enable Cloud Run API and Grant Permissions:**
+Enable the Cloud Run API in your service project so that the Cloud Run Service Agent is created:
+```bash
+gcloud services enable run.googleapis.com --project=YOUR_PROJECT_ID
+```
+Then, grant the Cloud Run Service Agent the `Compute Network User` role on the host project or `roles/compute.networkUser` on the specific subnet and `roles/compute.networkViewer` on the host project:
+```bash
+gcloud projects add-iam-policy-binding HOST_PROJECT_ID \
+  --member="serviceAccount:service-PROJECT_NUMBER@serverless-robot-prod.iam.gserviceaccount.com" \
+  --role="roles/compute.networkUser"
+```
+
+**3. Provision your infrastructure (creates other service accounts):**
+Run the deployment script with only the `infra` step:
+```bash
+./deploy-all.sh YOUR_PROJECT_ID --steps infra
+```
+
+**4. Grant IAM permissions on the Host Project:**
+The previous step created the service account needed for the batch jobs. Now you must grant the Cloud Batch Service Agent the `Compute Network User` role on the host project or specific subnet.
+
+Ask your host project administrator to run these commands (replacing `HOST_PROJECT_ID`, `SERVICE_PROJECT_ID`, and `PROJECT_NUMBER`):
+
+```bash
+gcloud compute networks subnets add-iam-policy-binding SUBNET_NAME \
+  --region REGION \
+  --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-cloudbatch.iam.gserviceaccount.com" \
+  --role="roles/compute.networkUser" \
+  --project HOST_PROJECT_ID
+```
+
+**5. Complete the deployment:**
+Now run the deployment script regularly to build containers and deploy the application:
+```bash
+./deploy-all.sh YOUR_PROJECT_ID
+```
+
 
 ### Other deploy options
 ```bash

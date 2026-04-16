@@ -161,6 +161,10 @@ extract_terraform_outputs() {
     export BUILD_SA_EMAIL=$(terraform output -raw build_sa_email)
     export PIPELINES_SA_EMAIL=$(terraform output -raw pipelines_sa_email)
     export DATABASES_BUCKET=$(terraform output -raw databases_bucket_name 2>/dev/null || echo "")
+    export SUBNET_ID=$(terraform output -raw subnet_id 2>/dev/null || echo "")
+    export NETWORK_ID=$(terraform output -raw network_id 2>/dev/null || echo "")
+    export NETWORK_PROJECT_NUMBER=$(terraform output -raw network_project_number 2>/dev/null || echo "")
+
     cd ..
 }
 
@@ -229,7 +233,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi
