@@ -1,4 +1,4 @@
-FROM openfoldconsortium/openfold3:stable
+FROM openfoldconsortium/openfold3:0.3.1
 
 # No GCS libraries needed — all I/O via NFS mounts and KFP artifacts,
 # consistent with the AF2 container.
