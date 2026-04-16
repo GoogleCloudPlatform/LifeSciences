@@ -263,13 +263,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onAnalyze, isLoading, error }) => {
             onChange={(e) => setSpeed(e.target.value as 'fast' | 'powerful')}
             helperText={
               speed === 'powerful'
-                ? 'Gemini 3.0 Pro: Deep reasoning for complex medical cases.'
+                ? 'Gemini 3.1 Pro: Deep reasoning for complex medical cases.'
                 : 'Gemini Flash: Rapid screening and identification.'
             }
             sx={{ mb: 3 }}
           >
             <MenuItem value="fast">Fast (Gemini Flash)</MenuItem>
-            <MenuItem value="powerful">Powerful (Gemini 3.0 Pro)</MenuItem>
+            <MenuItem value="powerful">Powerful (Gemini 3.1 Pro)</MenuItem>
           </TextField>
 
           {error && (
