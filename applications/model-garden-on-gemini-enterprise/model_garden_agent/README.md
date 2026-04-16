@@ -39,10 +39,10 @@ See [`model_garden_agent/`](model_garden_agent/) for a working example.
 import os
 from google.adk.agents.llm_agent import Agent
 
-os.environ['GOOGLE_CLOUD_LOCATION'] = 'us-east5'
+os.environ['GOOGLE_CLOUD_LOCATION'] = os.getenv('MODEL_LOCATION', 'us-east5')
 
 root_agent = Agent(
-    model='claude-sonnet-4-6',
+    model=os.getenv('MODEL_NAME', 'claude-sonnet-4-6'),
     name='root_agent',
     description='A helpful assistant for user questions.',
     instruction='Answer user questions to the best of your knowledge',
@@ -79,7 +79,9 @@ model_garden_agent/
 ```
 GOOGLE_GENAI_USE_VERTEXAI=1
 GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID
-GOOGLE_CLOUD_LOCATION=us-east5
+GOOGLE_CLOUD_LOCATION=us-central1
+MODEL_NAME=claude-sonnet-4-6
+MODEL_LOCATION=us-east5
 ```
 
 ## Test Locally

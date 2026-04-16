@@ -15,10 +15,10 @@
 import os
 from google.adk.agents.llm_agent import Agent
 
-os.environ['GOOGLE_CLOUD_LOCATION'] = 'us-east5' # set this to the region your model deployment is in such as global
+os.environ['GOOGLE_CLOUD_LOCATION'] = os.getenv('MODEL_LOCATION', 'us-east5')
 
 root_agent = Agent(
-    model='claude-sonnet-4-6',
+    model=os.getenv('MODEL_NAME', 'claude-sonnet-4-6'),
     name='root_agent',
     description='A helpful assistant for user questions.',
     instruction='Answer user questions to the best of your knowledge',
