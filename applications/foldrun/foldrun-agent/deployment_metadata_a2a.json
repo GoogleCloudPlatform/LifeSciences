@@ -1,7 +1,0 @@
-{
-  "remote_agent_engine_id": "projects/673254409461/locations/us-central1/reasoningEngines/7986545150664900608",
-  "deployment_target": "agent_engine",
-  "is_a2a": true,
-  "a2a_url": "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/673254409461/locations/us-central1/reasoningEngines/7986545150664900608/a2a/v1/card",
-  "deployment_timestamp": "2026-04-17T22:07:34.072999"
-}
