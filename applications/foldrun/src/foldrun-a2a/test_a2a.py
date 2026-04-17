@@ -1,18 +1,52 @@
+"""Test the FoldRun A2A Cloud Run proxy.
+
+Usage:
+    cd src/foldrun-a2a
+    python test_a2a.py [AGENT_URL]
+
+Defaults to the deployed Cloud Run service URL.
+Requires: gcloud auth login (uses ID token for Cloud Run auth)
+"""
+
 import asyncio
 import os
-import httpx
+import sys
+import subprocess
 from uuid import uuid4
 from typing import Any
 
+import httpx
 from a2a.client import ClientFactory
 from a2a.client.client import ClientConfig
 from a2a.client.middleware import ClientCallInterceptor, ClientCallContext
 from a2a.types import Message, TextPart, Role, TransportProtocol, AgentCard
 
-class SimpleAuthInterceptor(ClientCallInterceptor):
-    def __init__(self, token: str):
-        self.token = token
-        
+AGENT_URL = "https://foldrun-a2a-673254409461.us-central1.run.app"
+
+
+class CloudRunAuthInterceptor(ClientCallInterceptor):
+    """Injects an ID token for Cloud Run authentication."""
+
+    def __init__(self, agent_url: str):
+        self.agent_url = agent_url
+        self._token = None
+
+    def _get_token(self) -> str:
+        if self._token is None:
+            result = subprocess.run(
+                ["gcloud", "auth", "print-identity-token",
+                 f"--audiences={self.agent_url}"],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                # Fall back to access token
+                result = subprocess.run(
+                    ["gcloud", "auth", "print-access-token"],
+                    capture_output=True, text=True,
+                )
+            self._token = result.stdout.strip()
+        return self._token
+
     async def intercept(
         self,
         method_name: str,
@@ -21,38 +55,39 @@ class SimpleAuthInterceptor(ClientCallInterceptor):
         agent_card: AgentCard | None,
         context: ClientCallContext | None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        headers = http_kwargs.get('headers', {})
-        headers['Authorization'] = f'Bearer {self.token}'
-        http_kwargs['headers'] = headers
+        headers = http_kwargs.get("headers", {})
+        headers["Authorization"] = f"Bearer {self._get_token()}"
+        http_kwargs["headers"] = headers
         return request_payload, http_kwargs
 
+
 async def main():
-    token = os.popen('gcloud auth print-access-token').read().strip()
-    base_url = "https://us-central1-aiplatform.googleapis.com"
-    card_path = "/v1beta1/projects/673254409461/locations/us-central1/reasoningEngines/7986545150664900608/a2a/v1/card"
-    
-    # Enable debug logging
-    import logging
-    logging.basicConfig(level=logging.DEBUG)
-    
-    # Connect client
+    agent_url = sys.argv[1] if len(sys.argv) > 1 else AGENT_URL
+
+    print(f"Connecting to: {agent_url}")
+
+    # Get auth token
+    auth = CloudRunAuthInterceptor(agent_url)
+    token = auth._get_token()
+
+    # Connect A2A client
     client = await ClientFactory.connect(
-        agent=base_url,
+        agent=agent_url,
         client_config=ClientConfig(
             streaming=True,
             supported_transports=[TransportProtocol.http_json],
-            httpx_client=httpx.AsyncClient(headers={"Authorization": f"Bearer {token}"})
+            httpx_client=httpx.AsyncClient(
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=120.0,
+            ),
         ),
-        relative_card_path=card_path,
-        resolver_http_kwargs={"headers": {"Authorization": f"Bearer {token}"}}
     )
-    
-    print("Sending request...")
+
+    print("Connected. Sending request...")
     try:
-        parts = [TextPart(text='List my recent protein folding jobs.')]
         message = Message(
             role=Role.user,
-            parts=parts,
+            parts=[TextPart(text="What can you do? Reply in one sentence.")],
             message_id=uuid4().hex,
         )
 
@@ -60,11 +95,20 @@ async def main():
 
         async for chunk in streaming_response:
             task, _ = chunk
-            print("EVENT TASK:", task)
-            
+            print(f"EVENT: state={task.status.state}")
+            if task.status.message:
+                for part in task.status.message.parts:
+                    if hasattr(part.root, "text"):
+                        print(f"  TEXT: {part.root.text[:200]}")
+
+        print("\nTest passed!")
+
     except Exception as e:
-        print("ERROR:", e)
-        
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+
     await client.close()
+
 
 asyncio.run(main())
