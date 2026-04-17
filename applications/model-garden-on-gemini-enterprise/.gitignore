@@ -1,0 +1,8 @@
+venv/
+llms.txt
+llms-full.txt
+docs/images/
+__pycache__/
+*.pyc
+.env
+.adk/
