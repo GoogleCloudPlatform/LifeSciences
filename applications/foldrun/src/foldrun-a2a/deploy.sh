@@ -30,10 +30,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="${SCRIPT_DIR}/../../foldrun-agent"
 
+# Configuration
 PROJECT_ID="${1:?Usage: deploy.sh <PROJECT_ID> [SERVICE_NAME] [REGION]}"
 SERVICE_NAME="${2:-foldrun-a2a}"
 REGION="${3:-us-central1}"
 SERVICE_ACCOUNT="foldrun-agent-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+VPC_NAME="${VPC_NAME:-foldrun-network}"
+SUBNET_NAME="${SUBNET_NAME:-${VPC_NAME}-subnet}"
+AR_REPO="${AR_REPO:-foldrun-repo}"
+IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/${SERVICE_NAME}:latest"
 
 # Source .env from the agent directory
 if [[ -f "${AGENT_DIR}/.env" ]]; then
@@ -60,7 +65,9 @@ echo ""
 echo "  Project:         ${PROJECT_ID}"
 echo "  Service:         ${SERVICE_NAME}"
 echo "  Region:          ${REGION}"
+echo "  Image:           ${IMAGE_PATH}"
 echo "  Service Account: ${SERVICE_ACCOUNT}"
+echo "  Network:         ${VPC_NAME} / ${SUBNET_NAME}"
 echo ""
 
 # Set the project
@@ -83,13 +90,21 @@ for var in GCP_PROJECT_ID GCP_REGION GCS_BUCKET_NAME GEMINI_MODEL \
   fi
 done
 
-echo "Deploying to Cloud Run (source-based build)..."
-echo ""
+echo "Step 1: Building container image..."
+gcloud builds submit \
+  --config cloudbuild.yaml \
+  --project "${PROJECT_ID}" \
+  --service-account "projects/${PROJECT_ID}/serviceAccounts/foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --substitutions "_IMAGE_PATH=${IMAGE_PATH}" \
+  .
 
+echo ""
+echo "Step 2: Deploying to Cloud Run..."
 gcloud run deploy "${SERVICE_NAME}" \
-  --source . \
+  --image "${IMAGE_PATH}" \
   --region "${REGION}" \
   --platform managed \
+  --ingress all \
   --service-account "${SERVICE_ACCOUNT}" \
   --set-env-vars "${ENV_VARS}" \
   --memory 2Gi \
@@ -97,8 +112,10 @@ gcloud run deploy "${SERVICE_NAME}" \
   --timeout 300 \
   --min-instances 0 \
   --max-instances 5 \
-  --no-allow-unauthenticated \
-  --quiet
+  --network "${VPC_NAME}" \
+  --subnet "${SUBNET_NAME}" \
+  --vpc-egress all-traffic \
+  --no-allow-unauthenticated
 
 # Get the service URL
 AGENT_URL=$(gcloud run services describe "${SERVICE_NAME}" \
