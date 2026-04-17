@@ -28,13 +28,13 @@ The script reads `PROJECT_ID` from environment variables or `gcloud config`.
 
 ## Environment Variables
 
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `GCS_BUCKET` | GCS bucket for data | Yes | — |
-| `PROJECT_ID` | Google Cloud project | Yes | — |
-| `REGION` | Compute region | Yes | `us-central1` |
-| `ANALYSIS_PATH` | GCS path to analysis directory | Yes | — |
-| `GEMINI_MODEL` | Gemini model for expert analysis | No | `gemini-3-pro-preview` |
+| Variable        | Description                      | Required | Default                  |
+| --------------- | -------------------------------- | -------- | ------------------------ |
+| `GCS_BUCKET`    | GCS bucket for data              | Yes      | —                        |
+| `PROJECT_ID`    | Google Cloud project             | Yes      | —                        |
+| `REGION`        | Compute region                   | Yes      | `us-central1`            |
+| `ANALYSIS_PATH` | GCS path to analysis directory   | Yes      | —                        |
+| `GEMINI_MODEL`  | Gemini model for expert analysis | No       | `gemini-3.1-pro-preview` |
 
 ## Output Structure
 

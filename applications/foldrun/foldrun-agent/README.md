@@ -5,6 +5,7 @@ AI-powered scientific orchestration assistant, currently equipped with the **Alp
 ## Overview
 
 FoldRun is designed as a modular, stateful conversational agent for bioinformatics workflows. In its current release, it comes pre-loaded with the **AlphaFold2 capabilities**, providing an interface for:
+
 - Submitting protein structure predictions (monomers and multimers)
 - Monitoring job progress and status
 - Analyzing prediction quality metrics
@@ -28,6 +29,7 @@ Built with **Google ADK** using **native FunctionTools** — no external server 
 ## Prerequisites
 
 ### Required
+
 - Python 3.10+
 - Google Cloud Project with Vertex AI enabled
 - Application Default Credentials (`gcloud auth application-default login`)
@@ -35,6 +37,7 @@ Built with **Google ADK** using **native FunctionTools** — no external server 
 - Filestore instance for genetic database storage
 
 ### Optional (for deployment)
+
 - Google Cloud SDK (`gcloud`)
 - Access to Vertex AI Agent Engine
 
@@ -177,83 +180,91 @@ User Query -> ADK Agent -> Native FunctionTools -> Vertex AI / GCS / APIs -> Res
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GOOGLE_GENAI_USE_VERTEXAI` | Must be `true` (Vertex AI required) | `true` |
-| `GCP_PROJECT_ID` | GCP project ID | Required |
-| `GCP_REGION` | GCP region | `us-central1` |
-| `GCP_ZONE` | GCP zone | `us-central1-a` |
-| `GCS_BUCKET_NAME` | GCS bucket for artifacts | Required |
-| `FILESTORE_ID` | Filestore instance ID | Required |
-| `ALPHAFOLD_COMPONENTS_IMAGE` | Container image for pipeline | Required |
-| `GEMINI_MODEL` | Gemini model to use | `gemini-3-flash-preview` |
-| `AF2_VIEWER_URL` | Analysis viewer Cloud Run URL | Optional |
-| `AF2_SUPPORTED_GPUS` | Comma-separated GPU list | Auto-detected |
+| Variable                     | Description                         | Default                  |
+| ---------------------------- | ----------------------------------- | ------------------------ |
+| `GOOGLE_GENAI_USE_VERTEXAI`  | Must be `true` (Vertex AI required) | `true`                   |
+| `GCP_PROJECT_ID`             | GCP project ID                      | Required                 |
+| `GCP_REGION`                 | GCP region                          | `us-central1`            |
+| `GCP_ZONE`                   | GCP zone                            | `us-central1-a`          |
+| `GCS_BUCKET_NAME`            | GCS bucket for artifacts            | Required                 |
+| `FILESTORE_ID`               | Filestore instance ID               | Required                 |
+| `ALPHAFOLD_COMPONENTS_IMAGE` | Container image for pipeline        | Required                 |
+| `GEMINI_MODEL`               | Gemini model to use                 | `gemini-3-flash-preview` |
+| `AF2_VIEWER_URL`             | Analysis viewer Cloud Run URL       | Optional                 |
+| `AF2_SUPPORTED_GPUS`         | Comma-separated GPU list            | Auto-detected            |
 
 ### Supported Gemini Models
 
 - `gemini-3-flash-preview` (default) - Fast, cost-effective
-- `gemini-3-pro-preview` - Most capable model
+- `gemini-3.1-pro-preview` - Most capable model
 
 Both require `GOOGLE_CLOUD_LOCATION=global` (preview models use the global endpoint).
 
 ## Available Tools (24)
 
 ### Job Submission (3)
-| Tool | Description |
-|------|-------------|
-| `submit_monomer_prediction` | Single-chain protein prediction |
-| `submit_multimer_prediction` | Multi-chain protein complex prediction |
-| `submit_batch_predictions` | Bulk submission of multiple predictions |
+
+| Tool                         | Description                             |
+| ---------------------------- | --------------------------------------- |
+| `submit_monomer_prediction`  | Single-chain protein prediction         |
+| `submit_multimer_prediction` | Multi-chain protein complex prediction  |
+| `submit_batch_predictions`   | Bulk submission of multiple predictions |
 
 ### Job Management (5)
-| Tool | Description |
-|------|-------------|
-| `check_job_status` | Monitor job progress and state |
-| `list_jobs` | List and filter jobs with metadata |
-| `get_job_details` | Retrieve complete job configuration and FASTA |
-| `delete_job` | Remove job from Vertex AI (with safety check) |
-| `check_gpu_quota` | View GPU quota limits and availability |
+
+| Tool               | Description                                   |
+| ------------------ | --------------------------------------------- |
+| `check_job_status` | Monitor job progress and state                |
+| `list_jobs`        | List and filter jobs with metadata            |
+| `get_job_details`  | Retrieve complete job configuration and FASTA |
+| `delete_job`       | Remove job from Vertex AI (with safety check) |
+| `check_gpu_quota`  | View GPU quota limits and availability        |
 
 ### Results & Analysis (5)
-| Tool | Description |
-|------|-------------|
-| `get_prediction_results` | Download PDB files and rankings |
-| `analyze_prediction_quality` | pLDDT and PAE quality metrics |
-| `analyze_job_parallel` | Fast parallel analysis via Cloud Run (25 predictions in ~60s) |
-| `get_analysis_results` | Retrieve completed parallel analyses |
-| `analyze_job` | Comprehensive job analysis (any state) |
+
+| Tool                         | Description                                                   |
+| ---------------------------- | ------------------------------------------------------------- |
+| `get_prediction_results`     | Download PDB files and rankings                               |
+| `analyze_prediction_quality` | pLDDT and PAE quality metrics                                 |
+| `analyze_job_parallel`       | Fast parallel analysis via Cloud Run (25 predictions in ~60s) |
+| `get_analysis_results`       | Retrieve completed parallel analyses                          |
+| `analyze_job`                | Comprehensive job analysis (any state)                        |
 
 ### Database Queries (3)
-| Tool | Description |
-|------|-------------|
-| `query_alphafold_db_prediction` | Full prediction from AlphaFold DB |
-| `query_alphafold_db_summary` | Quick summary lookup |
-| `query_alphafold_db_annotations` | Variant/mutation annotations |
+
+| Tool                             | Description                       |
+| -------------------------------- | --------------------------------- |
+| `query_alphafold_db_prediction`  | Full prediction from AlphaFold DB |
+| `query_alphafold_db_summary`     | Quick summary lookup              |
+| `query_alphafold_db_annotations` | Variant/mutation annotations      |
 
 ### Storage Management (2)
-| Tool | Description |
-|------|-------------|
-| `cleanup_gcs_files` | Delete GCS files (job-based or bulk) |
+
+| Tool                      | Description                          |
+| ------------------------- | ------------------------------------ |
+| `cleanup_gcs_files`       | Delete GCS files (job-based or bulk) |
 | `find_orphaned_gcs_files` | Find GCS files without matching jobs |
 
 ### Visualization (1)
-| Tool | Description |
-|------|-------------|
+
+| Tool                    | Description                     |
+| ----------------------- | ------------------------------- |
 | `open_structure_viewer` | Interactive 3D structure viewer |
 
 ### Genetic Database Management (3)
-| Tool | Description |
-|------|-------------|
-| `download_genetic_database` | Download a single database to GCS |
-| `download_all_genetic_databases` | Download all databases in parallel |
+
+| Tool                             | Description                             |
+| -------------------------------- | --------------------------------------- |
+| `download_genetic_database`      | Download a single database to GCS       |
+| `download_all_genetic_databases` | Download all databases in parallel      |
 | `check_database_download_status` | Check download job status and GCS files |
 
 ### Infrastructure (2)
-| Tool | Description |
-|------|-------------|
+
+| Tool                   | Description                                            |
+| ---------------------- | ------------------------------------------------------ |
 | `check_infrastructure` | Check infrastructure readiness (Filestore, APIs, etc.) |
-| `setup_infrastructure` | Set up missing infrastructure components |
+| `setup_infrastructure` | Set up missing infrastructure components               |
 
 ## Genetic Databases
 
@@ -285,18 +296,18 @@ Converts FASTA databases to MMseqs2 GPU-indexed format. Runs on `n1-highmem-32` 
 
 ### Supported Databases
 
-| Database | Full Mode | Reduced Mode | Approx. Size | MMseqs2 Indexable |
-|----------|-----------|--------------|--------------|-------------------|
-| AlphaFold Parameters | Yes | Yes | ~4 GB | No |
-| BFD | Yes | No | ~1.7 TB | No |
-| Small BFD | No | Yes | ~17 GB | Yes |
-| MGnify | Yes | Yes | ~64 GB | Yes |
-| PDB70 | Yes | Yes | ~56 GB | No |
-| PDB mmCIF | Yes | Yes | ~200 GB | No |
-| PDB SeqRes | Yes | Yes | ~1 GB | No |
-| UniRef30 | Yes | Yes | ~86 GB | No |
-| UniRef90 | Yes | Yes | ~58 GB | Yes |
-| UniProt | Yes | Yes | ~100 GB | No |
+| Database             | Full Mode | Reduced Mode | Approx. Size | MMseqs2 Indexable |
+| -------------------- | --------- | ------------ | ------------ | ----------------- |
+| AlphaFold Parameters | Yes       | Yes          | ~4 GB        | No                |
+| BFD                  | Yes       | No           | ~1.7 TB      | No                |
+| Small BFD            | No        | Yes          | ~17 GB       | Yes               |
+| MGnify               | Yes       | Yes          | ~64 GB       | Yes               |
+| PDB70                | Yes       | Yes          | ~56 GB       | No                |
+| PDB mmCIF            | Yes       | Yes          | ~200 GB      | No                |
+| PDB SeqRes           | Yes       | Yes          | ~1 GB        | No                |
+| UniRef30             | Yes       | Yes          | ~86 GB       | No                |
+| UniRef90             | Yes       | Yes          | ~58 GB       | Yes               |
+| UniProt              | Yes       | Yes          | ~100 GB      | No                |
 
 ### Download Modes
 
@@ -306,6 +317,7 @@ Converts FASTA databases to MMseqs2 GPU-indexed format. Runs on `n1-highmem-32` 
 ## Best Practices
 
 ### Hardware Selection
+
 - **L4 GPUs**: Recommended for proteins <500 residues
 - **A100 GPUs**: Recommended for proteins 500-2000 residues
 - **A100-80GB**: Required for proteins >2000 residues
@@ -345,14 +357,14 @@ Uses [MMseqs2](https://github.com/soedinglab/MMseqs2) with GPU acceleration. 177
 
 #### Comparison
 
-| | JackHMMER (CPU, default) | MMseqs2 (GPU, optional) |
-|---|---|---|
-| **Speed** | Hours per chain | Minutes per chain |
-| **Sensitivity** | Higher (iterative profiles find distant homologs) | Slightly lower (single-pass) |
-| **Hardware** | CPU-only (c2-standard-16) | g2-standard-12 + L4 GPU |
-| **Database modes** | Both `true` and `false` | `use_small_bfd: true` only |
-| **Setup** | None (works with raw downloads) | Requires one-time MMseqs2 index conversion |
-| **Best for** | Default pipeline, difficult targets | High-throughput, batch jobs |
+|                    | JackHMMER (CPU, default)                          | MMseqs2 (GPU, optional)                    |
+| ------------------ | ------------------------------------------------- | ------------------------------------------ |
+| **Speed**          | Hours per chain                                   | Minutes per chain                          |
+| **Sensitivity**    | Higher (iterative profiles find distant homologs) | Slightly lower (single-pass)               |
+| **Hardware**       | CPU-only (c2-standard-16)                         | g2-standard-12 + L4 GPU                    |
+| **Database modes** | Both `true` and `false`                           | `use_small_bfd: true` only                 |
+| **Setup**          | None (works with raw downloads)                   | Requires one-time MMseqs2 index conversion |
+| **Best for**       | Default pipeline, difficult targets               | High-throughput, batch jobs                |
 
 For most proteins, both methods produce MSAs of sufficient depth for high-quality predictions. The ColabFold project has demonstrated comparable AlphaFold2 results using MMseqs2 search across a wide range of targets.
 
@@ -361,6 +373,7 @@ For most proteins, both methods produce MSAs of sufficient depth for high-qualit
 Always selects **Jackhmmer** (CPU). MMseqs2 must be explicitly requested via `msa_method: 'mmseqs2'`.
 
 ### Tips
+
 1. Query AlphaFold DB first — a structure may already exist
 2. Use `small_bfd` for most predictions (faster MSA search)
 3. Use L4 GPUs for small proteins, A100 for large
@@ -399,6 +412,7 @@ uv run python -m foldrun_app.app_utils.deploy \
 ```
 
 The deploy script will:
+
 - Load environment variables from `.env`
 - Package the `foldrun_app/` source directory
 - Upload to Agent Engine with all dependencies
@@ -420,7 +434,7 @@ uv run python -m foldrun_app.app_utils.deploy \
 uv run python -m foldrun_app.app_utils.deploy \
   --project your-project-id \
   --location us-central1 \
-  --set-env-vars "GEMINI_MODEL=gemini-3-pro-preview"
+  --set-env-vars "GEMINI_MODEL=gemini-3.1-pro-preview"
 ```
 
 ### 3. Verify
@@ -453,6 +467,7 @@ uv sync --reinstall
 ### Agent Engine Deployment Fails
 
 Common causes:
+
 - **Editable installs in requirements**: Ensure `pip freeze` output doesn't contain `-e file:///...` lines. Use the `grep -v "^-e "` filter.
 - **Missing APIs**: Enable `aiplatform.googleapis.com`
 - **Auth issues**: Run `gcloud auth application-default login`
@@ -466,6 +481,7 @@ gcloud builds log BUILD_ID --project=YOUR_PROJECT_ID
 ### GPU Quota Issues
 
 The agent automatically checks GPU quotas at startup. If no GPUs are available:
+
 1. Check quotas in GCP Console
 2. Request quota increase for your region
 3. Use FLEX_START scheduling to queue jobs

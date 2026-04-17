@@ -836,7 +836,7 @@ def create_alphafold_agent(model: str = None) -> Agent:
 
     Args:
         model: Gemini model to use (default: gemini-flash-latest)
-               Supported: gemini-3-flash-preview, gemini-3-pro-preview
+               Supported: gemini-3-flash-preview, gemini-3.1-pro-preview
 
     Returns:
         Configured Agent instance ready for use
@@ -851,7 +851,7 @@ def create_alphafold_agent(model: str = None) -> Agent:
         os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
 
     # Validate model choice
-    allowed_models = ["gemini-3-flash-preview", "gemini-3-pro-preview", "gemini-3.1-pro-preview"]
+    allowed_models = ["gemini-3-flash-preview", "gemini-3.1-pro-preview"]
     if gemini_model not in allowed_models:
         raise ValueError(
             f"Model '{gemini_model}' not supported. Use one of: {', '.join(allowed_models)}"
