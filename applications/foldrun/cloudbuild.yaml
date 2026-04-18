@@ -93,6 +93,8 @@ steps:
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/af2-analysis-job:latest'
       - '--region'
       - '${_REGION}'
+      - '--service-account'
+      - 'foldrun-analysis-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--set-env-vars'
       - 'GCS_BUCKET=${_BUCKET_NAME},PROJECT_ID=$PROJECT_ID,REGION=${_REGION}'
     waitFor: ['push-analysis-job']
@@ -134,9 +136,54 @@ steps:
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/of3-analysis-job:latest'
       - '--region'
       - '${_REGION}'
+      - '--service-account'
+      - 'foldrun-analysis-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--set-env-vars'
       - 'GCS_BUCKET=${_BUCKET_NAME},PROJECT_ID=$PROJECT_ID,REGION=${_REGION}'
     waitFor: ['push-of3-analysis-job']
+
+  # ============================================================================
+  # 2c. Boltz-2 Analysis Job (Cloud Run Job)
+  # ============================================================================
+  - id: 'pull-boltz2-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-analysis-job:latest || exit 0']
+    waitFor: ['-']
+
+  - id: 'build-boltz2-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    dir: 'src/boltz2-analysis-job'
+    args: [
+      'build',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-analysis-job:latest',
+      '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-analysis-job:latest',
+      '.'
+    ]
+    waitFor: ['pull-boltz2-analysis-job']
+
+  - id: 'push-boltz2-analysis-job'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-analysis-job:latest']
+    waitFor: ['build-boltz2-analysis-job']
+
+  - id: 'deploy-boltz2-analysis-job'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'boltz2-analysis-job'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-analysis-job:latest'
+      - '--region'
+      - '${_REGION}'
+      - '--service-account'
+      - 'foldrun-analysis-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      - '--set-env-vars'
+      - 'GCS_BUCKET=${_BUCKET_NAME},PROJECT_ID=$PROJECT_ID,REGION=${_REGION}'
+    waitFor: ['push-boltz2-analysis-job']
 
   # ============================================================================
   # 3. AlphaFold Components (Pipeline Container Image)
@@ -182,6 +229,32 @@ steps:
     waitFor: ['build-openfold3-components']
 
   # ============================================================================
+  # 3c. Boltz-2 Components (Pipeline Container Image)
+  # ============================================================================
+  - id: 'pull-boltz2-components'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest || exit 0']
+    waitFor: ['-']
+
+  - id: 'build-boltz2-components'
+    name: 'gcr.io/cloud-builders/docker'
+    dir: 'src/boltz2-components'
+    args: [
+      'build',
+      '--build-arg', 'BOLTZ_VERSION=${_BOLTZ_VERSION}',
+      '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest',
+      '.'
+    ]
+    waitFor: ['pull-boltz2-components']
+
+  - id: 'push-boltz2-components'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest']
+    waitFor: ['build-boltz2-components']
+
+  # ============================================================================
   # 4. Agentic AF2 Agent (Vertex AI Reasoning Engine)
   # ============================================================================
   - id: 'deploy-agent-engine'
@@ -208,6 +281,7 @@ steps:
         export FILESTORE_ID=${_FILESTORE_ID}
         export ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest
         export OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
+        export BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest
 
         # Read viewer URL captured from the deploy-viewer step
         VIEWER_URL=$$(cat /workspace/viewer_url.txt)
@@ -218,8 +292,8 @@ steps:
           --project=$PROJECT_ID \
           --location=${_REGION} \
           --service-account=${_AGENT_SA_EMAIL} \
-          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}
-    waitFor: ['deploy-viewer', 'push-alphafold-components', 'push-openfold3-components']
+          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,BOLTZ2_ANALYSIS_JOB_NAME=boltz2-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}
+    waitFor: ['deploy-viewer', 'push-alphafold-components', 'push-openfold3-components', 'push-boltz2-components']
 
   # ============================================================================
   # 4b. FoldRun A2A Proxy (Cloud Run Service — optional)
@@ -305,6 +379,7 @@ substitutions:
   _FILESTORE_ID: foldrun-nfs
   _AGENT_SA_EMAIL: required_sa_email
   _PIPELINES_SA_EMAIL: required_pipelines_sa_email
+  _BOLTZ_VERSION: 2.2.1
 timeout: 3600s
 options:
   logging: CLOUD_LOGGING_ONLY

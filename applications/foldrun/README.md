@@ -14,7 +14,7 @@
 
 ## Tech Stack
 
-- **Agent**: Google ADK with 23 native FunctionTools (AF2 + OF3), deployed to Vertex AI Agent Engine
+- **Agent**: Google ADK with up to 30 native FunctionTools (AF2 + OF3 + Boltz-2), deployed to Vertex AI Agent Engine
 - **A2A**: Agent-to-Agent protocol proxy (Cloud Run) for agent interoperability
 - **AI**: Gemini (via Vertex AI)
 - **Compute**: Vertex AI Pipelines, Cloud Run, Cloud Batch
@@ -48,6 +48,7 @@
 - AF2 minimum: **1x NVIDIA L4** in your region (for small proteins)
 - AF2 recommended: **1x NVIDIA A100 40GB** (for larger proteins)
 - OF3 minimum: **1x NVIDIA A100 40GB** (no L4 support)
+- Boltz-2 minimum: **1x NVIDIA A100 40GB** (no L4 support — diffusion model requires ≥40 GB VRAM)
 - Check your quota: [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu)
 - If you need to request quota increases, do it first — approvals can take hours
 
@@ -142,6 +143,7 @@ Expected output:
 ✅ [Cloud Run] foldrun-viewer service is deployed and active
 ✅ [Cloud Run] af2-analysis-job is deployed
 ✅ [Cloud Run] of3-analysis-job is deployed
+✅ [Cloud Run] boltz2-analysis-job is deployed
 ✅ [Agent Engine] FoldRun agent is deployed
 ✅ [Databases] Downloading (check Cloud Batch console for progress)
 ```
@@ -158,6 +160,7 @@ The engine ID is printed at the end of `deploy-all.sh` and saved in `foldrun-age
 **Try these prompts:**
 - "Predict the structure of ubiquitin" (AF2 monomer)
 - "Fold this protein with ATP: MQIFVKTLTGKTITL..." (OF3, protein + ligand)
+- "Predict a glycoprotein-ligand complex with covalent modifications" (Boltz-2)
 - "What's the structure of P69905?" (checks AlphaFold DB first)
 
 **Use via Gemini CLI (A2A):**
@@ -198,9 +201,10 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, analysis results |
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups |
 | Artifact Registry | `foldrun-repo` | Container images |
-| Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + OF3) |
+| Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + OF3 + Boltz-2) |
 | Cloud Run Job | `af2-analysis-job` | AF2 parallel analysis |
 | Cloud Run Job | `of3-analysis-job` | OF3 parallel analysis |
+| Cloud Run Job | `boltz2-analysis-job` | Boltz-2 parallel analysis (optional) |
 | Cloud Run Service | `foldrun-a2a` | A2A protocol proxy for agent interop |
 | Service Account | `foldrun-agent-sa` | Agent's GCP identity |
 | Agent Engine | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
@@ -231,6 +235,7 @@ uv run adk web foldrun_app
 | Cloud Run (viewer, idle) | ~$0 (scale to zero) |
 | AF2 prediction (per job, L4) | ~$4 per job (MSA + 5 seeds predict + relax) |
 | OF3 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
+| Boltz-2 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
 | Gemini API (per analysis) | ~$0.01-0.05 per analysis |
 
 The dominant cost is Filestore (~$770/mo). Current databases (AF2 reduced + OF3) use ~944 GB of the 2.5 TB provisioned, leaving room for the full BFD database (~272 GB) if needed. BASIC_SSD avoids throughput throttling during concurrent database downloads. Terraform ignores capacity changes after provisioning, so you can resize via Console or gcloud without drift. To stop costs, delete the Filestore instance when not in use and re-download databases when needed.
@@ -256,28 +261,36 @@ foldrun/
 │   │   │   │   ├── pipeline/   # KFP: Configure → Data → ParallelFor[Predict → Relax]
 │   │   │   │   ├── tools/      # 19 tools (submit, status, analysis, viewer, DB queries)
 │   │   │   │   └── utils/      # FASTA validation, pipeline utils
-│   │   │   └── of3/            # OpenFold3 plugin
-│   │   │       ├── config.py   # OF3Config (image, params path, viewer URL)
-│   │   │       ├── base.py     # OF3Tool (GPU tiers: A100/A100_80GB, no relax)
-│   │   │       ├── pipeline/   # KFP: ConfigureSeeds → MSA → ParallelFor[Predict]
+│   │   │   ├── of3/            # OpenFold3 plugin
+│   │   │   │   ├── config.py   # OF3Config (image, params path, viewer URL)
+│   │   │   │   ├── base.py     # OF3Tool (GPU tiers: A100/A100_80GB, no relax)
+│   │   │   │   ├── pipeline/   # KFP: ConfigureSeeds → MSA → ParallelFor[Predict]
+│   │   │   │   ├── tools/      # submit, analyze, get_results, open_viewer
+│   │   │   │   └── utils/      # Input converter (FASTA→OF3 JSON), pipeline utils
+│   │   │   └── boltz2/         # Boltz-2 plugin (optional — enabled by BOLTZ2_COMPONENTS_IMAGE)
+│   │   │       ├── config.py   # BOLTZ2Config (image, cache path)
+│   │   │       ├── base.py     # BOLTZ2Tool (GPU tiers: A100/A100_80GB only)
+│   │   │       ├── pipeline/   # KFP: ConfigureSeeds → MSA(protein) → ParallelFor[Predict]
 │   │   │       ├── tools/      # submit, analyze, get_results, open_viewer
-│   │   │       └── utils/      # Input converter (FASTA→OF3 JSON), pipeline utils
+│   │   │       └── utils/      # Input converter (FASTA→Boltz-2 YAML), pipeline utils
 │   │   └── skills/             # ADK FunctionTool wrappers
-│   │       ├── job_submission/  # submit_af2_*, submit_of3_prediction
+│   │       ├── job_submission/  # submit_af2_*, submit_of3_prediction, submit_boltz2_prediction
 │   │       ├── job_management/  # status, list, details, delete, GPU quota
-│   │       ├── results_analysis/ # AF2 + OF3 analysis, results retrieval
-│   │       ├── visualization/  # AF2 + OF3 viewer tools
+│   │       ├── results_analysis/ # AF2 + OF3 + Boltz-2 analysis, results retrieval
+│   │       ├── visualization/  # AF2 + OF3 + Boltz-2 viewer tools
 │   │       └── _tool_registry.py
 │   ├── databases.yaml          # Database manifest (all models)
 │   ├── scripts/setup_data.py   # CLI for database downloads
-│   └── tests/                  # 222 unit tests
+│   └── tests/                  # 298 unit tests
 ├── src/
 │   ├── alphafold-components/    # AF2 pipeline container
 │   ├── openfold3-components/    # OF3 pipeline container
-│   ├── foldrun-viewer/          # Cloud Run web app (combined AF2+OF3 3D viewer)
+│   ├── boltz2-components/       # Boltz-2 pipeline container (optional)
+│   ├── foldrun-viewer/          # Cloud Run web app (AF2 + OF3 + Boltz-2 3D viewer)
 │   ├── foldrun-a2a/             # Cloud Run A2A protocol proxy
 │   ├── af2-analysis-job/        # Cloud Run Job (AF2 analysis)
-│   └── of3-analysis-job/        # Cloud Run Job (OF3 analysis)
+│   ├── of3-analysis-job/        # Cloud Run Job (OF3 analysis)
+│   └── boltz2-analysis-job/     # Cloud Run Job (Boltz-2 analysis, optional)
 ├── terraform/                   # Infrastructure as code
 ├── cloudbuild.yaml              # CI/CD pipeline
 ├── deploy-all.sh                # One-command deployment
@@ -293,14 +306,14 @@ foldrun/
                      └───────┬──────────┘
                              │ Forwards to
 ┌──────────────────┐         │
-│  foldrun-agent   │ ←───────┘  Conversational AI (Gemini Flash + 23 FunctionTools)
+│  foldrun-agent   │ ←───────┘  Conversational AI (Gemini Flash + up to 30 FunctionTools)
 │  (Agent Engine)  │
 └───────┬──────────┘
         │ Native tool calls
-        ├──→ Vertex AI Pipelines  ← AF2 + OF3 structure prediction
+        ├──→ Vertex AI Pipelines  ← AF2 + OF3 + Boltz-2 structure prediction
         ├──→ Cloud Batch          ← Genetic database downloads
-        ├──→ Cloud Run Jobs       ← Parallel analysis (AF2 + OF3) + Gemini Pro expert analysis
-        └──→ Cloud Run Service    ← Interactive 3D structure viewer (combined AF2 + OF3)
+        ├──→ Cloud Run Jobs       ← Parallel analysis (AF2 + OF3 + Boltz-2) + Gemini Pro expert analysis
+        └──→ Cloud Run Service    ← Interactive 3D structure viewer (AF2 + OF3 + Boltz-2)
 ```
 
 ## Why FoldRun vs ColabFold / Public Servers
@@ -346,11 +359,14 @@ uv run python scripts/setup_data.py --models of3 --dry-run
 # Download OF3 data (skips shared DBs already present from AF2)
 uv run python scripts/setup_data.py --models of3
 
+# Download Boltz-2 data (weights + CCD mols, plus shared protein MSA databases)
+uv run python scripts/setup_data.py --models boltz
+
 # Download AF2 reduced set
 uv run python scripts/setup_data.py --models af2 --mode reduced
 
 # Download everything for all models
-uv run python scripts/setup_data.py --models af2,of3
+uv run python scripts/setup_data.py --models af2,of3,boltz
 
 # Re-download a specific database
 uv run python scripts/setup_data.py --db uniref90 --force
@@ -363,9 +379,9 @@ uv run python scripts/setup_data.py --list
 
 ```
 /mnt/nfs/foldrun/
-  uniref90/              # Shared (AF2, OF3, Boltz)
-  mgnify/                # Shared (AF2, OF3, Boltz)
-  pdb_seqres/            # Shared (AF2, OF3, Boltz)
+  uniref90/              # Shared (AF2, OF3, Boltz-2)
+  mgnify/                # Shared (AF2, OF3, Boltz-2)
+  pdb_seqres/            # Shared (AF2, OF3)
   uniprot/               # Shared (AF2, OF3)
   pdb_mmcif/             # Shared (AF2, OF3)
   alphafold2/params/     # AF2 only
@@ -373,8 +389,9 @@ uv run python scripts/setup_data.py --list
   pdb70/                 # AF2 only
   of3/params/            # OF3 only (~2GB weights)
   of3/ccd/               # OF3 only (~500MB Chemical Component Dictionary)
-  rfam/                  # OF3 only (RNA MSA)
-  rnacentral/            # OF3 only (RNA MSA)
+  rfam/                  # OF3 only (RNA MSA via nhmmer)
+  rnacentral/            # OF3 only (RNA MSA via nhmmer)
+  boltz2/cache/          # Boltz-2 only — boltz2_conf.ckpt, boltz2_aff.ckpt, mols/ (CCD)
 ```
 
 Monitor download progress in the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).

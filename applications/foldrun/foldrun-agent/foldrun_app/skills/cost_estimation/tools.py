@@ -42,20 +42,21 @@ def estimate_job_cost(
     to predict and relax). The number of predict/relax tasks depends on job type:
     - AF2 monomer: always 5 tasks (5 models x 1 seed)
     - AF2 multimer: 5 x num_predictions_per_model tasks (default 25)
-    - OF3: num_predictions_per_model seeds, each running num_diffusion_samples
+    - OF3/Boltz-2: num_predictions_per_model seeds, each running num_diffusion_samples
 
     Args:
         job_type: Type of prediction job. Use "af2_monomer" for single-chain AF2,
-            "af2_multimer" for multi-chain AF2, or "of3" for OpenFold3 predictions.
+            "af2_multimer" for multi-chain AF2, "of3" for OpenFold3 predictions, or
+            "boltz2" for Boltz-2 predictions.
         gpu_type: GPU to use. "auto" selects based on sequence length (recommended).
             Can also be "L4", "A100", or "A100_80GB".
-        sequence_length: Number of residues (AF2) or tokens (OF3) in the input.
+        sequence_length: Number of residues (AF2) or tokens (OF3/Boltz-2) in the input.
             For multimers, use the total across all chains. Larger proteins take
             proportionally longer to predict.
         num_predictions_per_model: For AF2 multimer: predictions per model (default
-            5, giving 5 models x 5 = 25 total). For OF3: number of seeds (default 5).
+            5, giving 5 models x 5 = 25 total). For OF3/Boltz-2: number of seeds (default 5).
             Ignored for AF2 monomer (always 5 models x 1).
-        num_diffusion_samples: OF3 only — diffusion samples per seed (default 5).
+        num_diffusion_samples: OF3/Boltz-2 only — diffusion samples per seed (default 5).
             Ignored for AF2 jobs.
         region: GCP region (default: us-central1).
 
@@ -77,6 +78,7 @@ def estimate_monthly_cost(
     af2_monomer_jobs: int = 0,
     af2_multimer_jobs: int = 0,
     of3_jobs: int = 0,
+    boltz2_jobs: int = 0,
     avg_sequence_length: int = 300,
     include_infrastructure: bool = True,
     region: Optional[str] = None,
@@ -91,7 +93,7 @@ def estimate_monthly_cost(
     Uses default prediction counts per job type:
     - AF2 monomer: 5 predictions (5 models x 1 seed)
     - AF2 multimer: 25 predictions (5 models x 5 seeds)
-    - OF3: 5 seeds x 5 diffusion samples = 25 structures
+    - OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures
 
     Calculates total cost across three categories:
     - Compute: GPU prediction costs based on job volumes (varies by pricing mode)
@@ -102,6 +104,7 @@ def estimate_monthly_cost(
         af2_monomer_jobs: Number of AF2 monomer jobs per month.
         af2_multimer_jobs: Number of AF2 multimer jobs per month.
         of3_jobs: Number of OpenFold3 jobs per month.
+        boltz2_jobs: Number of Boltz-2 jobs per month.
         avg_sequence_length: Average sequence length in residues/tokens. Larger
             proteins cost more due to longer predict and relax runtimes.
         include_infrastructure: Include always-on infrastructure costs (default True).
@@ -116,6 +119,7 @@ def estimate_monthly_cost(
         af2_monomer_jobs=af2_monomer_jobs,
         af2_multimer_jobs=af2_multimer_jobs,
         of3_jobs=of3_jobs,
+        boltz2_jobs=boltz2_jobs,
         avg_sequence_length=avg_sequence_length,
         include_infrastructure=include_infrastructure,
         region=region or "us-central1",

@@ -141,3 +141,40 @@ def submit_of3_prediction(
             "enable_flex_start": enable_flex_start,
         }
     )
+
+
+def submit_boltz2_prediction(
+    input: str,
+    job_name: Optional[str] = None,
+    num_model_seeds: int = 1,
+    num_diffusion_samples: int = 5,
+    gpu_type: str = "auto",
+    enable_flex_start: bool = True,
+) -> dict:
+    """Submit Boltz2 structure prediction job to Vertex AI.
+
+    Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted
+    to Boltz2 YAML) or native Boltz2 YAML input.
+
+    Args:
+        input: Input in FASTA format, Boltz2 YAML format, or path to file.
+            FASTA is auto-converted to Boltz2 YAML.
+        job_name: Human-readable job name for tracking.
+        num_model_seeds: Number of model seeds (default: 1). More seeds =
+            more independent predictions.
+        num_diffusion_samples: Number of diffusion samples per seed
+            (default: 5). More samples = more structural diversity.
+        gpu_type: GPU type. "auto" (default) selects A100 for <=2000 tokens,
+            A100_80GB for >2000.
+        enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
+    """
+    return get_tool("boltz2_submit_prediction").run(
+        {
+            "input": input,
+            "job_name": job_name,
+            "num_model_seeds": num_model_seeds,
+            "num_diffusion_samples": num_diffusion_samples,
+            "gpu_type": gpu_type,
+            "enable_flex_start": enable_flex_start,
+        }
+    )

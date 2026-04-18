@@ -79,7 +79,7 @@ class TestCreateAgent:
                 create_alphafold_agent(model="invalid-model")
 
     def test_agent_has_all_tools(self, mock_env_vars):
-        """Agent has all FunctionTools (AF2 + OF3)."""
+        """Agent has all FunctionTools (AF2 + OF3 + Boltz-2)."""
         with (
             _mock_startup(),
             patch("google.cloud.aiplatform.init"),
@@ -88,7 +88,7 @@ class TestCreateAgent:
             from foldrun_app.agent import create_alphafold_agent
 
             agent = create_alphafold_agent()
-            assert len(agent.tools) == 23
+            assert len(agent.tools) == 30
 
     def test_agent_tool_names_complete(self, mock_env_vars):
         """Every expected tool function is present by name."""
@@ -111,12 +111,21 @@ class TestCreateAgent:
                 "of3_analyze_job_parallel",
                 "of3_get_analysis_results",
                 "open_of3_structure_viewer",
+                # Boltz-2
+                "submit_boltz2_prediction",
+                "boltz2_analyze_job_parallel",
+                "boltz2_get_analysis_results",
+                "open_boltz2_structure_viewer",
                 # Job management
                 "check_job_status",
                 "list_jobs",
                 "get_job_details",
                 "delete_job",
                 "check_gpu_quota",
+                # Cost estimation
+                "estimate_job_cost",
+                "estimate_monthly_cost",
+                "get_actual_job_costs",
                 # Results & Analysis
                 "get_prediction_results",
                 "analyze_prediction_quality",

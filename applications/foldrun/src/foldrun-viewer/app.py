@@ -14,7 +14,7 @@
 
 """
 FoldRun Structure Viewer
-Cloud Run web application for viewing AlphaFold2 and OpenFold3 predictions
+Cloud Run web application for viewing AlphaFold2, OpenFold3, and Boltz-2 predictions
 """
 
 import json
@@ -171,32 +171,6 @@ def job_viewer(job_id):
     return redirect(url_for("combined_viewer", job_id=job_id))
 
 
-@app.route("/structure")
-def structure_viewer():
-    """3D structure viewer page"""
-    pdb_uri = request.args.get("pdb_uri")
-    model_name = request.args.get("model", "Model 1")
-    job_id = request.args.get("job_id", "")
-
-    if not pdb_uri:
-        abort(400, description="pdb_uri parameter is required")
-
-    return render_template(
-        "structure.html", pdb_uri=pdb_uri, model_name=model_name, job_id=job_id
-    )
-
-
-@app.route("/analysis")
-def analysis_dashboard():
-    """Analysis results dashboard"""
-    job_id = request.args.get("job_id")
-    summary_uri = request.args.get("summary_uri")
-
-    if not job_id and not summary_uri:
-        abort(400, description="Either job_id or summary_uri parameter is required")
-
-    return render_template("analysis.html", job_id=job_id, summary_uri=summary_uri)
-
 
 @app.route("/combined")
 def combined_viewer():
@@ -258,7 +232,7 @@ def get_pdb():
 
 @app.route("/api/cif")
 def get_cif():
-    """API endpoint to fetch CIF content (for OF3 predictions)"""
+    """API endpoint to fetch CIF content (for OF3 and Boltz-2 predictions)"""
     cif_uri = request.args.get("uri")
 
     if not cif_uri:

@@ -66,7 +66,7 @@ class TestToolRegistry:
                 get_tool("nonexistent_tool")
 
     def test_all_expected_tools_registered(self, mock_env_vars):
-        """All tool names are registered (AF2 from JSON + 1 dynamic + OF3)."""
+        """All tool names are registered (AF2 from JSON + 1 dynamic + OF3 + Boltz-2)."""
         self._reset_registry()
 
         with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
@@ -103,8 +103,13 @@ class TestToolRegistry:
                 "of3_analyze_parallel",
                 "of3_get_analysis_results",
                 "of3_open_viewer",
+                # Boltz-2 tools (4 from JSON, loaded when BOLTZ2_COMPONENTS_IMAGE is set)
+                "boltz2_submit_prediction",
+                "boltz2_analyze_parallel",
+                "boltz2_get_analysis_results",
+                "boltz2_open_viewer",
             ]
 
-            assert len(reg._agents) == 24
+            assert len(reg._agents) == 28
             for tool_name in expected_tools:
                 assert tool_name in reg._agents, f"Tool '{tool_name}' not registered"

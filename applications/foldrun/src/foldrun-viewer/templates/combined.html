@@ -554,6 +554,9 @@
         let predictions = [];
         let currentPredictionIndex = 0;
         let isSpinning = false;
+        let modelType = 'af2';  // 'af2', 'openfold3', or 'boltz2'
+        let isOF3 = false;
+        let isBoltz2 = false;
 
         // Initialize 3Dmol viewer
         function initViewer() {
@@ -583,9 +586,11 @@
                     throw new Error('No predictions found in analysis');
                 }
 
-                // Detect model type: OF3 has model_type or cif_uri fields
-                const isOF3 = analysisData.model_type === 'openfold3' ||
-                              (predictions[0] && predictions[0].cif_uri);
+                // Detect model type from summary data or presence of cif_uri
+                modelType = analysisData.model_type ||
+                            (predictions[0] && predictions[0].cif_uri ? 'openfold3' : 'af2');
+                isOF3 = modelType !== 'af2' && (predictions[0] && predictions[0].cif_uri);
+                isBoltz2 = modelType === 'boltz2';
 
                 // Sort predictions by rank (ascending)
                 predictions.sort((a, b) => a.rank - b.rank);
@@ -631,9 +636,10 @@
             let html = '';
 
             // Model type badge
-            const modelType = proteinInfo.model_type || analysisData.model_type;
-            if (modelType) {
-                const badge = modelType === 'openfold3' ? 'OpenFold3' : 'AlphaFold2';
+            const mt = proteinInfo.model_type || analysisData.model_type;
+            if (mt) {
+                const badge = mt === 'openfold3' ? 'OpenFold3' :
+                              mt === 'boltz2'    ? 'Boltz-2'   : 'AlphaFold2';
                 html += `<div class="job-info-item"><span class="job-info-value">${badge}</span></div>`;
             }
 
@@ -756,7 +762,7 @@
                         <h3>
                             Prediction Summary
                             <span class="rank-badge rank-${prediction.rank}">#${prediction.rank}</span>
-                            <span style="font-size: 0.75em; color: #666; margin-left: 8px;">OpenFold3</span>
+                            <span style="font-size: 0.75em; color: #666; margin-left: 8px;">${isBoltz2 ? 'Boltz-2' : 'OpenFold3'}</span>
                         </h3>
                         <div class="info-row">
                             <span class="info-label">Sample</span>
@@ -974,6 +980,56 @@
                 `;
             }
 
+            // Affinity results (Boltz-2 only, when affinity was requested)
+            const affinity = analysisData.summary?.affinity;
+            if (affinity && affinity.affinity_pred_value !== null && affinity.affinity_pred_value !== undefined) {
+                const bindingClass = affinity.binding_classification?.replace(/_/g, ' ') || 'N/A';
+                const classColors = {
+                    'very strong': '#4CAF50', 'strong': '#8BC34A',
+                    'moderate': '#FFC107', 'weak': '#FF9800', 'very weak': '#F44336',
+                };
+                const classColor = classColors[bindingClass.toLowerCase()] || '#9E9E9E';
+                html += `
+                    <div class="info-card" style="border-left: 4px solid ${classColor};">
+                        <h3 style="color: ${classColor};">Binding Affinity Prediction</h3>
+                        <div class="quality-grid">
+                            <div class="quality-item">
+                                <div class="value" style="color:${classColor};">${affinity.ic50_nm?.toFixed(1) ?? 'N/A'} nM</div>
+                                <div class="label">IC50</div>
+                            </div>
+                            <div class="quality-item">
+                                <div class="value">${affinity.pic50?.toFixed(2) ?? 'N/A'}</div>
+                                <div class="label">pIC50</div>
+                            </div>
+                            <div class="quality-item">
+                                <div class="value">${affinity.delta_g_kcal_mol?.toFixed(2) ?? 'N/A'}</div>
+                                <div class="label">ΔG (kcal/mol)</div>
+                            </div>
+                            <div class="quality-item">
+                                <div class="value">${affinity.affinity_probability_binary?.toFixed(3) ?? 'N/A'}</div>
+                                <div class="label">Binding Prob.</div>
+                            </div>
+                        </div>
+                        <div class="info-row" style="margin-top:10px;">
+                            <span class="info-label">Classification</span>
+                            <span class="info-value" style="font-weight:bold;color:${classColor};">${bindingClass.charAt(0).toUpperCase() + bindingClass.slice(1)}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">IC50 (μM)</span>
+                            <span class="info-value">${affinity.ic50_um?.toFixed(4) ?? 'N/A'} μM</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Raw log10(IC50_μM)</span>
+                            <span class="info-value">${affinity.affinity_pred_value?.toFixed(3) ?? 'N/A'}</span>
+                        </div>
+                        <p style="font-size:0.8rem;color:#888;margin-top:8px;">
+                            IC50 from ensemble model. pIC50 = 6 − log₁₀(IC₅₀ μM). ΔG ≈ pIC50 × 1.364 kcal/mol.
+                            Validated primarily for small-molecule competitive inhibitors.
+                        </p>
+                    </div>
+                `;
+            }
+
             // Job Summary (from overall analysis data)
             if (analysisData.summary) {
                 html += `
@@ -1060,16 +1116,31 @@
                 `;
             }
 
-            // Input Query JSON (OF3 only — copyable for resubmission)
+            // Input Query (OF3: JSON copyable; Boltz-2: YAML copyable)
             if (isOF3 && analysisData.summary && analysisData.summary.protein_info) {
                 const pi = analysisData.summary.protein_info;
-                const queryJson = pi.input_query_json;
-                if (queryJson) {
-                    const jsonStr = JSON.stringify(queryJson, null, 2);
+                if (isBoltz2 && pi.input_query_yaml) {
+                    // Boltz-2: YAML format
+                    const yamlStr = typeof pi.input_query_yaml === 'string'
+                        ? pi.input_query_yaml
+                        : JSON.stringify(pi.input_query_yaml, null, 2);
                     html += `
                         <div class="info-card">
                             <h3>
-                                Input Query
+                                Input Query (YAML)
+                                <button onclick="navigator.clipboard.writeText(document.getElementById('query-yaml-pre').textContent).then(() => this.textContent = 'Copied!').catch(() => {}); setTimeout(() => this.textContent = 'Copy YAML', 1500)"
+                                    style="float:right;font-size:0.75em;padding:4px 12px;background:#4285F4;color:white;border:none;border-radius:4px;cursor:pointer;">Copy YAML</button>
+                            </h3>
+                            <pre id="query-yaml-pre" style="background:#f8f9fa;padding:12px;border-radius:4px;font-size:0.82em;white-space:pre-wrap;word-break:break-word;max-height:400px;overflow-y:auto;border:1px solid #e0e0e0;">${yamlStr}</pre>
+                        </div>
+                    `;
+                } else if (!isBoltz2 && pi.input_query_json) {
+                    // OF3: JSON format
+                    const jsonStr = JSON.stringify(pi.input_query_json, null, 2);
+                    html += `
+                        <div class="info-card">
+                            <h3>
+                                Input Query (JSON)
                                 <button onclick="navigator.clipboard.writeText(document.getElementById('query-json-pre').textContent).then(() => this.textContent = 'Copied!').catch(() => {}); setTimeout(() => this.textContent = 'Copy JSON', 1500)"
                                     style="float:right;font-size:0.75em;padding:4px 12px;background:#4285F4;color:white;border:none;border-radius:4px;cursor:pointer;">Copy JSON</button>
                             </h3>
