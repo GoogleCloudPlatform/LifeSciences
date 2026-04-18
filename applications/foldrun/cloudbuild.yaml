@@ -169,11 +169,15 @@ steps:
     args:
       - '-c'
       - |
+        # Read Agent Engine resource ID written by deploy-agent-engine step
+        AGENT_ENGINE_RESOURCE=$$(python3 -c "import json; print(json.load(open('/workspace/foldrun-agent/deployment_metadata.json'))['remote_agent_engine_id'])")
+        echo "Agent Engine resource: $$AGENT_ENGINE_RESOURCE"
+
         gcloud run deploy foldrun-a2a \
           --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest \
           --region ${_REGION} \
           --service-account ${_AGENT_SA_EMAIL} \
-          --set-env-vars GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_REGION=${_REGION},AGENT_ENGINE_RESOURCE=${_AGENT_ENGINE_RESOURCE} \
+          --set-env-vars GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_REGION=${_REGION},AGENT_ENGINE_RESOURCE=$$AGENT_ENGINE_RESOURCE \
           --memory 512Mi \
           --cpu 1 \
           --timeout 300 \
@@ -298,7 +302,6 @@ substitutions:
   _FILESTORE_ID: foldrun-nfs
   _AGENT_SA_EMAIL: required_sa_email
   _PIPELINES_SA_EMAIL: required_pipelines_sa_email
-  _AGENT_ENGINE_RESOURCE: ''
 timeout: 3600s
 options:
   logging: CLOUD_LOGGING_ONLY
