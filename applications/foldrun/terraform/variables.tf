@@ -48,15 +48,15 @@ variable "peering_cidr" {
 }
 
 variable "filestore_tier" {
-  description = "Tier for the Filestore instance"
+  description = "Tier for the Filestore instance (BASIC_SSD avoids throughput throttling during concurrent database downloads)"
   type        = string
-  default     = "ZONAL"
+  default     = "BASIC_SSD"
 }
 
 variable "filestore_capacity_gb" {
-  description = "Capacity for Filestore in GB"
+  description = "Initial capacity for Filestore in GB (min 2560 for BASIC_SSD). AF2+OF3 reduced uses ~944GB, full BFD adds ~272GB. Capacity changes after provisioning are ignored by Terraform — resize freely via Console or gcloud."
   type        = number
-  default     = 4096
+  default     = 2560
 }
 
 variable "filestore_id" {

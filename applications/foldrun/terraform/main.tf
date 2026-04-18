@@ -201,6 +201,10 @@ resource "google_filestore_instance" "foldrun_nfs" {
     connect_mode = "PRIVATE_SERVICE_ACCESS"
   }
 
+  lifecycle {
+    ignore_changes = [file_shares[0].capacity_gb]
+  }
+
   depends_on = [
     google_service_networking_connection.default,
     google_project_service.apis

@@ -164,7 +164,7 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 | Resource | Name | Purpose |
 |----------|------|---------|
 | VPC + Subnet + Cloud NAT | `foldrun-network` | Private network with outbound internet |
-| Filestore | `foldrun-nfs` | 4TB NFS for genetic databases |
+| Filestore | `foldrun-nfs` | 2.5TB NFS for genetic databases (Basic SSD) |
 | GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, analysis results |
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups |
 | Artifact Registry | `foldrun-repo` | Container images |
@@ -293,13 +293,14 @@ uv run adk web foldrun_app
 
 | Component | Estimated Monthly Cost |
 |-----------|----------------------|
-| Filestore (4TB Basic SSD) | ~$800/mo |
+| Filestore (2.5TB Basic SSD) | ~$770/mo |
 | GCS (~500GB databases + results) | ~$15/mo |
 | Agent Engine (idle) | ~$0 (pay per query) |
 | Cloud Run (viewer + analysis, idle) | ~$0 (scale to zero) |
 | GPU predictions (per job) | $2–15 per job (L4: ~$2, A100: ~$8–15) |
 | Gemini API (per analysis) | ~$0.01–0.05 per analysis |
 
-The dominant cost is Filestore. To reduce costs when not in use, consider
-downgrading to Basic HDD tier or deleting the Filestore and re-downloading
-databases when needed.
+The dominant cost is Filestore (~$770/mo). To reduce costs when not in use,
+consider deleting the Filestore and re-downloading databases when needed.
+Terraform ignores capacity changes after provisioning, so you can resize
+via Console or gcloud without drift.
