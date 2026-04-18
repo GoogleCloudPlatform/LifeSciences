@@ -1,7 +1,7 @@
 google-cloud-storage>=3.0.0
 google-cloud-aiplatform>=1.85.0
 google-genai>=1.0.0
-numpy==2.2.3
-jax[cpu]==0.4.38
+numpy==2.4.4
+jax[cpu]==0.10.0
 dm-tree>=0.1.9
 matplotlib>=3.10.0
