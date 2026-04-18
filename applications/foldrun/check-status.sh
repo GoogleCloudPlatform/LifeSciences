@@ -60,6 +60,13 @@ else
     echo "❌ [Cloud Run] foldrun-viewer service is missing"
 fi
 
+# 2b. Check Cloud Run A2A Proxy (optional)
+if gcloud run services describe foldrun-a2a --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
+    echo "✅ [Cloud Run] foldrun-a2a A2A proxy is deployed and active"
+else
+    echo "⚠️  [Cloud Run] foldrun-a2a A2A proxy is not deployed (optional — deploy with src/foldrun-a2a/deploy.sh)"
+fi
+
 # 3. Check Cloud Run Analysis Job
 if gcloud run jobs describe af2-analysis-job --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
     echo "✅ [Cloud Run] af2-analysis-job is deployed"

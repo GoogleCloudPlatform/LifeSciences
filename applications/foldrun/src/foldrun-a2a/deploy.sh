@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -106,7 +106,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --network "${VPC_NAME}" \
   --subnet "${SUBNET_NAME}" \
   --vpc-egress all-traffic \
-  --allow-unauthenticated
+  --no-allow-unauthenticated
 
 # Get the service URL
 AGENT_URL=$(gcloud run services describe "${SERVICE_NAME}" \
@@ -122,6 +122,22 @@ echo "  Service URL:  ${AGENT_URL}"
 echo "  Agent Card:   ${AGENT_URL}/.well-known/agent.json"
 echo ""
 echo "  Test the agent card:"
-echo "    curl -H \"Authorization: Bearer \$(gcloud auth print-access-token)\" \\"
+echo "    curl -H \"Authorization: Bearer \$(gcloud auth print-identity-token --audiences=${AGENT_URL})\" \\"
 echo "      ${AGENT_URL}/.well-known/agent.json"
+echo ""
+echo "  ─── Gemini CLI Setup ───"
+echo ""
+echo "  To use FoldRun as a remote agent in Gemini CLI, create:"
+echo "    ~/.gemini/agents/foldrun.md"
+echo ""
+echo "  With this content:"
+echo ""
+echo "    ---"
+echo "    name: FoldRun"
+echo "    description: Protein structure prediction agent (AlphaFold2, OpenFold3)"
+echo "    agent_card_url: ${AGENT_URL}/.well-known/agent.json"
+echo "    ---"
+echo ""
+echo "  Then use it in Gemini CLI:"
+echo "    gemini -a foldrun \"Predict the structure of ubiquitin\""
 echo ""

@@ -16,7 +16,7 @@
 # Thin proxy that exposes the A2A protocol and forwards to Agent Engine.
 
 # Stage 1: Build environment
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime image
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 

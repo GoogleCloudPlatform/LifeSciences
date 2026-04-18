@@ -171,6 +171,7 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 | Cloud Run Service | `foldrun-viewer` | 3D structure viewer (IAP-secured) |
 | Cloud Run Job | `af2-analysis-job` | AF2 parallel analysis + Gemini |
 | Cloud Run Job | `of3-analysis-job` | OF3 parallel analysis + Gemini |
+| Cloud Run Service | `foldrun-a2a` | A2A protocol proxy (optional) |
 | Agent Engine | `FoldRun Assistant` | Deployed Gemini agent |
 
 ## 4. Testing and Validation
@@ -259,6 +260,101 @@ Access requires authentication through your organization's IAP configuration.
 The `iap_access_domain` Terraform variable controls which domain's users can
 access the viewer.
 
+## 5b. A2A Protocol Proxy (Optional)
+
+The A2A (Agent-to-Agent) proxy exposes the FoldRun agent via the [A2A protocol](https://google.github.io/a2a/),
+enabling interoperability with other A2A-compatible agents. The proxy is a thin Cloud Run
+service that forwards requests to the Agent Engine deployment.
+
+### Deploy the A2A Proxy
+
+The A2A proxy is built and deployed automatically by `deploy-all.sh` via Cloud Build.
+To deploy it standalone:
+
+```bash
+cd src/foldrun-a2a
+bash deploy.sh YOUR_PROJECT_ID
+```
+
+The script reads the Agent Engine resource ID from `foldrun-agent/deployment_metadata.json`
+(created by the agent deploy step). You can also set it explicitly:
+
+```bash
+AGENT_ENGINE_RESOURCE=projects/<num>/locations/us-central1/reasoningEngines/<id> \
+  bash deploy.sh YOUR_PROJECT_ID
+```
+
+### Grant Access to the A2A Proxy
+
+The A2A proxy requires authentication. Callers need the `roles/run.invoker` role
+on the `foldrun-a2a` Cloud Run service. Grant access to individual users, a Google
+Group, or a service account:
+
+```bash
+# Grant to a Google Group (recommended for teams)
+gcloud run services add-iam-policy-binding foldrun-a2a \
+  --region=us-central1 \
+  --member="group:my-team@example.com" \
+  --role="roles/run.invoker" \
+  --project=YOUR_PROJECT_ID
+
+# Grant to an individual user
+gcloud run services add-iam-policy-binding foldrun-a2a \
+  --region=us-central1 \
+  --member="user:alice@example.com" \
+  --role="roles/run.invoker" \
+  --project=YOUR_PROJECT_ID
+
+# Grant to a service account (for agent-to-agent calls)
+gcloud run services add-iam-policy-binding foldrun-a2a \
+  --region=us-central1 \
+  --member="serviceAccount:other-agent-sa@OTHER_PROJECT.iam.gserviceaccount.com" \
+  --role="roles/run.invoker" \
+  --project=YOUR_PROJECT_ID
+```
+
+Callers authenticate with an identity token scoped to the service URL:
+```bash
+gcloud auth print-identity-token --audiences=https://YOUR_A2A_URL
+```
+
+### Test the A2A Proxy
+
+```bash
+cd src/foldrun-a2a
+
+# Check the agent card
+curl -H "Authorization: Bearer $(gcloud auth print-identity-token --audiences=https://YOUR_A2A_URL)" \
+  https://YOUR_A2A_URL/.well-known/agent.json
+
+# Run the integration test
+python test_a2a.py https://YOUR_A2A_URL
+```
+
+### Connect via Gemini CLI
+
+Create `~/.gemini/agents/foldrun.md`:
+
+```markdown
+---
+name: FoldRun
+description: Protein structure prediction agent (AlphaFold2, OpenFold3)
+agent_card_url: https://YOUR_A2A_URL/.well-known/agent.json
+---
+```
+
+Then use it:
+
+```bash
+gemini -a foldrun "Predict the structure of ubiquitin"
+```
+
+The A2A URL is printed at the end of deployment. You can also retrieve it with:
+
+```bash
+gcloud run services describe foldrun-a2a --region=us-central1 --format='value(status.url)'
+```
+
 ## 6. Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -271,6 +367,8 @@ access the viewer.
 | Terraform backend error | State bucket mismatch | Script runs `terraform init -reconfigure` automatically |
 | Predictions fail after deploy | Databases still downloading | Check `gcloud batch jobs list`; wait for downloads to complete |
 | Viewer shows 403 | IAP not configured for your domain | Set `iap_access_domain` in Terraform and re-apply |
+| A2A proxy returns 403 | Caller lacks `run.invoker` role | Grant `roles/run.invoker` on the `foldrun-a2a` service (see "Grant Access" in section 5b) |
+| A2A proxy returns 500 | Agent Engine resource ID misconfigured | Check `AGENT_ENGINE_RESOURCE` env var on the Cloud Run service |
 
 ## 7. Local Development
 
