@@ -139,73 +139,6 @@ steps:
     waitFor: ['push-of3-analysis-job']
 
   # ============================================================================
-  # 2c. FoldRun A2A Proxy (Cloud Run Service — optional)
-  # ============================================================================
-  - id: 'pull-a2a'
-    name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
-    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest || exit 0']
-    waitFor: ['-']
-
-  - id: 'build-a2a'
-    name: 'gcr.io/cloud-builders/docker'
-    dir: 'src/foldrun-a2a'
-    args: [
-      'build',
-      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest',
-      '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest',
-      '.'
-    ]
-    waitFor: ['pull-a2a']
-
-  - id: 'push-a2a'
-    name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest']
-    waitFor: ['build-a2a']
-
-  - id: 'deploy-a2a'
-    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        # Read Agent Engine resource ID written by deploy-agent-engine step
-        AGENT_ENGINE_RESOURCE=$$(python3 -c "import json; print(json.load(open('/workspace/foldrun-agent/deployment_metadata.json'))['remote_agent_engine_id'])")
-        echo "Agent Engine resource: $$AGENT_ENGINE_RESOURCE"
-
-        gcloud run deploy foldrun-a2a \
-          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest \
-          --region ${_REGION} \
-          --service-account ${_AGENT_SA_EMAIL} \
-          --set-env-vars GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_REGION=${_REGION},AGENT_ENGINE_RESOURCE=$$AGENT_ENGINE_RESOURCE \
-          --memory 512Mi \
-          --cpu 1 \
-          --timeout 300 \
-          --min-instances 0 \
-          --max-instances 5 \
-          --no-allow-unauthenticated
-
-        # Capture the A2A URL and update its agent card
-        A2A_URL=$$(gcloud run services describe foldrun-a2a \
-          --region ${_REGION} --format 'value(status.url)')
-
-        gcloud run services update foldrun-a2a \
-          --region ${_REGION} \
-          --update-env-vars AGENT_BASE_URL=$$A2A_URL
-
-        echo ""
-        echo "A2A proxy deployed: $$A2A_URL"
-        echo "Agent card:         $$A2A_URL/.well-known/agent.json"
-        echo ""
-        echo "Gemini CLI: create ~/.gemini/agents/foldrun.md with:"
-        echo "  ---"
-        echo "  name: FoldRun"
-        echo "  description: Protein structure prediction agent (AlphaFold2, OpenFold3)"
-        echo "  agent_card_url: $$A2A_URL/.well-known/agent.json"
-        echo "  ---"
-    waitFor: ['push-a2a', 'deploy-agent-engine']
-
-  # ============================================================================
   # 3. AlphaFold Components (Pipeline Container Image)
   # ============================================================================
   - id: 'pull-alphafold-components'
@@ -287,6 +220,73 @@ steps:
           --service-account=${_AGENT_SA_EMAIL} \
           --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}
     waitFor: ['deploy-viewer', 'push-alphafold-components', 'push-openfold3-components']
+
+  # ============================================================================
+  # 2c. FoldRun A2A Proxy (Cloud Run Service — optional)
+  # ============================================================================
+  - id: 'pull-a2a'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest || exit 0']
+    waitFor: ['-']
+
+  - id: 'build-a2a'
+    name: 'gcr.io/cloud-builders/docker'
+    dir: 'src/foldrun-a2a'
+    args: [
+      'build',
+      '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest',
+      '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest',
+      '.'
+    ]
+    waitFor: ['pull-a2a']
+
+  - id: 'push-a2a'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest']
+    waitFor: ['build-a2a']
+
+  - id: 'deploy-a2a'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        # Read Agent Engine resource ID written by deploy-agent-engine step
+        AGENT_ENGINE_RESOURCE=$$(python3 -c "import json; print(json.load(open('/workspace/foldrun-agent/deployment_metadata.json'))['remote_agent_engine_id'])")
+        echo "Agent Engine resource: $$AGENT_ENGINE_RESOURCE"
+
+        gcloud run deploy foldrun-a2a \
+          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest \
+          --region ${_REGION} \
+          --service-account ${_AGENT_SA_EMAIL} \
+          --set-env-vars GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_REGION=${_REGION},AGENT_ENGINE_RESOURCE=$$AGENT_ENGINE_RESOURCE \
+          --memory 512Mi \
+          --cpu 1 \
+          --timeout 300 \
+          --min-instances 0 \
+          --max-instances 5 \
+          --no-allow-unauthenticated
+
+        # Capture the A2A URL and update its agent card
+        A2A_URL=$$(gcloud run services describe foldrun-a2a \
+          --region ${_REGION} --format 'value(status.url)')
+
+        gcloud run services update foldrun-a2a \
+          --region ${_REGION} \
+          --update-env-vars AGENT_BASE_URL=$$A2A_URL
+
+        echo ""
+        echo "A2A proxy deployed: $$A2A_URL"
+        echo "Agent card:         $$A2A_URL/.well-known/agent.json"
+        echo ""
+        echo "Gemini CLI: create ~/.gemini/agents/foldrun.md with:"
+        echo "  ---"
+        echo "  name: FoldRun"
+        echo "  description: Protein structure prediction agent (AlphaFold2, OpenFold3)"
+        echo "  agent_card_url: $$A2A_URL/.well-known/agent.json"
+        echo "  ---"
+    waitFor: ['push-a2a', 'deploy-agent-engine']
 
   # ============================================================================
   # 5. Data Download — handled locally by deploy-all.sh (step 5), not here.
