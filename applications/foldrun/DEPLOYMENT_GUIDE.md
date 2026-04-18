@@ -220,7 +220,7 @@ Or use the Agent Engine playground (see Production Access below).
 
 ```bash
 # List all Batch jobs
-gcloud batch jobs list --project=YOUR_PROJECT_ID --location=us-central1
+gcloud batch jobs list --project=YOUR_PROJECT_ID --location=YOUR_REGION
 
 # Or use the Cloud Console
 # https://console.cloud.google.com/batch/jobs?project=YOUR_PROJECT_ID
@@ -251,7 +251,7 @@ Results are viewed through the IAP-secured Cloud Run viewer:
 ```bash
 # Get the viewer URL
 gcloud run services describe foldrun-viewer \
-  --region=us-central1 \
+  --region=YOUR_REGION \
   --format='value(status.url)' \
   --project=YOUR_PROJECT_ID
 ```
@@ -280,7 +280,7 @@ The script reads the Agent Engine resource ID from `foldrun-agent/deployment_met
 (created by the agent deploy step). You can also set it explicitly:
 
 ```bash
-AGENT_ENGINE_RESOURCE=projects/<num>/locations/us-central1/reasoningEngines/<id> \
+AGENT_ENGINE_RESOURCE=projects/<num>/locations/YOUR_REGION/reasoningEngines/<id> \
   bash deploy.sh YOUR_PROJECT_ID
 ```
 
@@ -293,21 +293,21 @@ Group, or a service account:
 ```bash
 # Grant to a Google Group (recommended for teams)
 gcloud run services add-iam-policy-binding foldrun-a2a \
-  --region=us-central1 \
+  --region=YOUR_REGION \
   --member="group:my-team@example.com" \
   --role="roles/run.invoker" \
   --project=YOUR_PROJECT_ID
 
 # Grant to an individual user
 gcloud run services add-iam-policy-binding foldrun-a2a \
-  --region=us-central1 \
+  --region=YOUR_REGION \
   --member="user:alice@example.com" \
   --role="roles/run.invoker" \
   --project=YOUR_PROJECT_ID
 
 # Grant to a service account (for agent-to-agent calls)
 gcloud run services add-iam-policy-binding foldrun-a2a \
-  --region=us-central1 \
+  --region=YOUR_REGION \
   --member="serviceAccount:other-agent-sa@OTHER_PROJECT.iam.gserviceaccount.com" \
   --role="roles/run.invoker" \
   --project=YOUR_PROJECT_ID
@@ -352,7 +352,7 @@ gemini -a foldrun "Predict the structure of ubiquitin"
 The A2A URL is printed at the end of deployment. You can also retrieve it with:
 
 ```bash
-gcloud run services describe foldrun-a2a --region=us-central1 --format='value(status.url)'
+gcloud run services describe foldrun-a2a --region=YOUR_REGION --format='value(status.url)'
 ```
 
 ## 6. Troubleshooting

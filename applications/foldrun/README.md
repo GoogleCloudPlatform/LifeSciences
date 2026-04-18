@@ -150,7 +150,7 @@ Expected output:
 
 Open the Agent Engine playground:
 ```
-https://console.cloud.google.com/vertex-ai/agents/locations/us-central1/agent-engines/YOUR_ENGINE_ID/playground?project=YOUR_PROJECT_ID
+https://console.cloud.google.com/vertex-ai/agents/locations/YOUR_REGION/agent-engines/YOUR_ENGINE_ID/playground?project=YOUR_PROJECT_ID
 ```
 
 The engine ID is printed at the end of `deploy-all.sh` and saved in `foldrun-agent/deployment_metadata.json`.
@@ -181,7 +181,7 @@ Database downloads run as Cloud Batch jobs in the background. Structure predicti
 
 Monitor progress:
 ```bash
-gcloud batch jobs list --project=YOUR_PROJECT_ID --location=us-central1
+gcloud batch jobs list --project=YOUR_PROJECT_ID --location=YOUR_REGION
 ```
 
 Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
