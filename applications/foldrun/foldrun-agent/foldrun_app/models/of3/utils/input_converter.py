@@ -36,6 +36,37 @@ from typing import Optional
 _RNA_NT = set("ACGU")
 # Standard nucleotide alphabet (DNA)
 _DNA_NT = set("ACGT")
+# Standard + extended amino acids
+_PROTEIN_AA = set("ACDEFGHIKLMNPQRSTVWYBJOUXZ")
+# Valid molecule types in OF3 JSON
+_VALID_MOL_TYPES = {"protein", "rna", "dna", "ligand"}
+
+
+def _validate_sequence_chars(sequence: str, mol_type: str) -> list[str]:
+    """Return a list of error strings for invalid characters in a sequence."""
+    errors = []
+    if mol_type == "protein":
+        invalid = sorted(set(sequence.upper()) - _PROTEIN_AA)
+        if invalid:
+            errors.append(
+                f"Protein sequence contains invalid characters: {', '.join(invalid)}. "
+                "Expected standard amino acids (ACDEFGHIKLMNPQRSTVWY) plus ambiguity codes."
+            )
+    elif mol_type == "rna":
+        invalid = sorted(set(sequence.upper()) - _RNA_NT)
+        if invalid:
+            errors.append(
+                f"RNA sequence contains invalid characters: {', '.join(invalid)}. "
+                "Expected A, C, G, U only."
+            )
+    elif mol_type == "dna":
+        invalid = sorted(set(sequence.upper()) - _DNA_NT)
+        if invalid:
+            errors.append(
+                f"DNA sequence contains invalid characters: {', '.join(invalid)}. "
+                "Expected A, C, G, T only."
+            )
+    return errors
 
 
 def _detect_molecule_type(sequence: str) -> str:
@@ -99,6 +130,19 @@ def fasta_to_of3_json(fasta_content: str, job_name: Optional[str] = None) -> dic
     if not parsed:
         raise ValueError("No valid sequences found in FASTA input")
 
+    errors = []
+    for seq_id, sequence in parsed:
+        if not sequence:
+            errors.append(f"Sequence '{seq_id}' is empty after stripping non-alphabetic characters")
+            continue
+        if len(sequence) < 5:
+            errors.append(f"Sequence '{seq_id}' is too short ({len(sequence)} residues, minimum 5)")
+        mol_type = _detect_molecule_type(sequence)
+        errors.extend(_validate_sequence_chars(sequence, mol_type))
+
+    if errors:
+        raise ValueError("FASTA validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
+
     query_name = job_name or parsed[0][0]
 
     # Build chains with auto-assigned chain IDs (A, B, C, ...)
@@ -126,20 +170,105 @@ def fasta_to_of3_json(fasta_content: str, job_name: Optional[str] = None) -> dic
 def is_of3_json(content: str) -> bool:
     """Detect if content is already OF3 query JSON format.
 
-    Args:
-        content: Input string to check.
-
-    Returns:
-        True if content is valid OF3 JSON with 'queries' key.
+    Parses and validates structure rather than relying on string heuristics.
+    Returns False for any parse error or missing required fields.
     """
     content = content.strip()
     if not content.startswith("{"):
         return False
     try:
         data = json.loads(content)
-        return isinstance(data, dict) and "queries" in data
     except (json.JSONDecodeError, ValueError):
         return False
+    if not isinstance(data, dict) or "queries" not in data:
+        return False
+    queries = data["queries"]
+    if not isinstance(queries, dict) or not queries:
+        return False
+    # At least one query must have a 'chains' list
+    for query_data in queries.values():
+        if isinstance(query_data, dict) and isinstance(query_data.get("chains"), list):
+            return True
+    return False
+
+
+def validate_of3_json(content: str) -> tuple[bool, list[str], list[str]]:
+    """Validate an OF3 query JSON string.
+
+    Args:
+        content: Raw JSON string.
+
+    Returns:
+        (is_valid, errors, warnings) where errors and warnings are lists of strings.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, ValueError) as e:
+        return False, [f"JSON parse error: {e}"], []
+
+    if not isinstance(data, dict):
+        return False, ["Top-level structure must be a JSON object"], []
+
+    queries = data.get("queries")
+    if not isinstance(queries, dict) or not queries:
+        return False, ["Missing or empty 'queries' object"], []
+
+    for query_name, query_data in queries.items():
+        if not isinstance(query_data, dict):
+            errors.append(f"queries.{query_name}: must be a JSON object")
+            continue
+
+        chains = query_data.get("chains")
+        if not isinstance(chains, list) or not chains:
+            errors.append(f"queries.{query_name}: 'chains' must be a non-empty list")
+            continue
+
+        for i, chain in enumerate(chains):
+            if not isinstance(chain, dict):
+                errors.append(f"queries.{query_name}.chains[{i}]: must be a JSON object")
+                continue
+
+            mol_type = chain.get("molecule_type")
+            if not mol_type:
+                errors.append(f"queries.{query_name}.chains[{i}]: missing 'molecule_type'")
+                continue
+            if mol_type not in _VALID_MOL_TYPES:
+                errors.append(
+                    f"queries.{query_name}.chains[{i}]: unknown molecule_type '{mol_type}'. "
+                    f"Valid types: {sorted(_VALID_MOL_TYPES)}"
+                )
+
+            chain_ids = chain.get("chain_ids")
+            if not chain_ids:
+                errors.append(f"queries.{query_name}.chains[{i}]: missing 'chain_ids'")
+
+            if mol_type in ("protein", "rna", "dna"):
+                seq = chain.get("sequence", "")
+                if not seq:
+                    errors.append(
+                        f"queries.{query_name}.chains[{i}].{mol_type}: 'sequence' is empty or missing"
+                    )
+                else:
+                    seq_errors = _validate_sequence_chars(str(seq), mol_type)
+                    errors.extend(
+                        f"queries.{query_name}.chains[{i}]: {e}" for e in seq_errors
+                    )
+                    if mol_type == "protein" and len(str(seq)) < 5:
+                        warnings.append(
+                            f"queries.{query_name}.chains[{i}].protein: "
+                            f"very short sequence ({len(str(seq))} residues)"
+                        )
+            elif mol_type == "ligand":
+                if not chain.get("smiles") and not chain.get("ccd"):
+                    errors.append(
+                        f"queries.{query_name}.chains[{i}].ligand: "
+                        "must provide either 'smiles' or 'ccd'"
+                    )
+
+    return len(errors) == 0, errors, warnings
 
 
 def count_tokens(query_json: dict) -> int:
