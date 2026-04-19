@@ -181,13 +181,17 @@ class BaseTool:
         """
         Clean label value for GCP compliance.
 
+        GCP label values allow lowercase letters, numeric characters, underscores,
+        and dashes. Preserving dashes is important so that job names stored as labels
+        can be used to reconstruct GCS paths without lossy conversion.
+
         Args:
             value: Label value
 
         Returns:
-            Cleaned label value (max 63 chars, lowercase alphanumeric + underscore)
+            Cleaned label value (max 63 chars, lowercase alphanumeric + dash + underscore)
         """
-        cleaned = re.sub(r"[^a-z0-9_]", "_", str(value).lower())
+        cleaned = re.sub(r"[^a-z0-9_\-]", "_", str(value).lower())
         if not cleaned[0].isalnum():
             cleaned = "x" + cleaned
         return cleaned[:63]
