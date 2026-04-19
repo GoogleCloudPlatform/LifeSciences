@@ -83,7 +83,7 @@ fi
 if gcloud run jobs describe boltz2-analysis-job --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
     echo "✅ [Cloud Run] boltz2-analysis-job is deployed"
 else
-    echo "⚠️  [Cloud Run] boltz2-analysis-job is not deployed (optional — enabled by BOLTZ2_COMPONENTS_IMAGE)"
+    echo "❌ [Cloud Run] boltz2-analysis-job is missing"
 fi
 
 # 4. Check Agent Engine (via REST API since gcloud subcommand is not available)
