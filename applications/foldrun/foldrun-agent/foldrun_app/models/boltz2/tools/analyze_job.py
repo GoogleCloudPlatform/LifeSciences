@@ -194,10 +194,28 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
         if not samples:
             return {"status": "no_predictions", "message": "No BOLTZ2 samples found for this job"}
 
+        # Resolve query YAML URI now, while we have the pipeline job in hand.
+        # The agent reads labels reliably; passing the resolved URI in task_config
+        # avoids a second Vertex AI API call from inside the Cloud Run Job.
+        query_yaml_uri = None
+        try:
+            labels = dict(job.labels) if hasattr(job, "labels") and job.labels else {}
+            query_name_label = labels.get("query_name", "")
+            if query_name_label:
+                pipeline_root = job.runtime_config.gcs_output_directory
+                bucket = pipeline_root[5:].split("/", 1)[0]
+                query_yaml_uri = f"gs://{bucket}/boltz2_queries/{query_name_label}.yaml"
+                logger.info(f"Resolved query YAML URI from label: {query_yaml_uri}")
+            else:
+                logger.warning("No 'query_name' label found on pipeline job — query YAML will not be embedded in analysis")
+        except Exception as e:
+            logger.warning(f"Could not resolve query YAML URI: {e}")
+
         # Build task configuration
         task_config = {
             "job_id": job_id,
             "affinity_uri": affinity_uri,   # None if affinity was not requested
+            "query_yaml_uri": query_yaml_uri,  # Resolved here; passed to consolidate_results
             "predictions": [
                 {
                     "index": i,

@@ -1120,10 +1120,12 @@
             if (isOF3 && analysisData.summary && analysisData.summary.protein_info) {
                 const pi = analysisData.summary.protein_info;
                 if (isBoltz2 && pi.input_query_yaml) {
-                    // Boltz-2: YAML format
-                    const yamlStr = typeof pi.input_query_yaml === 'string'
+                    // Boltz-2: YAML format (stored as raw YAML text string)
+                    const yamlRaw = typeof pi.input_query_yaml === 'string'
                         ? pi.input_query_yaml
                         : JSON.stringify(pi.input_query_yaml, null, 2);
+                    // Escape HTML special chars so sequences with < > & display correctly
+                    const yamlStr = yamlRaw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                     html += `
                         <div class="info-card">
                             <h3>

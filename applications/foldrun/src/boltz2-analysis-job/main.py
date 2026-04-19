@@ -610,6 +610,7 @@ def main():
     pred = predictions[task_index]
     job_id = task_config.get("job_id")
     affinity_uri = task_config.get("affinity_uri")  # None if affinity was not requested
+    query_yaml_uri = task_config.get("query_yaml_uri")  # Resolved by agent at job dispatch time
 
     sample_name = pred["sample_name"]
     cif_uri = pred["cif_uri"]
@@ -855,7 +856,7 @@ def main():
                 waited += wait_interval
 
             try:
-                consolidate_results(job_id, analysis_path, affinity_uri=affinity_uri)
+                consolidate_results(job_id, analysis_path, affinity_uri=affinity_uri, query_yaml_uri=query_yaml_uri)
             except Exception as e:
                 logger.error(f"Consolidation failed: {e}", exc_info=True)
 
@@ -1136,7 +1137,7 @@ def parse_affinity(affinity_data: dict) -> dict:
     return result
 
 
-def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | None = None):
+def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | None = None, query_yaml_uri: str | None = None):
     """Consolidate per-sample analysis results into summary.json."""
     import time
 
@@ -1279,29 +1280,36 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
     ranking_scores = [a["ranking_score"] for a in all_analyses]
     plddt_means = [a["plddt_mean"] for a in all_analyses]
 
-    # Try to get input sequence from the uploaded Boltz-2 YAML query
+    # Try to get input sequence from the uploaded Boltz-2 YAML query.
+    # Primary: use the URI resolved by the agent at job dispatch time (task_config).
+    # Fallback: reconstruct from the query_name label if primary is absent.
     fasta_sequence = None
     fasta_header = None
     input_query_yaml = None
     try:
         import yaml
 
-        # Derive GCS path from the query_name label. The label now preserves dashes
-        # (GCP label values allow dashes; _clean_label was updated to keep them),
-        # so the label value matches the uploaded filename directly.
-        # Path: gs://{bucket}/boltz2_queries/{query_name}.yaml
-        query_name_label = all_labels.get("query_name", "")
-        bucket_name_from_analysis = analysis_path[5:].split("/", 1)[0]
-        query_yaml_path = (
-            f"gs://{bucket_name_from_analysis}/boltz2_queries/{query_name_label}.yaml"
-            if query_name_label else None
-        )
-        logger.info(f"Query YAML extraction: label={query_name_label!r} path={query_yaml_path!r} all_labels_keys={list(all_labels.keys())}")
+        # Primary: query_yaml_uri was resolved by analyze_job.py before launching the
+        # Cloud Run Job.  It is the exact GCS path written by submit_prediction.py.
+        query_yaml_path = query_yaml_uri
+
+        # Fallback: derive from query_name label (preserves backward compat for older
+        # task_config files that don't have query_yaml_uri)
+        if not query_yaml_path:
+            query_name_label = all_labels.get("query_name", "")
+            bucket_name_from_analysis = analysis_path[5:].split("/", 1)[0]
+            query_yaml_path = (
+                f"gs://{bucket_name_from_analysis}/boltz2_queries/{query_name_label}.yaml"
+                if query_name_label else None
+            )
+            logger.info(f"Query YAML fallback: label={query_name_label!r} path={query_yaml_path!r} all_labels_keys={list(all_labels.keys())}")
+        else:
+            logger.info(f"Query YAML primary path from task_config: {query_yaml_path!r}")
 
         if query_yaml_path:
             raw_yaml = download_text_from_gcs(query_yaml_path)
             query_data = yaml.safe_load(raw_yaml)
-            input_query_yaml = query_data
+            input_query_yaml = raw_yaml  # Store raw YAML text so viewer displays it as YAML, not JSON
             logger.info(f"Loaded input query YAML from {query_yaml_path}")
 
             # Extract protein sequences for display
