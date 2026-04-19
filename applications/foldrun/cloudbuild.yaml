@@ -199,6 +199,7 @@ steps:
     dir: 'src/alphafold-components'
     args: [
       'build',
+      '--build-arg', 'AF2_VERSION=${_AF2_VERSION}',
       '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest',
       '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest',
       '.'
@@ -218,6 +219,7 @@ steps:
     dir: 'src/openfold3-components'
     args: [
       'build',
+      '--build-arg', 'OF3_VERSION=${_OF3_VERSION}',
       '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest',
       '.'
     ]
@@ -379,7 +381,9 @@ substitutions:
   _FILESTORE_ID: foldrun-nfs
   _AGENT_SA_EMAIL: required_sa_email
   _PIPELINES_SA_EMAIL: required_pipelines_sa_email
-  _BOLTZ_VERSION: 2.2.1
+  _AF2_VERSION: "42719e135a62438aa651d2bc1d143626083c3703"
+  _OF3_VERSION: "0.3.1"
+  _BOLTZ_VERSION: "2.2.1"
 timeout: 3600s
 options:
   logging: CLOUD_LOGGING_ONLY

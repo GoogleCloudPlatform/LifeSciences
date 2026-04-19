@@ -17,7 +17,7 @@ FROM nvidia/cuda:${CUDA}-cudnn8-runtime-ubuntu20.04
 # FROM directive resets ARGS, so we specify again (the value is retained if
 # previously set).
 ARG CUDA
-ARG ALPHAFOLD_COMMIT=42719e135a62438aa651d2bc1d143626083c3703
+ARG AF2_VERSION="42719e135a62438aa651d2bc1d143626083c3703"
 
 # Use bash to support string substitution.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -71,7 +71,7 @@ RUN ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.7 /opt/conda/lib/libffi.so.7
 ENV LD_LIBRARY_PATH="/opt/conda/lib:$LD_LIBRARY_PATH"
 
 RUN git clone https://github.com/deepmind/alphafold.git /app/alphafold
-RUN git -C /app/alphafold reset --hard $ALPHAFOLD_COMMIT
+RUN git -C /app/alphafold reset --hard $AF2_VERSION
 RUN wget -q -P /app/alphafold/alphafold/common/ \
   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
 

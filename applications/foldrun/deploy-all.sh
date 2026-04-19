@@ -43,6 +43,8 @@ usage() {
     echo ""
     echo "Environment variables:"
     echo "  DOWNLOAD_MODE      Database download mode: reduced (default) or full"
+    echo "  AF2_VERSION        AlphaFold2 git commit to build (default: pinned commit)"
+    echo "  OF3_VERSION        OpenFold3 Docker image tag to use (default: 0.3.1)"
     echo "  BOLTZ_VERSION      Boltz-2 pip package version to install (default: 2.2.1)"
     echo ""
     echo "  The following override the auto-detected naming conventions for"
@@ -120,6 +122,8 @@ done
 PROJECT_ID=${POSITIONAL_ARGS[0]:-$(gcloud config get-value project)}
 REGION=${POSITIONAL_ARGS[1]:-"us-central1"}
 DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
+AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
+OF3_VERSION=${OF3_VERSION:-"0.3.1"}
 BOLTZ_VERSION=${BOLTZ_VERSION:-"2.2.1"}
 IAP_ACCESS_DOMAIN=${IAP_ACCESS_DOMAIN:-$(gcloud config get-value account | awk -F '@' '{print $2}')}
 TERRAFORM_DIR="terraform"
@@ -277,7 +281,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_BOLTZ_VERSION="$BOLTZ_VERSION" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi

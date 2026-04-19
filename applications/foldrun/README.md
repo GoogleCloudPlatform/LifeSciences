@@ -138,6 +138,20 @@ GCS_SOURCE_BUCKET=THEIR_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 DOWNLOAD_MODE=full ./deploy-all.sh YOUR_PROJECT_ID  # Full BFD database (~272GB)
 ```
 
+**Pinned model versions** — override without editing any files:
+```bash
+# Upgrade OpenFold3 to a newer release
+OF3_VERSION=0.4.0 ./deploy-all.sh YOUR_PROJECT_ID --steps build
+
+# Pin AlphaFold2 to a specific git commit
+AF2_VERSION=abc123def ./deploy-all.sh YOUR_PROJECT_ID --steps build
+
+# Upgrade Boltz-2
+BOLTZ_VERSION=2.3.0 ./deploy-all.sh YOUR_PROJECT_ID --steps build
+```
+
+Default versions are defined in `deploy-all.sh` and match the tested, pinned values in each container's `Dockerfile`.
+
 ### Step 3: Verify
 
 ```bash
