@@ -1286,16 +1286,27 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
     try:
         import yaml
 
-        if hasattr(job, "runtime_config") and hasattr(
+        # Primary: derive from the query_name job label — always present and reliable.
+        # The agent uploads the query YAML to gs://{bucket}/boltz2_queries/{query_name}.yaml
+        # at submission time. The query_name label is set on every Boltz-2 job.
+        query_name_label = all_labels.get("query_name", "")
+        bucket_name_from_analysis = analysis_path[5:].split("/", 1)[0]
+        query_yaml_path = (
+            f"gs://{bucket_name_from_analysis}/boltz2_queries/{query_name_label}.yaml"
+            if query_name_label else None
+        )
+
+        # Fallback: try parameter_values (may be empty depending on gRPC client behavior)
+        if not query_yaml_path and hasattr(job, "runtime_config") and hasattr(
             job.runtime_config, "parameter_values"
         ):
-            # parameter_values contains google.protobuf.Value objects — extract string
             _raw = job.runtime_config.parameter_values.get("query_json_path")
             query_yaml_path = (
-                _raw.string_value if hasattr(_raw, "string_value") else
+                _raw.string_value if hasattr(_raw, "string_value") and _raw else
                 _raw if isinstance(_raw, str) else None
             )
-            if query_yaml_path:
+
+        if query_yaml_path:
                 raw_yaml = download_text_from_gcs(query_yaml_path)
                 query_data = yaml.safe_load(raw_yaml)
                 input_query_yaml = query_data
