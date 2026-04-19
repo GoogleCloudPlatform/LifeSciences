@@ -254,7 +254,7 @@ def analyze_job(job_id: str, detail_level: str = "summary") -> dict:
     - Configuration details
 
     Args:
-        job_id: The AlphaFold pipeline job ID (e.g., 'alphafold-inference-pipeline-20251110082144')
+        job_id: The AlphaFold pipeline job ID (e.g., 'alphafold2-inference-pipeline-20251110082144')
         detail_level: Level of detail - 'summary' (quick overview, default) or 'detailed' (with Cloud Logging error logs - fetches top 5 ERROR logs per failed task)
 
     Returns:

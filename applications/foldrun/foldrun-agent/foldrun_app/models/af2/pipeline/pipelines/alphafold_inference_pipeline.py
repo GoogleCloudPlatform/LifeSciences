@@ -51,7 +51,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         dp_strategy = "STANDARD"  # CPU-only jobs cannot use FLEX_START
 
     @dsl.pipeline(
-        name="alphafold-inference-pipeline",
+        name="alphafold2-inference-pipeline",
         description="AlphaFold inference using original data pipeline with configurable scheduling.",
     )
     def alphafold_inference_pipeline(
