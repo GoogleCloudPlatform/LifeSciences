@@ -879,7 +879,8 @@ def consolidate_results(job_id: str, analysis_path: str):
             "total_predictions": len(all_analyses),
             "fasta_sequence": fasta_sequence,
             "fasta_header": fasta_header,
-            "job_metadata": job_metadata,  # Include labels here
+            "job_metadata": job_metadata,
+            "model_type": "alphafold2",
         },
         "quality_metrics": {
             "best_model_plddt": best["plddt_mean"],
@@ -901,6 +902,7 @@ def consolidate_results(job_id: str, analysis_path: str):
     # Build final summary
     summary_data = {
         "job_id": job_id,
+        "model_type": "alphafold2",
         "analyzed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         + "Z",
         "summary": summary,
