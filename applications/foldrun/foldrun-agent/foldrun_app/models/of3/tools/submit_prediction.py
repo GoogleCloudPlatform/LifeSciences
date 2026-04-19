@@ -24,7 +24,7 @@ from typing import Any, Dict
 from google.cloud import aiplatform as vertex_ai
 
 from ..base import OF3Tool
-from ..utils.input_converter import count_tokens, fasta_to_of3_json, is_of3_json
+from ..utils.input_converter import count_tokens, fasta_to_of3_json, is_of3_json, validate_of3_json
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +70,17 @@ class OF3SubmitPredictionTool(OF3Tool):
             content = input_data
 
         if is_of3_json(content):
+            ok, errors, warnings = validate_of3_json(content)
+            if not ok:
+                return {
+                    "status": "error",
+                    "message": "Invalid OF3 query JSON:\n" + "\n".join(f"  - {e}" for e in errors),
+                }
+            for w in warnings:
+                logger.warning(f"OF3 JSON warning: {w}")
             query_json = json.loads(content)
         else:
-            # Treat as FASTA and convert
+            # Treat as FASTA and convert (fasta_to_of3_json raises on invalid input)
             query_json = fasta_to_of3_json(content, job_name)
 
         # Count tokens for GPU auto-selection
