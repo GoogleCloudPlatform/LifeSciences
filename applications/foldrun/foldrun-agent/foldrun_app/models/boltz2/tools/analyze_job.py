@@ -123,6 +123,10 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                     cif_filename = filename.replace("confidence_", "", 1).replace(".json", ".cif")
                     cif_name = "/".join(parts_list[:-1] + [cif_filename])
 
+                    # pde_{stem}_model_N.npz — written when --write_full_pde is passed
+                    pde_filename = filename.replace("confidence_", "pde_", 1).replace(".json", ".npz")
+                    pde_name = "/".join(parts_list[:-1] + [pde_filename])
+
                     if name in seen:
                         continue
                     seen.add(name)
@@ -133,6 +137,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                             "sample_name": sample_name,
                             "cif_uri": f"gs://{bucket_name}/{cif_name}",
                             "aggregated_uri": f"gs://{bucket_name}/{name}",
+                            "pde_uri": f"gs://{bucket_name}/{pde_name}",
                         }
                     )
 
@@ -200,6 +205,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                     "cif_uri": s["cif_uri"],
                     "confidences_uri": "",
                     "aggregated_uri": s["aggregated_uri"],
+                    "pde_uri": s.get("pde_uri", ""),
                     "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
                 }
                 for i, s in enumerate(samples)

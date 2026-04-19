@@ -615,6 +615,7 @@ def main():
     cif_uri = pred["cif_uri"]
     confidences_uri = pred["confidences_uri"]
     aggregated_uri = pred["aggregated_uri"]
+    pde_uri = pred.get("pde_uri", "")
     output_uri = pred["output_uri"]
 
     logger.info(f"Starting analysis for sample: {sample_name}")
@@ -683,8 +684,18 @@ def main():
         # Per-atom pLDDT: Boltz-2 stores these in the CIF B-factor column (not a separate JSON).
         # We extracted them above via parse_cif_chains; fall back to empty if CIF parse failed.
         plddt_scores = cif_plddt_scores
-        # PDE matrix: only available via --write_full_pde as a .npz file (not in confidence JSON).
+
+        # PDE matrix: written as pde_{stem}_model_N.npz when --write_full_pde is passed.
         pde_matrix = None
+        if pde_uri:
+            try:
+                import io
+                pde_bytes = download_image_from_gcs(pde_uri)  # returns raw bytes
+                pde_data = np.load(io.BytesIO(pde_bytes))
+                pde_matrix = pde_data["pde"].tolist()
+                logger.info(f"Loaded PDE matrix {np.array(pde_matrix).shape} from {pde_uri}")
+            except Exception as e:
+                logger.warning(f"Could not load PDE matrix from {pde_uri}: {e}")
 
         # Calculate overall pLDDT stats
         if plddt_scores:
