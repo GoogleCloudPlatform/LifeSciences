@@ -54,10 +54,16 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         gpu_type = arguments.get("gpu_type", "auto")
         enable_flex_start = arguments.get("enable_flex_start", True)
 
-        # Determine input type and convert to BOLTZ2 JSON
-        is_file = os.path.isfile(input_data) if isinstance(input_data, str) else False
+        # Determine input type and load content
+        is_gcs = isinstance(input_data, str) and input_data.startswith("gs://")
+        is_file = os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
 
-        if is_file:
+        if is_gcs:
+            bucket_name = input_data[5:].split("/", 1)[0]
+            blob_path = input_data[5:].split("/", 1)[1]
+            bucket = self.storage_client.bucket(bucket_name)
+            content = bucket.blob(blob_path).download_as_text()
+        elif is_file:
             with open(input_data) as f:
                 content = f.read()
         else:
