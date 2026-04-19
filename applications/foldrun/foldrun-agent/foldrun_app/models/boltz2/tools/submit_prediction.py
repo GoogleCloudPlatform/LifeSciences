@@ -24,7 +24,7 @@ from typing import Any, Dict
 from google.cloud import aiplatform as vertex_ai
 
 from ..base import BOLTZ2Tool
-from ..utils.input_converter import count_tokens, fasta_to_boltz2_yaml, is_boltz2_yaml
+from ..utils.input_converter import count_tokens, fasta_to_boltz2_yaml, is_boltz2_yaml, validate_boltz2_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +71,16 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
 
         if is_boltz2_yaml(content):
             query_yaml = content
+            ok, errors, warnings = validate_boltz2_yaml(query_yaml)
+            if not ok:
+                return {
+                    "status": "error",
+                    "message": "Invalid Boltz-2 query YAML:\n" + "\n".join(f"  - {e}" for e in errors),
+                }
+            for w in warnings:
+                logger.warning(f"Boltz-2 YAML warning: {w}")
         else:
-            # Treat as FASTA and convert
+            # Treat as FASTA and convert (fasta_to_boltz2_yaml raises on invalid input)
             query_yaml = fasta_to_boltz2_yaml(content, job_name)
 
         # Count tokens for GPU auto-selection

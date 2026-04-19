@@ -97,6 +97,23 @@ def predict_of3(
     # Find output files in the nested directory structure
     # OF3 outputs: output_dir/<query_name>/seed_<N>/<name>_seed_<N>_sample_<M>_model.cif
     #              output_dir/<query_name>/seed_<N>/<name>_seed_<N>_sample_<M>_confidences_aggregated.json
+    # Determine if this is a monomer — OF3 uses AF3-style ranking:
+    #   sample_ranking_score = 0.8 * iptm + 0.2 * ptm
+    # For a single-chain prediction iptm ≈ 0 (no interface), so all samples
+    # get near-zero scores and the "best" selection is essentially random.
+    # For monomers we rank by ptm instead, which correctly reflects fold quality.
+    with open(updated_query_json.path) as f:
+        _qdata = json.load(f)
+    _chains = []
+    for _q in _qdata.get("queries", {}).values():
+        _chains.extend(_q.get("chains", []))
+    _is_monomer = len(_chains) <= 1
+
+    if _is_monomer:
+        logging.info("Monomer detected — ranking samples by ptm (not sample_ranking_score)")
+    else:
+        logging.info(f"Complex detected ({len(_chains)} chains) — ranking samples by sample_ranking_score")
+
     best_cif = None
     best_conf = None
     best_score = -1.0
@@ -107,7 +124,11 @@ def predict_of3(
             if fname.endswith("_confidences_aggregated.json"):
                 with open(src) as f:
                     conf_data = json.load(f)
-                score = conf_data.get("sample_ranking_score", 0.0)
+                if _is_monomer:
+                    # Use ptm for monomers — iptm≈0 makes sample_ranking_score useless
+                    score = conf_data.get("ptm", conf_data.get("sample_ranking_score", 0.0))
+                else:
+                    score = conf_data.get("sample_ranking_score", 0.0)
                 if score > best_score:
                     best_score = score
                     best_conf = src
@@ -135,8 +156,14 @@ def predict_of3(
         with open(confidence_json.path) as f:
             conf_data = json.load(f)
         confidence_json.metadata["category"] = "confidence"
+        confidence_json.metadata["is_monomer"] = _is_monomer
+        # Store both scores so downstream tools can display the right one
         if "sample_ranking_score" in conf_data:
-            confidence_json.metadata["ranking_score"] = conf_data["sample_ranking_score"]
+            confidence_json.metadata["sample_ranking_score"] = conf_data["sample_ranking_score"]
+        if "ptm" in conf_data:
+            confidence_json.metadata["ptm"] = conf_data["ptm"]
+        # ranking_score: ptm for monomers, sample_ranking_score for complexes
+        confidence_json.metadata["ranking_score"] = best_score
 
     t1 = time.time()
     logging.info(

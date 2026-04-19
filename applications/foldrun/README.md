@@ -12,6 +12,14 @@
 - **Interactive Visualization**: Web-based 3D structure viewer with confidence coloring and analysis dashboards
 - **Smart Database Management**: YAML-driven downloads via Cloud Batch with GCS-based gap detection — shared databases downloaded once across models
 
+## Supported Models
+
+| Model | Source | Capabilities |
+|-------|--------|-------------|
+| [AlphaFold 2](https://github.com/google-deepmind/alphafold) | Google DeepMind | Protein monomers and multimers, AMBER relaxation |
+| [OpenFold 3](https://github.com/aqlaboratory/openfold-3) | AQ Laboratory | Proteins, RNA, DNA, ligands (SMILES/CCD), covalent modifications, glycans |
+| [Boltz-2](https://github.com/jwohlwend/boltz) | MIT / jwohlwend | Proteins, RNA, DNA, ligands, covalent modifications, glycans, binding affinity |
+
 ## Tech Stack
 
 - **Agent**: Google ADK with up to 30 native FunctionTools (AF2 + OF3 + Boltz-2), deployed to Vertex AI Agent Engine
@@ -45,8 +53,8 @@
   - `roles/serviceusage.serviceUsageAdmin` — enable APIs
 
 **GPU Quota (check before starting):**
-- AF2 minimum: **1x NVIDIA L4** in your region (for small proteins)
-- AF2 recommended: **1x NVIDIA A100 40GB** (for larger proteins)
+- AF2 minimum: **1x NVIDIA A100 40GB** (L4 no longer auto-selected — slow DWS provisioning)
+- AF2 large proteins (>1500 residues): **1x NVIDIA A100 80GB**
 - OF3 minimum: **1x NVIDIA A100 40GB** (no L4 support)
 - Boltz-2 minimum: **1x NVIDIA A100 40GB** (no L4 support — diffusion model requires ≥40 GB VRAM)
 - Check your quota: [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu)
@@ -236,7 +244,7 @@ uv run adk web foldrun_app
 | Artifact Registry (~16GB) | ~$2/mo |
 | Agent Engine (idle) | ~$0 (pay per query) |
 | Cloud Run (viewer, idle) | ~$0 (scale to zero) |
-| AF2 prediction (per job, L4) | ~$4 per job (MSA + 5 seeds predict + relax) |
+| AF2 prediction (per job, A100) | ~$8 per job (MSA + 5 seeds predict + relax) |
 | OF3 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
 | Boltz-2 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
 | Gemini API (per analysis) | ~$0.01-0.05 per analysis |

@@ -601,12 +601,26 @@ def main():
         except Exception as e:
             logger.warning(f"Could not parse CIF for chain info: {e}")
 
-        # Extract metrics from aggregated
-        ranking_score = aggregated.get(
-            "sample_ranking_score", aggregated.get("ranking_score", 0.0)
-        )
+        # Extract metrics from aggregated.
+        # OF3 uses AF3-style ranking: sample_ranking_score = 0.8*iptm + 0.2*ptm.
+        # For monomers iptm≈0 (no interface), so sample_ranking_score is near 0
+        # and meaningless for comparing prediction quality. Use ptm for monomers.
         ptm = aggregated.get("ptm", 0.0)
         iptm = aggregated.get("iptm", 0.0)
+        sample_ranking_score = aggregated.get(
+            "sample_ranking_score", aggregated.get("ranking_score", 0.0)
+        )
+        # Determine monomer vs complex from chain_info parsed from CIF
+        _is_monomer = len(chain_info) <= 1
+        if _is_monomer:
+            # pTM is the right quality metric for single-chain predictions
+            ranking_score = ptm if ptm > 0.0 else sample_ranking_score
+            logger.info(
+                f"Monomer: using ptm={ptm:.4f} as ranking_score "
+                f"(sample_ranking_score={sample_ranking_score:.4f} suppressed — iptm≈0 for monomers)"
+            )
+        else:
+            ranking_score = sample_ranking_score
         avg_plddt = aggregated.get("avg_plddt", 0.0)
         gpde = aggregated.get("gpde", None)
         has_clash = aggregated.get("has_clash", 0)
