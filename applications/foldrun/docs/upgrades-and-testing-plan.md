@@ -104,3 +104,37 @@ Bring AlphaFold2 testing coverage up to par with OpenFold3 and Boltz-2. Currentl
 - **Pipeline Compilation Tests:** Write tests to load and compile the `af2_monomer_pipeline` and `af2_multimer_pipeline` into JSON to ensure the DAGs are structurally sound and variables resolve correctly.
 - **Config & Hardware Tests:** Add tests to verify AF2-specific configuration loading and GPU auto-detection logic (e.g., ensuring `A100` vs `L4` is selected correctly based on sequence length).
 - Integrate the new tests into the main `pytest` execution path and verify they all pass.
+
+## 7. Viewer Job Picker — Browse Recent Jobs Without the Agent
+
+Add a job browser to the viewer's home page (`index.html`) so users can navigate directly to any recent FoldRun job without needing the agent to provide the link.
+
+**Current state:** The home page is a static info/landing page. The only way to reach the combined viewer is via a URL the agent provides (e.g. `https://viewer.../job/{id}`).
+
+**Proposed UX:** The home page fetches a live list of recent pipeline jobs and renders them as a browseable list — grouped or sorted by recency, with model badge (AlphaFold2 / OpenFold3 / Boltz-2), state chip (Running / Succeeded / Failed), timestamp, job display name, and a "View" button that navigates to `/job/{id}`.
+
+**What the viewer SA currently has:** `roles/storage.objectViewer` on the GCS bucket only. No Vertex AI permissions.
+
+**Implementation steps:**
+
+1. **Terraform — `terraform/iam.tf`**: Grant `foldrun-viewer-sa` `roles/aiplatform.viewer` at the project level so it can call `pipelineJobs.list`. This is the only infrastructure change required.
+
+2. **`src/foldrun-viewer/app.py` — new `/api/jobs` endpoint**:
+   - Calls `GET https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/pipelineJobs`
+   - Filter: `labels.submitted_by=foldrun-agent` to scope to FoldRun jobs only
+   - Order by `createTime desc`, page size ~50
+   - Returns JSON: `[{job_id, display_name, model_type, state, create_time, has_analysis}]`
+   - `model_type` read from `labels.model_type` (already set by all three submit tools)
+   - `has_analysis` determined by checking if `{pipeline_root}/analysis/summary.json` exists in GCS (optional — can skip for v1 and just show all jobs)
+   - Use `google.auth.default()` + `google.auth.transport.requests.Request()` for the REST call — same credential flow the Cloud Run identity already uses
+
+3. **`src/foldrun-viewer/templates/index.html` — dynamic job picker**:
+   - On load, `fetch('/api/jobs')` and render the list
+   - Each row: model badge (color-coded), state chip (green/yellow/red), display name, relative timestamp, "View" button → `/job/{job_id}`
+   - Filter controls: by model type, by state (All / Running / Succeeded)
+   - Empty state: "No jobs found — submit a prediction through the FoldRun agent to get started"
+   - Auto-refresh every 30s if any jobs are in RUNNING state
+
+**Effort estimate:** ~80 lines Python (endpoint + auth), ~150 lines HTML/JS (picker UI). No new pip dependencies — uses `google-auth` which is already in `requirements.txt`.
+
+**Note:** The existing `/job/<job_id>` route and `get_analysis_summary()` function already handle the full viewer flow once a job is selected — the picker is purely additive.
