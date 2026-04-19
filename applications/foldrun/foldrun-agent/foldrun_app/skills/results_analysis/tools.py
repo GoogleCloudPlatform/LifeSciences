@@ -174,6 +174,58 @@ def of3_get_analysis_results(
     )
 
 
+def boltz2_analyze_job_parallel(
+    job_id: str,
+    overwrite: bool = False,
+) -> dict:
+    """
+    Trigger parallel analysis of Boltz2 predictions via Cloud Run Jobs.
+
+    Discovers Boltz2 output samples (CIF + confidence JSON files) from GCS,
+    generates pLDDT plots, PDE heatmaps, ipTM matrix, and Gemini expert analysis.
+
+    Args:
+        job_id: Boltz2 pipeline job ID (required)
+        overwrite: Overwrite existing analysis (default: False)
+
+    Returns execution details. Use boltz2_get_analysis_results to retrieve results.
+    """
+    return get_tool("boltz2_analyze_parallel").run(
+        {
+            "job_id": job_id,
+            "overwrite": overwrite,
+        }
+    )
+
+
+def boltz2_get_analysis_results(
+    job_id: str,
+    wait: bool = False,
+    timeout: int = 10,
+    poll_interval: int = 2,
+) -> dict:
+    """
+    Get Boltz2 analysis results from Cloud Run.
+
+    Returns ranking_score, pTM, ipTM, chain_pair_iptm, pLDDT metrics,
+    and Gemini expert analysis when complete.
+
+    Args:
+        job_id: Boltz2 pipeline job ID
+        wait: Poll until analysis completes (default: False)
+        timeout: Max wait time in seconds (default: 10)
+        poll_interval: Seconds between polls (default: 2)
+    """
+    return get_tool("boltz2_get_analysis_results").run(
+        {
+            "job_id": job_id,
+            "wait": wait,
+            "timeout": timeout,
+            "poll_interval": poll_interval,
+        }
+    )
+
+
 def analyze_job(job_id: str, detail_level: str = "summary") -> dict:
     """
     Perform analysis of any AlphaFold job with configurable detail level.

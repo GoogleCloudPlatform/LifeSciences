@@ -443,3 +443,125 @@ class TestVisualizationSkills:
             assert args["job_id"] == "pipeline-123"
             assert args["model_name"] == "Best Model"
             assert args["open_browser"] is True
+
+    def test_open_boltz2_structure_viewer_calls_correct_tool(self):
+        """open_boltz2_structure_viewer calls boltz2_open_viewer tool."""
+        mock = _mock_tool({"viewer_url": "https://viewer.example.com/job/boltz-123"})
+
+        with _patch_get_tool(mock, _VISUALIZATION) as mock_get:
+            from foldrun_app.skills.visualization import open_boltz2_structure_viewer
+
+            open_boltz2_structure_viewer(job_id="boltz-123")
+
+            mock_get.assert_called_with("boltz2_open_viewer")
+            args = mock.run.call_args[0][0]
+            assert args["job_id"] == "boltz-123"
+
+
+class TestBoltz2JobSubmissionSkills:
+    """Tests for Boltz-2 job_submission skill wrappers."""
+
+    def test_submit_boltz2_prediction_calls_correct_tool(self):
+        """submit_boltz2_prediction calls boltz2_submit_prediction tool."""
+        mock = _mock_tool({"status": "submitted", "job_id": "boltz-456"})
+
+        with _patch_get_tool(mock, _JOB_SUBMISSION) as mock_get:
+            from foldrun_app.skills.job_submission import submit_boltz2_prediction
+
+            result = submit_boltz2_prediction(
+                input=">A\nMKQHEDKL",
+                job_name="test-boltz",
+                num_model_seeds=2,
+                num_diffusion_samples=5,
+                gpu_type="A100",
+                enable_flex_start=False,
+            )
+
+            mock_get.assert_called_with("boltz2_submit_prediction")
+            args = mock.run.call_args[0][0]
+            assert args["input"] == ">A\nMKQHEDKL"
+            assert args["job_name"] == "test-boltz"
+            assert args["num_model_seeds"] == 2
+            assert args["num_diffusion_samples"] == 5
+            assert args["gpu_type"] == "A100"
+            assert args["enable_flex_start"] is False
+            assert result["status"] == "submitted"
+
+    def test_submit_boltz2_defaults(self):
+        """submit_boltz2_prediction has sensible defaults."""
+        mock = _mock_tool({"status": "submitted"})
+
+        with _patch_get_tool(mock, _JOB_SUBMISSION):
+            from foldrun_app.skills.job_submission import submit_boltz2_prediction
+
+            submit_boltz2_prediction(input=">A\nMKQHEDKL")
+
+            args = mock.run.call_args[0][0]
+            assert args["num_model_seeds"] == 1
+            assert args["num_diffusion_samples"] == 5
+            assert args["gpu_type"] == "auto"
+            assert args["enable_flex_start"] is True
+
+
+class TestBoltz2ResultsAnalysisSkills:
+    """Tests for Boltz-2 results_analysis skill wrappers."""
+
+    def test_boltz2_analyze_job_parallel_calls_correct_tool(self):
+        """boltz2_analyze_job_parallel calls boltz2_analyze_parallel tool."""
+        mock = _mock_tool({"status": "started", "total_predictions": 5})
+
+        with _patch_get_tool(mock, _RESULTS_ANALYSIS) as mock_get:
+            from foldrun_app.skills.results_analysis import boltz2_analyze_job_parallel
+
+            result = boltz2_analyze_job_parallel(job_id="boltz-123", overwrite=True)
+
+            mock_get.assert_called_with("boltz2_analyze_parallel")
+            args = mock.run.call_args[0][0]
+            assert args["job_id"] == "boltz-123"
+            assert args["overwrite"] is True
+            assert result["status"] == "started"
+
+    def test_boltz2_analyze_job_parallel_default_overwrite(self):
+        """boltz2_analyze_job_parallel defaults overwrite to False."""
+        mock = _mock_tool({"status": "started"})
+
+        with _patch_get_tool(mock, _RESULTS_ANALYSIS):
+            from foldrun_app.skills.results_analysis import boltz2_analyze_job_parallel
+
+            boltz2_analyze_job_parallel(job_id="boltz-123")
+
+            args = mock.run.call_args[0][0]
+            assert args["overwrite"] is False
+
+    def test_boltz2_get_analysis_results_calls_correct_tool(self):
+        """boltz2_get_analysis_results calls boltz2_get_analysis_results tool."""
+        mock = _mock_tool({"status": "complete", "ranking_score": 0.85})
+
+        with _patch_get_tool(mock, _RESULTS_ANALYSIS) as mock_get:
+            from foldrun_app.skills.results_analysis import boltz2_get_analysis_results
+
+            result = boltz2_get_analysis_results(
+                job_id="boltz-123", wait=True, timeout=30, poll_interval=5
+            )
+
+            mock_get.assert_called_with("boltz2_get_analysis_results")
+            args = mock.run.call_args[0][0]
+            assert args["job_id"] == "boltz-123"
+            assert args["wait"] is True
+            assert args["timeout"] == 30
+            assert args["poll_interval"] == 5
+            assert result["status"] == "complete"
+
+    def test_boltz2_get_analysis_results_defaults(self):
+        """boltz2_get_analysis_results has sensible polling defaults."""
+        mock = _mock_tool({"status": "running"})
+
+        with _patch_get_tool(mock, _RESULTS_ANALYSIS):
+            from foldrun_app.skills.results_analysis import boltz2_get_analysis_results
+
+            boltz2_get_analysis_results(job_id="boltz-123")
+
+            args = mock.run.call_args[0][0]
+            assert args["wait"] is False
+            assert args["timeout"] == 10
+            assert args["poll_interval"] == 2

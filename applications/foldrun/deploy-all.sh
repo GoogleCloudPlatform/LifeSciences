@@ -42,7 +42,18 @@ usage() {
     echo "  --clean        Remove generated build artifacts (.egg-info, .venv, etc.)"
     echo ""
     echo "Environment variables:"
-    echo "  DOWNLOAD_MODE  Database download mode: reduced (default) or full"
+    echo "  DOWNLOAD_MODE      Database download mode: reduced (default) or full"
+    echo "  BOLTZ_VERSION      Boltz-2 pip package version to install (default: 2.2.1)"
+    echo ""
+    echo "  The following override the auto-detected naming conventions for"
+    echo "  --steps build and --steps data (terraform not required if infra exists):"
+    echo "  GCS_BUCKET         Pipeline data bucket (default: PROJECT_ID-foldrun-data)"
+    echo "  DATABASES_BUCKET   Genomic databases bucket (default: PROJECT_ID-foldrun-gdbs)"
+    echo "  AR_REPO            Artifact Registry repo name (default: foldrun-repo)"
+    echo "  FILESTORE_ID       Filestore instance ID (default: foldrun-nfs)"
+    echo "  AGENT_SA_EMAIL     Agent service account email"
+    echo "  BUILD_SA_EMAIL     Cloud Build service account email"
+    echo "  PIPELINES_SA_EMAIL Vertex AI Pipelines service account email"
     echo ""
     echo "Examples:"
     echo "  $0                                      # Full deploy (infra + build + data)"
@@ -109,6 +120,7 @@ done
 PROJECT_ID=${POSITIONAL_ARGS[0]:-$(gcloud config get-value project)}
 REGION=${POSITIONAL_ARGS[1]:-"us-central1"}
 DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
+BOLTZ_VERSION=${BOLTZ_VERSION:-"2.2.1"}
 IAP_ACCESS_DOMAIN=${IAP_ACCESS_DOMAIN:-$(gcloud config get-value account | awk -F '@' '{print $2}')}
 TERRAFORM_DIR="terraform"
 BUCKET_NAME="${PROJECT_ID}-foldrun-data"
@@ -148,20 +160,56 @@ echo "Steps:         $STEPS"
 echo ""
 
 # ==============================================================================
-# Helper: Extract terraform outputs (needed by build and data steps)
+# Helper: Resolve deployment configuration for build and data steps.
+#
+# All FoldRun resources follow predictable naming conventions derived from
+# PROJECT_ID — no terraform required for build/data steps run against an
+# already-provisioned project.
+#
+# Priority (highest to lowest):
+#   1. Environment variable overrides (for custom deployments or CI/CD)
+#   2. Terraform outputs (if terraform is installed and state is accessible)
+#   3. FoldRun naming conventions (PROJECT_ID-based defaults)
+#
+# This means `--steps build` and `--steps data` work without terraform
+# installed, as long as infra was previously provisioned by `--steps infra`.
 # ==============================================================================
 extract_terraform_outputs() {
-    echo "Extracting Terraform outputs..."
-    cd "$TERRAFORM_DIR"
-    terraform init -reconfigure -input=false > /dev/null 2>&1
-    export GCS_BUCKET=$(terraform output -raw gcs_bucket_name)
-    export AR_REPO=$(terraform output -raw artifact_registry_repo)
-    export FILESTORE_ID=$(terraform output -raw filestore_id)
-    export AGENT_SA_EMAIL=$(terraform output -raw agent_sa_email)
-    export BUILD_SA_EMAIL=$(terraform output -raw build_sa_email)
-    export PIPELINES_SA_EMAIL=$(terraform output -raw pipelines_sa_email)
-    export DATABASES_BUCKET=$(terraform output -raw databases_bucket_name 2>/dev/null || echo "")
-    cd ..
+    # Apply naming-convention defaults first (no terraform needed)
+    export GCS_BUCKET="${GCS_BUCKET:-${PROJECT_ID}-foldrun-data}"
+    export AR_REPO="${AR_REPO:-foldrun-repo}"
+    export FILESTORE_ID="${FILESTORE_ID:-foldrun-nfs}"
+    export AGENT_SA_EMAIL="${AGENT_SA_EMAIL:-foldrun-agent-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
+    export BUILD_SA_EMAIL="${BUILD_SA_EMAIL:-foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
+    export PIPELINES_SA_EMAIL="${PIPELINES_SA_EMAIL:-pipelines-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
+    export DATABASES_BUCKET="${DATABASES_BUCKET:-${PROJECT_ID}-foldrun-gdbs}"
+
+    # If terraform is available and state exists, cross-check and prefer its outputs
+    # (useful immediately after --steps infra when non-default names may have been used)
+    if command -v terraform &>/dev/null; then
+        cd "$TERRAFORM_DIR"
+        if terraform init -reconfigure -input=false > /dev/null 2>&1; then
+            _tf() { terraform output -raw "$1" 2>/dev/null; }
+            v=$(_tf gcs_bucket_name);       [[ -n "$v" ]] && export GCS_BUCKET="$v"
+            v=$(_tf artifact_registry_repo); [[ -n "$v" ]] && export AR_REPO="$v"
+            v=$(_tf filestore_id);           [[ -n "$v" ]] && export FILESTORE_ID="$v"
+            v=$(_tf agent_sa_email);         [[ -n "$v" ]] && export AGENT_SA_EMAIL="$v"
+            v=$(_tf build_sa_email);         [[ -n "$v" ]] && export BUILD_SA_EMAIL="$v"
+            v=$(_tf pipelines_sa_email);     [[ -n "$v" ]] && export PIPELINES_SA_EMAIL="$v"
+            v=$(_tf databases_bucket_name);  [[ -n "$v" ]] && export DATABASES_BUCKET="$v"
+            unset -f _tf
+        fi
+        cd ..
+    fi
+
+    echo "Configuration:"
+    echo "  GCS_BUCKET=$GCS_BUCKET"
+    echo "  AR_REPO=$AR_REPO"
+    echo "  FILESTORE_ID=$FILESTORE_ID"
+    echo "  DATABASES_BUCKET=$DATABASES_BUCKET"
+    echo "  AGENT_SA_EMAIL=$AGENT_SA_EMAIL"
+    echo "  BUILD_SA_EMAIL=$BUILD_SA_EMAIL"
+    echo "  PIPELINES_SA_EMAIL=$PIPELINES_SA_EMAIL"
 }
 
 # ==============================================================================
@@ -229,7 +277,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_BOLTZ_VERSION="$BOLTZ_VERSION" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi

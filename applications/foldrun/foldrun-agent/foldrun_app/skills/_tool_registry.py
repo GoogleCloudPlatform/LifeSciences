@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Singleton registry for AF2 tool instances.
+"""Singleton registry for all FoldRun tool instances (AF2, OF3, Boltz-2).
 
 Provides eager or lazy initialization of Config + tool class instances.
 """
@@ -55,9 +55,46 @@ def get_tool(tool_name: str):
 
 
 def _initialize_all_tools():
-    """Initialize all tool instances (AF2 + OF3)."""
+    """Initialize all tool instances (AF2 + OF3 + Boltz2)."""
     _initialize_af2_tools()
     _initialize_of3_tools()
+    _initialize_boltz2_tools()
+
+
+def _initialize_boltz2_tools():
+    """Initialize Boltz2 tool instances."""
+    try:
+        from foldrun_app.models.boltz2.startup import get_config, get_tool_configs
+        from foldrun_app.models.boltz2.tools import (
+            BOLTZ2GetAnalysisResultsTool,
+            BOLTZ2JobAnalysisTool,
+            BOLTZ2OpenViewerTool,
+            BOLTZ2SubmitPredictionTool,
+        )
+
+        config = get_config()
+        boltz2_tools = get_tool_configs()
+
+        tool_classes = {
+            "BOLTZ2SubmitPredictionTool": BOLTZ2SubmitPredictionTool,
+            "BOLTZ2JobAnalysisTool": BOLTZ2JobAnalysisTool,
+            "BOLTZ2GetAnalysisResultsTool": BOLTZ2GetAnalysisResultsTool,
+            "BOLTZ2OpenViewerTool": BOLTZ2OpenViewerTool,
+        }
+
+        for tool_config in boltz2_tools:
+            tool_type = tool_config["type"]
+            tool_name = tool_config["name"]
+            tool_class = tool_classes.get(tool_type)
+
+            if tool_class:
+                _agents[tool_name] = tool_class(tool_config=tool_config, config=config)
+                logger.info(f"Initialized tool: {tool_name}")
+            else:
+                logger.warning(f"Unknown Boltz2 tool type: {tool_type}")
+
+    except Exception as e:
+        logger.warning(f"Boltz2 tools not initialized (missing BOLTZ2_COMPONENTS_IMAGE?): {e}")
 
 
 def _initialize_af2_tools():

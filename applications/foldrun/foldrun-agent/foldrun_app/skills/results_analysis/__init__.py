@@ -18,6 +18,8 @@ from .tools import (
     analyze_job,
     analyze_job_parallel,
     analyze_prediction_quality,
+    boltz2_analyze_job_parallel,
+    boltz2_get_analysis_results,
     get_analysis_results,
     get_prediction_results,
     of3_analyze_job_parallel,
@@ -31,5 +33,7 @@ __all__ = [
     "get_analysis_results",
     "of3_analyze_job_parallel",
     "of3_get_analysis_results",
+    "boltz2_analyze_job_parallel",
+    "boltz2_get_analysis_results",
     "analyze_job",
 ]

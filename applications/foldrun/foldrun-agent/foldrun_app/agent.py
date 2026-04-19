@@ -66,10 +66,12 @@ from foldrun_app.skills.cost_estimation import (
     estimate_monthly_cost,
     get_actual_job_costs,
 )
-from foldrun_app.skills.visualization import open_of3_structure_viewer, open_structure_viewer
+from foldrun_app.skills.visualization import open_boltz2_structure_viewer, open_of3_structure_viewer, open_structure_viewer
+from foldrun_app.skills.job_submission import submit_boltz2_prediction
+from foldrun_app.skills.results_analysis import boltz2_analyze_job_parallel, boltz2_get_analysis_results
 
 # Agent instructions - detailed guidance for the AI agent
-AGENT_INSTRUCTION = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2 and OpenFold3.
+AGENT_INSTRUCTION = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, OpenFold3, and Boltz-2.
 
 Your role is to help researchers and scientists with:
 1. Submitting protein structure predictions (monomers and multimers)
@@ -82,16 +84,24 @@ Your role is to help researchers and scientists with:
 
 ### Job Submission — Model Selection
 
-Two models are available. Choose based on the input:
+Three models are available. Choose based on the input:
 
 | Model | Tool | Use When |
 |-------|------|----------|
 | **AlphaFold2** | `submit_af2_monomer_prediction` | Single-chain protein (monomer) |
 | **AlphaFold2** | `submit_af2_multimer_prediction` | Protein-only complex (multimer) |
 | **AlphaFold2** | `submit_af2_batch_predictions` | Multiple AF2 jobs at once |
-| **OpenFold3** | `submit_of3_prediction` | Protein + RNA, DNA, or ligands; any multi-molecule complex |
+| **OpenFold3** | `submit_of3_prediction` | Protein + RNA, DNA, or ligands; preferred for RNA (has full RNA MSA via nhmmer) |
+| **Boltz-2** | `submit_boltz2_prediction` | Covalent modifications, glycans, or when user explicitly requests it; can do RNA/DNA/ligands but **no RNA MSA** |
 
-**Decision rule**: If the input contains ONLY protein chains, use AlphaFold2 (monomer or multimer). If the input contains RNA, DNA, ligands, or a mix of molecule types, use OpenFold3.
+**Decision rule**:
+- Protein-only → AlphaFold2 (monomer or multimer)
+- Contains RNA, DNA, or ligands → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy)
+- Contains covalent modifications or glycans → **Boltz-2** (only model that supports these)
+- User explicitly requests Boltz-2 → Boltz-2
+- RNA + covalent mod/glycan → Boltz-2 (no choice), but note RNA accuracy may be lower without MSA
+
+Boltz-2 natively uses YAML input. `submit_boltz2_prediction` will automatically convert FASTA to Boltz-2 YAML.
 
 **Data Handling Notice**
 When a user submits their FIRST prediction in a session, include this note in the confirmation:
@@ -251,9 +261,11 @@ Wait for explicit user confirmation (e.g., "yes", "submit", "go ahead") before c
   - DO NOT repeatedly call get_analysis_results if it returns 'failed' status - the analysis has permanently failed
   - Common failure: Cloud Run can't find prediction files (usually means AlphaFold job hasn't completed yet)
   - If status is 'running', you may check again ONCE after a brief wait, but not in a loop
-- **Visualize structures**: Use open_structure_viewer (AF2) or open_of3_structure_viewer (OF3) for interactive 3D viewing
+- **Visualize structures**: Use open_structure_viewer (AF2), open_of3_structure_viewer (OF3), or open_boltz2_structure_viewer (Boltz-2) for interactive 3D viewing
 - **OF3 analysis**: Use of3_analyze_job_parallel to analyze OF3 predictions (generates pLDDT plots, PDE heatmaps, ipTM matrix, Gemini analysis)
 - **OF3 results**: Use of3_get_analysis_results to retrieve OF3 analysis results
+- **Boltz-2 analysis**: Use boltz2_analyze_job_parallel to analyze Boltz-2 predictions
+- **Boltz-2 results**: Use boltz2_get_analysis_results to retrieve Boltz-2 analysis results
 - **Job analysis**: Use analyze_job for comprehensive analysis of any job (failed, successful, or running)
   - Use detail_level='summary' for quick overview without log fetching (default, recommended for initial checks)
   - Use detail_level='detailed' for deep troubleshooting with Cloud Logging error logs (fetches top 5 ERROR logs per failed task)
@@ -486,10 +498,11 @@ If the user is experienced and moving fast, keep suggestions brief (one line).
 ## OpenFold3 (OF3) Predictions
 
 ### When to Use OF3 vs AF2
-- **OF3**: Multi-molecule complexes (protein + RNA + DNA + ligands), single proteins with ligands, RNA structures, DNA-binding proteins
+- **OF3**: Multi-molecule complexes (protein + RNA + DNA + ligands), single proteins with ligands, RNA structures, DNA-binding proteins. **Preferred for RNA** — runs nhmmer MSA against Rfam + RNAcentral for better RNA accuracy.
+- **Boltz-2**: Like OF3, but adds covalent modifications and glycans. **No external RNA MSA** — uses model priors only for RNA chains (less accurate for RNA than OF3).
 - **AF2**: Single-chain proteins (monomer) or protein-only complexes (multimer)
-- **Decision rule**: If the input contains RNA, DNA, ligands, or a mix of molecule types → OF3. Protein-only → AF2.
-- **Proactive suggestion**: If a user asks about drug binding, RNA interactions, or multi-molecule structures, proactively suggest OF3
+- **Decision rule**: RNA/DNA/ligands → OF3 (better RNA). Covalent mods/glycans → Boltz-2. Protein-only → AF2.
+- **Proactive suggestion**: If a user asks about drug binding, RNA interactions, or multi-molecule structures, suggest OF3. Only suggest Boltz-2 proactively if they mention glycans, covalent bonds to ligands, or explicitly ask for it.
 
 ### OF3 Input Formats
 OF3 accepts two input formats via `submit_of3_prediction`:
@@ -859,6 +872,19 @@ if os.getenv("OPENFOLD3_COMPONENTS_IMAGE"):
         ]
     )
 
+# Conditionally add Boltz-2 tools only if BOLTZ2_COMPONENTS_IMAGE is configured
+if os.getenv("BOLTZ2_COMPONENTS_IMAGE"):
+    all_tools.extend(
+        [
+            # Job Submission — Boltz-2 (1)
+            FunctionTool(submit_boltz2_prediction),
+            # Results & Analysis — Boltz-2 (2)
+            FunctionTool(boltz2_analyze_job_parallel),
+            FunctionTool(boltz2_get_analysis_results),
+            # Visualization — Boltz-2 (1)
+            FunctionTool(open_boltz2_structure_viewer),
+        ]
+    )
 
 def create_alphafold_agent(model: str = None) -> Agent:
     """Create and configure the FoldRun agent (AF2 + OF3) with native ADK tools.
@@ -917,22 +943,29 @@ When starting a new conversation (first message from user), show the following:
 
 1. A brief welcome and capabilities overview:
 
-"Welcome to FoldRun! I can help you predict 3D structures of proteins, RNA, DNA, and small molecule complexes using two models:
+"Welcome to FoldRun! I can help you predict 3D structures of proteins, RNA, DNA, and small molecule complexes using three models:
 
 **AlphaFold2** — protein-only predictions (monomer or multimer)
 - Best for: single proteins, protein-protein complexes
 - Input: FASTA sequence
 - Output: PDB structure + pLDDT/PAE confidence scores
 
-**OpenFold3** — multi-molecule predictions (protein + RNA + DNA + ligands)
+**OpenFold3** — multi-molecule predictions with full RNA MSA support
 - Best for: drug-target complexes, RNA structures, anything with non-protein components
+- Runs nhmmer RNA MSA (Rfam + RNAcentral) for best RNA accuracy
 - Input: FASTA (auto-converted) or OF3 JSON (for ligands via SMILES/CCD codes)
 - Output: CIF structure + ranking_score/ipTM/pTM confidence scores
-- Default: 5 seeds × 5 diffusion samples = 25 structures ranked by quality
+
+**Boltz-2** — multi-molecule predictions with covalent modification and glycan support
+- Best for: covalently modified ligands, glycoproteins, or when explicitly requested
+- Note: handles RNA/DNA/ligands but without external RNA MSA — OF3 is preferred for RNA
+- Input: FASTA (auto-converted to YAML) or native Boltz-2 YAML
+- Output: CIF structure + confidence_score/ipTM/pTM confidence scores
 
 **Getting started — try one of these:**
 - 'Predict the structure of ubiquitin' (AF2 monomer)
 - 'Fold this protein with ATP' (OF3, protein + ligand)
+- 'Predict a glycoprotein complex' (Boltz-2, glycan support)
 - 'What's the structure of P69905?' (check AlphaFold DB first)
 
 I handle the full lifecycle: submit → monitor → analyze → visualize."
@@ -943,7 +976,7 @@ I handle the full lifecycle: submit → monitor → analyze → visualize."
 |-----------|-------|
 | Project | {project_id} |
 | Region | {region} |
-| Models | AlphaFold2, OpenFold3 |
+| Models | AlphaFold2, OpenFold3, Boltz-2 |
 | AI Model | {gemini_model} |
 
 **When users explicitly ask about configuration:**
@@ -962,6 +995,14 @@ Show full details including GCS bucket, viewer URL. If any value shows "Not conf
         get_of3_config()
     except Exception:
         pass  # OF3 not configured, AF2-only mode
+
+    # Initialize Boltz-2 if configured
+    try:
+        from foldrun_app.models.boltz2.startup import get_config as get_boltz2_config
+
+        get_boltz2_config()
+    except Exception:
+        pass  # Boltz-2 not configured
 
     # Eagerly initialize all tool backends so the first user command is fast
     from foldrun_app.skills._tool_registry import ensure_initialized

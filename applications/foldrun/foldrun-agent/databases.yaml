@@ -24,6 +24,41 @@ databases:
   # ===========================================================================
   # Shared protein MSA databases (used by AF2, OF3, and Boltz)
   # ===========================================================================
+  boltz2_cache:
+    models: [boltz]
+    display_name: Boltz-2 Model Weights + CCD (unified cache)
+    nfs_path: boltz2/cache
+    machine_type: n2d-standard-4
+    script: |
+      echo "Downloading Boltz-2 model weights + CCD to {dest}..."
+      mkdir -p {dest}
+
+      # Weights: boltz2_conf.ckpt and boltz2_aff.ckpt must be directly under {dest}
+      # (boltz predict --cache={dest} expects {dest}/boltz2_conf.ckpt)
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://model-gateway.boltz.bio/boltz2_conf.ckpt' \
+        --dir={dest} --out=boltz2_conf.ckpt || \
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://huggingface.co/boltz-community/boltz-2/resolve/main/boltz2_conf.ckpt' \
+        --dir={dest} --out=boltz2_conf.ckpt
+
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://model-gateway.boltz.bio/boltz2_aff.ckpt' \
+        --dir={dest} --out=boltz2_aff.ckpt || \
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://huggingface.co/boltz-community/boltz-2/resolve/main/boltz2_aff.ckpt' \
+        --dir={dest} --out=boltz2_aff.ckpt
+
+      # CCD: mols.tar must extract to {dest}/mols/
+      # (boltz predict --cache={dest} expects {dest}/mols/)
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://huggingface.co/boltz-community/boltz-2/resolve/main/mols.tar' \
+        --dir={dest} --out=mols.tar
+
+      echo "Extracting mols.tar..."
+      tar -xf {dest}/mols.tar -C {dest}
+      rm {dest}/mols.tar
+
   uniref90:
     models: [af2, of3, boltz]
     display_name: UniRef90
@@ -293,3 +328,14 @@ modes:
     core:
       - of3_params
       - of3_ccd
+  boltz:
+    full:
+      - boltz2_cache
+      - uniref90
+      - mgnify
+    reduced:
+      - boltz2_cache
+      - uniref90
+      - mgnify
+    core:
+      - boltz2_cache

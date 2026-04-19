@@ -27,3 +27,7 @@ def pytest_configure(config):
     
     # OpenFold3 required variables
     os.environ["OPENFOLD3_COMPONENTS_IMAGE"] = "test-of3-image"
+
+    # Boltz-2 required variables
+    os.environ["BOLTZ2_COMPONENTS_IMAGE"] = "test-boltz2-image"
+    os.environ["BOLTZ2_CACHE_PATH"] = "boltz2/cache"

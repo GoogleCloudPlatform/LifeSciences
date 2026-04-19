@@ -151,3 +151,61 @@ resource "google_cloud_run_v2_job" "of3_analysis_job" {
 
   depends_on = [google_project_service.apis]
 }
+
+resource "google_cloud_run_v2_job" "boltz2_analysis_job" {
+  name     = "boltz2-analysis-job"
+  project  = var.project_id
+  location = var.region
+
+  template {
+    parallelism = 25
+    task_count  = 25
+
+    template {
+      max_retries     = 0
+      timeout         = "600s"
+      service_account = google_service_account.foldrun_analysis.email
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.foldrun_vpc.name
+          subnetwork = google_compute_subnetwork.foldrun_subnet.name
+        }
+        egress = "ALL_TRAFFIC"
+      }
+      containers {
+        image = "us-docker.pkg.dev/cloudrun/container/hello"
+
+        env {
+          name  = "GCS_BUCKET"
+          value = google_storage_bucket.foldrun_bucket.name
+        }
+        env {
+          name  = "PROJECT_ID"
+          value = var.project_id
+        }
+        env {
+          name  = "REGION"
+          value = var.region
+        }
+
+        resources {
+          limits = {
+            cpu    = "2"
+            memory = "8Gi"
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      template[0].task_count,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [google_project_service.apis]
+}

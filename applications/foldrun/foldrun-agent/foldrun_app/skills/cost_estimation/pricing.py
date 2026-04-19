@@ -165,7 +165,28 @@ DURATION_ANCHORS = {
             (600,  15,   4,   0),
             (1000, 18,   6,   0),
             (1500, 20,  10,   0),
-            (2000, 25,  14,   0),
+            (2000, 25,  15,   0),
+            (3000, 30,  22,   0),
+        ],
+    },
+    "boltz2": {
+        # predict_per_task is per seed (each seed runs num_diffusion_samples)
+        "A100": [
+            (100,  10,   1.5, 0),
+            (300,  13,   2.5, 0),
+            (600,  15,   5,   0),
+            (1000, 18,   8,   0),
+            (1500, 20,  12,   0),
+            (2000, 25,  18,   0),
+        ],
+        "A100_80GB": [
+            (100,  10,   1,   0),
+            (300,  13,   2,   0),
+            (600,  15,   4,   0),
+            (1000, 18,   6,   0),
+            (1500, 20,  10,   0),
+            (2000, 25,  15,   0),
+            (3000, 30,  22,   0),
         ],
     },
 }
@@ -178,6 +199,7 @@ DEFAULT_PREDICT_TASKS = {
     "af2_monomer": 5,
     "af2_multimer": 25,
     "of3": 5,
+    "boltz2": 5,
 }
 
 # Infrastructure monthly costs (always-on, independent of job volume)
@@ -242,7 +264,7 @@ def _auto_select_gpu(job_type: str, sequence_length: int) -> str:
 
     Mirrors the logic in FoldRun's submission tools.
     """
-    if job_type == "of3":
+    if job_type in ["of3", "boltz2"]:
         return "A100" if sequence_length <= 2000 else "A100_80GB"
     elif job_type == "af2_multimer":
         return "A100" if sequence_length < 1000 else "A100_80GB"
@@ -447,8 +469,8 @@ def _estimate_phases(
     predict_machine = _machine_for_gpu(gpu_type)
     predict_rate = _hourly_rate(predict_machine, gpu_type, 1, spot, prices)
 
-    if job_type == "of3":
-        # OF3: each seed task runs num_diffusion_samples sequentially
+    if job_type in ["of3", "boltz2"]:
+        # OF3/Boltz-2: each seed task runs num_diffusion_samples sequentially
         predict_total_min = predict_per_task_min * num_diffusion_samples * num_predictions
         predict_desc = f"{num_predictions} seeds x {num_diffusion_samples} samples"
     elif job_type == "af2_multimer":
@@ -504,15 +526,15 @@ def estimate_single_job(
     sequence length for continuous cost scaling.
 
     Args:
-        job_type: "af2_monomer", "af2_multimer", or "of3"
+        job_type: "af2_monomer", "af2_multimer", "of3", or "boltz2"
         gpu_type: "L4", "A100", "A100_80GB", or "auto"
         sequence_length: Residue/token count (drives duration estimation
             and GPU auto-selection — larger proteins take longer)
         num_predictions_per_model: For AF2 multimer, number of predictions
             per model (default 5, giving 5 models x 5 = 25 total). For AF2
-            monomer, always 1 (5 models x 1 = 5 total). For OF3, this is
+            monomer, always 1 (5 models x 1 = 5 total). For OF3/Boltz-2, this is
             the number of seeds (default 5).
-        num_diffusion_samples: OF3 only — diffusion samples per seed
+        num_diffusion_samples: OF3/Boltz-2 only — diffusion samples per seed
             (default 5, run serially on the same GPU). Ignored for AF2.
         region: GCP region
 
@@ -529,7 +551,7 @@ def estimate_single_job(
         num_predictions = 5  # always 5 models × 1 seed
     elif job_type == "af2_multimer":
         num_predictions = 5 * num_predictions_per_model  # 5 models × N seeds
-    else:  # of3
+    else:  # of3 or boltz2
         num_predictions = num_predictions_per_model  # num_seeds
 
     # Build phases for both pricing modes
@@ -607,6 +629,7 @@ def estimate_monthly(
     af2_monomer_jobs: int = 0,
     af2_multimer_jobs: int = 0,
     of3_jobs: int = 0,
+    boltz2_jobs: int = 0,
     avg_sequence_length: int = 300,
     include_infrastructure: bool = True,
     region: str = "us-central1",
@@ -619,12 +642,13 @@ def estimate_monthly(
     Uses default prediction counts:
     - AF2 monomer: 5 models x 1 seed = 5 predictions per job
     - AF2 multimer: 5 models x 5 seeds = 25 predictions per job
-    - OF3: 5 seeds x 5 diffusion samples = 25 structures per job
+    - OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures per job
 
     Args:
         af2_monomer_jobs: Monthly AF2 monomer job count
         af2_multimer_jobs: Monthly AF2 multimer job count
         of3_jobs: Monthly OF3 job count
+        boltz2_jobs: Monthly Boltz-2 job count
         avg_sequence_length: Average sequence length for cost estimation
             (drives duration interpolation and GPU auto-selection)
         include_infrastructure: Include always-on infrastructure costs (default True)
@@ -640,6 +664,7 @@ def estimate_monthly(
         ("af2_monomer", af2_monomer_jobs, avg_sequence_length),
         ("af2_multimer", af2_multimer_jobs, avg_sequence_length),
         ("of3", of3_jobs, avg_sequence_length),
+        ("boltz2", boltz2_jobs, avg_sequence_length),
     ]
 
     spot_items, spot_compute = _compute_items_for_mode(

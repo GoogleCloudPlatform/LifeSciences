@@ -44,6 +44,31 @@ def open_of3_structure_viewer(
     )
 
 
+def open_boltz2_structure_viewer(
+    job_id: str,
+    open_browser: bool = True,
+) -> dict:
+    """
+    Open the FoldRun structure viewer for Boltz-2 predictions.
+
+    Displays interactive 3D CIF structure with pLDDT confidence coloring,
+    ranking scores, ipTM matrix, and analysis plots.
+
+    Args:
+        job_id: Boltz-2 pipeline job ID
+        open_browser: Automatically open in browser (default: True)
+
+    Returns:
+        Viewer URL and status information
+    """
+    return get_tool("boltz2_open_viewer").run(
+        {
+            "job_id": job_id,
+            "open_browser": open_browser,
+        }
+    )
+
+
 def open_structure_viewer(
     job_id: str,
     pdb_uri: Optional[str] = None,
