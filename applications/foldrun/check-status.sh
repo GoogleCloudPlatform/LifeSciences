@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # ==============================================================================
-# AlphaFold2 Ecosystem Status Checker
+# FoldRun Ecosystem Status Checker
 # Use this script to check the deployment progress and health of your environment
 # ==============================================================================
 
@@ -26,7 +26,7 @@ TERRAFORM_DIR="terraform"
 gcloud config set project "$PROJECT_ID" >/dev/null 2>&1
 
 echo "================================================================================"
-echo "🔍 AlphaFold2 Ecosystem Status Checklist"
+echo "🔍 FoldRun Ecosystem Status Checklist"
 echo "================================================================================"
 
 if [ -z "$PROJECT_ID" ]; then
@@ -67,11 +67,23 @@ else
     echo "⚠️  [Cloud Run] foldrun-a2a A2A proxy is not deployed (optional — deploy with src/foldrun-a2a/deploy.sh)"
 fi
 
-# 3. Check Cloud Run Analysis Job
+# 3. Check Cloud Run Analysis Jobs
 if gcloud run jobs describe af2-analysis-job --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
     echo "✅ [Cloud Run] af2-analysis-job is deployed"
 else
     echo "❌ [Cloud Run] af2-analysis-job is missing"
+fi
+
+if gcloud run jobs describe of3-analysis-job --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
+    echo "✅ [Cloud Run] of3-analysis-job is deployed"
+else
+    echo "❌ [Cloud Run] of3-analysis-job is missing"
+fi
+
+if gcloud run jobs describe boltz2-analysis-job --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
+    echo "✅ [Cloud Run] boltz2-analysis-job is deployed"
+else
+    echo "⚠️  [Cloud Run] boltz2-analysis-job is not deployed (optional — enabled by BOLTZ2_COMPONENTS_IMAGE)"
 fi
 
 # 4. Check Agent Engine (via REST API since gcloud subcommand is not available)
@@ -91,15 +103,20 @@ fi
 # 5. Check Data Download State
 if [ -n "$DB_BUCKET_NAME" ] && [[ ! "$DB_BUCKET_NAME" == *"No outputs"* ]]; then
     FOLDER_COUNT=$(gcloud storage ls "gs://$DB_BUCKET_NAME/" 2>/dev/null | grep -c "/$")
-    if [ "$FOLDER_COUNT" -eq 12 ]; then
-        echo "✅ [Data] Genetic database download is COMPLETE ($FOLDER_COUNT/12 folders found)"
-    elif [ "$FOLDER_COUNT" -gt 0 ]; then
-        echo "⏳ [Data] Genetic database download is IN PROGRESS ($FOLDER_COUNT/12 folders found)"
+    # Core databases required for AF2 + OF3 (uniref90, mgnify, pdb_seqres, etc.)
+    # Boltz-2 adds boltz2/ when configured — total varies by model selection
+    AF2_CORE_PRESENT=$(gcloud storage ls "gs://$DB_BUCKET_NAME/uniref90/" >/dev/null 2>&1 && echo yes || echo no)
+    OF3_PRESENT=$(gcloud storage ls "gs://$DB_BUCKET_NAME/of3/" >/dev/null 2>&1 && echo yes || echo no)
+    BOLTZ2_PRESENT=$(gcloud storage ls "gs://$DB_BUCKET_NAME/boltz2/" >/dev/null 2>&1 && echo yes || echo no)
+    if [ "$FOLDER_COUNT" -gt 0 ]; then
+        echo "✅ [Data] Databases present ($FOLDER_COUNT folders)"
+        [ "$AF2_CORE_PRESENT" = "yes" ] && echo "   ✅ AF2 core databases (uniref90 etc.)" || echo "   ❌ AF2 core databases missing"
+        [ "$OF3_PRESENT" = "yes" ]   && echo "   ✅ OF3 weights + CCD" || echo "   ⚠️  OF3 databases not downloaded"
+        [ "$BOLTZ2_PRESENT" = "yes" ] && echo "   ✅ Boltz-2 cache (weights + mols)" || echo "   ⚠️  Boltz-2 databases not downloaded (optional)"
     elif gcloud storage objects describe "gs://$DB_BUCKET_NAME/.deploy-state/data-download-triggered" >/dev/null 2>&1; then
-        echo "✅ [Data] Genetic database download has been triggered via Cloud Batch"
-        echo "          (Check 'Batch Jobs' in Cloud Console to track download progress)"
+        echo "⏳ [Data] Database download triggered — check Cloud Batch for progress"
     else
-        echo "❌ [Data] Genetic database download has NOT been triggered yet"
+        echo "❌ [Data] Databases have NOT been downloaded yet (run ./deploy-all.sh --steps data)"
     fi
 else
     echo "❌ [Data] Cannot check data status without a valid DB bucket"

@@ -143,9 +143,12 @@ Expected output:
 ✅ [Cloud Run] foldrun-viewer service is deployed and active
 ✅ [Cloud Run] af2-analysis-job is deployed
 ✅ [Cloud Run] of3-analysis-job is deployed
-✅ [Cloud Run] boltz2-analysis-job is deployed
-✅ [Agent Engine] FoldRun agent is deployed
-✅ [Databases] Downloading (check Cloud Batch console for progress)
+✅ [Cloud Run] boltz2-analysis-job is deployed     ← optional, shown as ⚠️ if not configured
+✅ [Vertex AI] FoldRun Agent Engine is deployed
+✅ [Data] Databases present (12 folders)
+   ✅ AF2 core databases (uniref90 etc.)
+   ✅ OF3 weights + CCD
+   ⚠️  Boltz-2 databases not downloaded (optional)
 ```
 
 ### Step 4: Use the Agent
