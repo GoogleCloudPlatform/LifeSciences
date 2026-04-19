@@ -74,6 +74,8 @@ def predict_boltz2(
         f"--cache={nfs_cache_path}",
         f"--seed={seed_value}",
         "--override",
+        "--no_kernels",  # disable cuequivariance CUDA kernels — requires newer
+                         # driver than Vertex AI A100 nodes currently support
     ]
 
     logging.info(f"Running: {' '.join(cmd)}")
