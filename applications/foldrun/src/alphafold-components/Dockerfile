@@ -76,16 +76,16 @@ RUN wget -q -P /app/alphafold/alphafold/common/ \
   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
 
 # Install pip packages (h5py already satisfied via conda).
-# requirements.txt specifies openmm[cuda12]==8.2.0 which targets CUDA 12.3+ PTX
-# and causes CUDA_ERROR_UNSUPPORTED_PTX_VERSION on Vertex AI A100/L4 nodes.
-# Override with openmm==8.0.0 (CUDA 12.0 PTX — compatible with driver 525/535).
-# See: https://github.com/google-deepmind/alphafold/issues/955
-RUN pip3 install --upgrade pip --no-cache-dir \
+# Patch requirements.txt before install: openmm[cuda12]==8.2.0 targets CUDA 12.3+
+# PTX causing CUDA_ERROR_UNSUPPORTED_PTX_VERSION on Vertex AI nodes. Replace with
+# openmm==8.1.1 (earliest on PyPI, CUDA 12.1 PTX — compatible with L4 driver 535).
+# DeepMind has not fixed this upstream: github.com/google-deepmind/alphafold/issues/955
+RUN sed -i 's/openmm\[cuda12\]==8.2.0/openmm==8.1.1/' /app/alphafold/requirements.txt \
+    && pip3 install --upgrade pip --no-cache-dir \
     && pip3 install -r /app/alphafold/requirements.txt --no-cache-dir \
     && pip3 install --upgrade --no-cache-dir \
       jax==0.4.26 \
       jaxlib==0.4.26+cuda12.cudnn89 \
-      "openmm==8.0.0" \
       -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 
