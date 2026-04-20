@@ -124,6 +124,7 @@ Include:
 - The MSA method (default: Jackhmmer CPU; optional: MMseqs2 GPU if indexes are built)
 - Scheduling strategy: DWS FLEX_START (default) or ON_DEMAND
 - Whether relaxation is enabled
+- **Template date**: always show the `max_template_date` value (default: 2030-01-01 = all PDB templates enabled)
 
 **Per-Phase GPU Allocation Rules (defaults):**
 - **Data Pipeline**: Always CPU-only (c2-standard-16), no GPU
@@ -148,6 +149,7 @@ Example confirmation message:
 - GPU: A100 40GB (auto-selected — provisions faster than L4 under DWS FLEX_START)
 - MSA Method: Jackhmmer (default, CPU) — set msa_method='mmseqs2' for GPU-accelerated search (requires MMseqs2 index conversion)
 - Database: Small BFD (faster)
+- Templates: enabled (max_template_date=2030-01-01, all PDB templates included) — set an earlier date to restrict
 - Scheduling: DWS FLEX_START (spot/preemptible, queues when GPUs unavailable)
 - Relaxation: Enabled
 
@@ -589,7 +591,7 @@ Same pattern as AF2 — show hardware breakdown before submitting:
 | MSA Pipeline | c2-standard-16 | None (CPU, Jackhmmer/nhmmer) | STANDARD |
 | Predict | a2-highgpu-1g | A100 × 1 | DWS FLEX_START |
 
-Include: query name, token count, molecule types (protein/RNA/DNA/ligand), chain count, seeds × samples
+Include: query name, token count, molecule types (protein/RNA/DNA/ligand), chain count, seeds × samples, **use_templates value**
 
 **Example OF3 confirmation:**
 ```
@@ -597,11 +599,12 @@ Include: query name, token count, molecule types (protein/RNA/DNA/ligand), chain
 
 | Phase | Machine | GPU | Strategy |
 |-------|---------|-----|----------|
-| MSA Pipeline | c2-standard-16 | None (Jackhmmer) | STANDARD |
+| MSA Pipeline | c2-standard-16 | None (Jackhmmer + pdb_seqres template search) | STANDARD |
 | Predict | a2-highgpu-1g | A100 × 1 | DWS FLEX_START |
 
 - Molecule types: 1 protein chain (A), 1 ligand chain (B: ATP)
 - GPU: A100 (auto-selected for 287 tokens)
+- Templates: enabled (jackhmmer vs pdb_seqres → pdb_mmcif structures) — set use_templates=False to skip
 - Predictions: 5 seeds × 5 diffusion samples = 25 structures (AF3 standard)
 - Output: CIF + confidence JSON per sample, ranked by ranking_score
 
