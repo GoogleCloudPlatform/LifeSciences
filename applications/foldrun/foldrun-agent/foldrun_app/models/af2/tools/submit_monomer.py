@@ -165,13 +165,14 @@ class AF2SubmitMonomerTool(AF2Tool):
 
         # Prepare labels (use resolved values, not 'auto')
         labels = {
+            "model_type": "alphafold2",
             "job_type": "monomer",
-            "seq_name": self._clean_label(seq_name),
-            "seq_len": str(seq_length),
+            "query_name": self._clean_label(seq_name),
+            "num_tokens": str(seq_length),
+            "num_chains": "1",
             "gpu_type": accel_to_label.get(resolved_gpu, gpu_type.lower().replace("_", "-")),
             "msa_method": resolved_msa,
             "submitted_by": "foldrun-agent",
-            "model_type": "alphafold2",
         }
 
         # Submit pipeline job

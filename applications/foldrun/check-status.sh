@@ -112,7 +112,7 @@ if [ -n "$DB_BUCKET_NAME" ] && [[ ! "$DB_BUCKET_NAME" == *"No outputs"* ]]; then
         echo "✅ [Data] Databases present ($FOLDER_COUNT folders)"
         [ "$AF2_CORE_PRESENT" = "yes" ] && echo "   ✅ AF2 core databases (uniref90 etc.)" || echo "   ❌ AF2 core databases missing"
         [ "$OF3_PRESENT" = "yes" ]   && echo "   ✅ OF3 weights + CCD" || echo "   ⚠️  OF3 databases not downloaded"
-        [ "$BOLTZ2_PRESENT" = "yes" ] && echo "   ✅ Boltz-2 cache (weights + mols)" || echo "   ⚠️  Boltz-2 databases not downloaded (optional)"
+        [ "$BOLTZ2_PRESENT" = "yes" ] && echo "   ✅ Boltz-2 cache (weights + mols)" || echo "   ❌ Boltz-2 databases not downloaded (run: setup_data.py --models boltz)"
     elif gcloud storage objects describe "gs://$DB_BUCKET_NAME/.deploy-state/data-download-triggered" >/dev/null 2>&1; then
         echo "⏳ [Data] Database download triggered — check Cloud Batch for progress"
     else

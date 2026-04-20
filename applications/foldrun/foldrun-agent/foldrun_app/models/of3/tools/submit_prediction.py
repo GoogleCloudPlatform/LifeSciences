@@ -140,12 +140,17 @@ class OF3SubmitPredictionTool(OF3Tool):
         # Prepare labels — extract first query name from the queries dict
         query_names = list(query_json.get("queries", {}).keys())
         query_name = query_names[0] if query_names else job_name
+        _all_chains = [c for q in query_json.get("queries", {}).values() for c in q.get("chains", [])]
+        _num_chains = sum(len(c.get("chain_ids", ["?"])) if isinstance(c.get("chain_ids"), list) else 1 for c in _all_chains)
         labels = {
             "model_type": "openfold3",
+            "job_type": "monomer" if _num_chains <= 1 else "complex",
             "query_name": self._clean_label(query_name),
             "num_tokens": str(num_tokens),
+            "num_chains": str(_num_chains),
             "num_seeds": str(num_model_seeds),
             "gpu_type": accel_to_label.get(resolved_gpu, gpu_type.lower().replace("_", "-")),
+            "msa_method": "jackhmmer",
             "submitted_by": "foldrun-agent",
         }
 

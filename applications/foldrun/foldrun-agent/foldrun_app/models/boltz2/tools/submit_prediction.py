@@ -131,14 +131,25 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             pipeline_func=pipeline,
             package_path=pipeline_path,
         )
-        # Prepare labels
+        # Prepare labels — parse chain count from YAML for job_type
+        import yaml as _yaml
+        _parsed = _yaml.safe_load(query_yaml) if isinstance(query_yaml, str) else {}
+        _seqs = _parsed.get("sequences", []) if _parsed else []
+        _num_chains = sum(
+            len(s[list(s.keys())[0]].get("id", ["?"])) if isinstance(s[list(s.keys())[0]].get("id"), list)
+            else 1
+            for s in _seqs if s
+        ) if _seqs else 1
         query_name = job_name
         labels = {
             "model_type": "boltz2",
+            "job_type": "monomer" if _num_chains <= 1 else "complex",
             "query_name": self._clean_label(query_name),
             "num_tokens": str(num_tokens),
+            "num_chains": str(_num_chains),
             "num_seeds": str(num_model_seeds),
             "gpu_type": accel_to_label.get(resolved_gpu, gpu_type.lower().replace("_", "-")),
+            "msa_method": "jackhmmer",
             "submitted_by": "foldrun-agent",
         }
 

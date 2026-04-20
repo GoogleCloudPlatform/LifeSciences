@@ -222,8 +222,8 @@ def main():
         return
 
     if not args.models and not args.db:
-        # Default: use DOWNLOAD_MODELS env var, or af2,of3
-        models_str = os.environ.get("DOWNLOAD_MODELS", "af2,of3")
+        # Default: use DOWNLOAD_MODELS env var, or af2,of3,boltz
+        models_str = os.environ.get("DOWNLOAD_MODELS", "af2,of3,boltz")
         args.models = models_str
 
     if not args.mode:

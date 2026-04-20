@@ -260,7 +260,7 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + OF3 + Boltz-2) |
 | Cloud Run Job | `af2-analysis-job` | AF2 parallel analysis |
 | Cloud Run Job | `of3-analysis-job` | OF3 parallel analysis |
-| Cloud Run Job | `boltz2-analysis-job` | Boltz-2 parallel analysis (optional) |
+| Cloud Run Job | `boltz2-analysis-job` | Boltz-2 parallel analysis |
 | Cloud Run Service | `foldrun-a2a` | A2A protocol proxy for agent interop |
 | Service Account | `foldrun-agent-sa` | Agent's GCP identity |
 | Agent Engine | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
@@ -323,7 +323,7 @@ foldrun/
 │   │   │   │   ├── pipeline/   # KFP: ConfigureSeeds → MSA+templates → ParallelFor[Predict]
 │   │   │   │   ├── tools/      # submit (use_templates=True default), analyze, get_results, open_viewer
 │   │   │   │   └── utils/      # Input converter (FASTA→OF3 JSON), pipeline utils
-│   │   │   └── boltz2/         # Boltz-2 plugin (optional — enabled by BOLTZ2_COMPONENTS_IMAGE)
+│   │   │   └── boltz2/         # Boltz-2 plugin
 │   │   │       ├── config.py   # BOLTZ2Config (image, cache path)
 │   │   │       ├── base.py     # BOLTZ2Tool (GPU tiers: A100/A100_80GB only)
 │   │   │       ├── pipeline/   # KFP: ConfigureSeeds → MSA(protein) → ParallelFor[Predict]
@@ -341,12 +341,12 @@ foldrun/
 ├── src/
 │   ├── alphafold-components/    # AF2 pipeline container
 │   ├── openfold3-components/    # OF3 pipeline container
-│   ├── boltz2-components/       # Boltz-2 pipeline container (optional)
+│   ├── boltz2-components/       # Boltz-2 pipeline container
 │   ├── foldrun-viewer/          # Cloud Run web app (AF2 + OF3 + Boltz-2 3D viewer)
 │   ├── foldrun-a2a/             # Cloud Run A2A protocol proxy
 │   ├── af2-analysis-job/        # Cloud Run Job (AF2 analysis)
 │   ├── of3-analysis-job/        # Cloud Run Job (OF3 analysis)
-│   └── boltz2-analysis-job/     # Cloud Run Job (Boltz-2 analysis, optional)
+│   └── boltz2-analysis-job/     # Cloud Run Job (Boltz-2 analysis)
 ├── terraform/                   # Infrastructure as code
 ├── cloudbuild.yaml              # CI/CD pipeline
 ├── deploy-all.sh                # One-command deployment
