@@ -58,17 +58,10 @@ RUN wget -q -P /tmp \
     && rm /tmp/Miniconda3-latest-Linux-x86_64.sh
 
 # Install conda packages.
-# openmm=8.0.0 must be installed in the same conda call as the CUDA toolkit so
-# conda resolves OpenMM's CUDA dependencies against our pinned cudatoolkit version.
-# Installing them separately causes openmm to pick up a newer PTX target that is
-# incompatible with the Vertex AI GPU node drivers (CUDA_ERROR_UNSUPPORTED_PTX_VERSION).
-# See: https://github.com/google-deepmind/alphafold/issues/955
 ENV PATH="/opt/conda/bin:$PATH"
 ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
 RUN conda install --quiet --yes conda==24.11.1 pip python=3.11 \
-    && conda install --quiet --yes \
-        --channel nvidia cuda=${CUDA_VERSION} \
-        --channel conda-forge openmm=8.0.0 \
+    && conda install --quiet --yes --channel nvidia cuda=${CUDA_VERSION} \
     && conda clean --all --force-pkgs-dirs --yes
 
 # Currently needed to avoid undefined_symbol error before running any system tools like git.
@@ -83,11 +76,16 @@ RUN wget -q -P /app/alphafold/alphafold/common/ \
   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
 
 # Install pip packages (h5py already satisfied via conda).
+# requirements.txt specifies openmm[cuda12]==8.2.0 which targets CUDA 12.3+ PTX
+# and causes CUDA_ERROR_UNSUPPORTED_PTX_VERSION on Vertex AI A100/L4 nodes.
+# Override with openmm==8.0.0 (CUDA 12.0 PTX — compatible with driver 525/535).
+# See: https://github.com/google-deepmind/alphafold/issues/955
 RUN pip3 install --upgrade pip --no-cache-dir \
     && pip3 install -r /app/alphafold/requirements.txt --no-cache-dir \
     && pip3 install --upgrade --no-cache-dir \
       jax==0.4.26 \
       jaxlib==0.4.26+cuda12.cudnn89 \
+      "openmm==8.0.0" \
       -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 
