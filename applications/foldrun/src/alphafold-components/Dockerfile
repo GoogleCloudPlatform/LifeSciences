@@ -58,10 +58,17 @@ RUN wget -q -P /tmp \
     && rm /tmp/Miniconda3-latest-Linux-x86_64.sh
 
 # Install conda packages.
+# openmm=8.0.0 must be installed in the same conda call as the CUDA toolkit so
+# conda resolves OpenMM's CUDA dependencies against our pinned cudatoolkit version.
+# Installing them separately causes openmm to pick up a newer PTX target that is
+# incompatible with the Vertex AI GPU node drivers (CUDA_ERROR_UNSUPPORTED_PTX_VERSION).
+# See: https://github.com/google-deepmind/alphafold/issues/955
 ENV PATH="/opt/conda/bin:$PATH"
 ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
 RUN conda install --quiet --yes conda==24.11.1 pip python=3.11 \
-    && conda install --quiet --yes --channel nvidia cuda=${CUDA_VERSION} \
+    && conda install --quiet --yes \
+        --channel nvidia cuda=${CUDA_VERSION} \
+        --channel conda-forge openmm=8.0.0 \
     && conda clean --all --force-pkgs-dirs --yes
 
 # Currently needed to avoid undefined_symbol error before running any system tools like git.
@@ -83,14 +90,6 @@ RUN pip3 install --upgrade pip --no-cache-dir \
       jaxlib==0.4.26+cuda12.cudnn89 \
       -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-# Replace pip-installed OpenMM with a version whose PTX bytecode is compatible
-# with Vertex AI GPU node drivers:
-#   A100 nodes: driver 525 → max CUDA 12.0 PTX
-#   L4 nodes:   driver 535 → max CUDA 12.2 PTX
-# openmm[cuda12]==8.2.0 (pip default) targets CUDA 12.3+ PTX → fails on both.
-# openmm=8.0.0 targets CUDA 12.0 PTX → compatible with A100 and L4 nodes.
-RUN conda install --quiet --yes --channel conda-forge openmm=8.0.0 \
-    && conda clean --all --force-pkgs-dirs --yes
 
 # Patch: skip unparseable template descriptions instead of crashing.
 # Some PDB entries (e.g. 5apu) have formats AF2's parser can't handle.
