@@ -83,6 +83,15 @@ RUN pip3 install --upgrade pip --no-cache-dir \
       jaxlib==0.4.26+cuda12.cudnn89 \
       -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
+# Replace pip-installed OpenMM with the conda-forge build compiled against our
+# pinned CUDA 12.2.2 toolkit. The pip wheel for openmm[cuda12]==8.2.0 targets
+# PTX for CUDA 12.3+, causing CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222) on
+# Vertex AI A100 nodes whose driver only supports up to CUDA 12.2 PTX.
+# conda-forge resolves OpenMM's CUDA kernels against the installed cudatoolkit
+# at build time, ensuring PTX compatibility with the runtime driver.
+RUN conda install --quiet --yes --channel conda-forge openmm=8.1.1 \
+    && conda clean --all --force-pkgs-dirs --yes
+
 # Patch: skip unparseable template descriptions instead of crashing.
 # Some PDB entries (e.g. 5apu) have formats AF2's parser can't handle.
 # Placed after pip install to preserve Docker layer cache.
