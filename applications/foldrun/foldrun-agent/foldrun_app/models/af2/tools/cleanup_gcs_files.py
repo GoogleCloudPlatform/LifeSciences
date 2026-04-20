@@ -207,10 +207,12 @@ class AF2CleanupGCSFilesTool(AF2Tool):
                 job_name = job_name.split("/")[-1]
 
         # Extract timestamp from job ID for timestamped directory search
-        # Job ID format: alphafold-inference-pipeline-20251112172826
+        # Job ID format: alphafold2-inference-pipeline-20251112172826 (new)
+        #                alphafold-inference-pipeline-20251112172826  (legacy)
         # Timestamped dir: pipeline_runs/20251112_172826/
         timestamp_search = None
-        if "alphafold-inference-pipeline-" in job_id.lower():
+        if "alphafold2-inference-pipeline-" in job_id.lower() or \
+                "alphafold-inference-pipeline-" in job_id.lower():
             timestamp = job_id.split("-")[-1]  # Get the timestamp part
             if timestamp.isdigit() and len(timestamp) >= 14:
                 # Format as YYYYMMDD_HHMMSS

@@ -236,10 +236,13 @@ class TestOF3PredictComponentArgs:
         source = self._read_predict_source()
         assert "--use_msa_server=False" in source
 
-    def test_disables_templates(self):
-        """Predict uses --use_templates=False (no template search)."""
+    def test_templates_flag_is_dynamic(self):
+        """Predict passes --use_templates dynamically (not hardcoded False)."""
         source = self._read_predict_source()
-        assert "--use_templates=False" in source
+        # Must be a dynamic flag — template support is now configurable
+        assert "--use_templates=" in source
+        # Should NOT be hardcoded to False (was the old behaviour, now configurable)
+        assert '"--use_templates=False"' not in source
 
     def test_patches_query_json_seeds(self):
         """Predict patches query JSON seeds field for correct output directory naming."""

@@ -28,13 +28,24 @@ usage() {
     echo "  REGION       GCP region (default: us-central1)"
     echo ""
     echo "Options:"
-    echo "  --steps STEPS  Comma-separated list of steps to run:"
-    echo "                   infra      - Enable APIs + Terraform"
-    echo "                   build      - Cloud Build (containers + agent engine)"
-    echo "                   data       - Download genomic databases to NFS + GCS backup"
-    echo "                   convert    - MMseqs2 GPU index conversion (optional, requires data)"
-    echo "                   all        - Run infra + build + data (no convert)"
-    echo "  --db DATABASE  With --steps data or convert: target a single database."
+    echo "  --steps STEPS          Comma-separated list of steps to run:"
+    echo "                           infra      - Enable APIs + Terraform"
+    echo "                           build      - Cloud Build (containers + agent engine)"
+    echo "                           data       - Download genomic databases to NFS + GCS backup"
+    echo "                           convert    - MMseqs2 GPU index conversion (optional, requires data)"
+    echo "                           all        - Run infra + build + data (no convert)"
+    echo "  --build-target TARGET  With --steps build: which components to rebuild (default: all)."
+    echo "                           all            - rebuild everything (default)"
+    echo "                           of3            - openfold3-components + agent"
+    echo "                           af2            - alphafold-components + agent"
+    echo "                           boltz2         - boltz2-components + agent"
+    echo "                           viewer         - foldrun-viewer + agent"
+    echo "                           agent          - agent only (no container rebuilds)"
+    echo "                           of3-analysis   - of3-analysis-job Cloud Run Job"
+    echo "                           af2-analysis   - af2-analysis-job Cloud Run Job"
+    echo "                           boltz2-analysis- boltz2-analysis-job Cloud Run Job"
+    echo "                         Combine with commas: --build-target of3,viewer"
+    echo "  --db DATABASE          With --steps data or convert: target a single database."
     echo "                   data options: bfd, small_bfd, mgnify, pdb70, pdb_mmcif,"
     echo "                                pdb_seqres, uniref30, uniref90, uniprot, alphafold_params"
     echo "                   convert options: uniref90, mgnify, small_bfd"
@@ -67,9 +78,13 @@ usage() {
     echo "  $0 --steps convert                      # Convert all MMseqs2-indexable databases"
     echo "  $0 --steps convert --db mgnify          # Convert a single database"
     echo "  $0 --steps data --force                  # Re-download even if GCS has the data"
-    echo "  $0 --steps data,convert                 # Download + convert (full pipeline)"
-    echo "  $0 --steps infra,build                  # Terraform + Cloud Build (no data)"
-    echo "  DOWNLOAD_MODE=full $0               # Full deploy with all databases"
+    echo "  $0 --steps data,convert                             # Download + convert (full pipeline)"
+    echo "  $0 --steps infra,build                              # Terraform + Cloud Build (no data)"
+    echo "  $0 --steps build --build-target of3                 # Rebuild only OF3 container + agent"
+    echo "  $0 --steps build --build-target agent               # Redeploy agent only (fast)"
+    echo "  $0 --steps build --build-target of3,viewer          # Rebuild OF3 + viewer + agent"
+    echo "  $0 --steps build --build-target of3-analysis        # Rebuild only OF3 analysis job"
+    echo "  DOWNLOAD_MODE=full $0                               # Full deploy with all databases"
     exit 1
 }
 
@@ -77,6 +92,7 @@ usage() {
 # Parse arguments
 # ==============================================================================
 STEPS="all"
+BUILD_TARGET="all"
 DB_NAME=""
 FORCE_DATA=false
 POSITIONAL_ARGS=()
@@ -85,6 +101,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --steps)
             STEPS="$2"
+            shift 2
+            ;;
+        --build-target)
+            BUILD_TARGET="$2"
             shift 2
             ;;
         --db)
@@ -161,6 +181,7 @@ echo "Region:        $REGION"
 echo "IAP Domain:    $IAP_ACCESS_DOMAIN"
 echo "Download Mode: $DOWNLOAD_MODE"
 echo "Steps:         $STEPS"
+echo "Build Target:  $BUILD_TARGET"
 echo ""
 
 # ==============================================================================
@@ -281,7 +302,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi

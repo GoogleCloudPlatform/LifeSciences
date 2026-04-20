@@ -19,6 +19,15 @@
 Each seed runs on its own A100 via ParallelFor. Within each seed,
 OF3 generates num_diffusion_samples structures sequentially.
 Default: 5 seeds × 5 samples = 25 structures (AF3 paper protocol).
+
+Template support (use_templates=True, default):
+    The MSA step runs jackhmmer against pdb_seqres to generate per-chain template
+    alignment files (.sto) on NFS. The predict step reads these alignments and
+    resolves template structures from the local NFS pdb_mmcif directory.
+    Templates significantly improve prediction quality for proteins with known
+    structural homologs (e.g., Mcl-1: OF3 pLDDT 54 → expected improvement with
+    templates enabled).
+    See: https://openfold-3.readthedocs.io/en/latest/template_how_to.html
 """
 
 import os
@@ -50,10 +59,17 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
         nfs_params_path: str,
         num_model_seeds: int = 5,
         num_diffusion_samples: int = 5,
+        use_templates: bool = True,
     ):
         """OpenFold3 Inference Pipeline.
 
         ConfigureSeeds → MSA (CPU) → ParallelFor[Predict(GPU, 1 seed each)]
+
+        Template support:
+            When use_templates=True (default), the MSA step generates template
+            alignment files (.sto) by searching pdb_seqres with jackhmmer. The predict
+            step resolves template structures from the local pdb_mmcif directory via a
+            runner YAML, without requiring internet access.
         """
 
         # Step 1: Generate seed configs for ParallelFor
@@ -103,6 +119,7 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
             .set_display_name("Reference databases (OF3)")
             .output,
             query_json=query_json_import.output,
+            use_templates=use_templates,
         ).set_retry(
             num_retries=2,
             backoff_duration="60s",
@@ -112,6 +129,11 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
         # Step 3: Predict — ParallelFor over seeds, each on its own A100
         flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
         max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
+
+        # NFS path to pdb_mmcif CIF files for template structure featurization.
+        # This is passed as a string (not a KFP artifact) since it's just a path
+        # on the NFS that the predict task already has mounted.
+        nfs_mmcif_dir = f"{config.NFS_MOUNT_POINT}/{config.PDB_MMCIF_PATH}"
 
         JobPredictOp = create_custom_training_job_from_component(
             PredictOF3,
@@ -141,6 +163,8 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
                 seed_value=seed_config.seed_value,  # type: ignore
                 num_diffusion_samples=num_diffusion_samples,
                 nfs_params_path=nfs_params_path,
+                use_templates=use_templates,
+                nfs_mmcif_dir=nfs_mmcif_dir,
             ).set_retry(
                 num_retries=2,
                 backoff_duration="60s",

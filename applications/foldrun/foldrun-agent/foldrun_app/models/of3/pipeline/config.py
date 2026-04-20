@@ -45,6 +45,10 @@ MGNIFY_PATH = os.getenv("MGNIFY_PATH", "mgnify/mgy_clusters_2022_05.fa")
 PDB_SEQRES_PATH = os.getenv("PDB_SEQRES_PATH", "pdb_seqres/pdb_seqres.txt")
 UNIPROT_PATH = os.getenv("UNIPROT_PATH", "uniprot/uniprot.fasta")
 
+# Template structure database (shared with AF2, relative to NFS mount point)
+# mmcif_files/ contains flat .cif files used for template featurization
+PDB_MMCIF_PATH = os.getenv("PDB_MMCIF_PATH", "pdb_mmcif/mmcif_files")
+
 # RNA database paths (OF3-specific, relative to NFS mount point)
 RFAM_PATH = os.getenv("RFAM_PATH", "of3/rfam/Rfam.cm")
 RNACENTRAL_PATH = os.getenv("RNACENTRAL_PATH", "of3/rnacentral/rnacentral_active.fasta")

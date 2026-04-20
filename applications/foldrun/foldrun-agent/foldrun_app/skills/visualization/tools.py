@@ -84,7 +84,7 @@ def open_structure_viewer(
     prediction jobs.
 
     Args:
-        job_id: Pipeline job ID (e.g., 'alphafold-inference-pipeline-20250421110959')
+        job_id: Pipeline job ID (e.g., 'alphafold2-inference-pipeline-20250421110959')
         pdb_uri: GCS URI to PDB file (optional, defaults to ranked_0.pdb from job)
         summary_uri: GCS URI to analysis summary.json (optional, auto-constructed from job_id)
         model_name: Display name for the model (default: 'Best Model')

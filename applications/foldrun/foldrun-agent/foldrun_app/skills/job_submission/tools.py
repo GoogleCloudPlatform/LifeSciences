@@ -113,6 +113,7 @@ def submit_of3_prediction(
     num_diffusion_samples: int = 5,
     gpu_type: str = "auto",
     enable_flex_start: bool = True,
+    use_templates: bool = True,
 ) -> dict:
     """Submit OpenFold3 structure prediction job to Vertex AI.
 
@@ -130,6 +131,13 @@ def submit_of3_prediction(
         gpu_type: GPU type. "auto" (default) selects A100 for <=2000 tokens,
             A100_80GB for >2000. No L4 — OF3 requires minimum 40GB VRAM.
         enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
+        use_templates: Use PDB structural templates (default: true). Runs
+            jackhmmer against pdb_seqres to find structural homologs, then
+            uses local pdb_mmcif CIF files for featurization. Improves
+            prediction quality for proteins with known related structures.
+            Adds ~10-20 min to the MSA step. Requires pdb_seqres and
+            pdb_mmcif databases on NFS (included in 'of3 full' install).
+            Set to false for ab initio prediction or to reduce job time.
     """
     return get_tool("of3_submit_prediction").run(
         {
@@ -139,6 +147,7 @@ def submit_of3_prediction(
             "num_diffusion_samples": num_diffusion_samples,
             "gpu_type": gpu_type,
             "enable_flex_start": enable_flex_start,
+            "use_templates": use_templates,
         }
     )
 

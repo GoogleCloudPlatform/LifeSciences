@@ -133,21 +133,52 @@ GCS_SOURCE_BUCKET=THEIR_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 ### Other deploy options
 ```bash
 ./deploy-all.sh YOUR_PROJECT_ID --steps infra    # Only Terraform
-./deploy-all.sh YOUR_PROJECT_ID --steps build    # Only Cloud Build
+./deploy-all.sh YOUR_PROJECT_ID --steps build    # Only Cloud Build (all containers)
 ./deploy-all.sh YOUR_PROJECT_ID --steps data     # Only database downloads
 DOWNLOAD_MODE=full ./deploy-all.sh YOUR_PROJECT_ID  # Full BFD database (~272GB)
 ```
 
+**Targeted rebuilds** — rebuild only what changed (much faster than full build):
+```bash
+# Rebuild just the OF3 container + redeploy agent (~10 min vs ~25 min full build)
+./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target of3
+
+# Redeploy agent only — no container rebuilds (~3 min, e.g. after agent code change)
+./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target agent
+
+# Rebuild a single analysis job
+./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target of3-analysis
+
+# Rebuild multiple targets (comma-separated)
+./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target of3,viewer
+```
+
+Available `--build-target` values:
+
+| Target | What rebuilds |
+|--------|--------------|
+| `all` | Everything (default) |
+| `of3` | openfold3-components container + agent |
+| `af2` | alphafold-components container + agent |
+| `boltz2` | boltz2-components container + agent |
+| `viewer` | foldrun-viewer Cloud Run service + agent |
+| `agent` | Agent Engine only (no container rebuilds) |
+| `of3-analysis` | of3-analysis-job Cloud Run Job only |
+| `af2-analysis` | af2-analysis-job Cloud Run Job only |
+| `boltz2-analysis` | boltz2-analysis-job Cloud Run Job only |
+
+The agent is automatically redeployed whenever any non-analysis target is included.
+
 **Pinned model versions** — override without editing any files:
 ```bash
 # Upgrade OpenFold3 to a newer release
-OF3_VERSION=0.4.0 ./deploy-all.sh YOUR_PROJECT_ID --steps build
+OF3_VERSION=0.4.0 ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target of3
 
 # Pin AlphaFold2 to a specific git commit
-AF2_VERSION=abc123def ./deploy-all.sh YOUR_PROJECT_ID --steps build
+AF2_VERSION=abc123def ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target af2
 
 # Upgrade Boltz-2
-BOLTZ_VERSION=2.3.0 ./deploy-all.sh YOUR_PROJECT_ID --steps build
+BOLTZ_VERSION=2.3.0 ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target boltz2
 ```
 
 Default versions are defined in `deploy-all.sh` and match the tested, pinned values in each container's `Dockerfile`.
@@ -289,8 +320,8 @@ foldrun/
 │   │   │   ├── of3/            # OpenFold3 plugin
 │   │   │   │   ├── config.py   # OF3Config (image, params path, viewer URL)
 │   │   │   │   ├── base.py     # OF3Tool (GPU tiers: A100/A100_80GB, no relax)
-│   │   │   │   ├── pipeline/   # KFP: ConfigureSeeds → MSA → ParallelFor[Predict]
-│   │   │   │   ├── tools/      # submit, analyze, get_results, open_viewer
+│   │   │   │   ├── pipeline/   # KFP: ConfigureSeeds → MSA+templates → ParallelFor[Predict]
+│   │   │   │   ├── tools/      # submit (use_templates=True default), analyze, get_results, open_viewer
 │   │   │   │   └── utils/      # Input converter (FASTA→OF3 JSON), pipeline utils
 │   │   │   └── boltz2/         # Boltz-2 plugin (optional — enabled by BOLTZ2_COMPONENTS_IMAGE)
 │   │   │       ├── config.py   # BOLTZ2Config (image, cache path)
@@ -406,14 +437,15 @@ uv run python scripts/setup_data.py --list
 /mnt/nfs/foldrun/
   uniref90/              # Shared (AF2, OF3, Boltz-2)
   mgnify/                # Shared (AF2, OF3, Boltz-2)
-  pdb_seqres/            # Shared (AF2, OF3)
+  pdb_seqres/            # Shared (AF2, OF3) — also used for OF3 template search
   uniprot/               # Shared (AF2, OF3)
-  pdb_mmcif/             # Shared (AF2, OF3)
+  pdb_mmcif/             # Shared (AF2, OF3) — CIF structures for OF3 template featurization
   alphafold2/params/     # AF2 only
   small_bfd/             # AF2 only
   pdb70/                 # AF2 only
   of3/params/            # OF3 only (~2GB weights)
   of3/ccd/               # OF3 only (~500MB Chemical Component Dictionary)
+  of3_msas/              # OF3 runtime — per-job MSA + template alignment files (auto-created)
   rfam/                  # OF3 only (RNA MSA via nhmmer)
   rnacentral/            # OF3 only (RNA MSA via nhmmer)
   boltz2/cache/          # Boltz-2 only — boltz2_conf.ckpt, boltz2_aff.ckpt, mols/ (CCD)

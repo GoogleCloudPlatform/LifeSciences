@@ -405,7 +405,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
                     "type": "string",
                     "description": (
                         "The AlphaFold pipeline job ID to analyze (e.g., "
-                        "'alphafold-inference-pipeline-20251110082144')"
+                        "'alphafold2-inference-pipeline-20251110082144')"
                     ),
                 },
                 "detail_level": {

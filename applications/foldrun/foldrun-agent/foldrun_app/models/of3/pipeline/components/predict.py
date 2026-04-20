@@ -24,8 +24,16 @@ CLI reference (from openfold3.run_openfold):
         --output_dir PATH           (optional)
         --use_msa_server BOOL       (default: True)
         --use_templates BOOL        (default: True)
+        --runner_yaml PATH          (optional, overrides dataset/model config)
         --num_diffusion_samples INT (optional)
         --num_model_seeds INT       (optional)
+
+Template handling:
+    When use_templates=True and nfs_mmcif_dir is provided, a runner YAML is written
+    with template_preprocessor_settings pointing to the NFS pdb_mmcif directory.
+    OF3 uses this to resolve template structures (CIF files) for featurization.
+    The template alignment files (.sto from jackhmmer against pdb_seqres) are embedded
+    in the query JSON per chain by the MSA pipeline step.
 """
 
 import config as config
@@ -41,12 +49,19 @@ def predict_of3(
     nfs_params_path: str,
     predicted_structure: Output[Artifact],
     confidence_json: Output[Artifact],
+    use_templates: bool = True,
+    nfs_mmcif_dir: str = "",
 ):
     """Runs OF3 structure prediction for a single seed.
 
     Generates a runner YAML with the specific seed value, then calls
     run_openfold predict with --runner_yaml and --num_model_seeds=1.
     Each seed runs as a separate GPU task via ParallelFor.
+
+    When use_templates=True, writes a runner YAML configuring OF3's template
+    preprocessor to resolve structures from the local NFS pdb_mmcif directory
+    rather than downloading from RCSB. Template alignment files (.sto) must
+    already be embedded in the query JSON by the MSA pipeline.
     """
     import json
     import logging
@@ -78,6 +93,33 @@ def predict_of3(
         json.dump(query_data, f, indent=2)
     logging.info(f"Patched query JSON seeds to [{seed_value}]")
 
+    # Write runner YAML if using templates with local NFS CIF structures.
+    # This configures OF3's TemplatePreprocessorSettings to look in pdb_mmcif
+    # instead of downloading from RCSB, keeping prediction VPC-isolated.
+    runner_yaml_path = None
+    if use_templates and nfs_mmcif_dir:
+        import yaml
+
+        runner_config = {
+            "template_preprocessor_settings": {
+                "structure_directory": nfs_mmcif_dir,
+                "fetch_missing_structures": False,
+                "structure_file_format": "cif",
+            }
+        }
+        runner_yaml_path = os.path.join(output_dir, "runner.yaml")
+        with open(runner_yaml_path, "w") as f:
+            yaml.dump(runner_config, f, default_flow_style=False)
+        logging.info(
+            f"Runner YAML written: {runner_yaml_path} "
+            f"(structure_directory={nfs_mmcif_dir})"
+        )
+    elif use_templates:
+        logging.warning(
+            "use_templates=True but nfs_mmcif_dir not provided; "
+            "OF3 will attempt to download template structures from RCSB"
+        )
+
     # Run OpenFold3 prediction via run_openfold CLI entrypoint
     cmd = [
         "run_openfold",
@@ -88,8 +130,10 @@ def predict_of3(
         "--num_model_seeds=1",
         f"--num_diffusion_samples={num_diffusion_samples}",
         "--use_msa_server=False",
-        "--use_templates=False",
+        f"--use_templates={str(use_templates)}",
     ]
+    if runner_yaml_path:
+        cmd.append(f"--runner_yaml={runner_yaml_path}")
 
     logging.info(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
@@ -151,12 +195,14 @@ def predict_of3(
     predicted_structure.metadata["category"] = "predicted_structure"
     predicted_structure.metadata["seed_value"] = seed_value
     predicted_structure.metadata["num_diffusion_samples"] = num_diffusion_samples
+    predicted_structure.metadata["use_templates"] = use_templates
 
     if best_conf and os.path.exists(confidence_json.path):
         with open(confidence_json.path) as f:
             conf_data = json.load(f)
         confidence_json.metadata["category"] = "confidence"
         confidence_json.metadata["is_monomer"] = _is_monomer
+        confidence_json.metadata["use_templates"] = use_templates
         # Store both scores so downstream tools can display the right one
         if "sample_ranking_score" in conf_data:
             confidence_json.metadata["sample_ranking_score"] = conf_data["sample_ranking_score"]

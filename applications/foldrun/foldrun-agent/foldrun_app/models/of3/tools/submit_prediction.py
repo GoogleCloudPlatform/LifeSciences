@@ -42,6 +42,10 @@ class OF3SubmitPredictionTool(OF3Tool):
                 'num_model_seeds': Number of seeds (default: 1),
                 'gpu_type': 'auto', 'A100', or 'A100_80GB',
                 'enable_flex_start': Enable DWS FLEX_START (default: true),
+                'use_templates': Use PDB template structures (default: true).
+                    Requires pdb_seqres and pdb_mmcif on NFS. Adds ~10-20 min
+                    to the MSA step but improves prediction quality for proteins
+                    with known structural homologs.
             }
 
         Returns:
@@ -53,6 +57,7 @@ class OF3SubmitPredictionTool(OF3Tool):
         num_diffusion_samples = arguments.get("num_diffusion_samples", 5)
         gpu_type = arguments.get("gpu_type", "auto")
         enable_flex_start = arguments.get("enable_flex_start", True)
+        use_templates = arguments.get("use_templates", True)
 
         # Determine input type and load content
         is_gcs = isinstance(input_data, str) and input_data.startswith("gs://")
@@ -158,6 +163,7 @@ class OF3SubmitPredictionTool(OF3Tool):
                 "nfs_params_path": f"{self.config.nfs_mount_point}/{self.config.params_path}",
                 "num_model_seeds": num_model_seeds,
                 "num_diffusion_samples": num_diffusion_samples,
+                "use_templates": use_templates,
             },
             "enable_caching": True,
             "labels": labels,
@@ -193,9 +199,10 @@ class OF3SubmitPredictionTool(OF3Tool):
                 "molecule_types": mol_types,
                 "num_model_seeds": num_model_seeds,
                 "num_diffusion_samples": num_diffusion_samples,
+                "use_templates": use_templates,
             },
             "hardware": {
-                "msa_pipeline": f"{hardware_config['msa_machine']} (CPU-only, Jackhmmer/nhmmer)",
+                "msa_pipeline": f"{hardware_config['msa_machine']} (CPU-only, Jackhmmer/nhmmer{', +pdb_seqres template search' if use_templates else ''})",
                 "prediction": f"{hardware_config['predict_machine']} ({hardware_config['predict_accel']} x{hardware_config['predict_count']})",
                 "scheduling": "FLEX_START (DWS)" if enable_flex_start else "ON_DEMAND",
             },

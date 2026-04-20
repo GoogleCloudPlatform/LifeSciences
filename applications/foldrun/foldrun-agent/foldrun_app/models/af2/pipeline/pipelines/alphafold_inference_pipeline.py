@@ -51,7 +51,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         dp_strategy = "STANDARD"  # CPU-only jobs cannot use FLEX_START
 
     @dsl.pipeline(
-        name="alphafold-inference-pipeline",
+        name="alphafold2-inference-pipeline",
         description="AlphaFold inference using original data pipeline with configurable scheduling.",
     )
     def alphafold_inference_pipeline(
@@ -74,7 +74,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
                 model_preset=model_preset,
                 num_multimer_predictions_per_model=num_multimer_predictions_per_model,
             )
-            .set_display_name("Configure Pipeline Run")
+            .set_display_name("AF2 Configure Run")
             .set_retry(
                 num_retries=2,
                 backoff_duration="30s",
@@ -84,7 +84,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
 
         # Data pipeline: CPU-only for jackhmmer, GPU for mmseqs2
         dp_kwargs = dict(
-            display_name="Data Pipeline",
+            display_name="AF2 Data Pipeline",
             machine_type=dp_machine_type,
             nfs_mounts=[
                 dict(
@@ -126,7 +126,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
                 reimport=False,
                 metadata=db_metadata,
             )
-            .set_display_name("Reference databases")
+            .set_display_name("AF2 Reference Databases")
             .output,
             sequence=run_config_task.outputs["sequence"],
             max_template_date=max_template_date,
@@ -152,7 +152,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
 
         JobPredictOp = create_custom_training_job_from_component(
             PredictOp,
-            display_name="Predict",
+            display_name="AF2 Predict",
             machine_type=os.environ.get("PREDICT_MACHINE_TYPE", "g2-standard-12"),
             accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_L4"),
             accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
@@ -162,7 +162,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
 
         JobRelaxOp = create_custom_training_job_from_component(
             RelaxOp,
-            display_name="Relax",
+            display_name="AF2 Relax",
             machine_type=os.environ.get("RELAX_MACHINE_TYPE", "g2-standard-12"),
             accelerator_type=os.environ.get("RELAX_ACCELERATOR_TYPE", "NVIDIA_L4"),
             accelerator_count=int(os.environ.get("RELAX_ACCELERATOR_COUNT", "1")),
