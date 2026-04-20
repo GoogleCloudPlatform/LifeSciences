@@ -216,9 +216,11 @@ steps:
           docker build \
             --build-arg AF2_VERSION=${_AF2_VERSION} \
             -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:${BUILD_ID} \
             --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest \
             src/alphafold-components/
           docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest
+          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:${BUILD_ID}
         else
           echo "Skipping af2-components build (BUILD_TARGET=${_BUILD_TARGET})"
         fi
@@ -238,8 +240,10 @@ steps:
           docker build \
             --build-arg OF3_VERSION=${_OF3_VERSION} \
             -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:${BUILD_ID} \
             src/openfold3-components/
           docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
+          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:${BUILD_ID}
         else
           echo "Skipping of3-components build (BUILD_TARGET=${_BUILD_TARGET})"
         fi
@@ -261,8 +265,10 @@ steps:
             --build-arg BOLTZ_VERSION=${_BOLTZ_VERSION} \
             --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest \
             -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:${BUILD_ID} \
             src/boltz2-components/
           docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest
+          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:${BUILD_ID}
         else
           echo "Skipping boltz2-components build (BUILD_TARGET=${_BUILD_TARGET})"
         fi
@@ -308,9 +314,29 @@ steps:
         export GCS_BUCKET_NAME=${_BUCKET_NAME}
         export GCS_DATABASES_BUCKET=${_DATABASES_BUCKET}
         export FILESTORE_ID=${_FILESTORE_ID}
-        export ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest
-        export OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
-        export BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest
+        # Use build-tagged image URIs when a component was rebuilt in this run.
+        # BUILD_ID-tagged images force Vertex AI nodes to pull fresh rather than
+        # using a cached :latest digest — critical for container fixes to take effect.
+        _t=",${_BUILD_TARGET},"
+        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",af2,"* ]]; then
+          AF2_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:${BUILD_ID}
+        else
+          AF2_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest
+        fi
+        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",of3,"* ]]; then
+          OF3_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:${BUILD_ID}
+        else
+          OF3_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
+        fi
+        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",boltz2,"* ]]; then
+          BOLTZ2_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:${BUILD_ID}
+        else
+          BOLTZ2_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest
+        fi
+
+        export ALPHAFOLD_COMPONENTS_IMAGE=$$AF2_IMAGE
+        export OPENFOLD3_COMPONENTS_IMAGE=$$OF3_IMAGE
+        export BOLTZ2_COMPONENTS_IMAGE=$$BOLTZ2_IMAGE
 
         VIEWER_URL=$$(cat /workspace/viewer_url.txt)
         export AF2_VIEWER_URL=$$VIEWER_URL
@@ -319,7 +345,7 @@ steps:
           --project=$PROJECT_ID \
           --location=${_REGION} \
           --service-account=${_AGENT_SA_EMAIL} \
-          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,BOLTZ2_ANALYSIS_JOB_NAME=boltz2-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}
+          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=$$AF2_IMAGE,OPENFOLD3_COMPONENTS_IMAGE=$$OF3_IMAGE,BOLTZ2_COMPONENTS_IMAGE=$$BOLTZ2_IMAGE,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,BOLTZ2_ANALYSIS_JOB_NAME=boltz2-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}
     waitFor: ['deploy-viewer', 'build-push-af2-components', 'build-push-of3-components', 'build-push-boltz2-components']
 
   # ============================================================================
