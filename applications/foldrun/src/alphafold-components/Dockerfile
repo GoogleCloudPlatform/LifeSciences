@@ -58,10 +58,21 @@ RUN wget -q -P /tmp \
     && rm /tmp/Miniconda3-latest-Linux-x86_64.sh
 
 # Install conda packages.
+# openmm is installed via conda with cuda-toolkit pinned to ${CUDA_VERSION} so
+# conda-forge resolves openmm's CUDA kernels against the exact toolkit version.
+# This ensures the PTX target matches what the Vertex AI GPU driver supports.
+# Pinning cuda-toolkit alongside openmm in the same solve is the community-confirmed
+# fix for CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222).
+# See: github.com/openmm/openmm/issues/3585
+# openmm must NOT come from pip — requirements.txt line is stripped below.
 ENV PATH="/opt/conda/bin:$PATH"
 ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
 RUN conda install --quiet --yes conda==24.11.1 pip python=3.11 \
     && conda install --quiet --yes --channel nvidia cuda=${CUDA_VERSION} \
+    && conda install --quiet --yes --channel conda-forge \
+        openmm \
+        cuda-toolkit=${CUDA_VERSION} \
+        pdbfixer \
     && conda clean --all --force-pkgs-dirs --yes
 
 # Currently needed to avoid undefined_symbol error before running any system tools like git.
@@ -76,12 +87,10 @@ RUN wget -q -P /app/alphafold/alphafold/common/ \
   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
 
 # Install pip packages (h5py already satisfied via conda).
-# Patch requirements.txt before install: openmm[cuda12]==8.2.0 targets CUDA 12.3+
-# PTX causing CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222) on Vertex AI A100 nodes
-# (driver 525, max CUDA 12.0 PTX). Replace with openmm[cuda11-8]==8.1.1 which
-# installs openmm-cuda==8.1.1.11.8 (CUDA 11.8 PTX — compatible with driver 525+).
-# DeepMind has not fixed this upstream: github.com/google-deepmind/alphafold/issues/955
-RUN sed -i 's/openmm\[cuda12\]==8.2.0/openmm[cuda11-8]==8.1.1/' /app/alphafold/requirements.txt \
+# Remove openmm from requirements.txt — it is managed by conda above.
+# pip must not reinstall openmm or it overwrites the conda version with
+# openmm[cuda12]==8.2.0 which has incompatible PTX for Vertex AI A100 nodes.
+RUN sed -i '/openmm/d' /app/alphafold/requirements.txt \
     && pip3 install --upgrade pip --no-cache-dir \
     && pip3 install -r /app/alphafold/requirements.txt --no-cache-dir \
     && pip3 install --upgrade --no-cache-dir \
