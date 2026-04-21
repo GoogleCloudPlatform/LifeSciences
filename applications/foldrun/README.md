@@ -20,7 +20,7 @@
 | [OpenFold 3](https://github.com/aqlaboratory/openfold-3) | AQ Laboratory | Proteins, RNA, DNA, ligands (SMILES/CCD), covalent modifications, glycans |
 | [Boltz-2](https://github.com/jwohlwend/boltz) | MIT / jwohlwend | Proteins, RNA, DNA, ligands, covalent modifications, glycans, binding affinity |
 
-> **AF2 AMBER relaxation note:** AMBER relaxation is currently disabled by default (`run_relaxation=false`) due to a CUDA PTX version mismatch between the DeepMind AlphaFold2 container image and the Vertex AI GPU driver. Unrelaxed structures are suitable for most downstream analyses. A fix is in progress — see [PR #61](https://github.com/GoogleCloudPlatform/LifeSciences/pull/61).
+> **AF2 AMBER relaxation note:** AMBER relaxation is currently disabled by default (`run_relaxation=false`) due to a CUDA PTX version mismatch between the DeepMind AlphaFold2 container image and the Vertex AI GPU driver. Unrelaxed structures are suitable for most downstream analyses. A fix is in progress — see [PR #61](https://github.com/GoogleCloudPlatform/LifeSciences/pull/61). Relevant upstream context: [AlphaFold Issue #921](https://github.com/google-deepmind/alphafold/issues/921) (breaking change), [AlphaFold Commit a4315dd](https://github.com/google-deepmind/alphafold/commit/a4315dd7b8f9f543ad5f4080af4a42d431ef3b35), and [OpenMM Issue #3585](https://github.com/openmm/openmm/issues/3585).
 
 ## Tech Stack
 
