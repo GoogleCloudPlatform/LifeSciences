@@ -24,6 +24,7 @@ from google.cloud import aiplatform as vertex_ai
 
 logger = logging.getLogger(__name__)
 
+from ....utils.pipeline_dedup import check_duplicate_job
 from ..base import AF2Tool
 from ..utils.fasta_utils import (
     get_sequence_length,
@@ -62,6 +63,12 @@ class AF2SubmitMonomerTool(AF2Tool):
         )  # Matches DB download date (April 2025)
         use_small_bfd = arguments.get("use_small_bfd", True)
         run_relaxation = arguments.get("run_relaxation", False)
+
+        # Dedup: block submission if a job with the same name is already running
+        duplicate = check_duplicate_job(job_name, self.config.project, self.config.location)
+        if duplicate:
+            return duplicate
+
         gpu_type = arguments.get(
             "gpu_type", "auto"
         )  # Default to auto-select based on sequence length

@@ -23,6 +23,7 @@ from typing import Any, Dict
 
 from google.cloud import aiplatform as vertex_ai
 
+from ....utils.pipeline_dedup import check_duplicate_job
 from ..base import BOLTZ2Tool
 from ..utils.input_converter import count_tokens, fasta_to_boltz2_yaml, is_boltz2_yaml, validate_boltz2_yaml
 
@@ -49,6 +50,12 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         """
         input_data = arguments.get("input")
         job_name = arguments.get("job_name", f"boltz2_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+
+        # Dedup: block submission if a job with the same name is already running
+        duplicate = check_duplicate_job(job_name, self.config.project, self.config.location)
+        if duplicate:
+            return duplicate
+
         num_model_seeds = arguments.get("num_model_seeds", 1)
         num_diffusion_samples = arguments.get("num_diffusion_samples", 5)
         gpu_type = arguments.get("gpu_type", "auto")
