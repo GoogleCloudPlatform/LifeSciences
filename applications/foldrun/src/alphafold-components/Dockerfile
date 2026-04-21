@@ -77,10 +77,11 @@ RUN wget -q -P /app/alphafold/alphafold/common/ \
 
 # Install pip packages (h5py already satisfied via conda).
 # Patch requirements.txt before install: openmm[cuda12]==8.2.0 targets CUDA 12.3+
-# PTX causing CUDA_ERROR_UNSUPPORTED_PTX_VERSION on Vertex AI nodes. Replace with
-# openmm==8.1.1 (earliest on PyPI, CUDA 12.1 PTX — compatible with L4 driver 535).
+# PTX causing CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222) on Vertex AI A100 nodes
+# (driver 525, max CUDA 12.0 PTX). Replace with openmm[cuda11-8]==8.1.1 which
+# installs openmm-cuda==8.1.1.11.8 (CUDA 11.8 PTX — compatible with driver 525+).
 # DeepMind has not fixed this upstream: github.com/google-deepmind/alphafold/issues/955
-RUN sed -i 's/openmm\[cuda12\]==8.2.0/openmm==8.1.1/' /app/alphafold/requirements.txt \
+RUN sed -i 's/openmm\[cuda12\]==8.2.0/openmm[cuda11-8]==8.1.1/' /app/alphafold/requirements.txt \
     && pip3 install --upgrade pip --no-cache-dir \
     && pip3 install -r /app/alphafold/requirements.txt --no-cache-dir \
     && pip3 install --upgrade --no-cache-dir \
