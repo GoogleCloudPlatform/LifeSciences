@@ -58,20 +58,18 @@ RUN wget -q -P /tmp \
     && rm /tmp/Miniconda3-latest-Linux-x86_64.sh
 
 # Install conda packages.
-# openmm is installed via conda with cuda-toolkit pinned to ${CUDA_VERSION} so
-# conda-forge resolves openmm's CUDA kernels against the exact toolkit version.
-# This ensures the PTX target matches what the Vertex AI GPU driver supports.
-# Pinning cuda-toolkit alongside openmm in the same solve is the community-confirmed
-# fix for CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222).
-# See: github.com/openmm/openmm/issues/3585
+# openmm=8.0.0 is installed from conda-forge after the nvidia CUDA install so
+# conda resolves openmm's CUDA kernels against the already-installed CUDA version.
+# The nvidia cuda install provides the toolkit that pins openmm's PTX target —
+# no need for the redundant conda-forge cuda-toolkit package.
 # openmm must NOT come from pip — requirements.txt line is stripped below.
+# See: github.com/openmm/openmm/issues/3585, github.com/google-deepmind/alphafold/issues/921
 ENV PATH="/opt/conda/bin:$PATH"
 ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
 RUN conda install --quiet --yes conda==24.11.1 pip python=3.11 \
     && conda install --quiet --yes --channel nvidia cuda=${CUDA_VERSION} \
     && conda install --quiet --yes --channel conda-forge \
         openmm=8.0.0 \
-        cuda-toolkit=${CUDA_VERSION} \
         pdbfixer \
     && conda clean --all --force-pkgs-dirs --yes
 
