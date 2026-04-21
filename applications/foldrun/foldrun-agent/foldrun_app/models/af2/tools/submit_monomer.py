@@ -61,7 +61,7 @@ class AF2SubmitMonomerTool(AF2Tool):
             "max_template_date", "2025-04-01"
         )  # Matches DB download date (April 2025)
         use_small_bfd = arguments.get("use_small_bfd", True)
-        run_relaxation = arguments.get("run_relaxation", True)
+        run_relaxation = arguments.get("run_relaxation", False)
         gpu_type = arguments.get(
             "gpu_type", "auto"
         )  # Default to auto-select based on sequence length
@@ -71,6 +71,21 @@ class AF2SubmitMonomerTool(AF2Tool):
         vertex_repo_path = arguments.get(
             "vertex_repo_path"
         )  # No longer needed, kept for backwards compatibility
+
+        # Warn if relaxation is explicitly requested — known to fail on A100 nodes due to
+        # a CUDA PTX version mismatch (CUDA_ERROR_UNSUPPORTED_PTX_VERSION) in the current
+        # container image. Fix is in progress (see PR #61). Relaxation is disabled by default
+        # until the fix is merged and deployed.
+        if run_relaxation:
+            return {
+                "status": "error",
+                "message": (
+                    "AMBER relaxation is temporarily disabled. The relax step currently "
+                    "fails on A100 GPU nodes with a CUDA PTX version mismatch. A fix is "
+                    "in progress. Please resubmit with run_relaxation=false to get "
+                    "unrelaxed structures, which are suitable for most downstream analyses."
+                ),
+            }
 
         # Validate: explicit mmseqs2 requires use_small_bfd=True and pre-built indexes
         if msa_method == "mmseqs2":
