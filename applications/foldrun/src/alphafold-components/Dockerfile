@@ -70,7 +70,7 @@ ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
 RUN conda install --quiet --yes conda==24.11.1 pip python=3.11 \
     && conda install --quiet --yes --channel nvidia cuda=${CUDA_VERSION} \
     && conda install --quiet --yes --channel conda-forge \
-        openmm \
+        openmm=8.0.0 \
         cuda-toolkit=${CUDA_VERSION} \
         pdbfixer \
     && conda clean --all --force-pkgs-dirs --yes
