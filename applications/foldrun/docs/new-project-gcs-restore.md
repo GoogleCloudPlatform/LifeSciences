@@ -89,7 +89,7 @@ gcloud storage buckets get-iam-policy gs://SOURCE_PROJECT_ID-foldrun-gdbs \
   --filter="bindings.members:batch-compute-sa@YOUR_NEW_PROJECT_ID.iam.gserviceaccount.com"
 ```
 
-### Cross-org IAM (Argolis source projects)
+### Cross-org IAM (restricted source projects)
 
 If the source project has an `iam.allowedPolicyMemberDomains` org policy inherited
 from its folder, the binding will fail with `HTTP 412: One or more users named in the
