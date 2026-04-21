@@ -58,13 +58,12 @@ RUN wget -q -P /tmp \
     && rm /tmp/Miniconda3-latest-Linux-x86_64.sh
 
 # Install conda packages.
-# openmm=8.0.0 is installed from conda-forge, then targeted nvidia CUDA packages
-# (cuda-nvcc, cuda-libraries-dev, cuda-nvtx, cuda-cupti) are installed from the
-# versioned nvidia/label/cuda-${CUDA} channel. cuda-nvcc provides the JIT compiler
-# openmm needs to pin its PTX target to exactly this CUDA version, fixing
-# CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222) on Vertex AI A100s — without the ~3GB
-# full conda-forge cuda-toolkit. Pattern follows the old Google Vertex AI AF2 pipeline.
-# See: github.com/openmm/openmm/issues/3585, GoogleCloudPlatform/LifeSciences#62
+# openmm is installed via conda with cuda-toolkit pinned to ${CUDA_VERSION} so
+# conda-forge resolves openmm's CUDA kernels against the exact toolkit version.
+# This ensures the PTX target matches what the Vertex AI GPU driver supports.
+# Pinning cuda-toolkit alongside openmm in the same solve is the community-confirmed
+# fix for CUDA_ERROR_UNSUPPORTED_PTX_VERSION (222).
+# See: github.com/openmm/openmm/issues/3585
 # openmm must NOT come from pip — requirements.txt line is stripped below.
 ENV PATH="/opt/conda/bin:$PATH"
 ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
@@ -72,12 +71,8 @@ RUN conda install --quiet --yes conda==24.11.1 pip python=3.11 \
     && conda install --quiet --yes --channel nvidia cuda=${CUDA_VERSION} \
     && conda install --quiet --yes --channel conda-forge \
         openmm=8.0.0 \
+        cuda-toolkit=${CUDA_VERSION} \
         pdbfixer \
-    && conda install --quiet --yes --channel nvidia/label/cuda-${CUDA} \
-        cuda-libraries-dev \
-        cuda-nvcc \
-        cuda-nvtx \
-        cuda-cupti \
     && conda clean --all --force-pkgs-dirs --yes
 
 # Currently needed to avoid undefined_symbol error before running any system tools like git.
