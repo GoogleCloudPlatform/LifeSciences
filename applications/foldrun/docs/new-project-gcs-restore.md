@@ -89,6 +89,37 @@ gcloud storage buckets get-iam-policy gs://SOURCE_PROJECT_ID-foldrun-gdbs \
   --filter="bindings.members:batch-compute-sa@YOUR_NEW_PROJECT_ID.iam.gserviceaccount.com"
 ```
 
+### Cross-org IAM (Argolis source projects)
+
+If the source project is in an Argolis folder, the `iam.allowedPolicyMemberDomains`
+org policy will block the binding with `HTTP 412: One or more users named in the
+policy do not belong to a permitted customer.`
+
+Override the policy at the project level, apply the binding, then restore:
+
+```bash
+# 1. Enable the Org Policy API if not already enabled
+gcloud services enable orgpolicy.googleapis.com --project=SOURCE_PROJECT_ID
+
+# 2. Override the domain restriction at project level
+gcloud org-policies set-policy /dev/stdin --project=SOURCE_PROJECT_ID <<'EOF'
+name: projects/SOURCE_PROJECT_ID/policies/iam.allowedPolicyMemberDomains
+spec:
+  reset: true
+EOF
+
+# 3. Wait ~10s for propagation, then apply the binding
+gcloud storage buckets add-iam-policy-binding \
+  gs://SOURCE_PROJECT_ID-foldrun-gdbs \
+  --member="serviceAccount:batch-compute-sa@YOUR_NEW_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.objectViewer"
+
+# 4. Restore folder-level policy inheritance
+gcloud org-policies delete iam.allowedPolicyMemberDomains --project=SOURCE_PROJECT_ID
+```
+
+The bucket-level IAM binding persists after the project-level override is removed.
+
 ---
 
 ## Step 4 + 5: Build and Restore
