@@ -91,8 +91,8 @@ gcloud storage buckets get-iam-policy gs://SOURCE_PROJECT_ID-foldrun-gdbs \
 
 ### Cross-org IAM (Argolis source projects)
 
-If the source project is in an Argolis folder, the `iam.allowedPolicyMemberDomains`
-org policy will block the binding with `HTTP 412: One or more users named in the
+If the source project has an `iam.allowedPolicyMemberDomains` org policy inherited
+from its folder, the binding will fail with `HTTP 412: One or more users named in the
 policy do not belong to a permitted customer.`
 
 Override the policy at the project level, apply the binding, then restore:
