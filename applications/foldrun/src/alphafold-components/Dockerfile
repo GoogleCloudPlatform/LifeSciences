@@ -90,7 +90,10 @@ RUN wget -q -P /app/alphafold/alphafold/common/ \
 # Remove openmm from requirements.txt — it is managed by conda above.
 # pip must not reinstall openmm or it overwrites the conda version with
 # openmm[cuda12]==8.2.0 which has incompatible PTX for Vertex AI A100 nodes.
-RUN sed -i '/openmm/d' /app/alphafold/requirements.txt \
+# Strip openmm AND pdbfixer from requirements.txt.
+# pdbfixer==1.12.0 requires openmm>=8.2 — installing it via pip would upgrade
+# the conda-managed openmm=8.0.0 back to 8.2.0. Both are managed via conda above.
+RUN sed -i '/openmm/d;/pdbfixer/d' /app/alphafold/requirements.txt \
     && pip3 install --upgrade pip --no-cache-dir \
     && pip3 install -r /app/alphafold/requirements.txt --no-cache-dir \
     && pip3 install --upgrade --no-cache-dir \
