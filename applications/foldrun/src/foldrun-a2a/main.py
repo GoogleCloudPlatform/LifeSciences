@@ -16,24 +16,25 @@
 and forwards requests to the FoldRun Agent Engine deployment.
 """
 
+import asyncio
 import logging
 import os
+from uuid import uuid4
 
 import uvicorn
 import vertexai
-from starlette.applications import Starlette
-from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.routes.agent_card_routes import create_agent_card_routes
-from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
     UnsupportedOperationError,
+    TextPart,
 )
-from a2a.helpers.proto_helpers import get_message_text, new_text_status_update_event
+from a2a.utils import new_agent_text_message
+from a2a.server.agent_execution import AgentExecutor, RequestContext
 
 from a2a_agent_card import foldrun_agent_card
 
@@ -44,7 +45,6 @@ AGENT_ENGINE_RESOURCE = os.environ.get(
     "AGENT_ENGINE_RESOURCE",
     "projects/your-project-id/locations/us-central1/reasoningEngines/your-engine-id",
 )
-
 
 class AgentEngineProxyExecutor(AgentExecutor):
     """A2A executor that proxies requests to Agent Engine."""
@@ -72,26 +72,39 @@ class AgentEngineProxyExecutor(AgentExecutor):
         return session_id
 
     async def execute(self, context: RequestContext, event_queue) -> None:
-        user_text = get_message_text(context.message) if context.message else ""
-        task_id = context.task_id
+        user_text = ""
+        if context.message and context.message.parts:
+            for part in context.message.parts:
+                if isinstance(part.root, TextPart):
+                    user_text += part.root.text
+
+        task_id = context.task_id or uuid4().hex
         context_id = context.context_id
 
         if not user_text:
             await event_queue.enqueue_event(
-                new_text_status_update_event(
-                    task_id=task_id,
-                    context_id=context_id,
-                    state=TaskState.TASK_STATE_COMPLETED,
-                    text="No text content in request.",
+                TaskStatusUpdateEvent(
+                    taskId=task_id,
+                    contextId=context_id,
+                    final=True,
+                    status=TaskStatus(
+                        state=TaskState.completed,
+                        message=new_agent_text_message(
+                            "No text content in request.",
+                            task_id,
+                            context_id,
+                        ),
+                    ),
                 )
             )
             return
 
         await event_queue.enqueue_event(
             TaskStatusUpdateEvent(
-                task_id=task_id,
-                context_id=context_id,
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                taskId=task_id,
+                contextId=context_id,
+                final=False,
+                status=TaskStatus(state=TaskState.working),
             )
         )
 
@@ -123,28 +136,41 @@ class AgentEngineProxyExecutor(AgentExecutor):
                     full_response += chunk_text
 
             await event_queue.enqueue_event(
-                new_text_status_update_event(
-                    task_id=task_id,
-                    context_id=context_id,
-                    state=TaskState.TASK_STATE_COMPLETED,
-                    text=full_response or "No response from agent.",
+                TaskStatusUpdateEvent(
+                    taskId=task_id,
+                    contextId=context_id,
+                    final=True,
+                    status=TaskStatus(
+                        state=TaskState.completed,
+                        message=new_agent_text_message(
+                            full_response or "No response from agent.",
+                            task_id,
+                            context_id,
+                        ),
+                    ),
                 )
             )
 
         except Exception as e:
             logger.exception(f"Error proxying to Agent Engine: {e}")
             await event_queue.enqueue_event(
-                new_text_status_update_event(
-                    task_id=task_id,
-                    context_id=context_id,
-                    state=TaskState.TASK_STATE_FAILED,
-                    text=f"Error communicating with agent: {e}",
+                TaskStatusUpdateEvent(
+                    taskId=task_id,
+                    contextId=context_id,
+                    final=True,
+                    status=TaskStatus(
+                        state=TaskState.failed,
+                        message=new_agent_text_message(
+                            f"Error communicating with agent: {e}",
+                            task_id,
+                            context_id,
+                        ),
+                    ),
                 )
             )
 
     async def cancel(self, context: RequestContext, event_queue) -> None:
         raise UnsupportedOperationError("Cancel not supported")
-
 
 def create_app():
     project = os.environ.get("GOOGLE_CLOUD_PROJECT", "your-project-id")
@@ -154,12 +180,14 @@ def create_app():
     request_handler = DefaultRequestHandler(
         agent_executor=AgentEngineProxyExecutor(),
         task_store=InMemoryTaskStore(),
-        agent_card=foldrun_agent_card,
     )
 
-    routes = create_agent_card_routes(foldrun_agent_card) + create_rest_routes(request_handler)
-    return Starlette(routes=routes)
+    server = A2AStarletteApplication(
+        agent_card=foldrun_agent_card,
+        http_handler=request_handler,
+    )
 
+    return server.build()
 
 app = create_app()
 
