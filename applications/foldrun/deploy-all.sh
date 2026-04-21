@@ -283,9 +283,43 @@ EOF
 fi
 
 # ==============================================================================
+# Helper: API warm-up — polls required APIs until they respond, or times out.
+# Runs automatically between infra and build on a fresh project. Safe no-op on
+# existing projects where APIs are already initialized. Refs: issue #65
+# ==============================================================================
+warm_up_apis() {
+    echo ""
+    echo "Warming up GCP APIs (may take 1-3 min on a new project)..."
+    local timeout=300 interval=15 elapsed=0
+
+    probe() {
+        gcloud ai operations list --region="$REGION" --project="$PROJECT_ID" --limit=1 --quiet >/dev/null 2>&1 \
+            && gcloud run services list --region="$REGION" --project="$PROJECT_ID" --limit=1 --quiet >/dev/null 2>&1 \
+            && gcloud artifacts repositories list --location="$REGION" --project="$PROJECT_ID" --limit=1 --quiet >/dev/null 2>&1 \
+            && gcloud builds list --project="$PROJECT_ID" --limit=1 --quiet >/dev/null 2>&1 \
+            && gcloud batch jobs list --location="$REGION" --project="$PROJECT_ID" --limit=1 --quiet >/dev/null 2>&1
+    }
+
+    while ! probe; do
+        if [[ $elapsed -ge $timeout ]]; then
+            echo "Warning: APIs did not warm up within ${timeout}s — proceeding anyway."
+            return
+        fi
+        echo "  APIs not ready yet, retrying in ${interval}s... (${elapsed}s elapsed)"
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+    echo "  APIs ready."
+}
+
+# ==============================================================================
 # Step: build
 # ==============================================================================
 if $run_build; then
+    # Auto warm-up when following an infra step (new project protection)
+    if $run_infra; then
+        warm_up_apis
+    fi
     extract_terraform_outputs
 
     echo "Step 4: Building and Deploying Applications (Cloud Build)"
