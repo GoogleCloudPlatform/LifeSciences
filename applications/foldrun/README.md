@@ -16,9 +16,11 @@
 
 | Model | Source | Capabilities |
 |-------|--------|-------------|
-| [AlphaFold 2](https://github.com/google-deepmind/alphafold) | Google DeepMind | Protein monomers and multimers, AMBER relaxation |
+| [AlphaFold 2](https://github.com/google-deepmind/alphafold) | Google DeepMind | Protein monomers and multimers, AMBER relaxation (currently disabled — see note below) |
 | [OpenFold 3](https://github.com/aqlaboratory/openfold-3) | AQ Laboratory | Proteins, RNA, DNA, ligands (SMILES/CCD), covalent modifications, glycans |
 | [Boltz-2](https://github.com/jwohlwend/boltz) | MIT / jwohlwend | Proteins, RNA, DNA, ligands, covalent modifications, glycans, binding affinity |
+
+> **AF2 AMBER relaxation note:** AMBER relaxation is currently disabled by default (`run_relaxation=false`) due to a CUDA PTX version mismatch between the DeepMind AlphaFold2 container image and the Vertex AI GPU driver. Unrelaxed structures are suitable for most downstream analyses. A fix is in progress — see [PR #61](https://github.com/GoogleCloudPlatform/LifeSciences/pull/61).
 
 ## Tech Stack
 
