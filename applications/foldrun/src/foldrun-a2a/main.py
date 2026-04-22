@@ -16,7 +16,6 @@
 and forwards requests to the FoldRun Agent Engine deployment.
 """
 
-import asyncio
 import logging
 import os
 from uuid import uuid4

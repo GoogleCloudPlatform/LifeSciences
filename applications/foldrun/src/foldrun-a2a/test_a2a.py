@@ -9,7 +9,6 @@ Requires: gcloud auth login (uses ID token for Cloud Run auth)
 """
 
 import asyncio
-import os
 import sys
 import subprocess
 from uuid import uuid4

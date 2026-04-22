@@ -238,7 +238,7 @@ def main():
         f.write(icon_svg)
     print(f"Icon saved to {OUTPUT_ICON}")
 
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Title:   {TITLE}")
     print(f"  Tagline: {TAGLINE}")
     print(f"  QR URL:  {DEMO_URL}")

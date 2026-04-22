@@ -35,18 +35,14 @@ class OF3Tool(BaseTool):
         self,
         hardware_config: Dict[str, Any],
         filestore_ip: str = None,
-        filestore_network: str = None,
     ):
         """Set up environment variables for OF3 pipeline compilation."""
         nfs_server = filestore_ip or self.config.filestore_ip or ""
-        network = filestore_network or self.config.filestore_network or ""
-
         env_vars = {
             "OPENFOLD3_COMPONENTS_IMAGE": self.config.base_image,
             "NFS_SERVER": nfs_server,
             "NFS_PATH": self.config.nfs_share,
             "NFS_MOUNT_POINT": self.config.nfs_mount_point,
-            "NETWORK": network,
             "OF3_PARAMS_PATH": self.config.params_path,
             "OF3_CCD_PATH": self.config.ccd_path,
             "PREDICT_MACHINE_TYPE": hardware_config.get("predict_machine", "a2-highgpu-1g"),

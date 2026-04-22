@@ -42,7 +42,6 @@ class AF2Tool(BaseTool):
         self,
         hardware_config: Dict[str, Any],
         filestore_ip: str = None,
-        filestore_network: str = None,
     ):
         """
         Set up environment variables for pipeline compilation.
@@ -50,18 +49,14 @@ class AF2Tool(BaseTool):
         Args:
             hardware_config: Hardware configuration dictionary
             filestore_ip: Filestore IP address (optional, uses config if not provided)
-            filestore_network: Filestore network (optional, uses config if not provided)
         """
         # Use provided values or fall back to config
         nfs_server = filestore_ip or self.config.filestore_ip or ""
-        network = filestore_network or self.config.filestore_network or ""
-
         env_vars = {
             "ALPHAFOLD_COMPONENTS_IMAGE": self.config.base_image,
             "NFS_SERVER": nfs_server,
             "NFS_PATH": self.config.nfs_share,
             "NFS_MOUNT_POINT": self.config.nfs_mount_point,
-            "NETWORK": network,
             "MODEL_PARAMS_GCS_LOCATION": f"gs://{self.config.databases_bucket_name}/alphafold2",
             "DATA_PIPELINE_MACHINE_TYPE": hardware_config.get("data_pipeline", "c2-standard-16"),
             "PREDICT_MACHINE_TYPE": hardware_config.get("predict_machine", "g2-standard-12"),

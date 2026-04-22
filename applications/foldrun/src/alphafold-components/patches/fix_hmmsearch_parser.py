@@ -8,7 +8,6 @@ logs a warning and skips the bad entry instead of crashing.
 Applied at container build time via Dockerfile.
 """
 
-import re
 import sys
 
 PARSERS_PATH = "/app/alphafold/alphafold/data/parsers.py"

@@ -24,6 +24,9 @@ from dotenv import dotenv_values
 _TEST_ENV_PATH = os.path.join(os.path.dirname(__file__), ".env.test")
 _TEST_ENV = dotenv_values(_TEST_ENV_PATH)
 
+for key, value in _TEST_ENV.items():
+    os.environ[key] = value
+
 
 @pytest.fixture
 def mock_env_vars(monkeypatch):

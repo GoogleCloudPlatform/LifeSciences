@@ -50,7 +50,8 @@ class CoreConfig:
             "GCP_PROJECT_ID": ("GCP_PROJECT_ID", "GOOGLE_CLOUD_PROJECT"),
             "GCP_REGION": ("GCP_REGION", "GOOGLE_CLOUD_LOCATION"),
             "GCS_BUCKET_NAME": ("GCS_BUCKET_NAME",),
-            "FILESTORE_ID": ("FILESTORE_ID",),
+            "FILESTORE_IP": ("FILESTORE_IP",),
+            "VERTEX_AI_NETWORK_ATTACHMENT": ("VERTEX_AI_NETWORK_ATTACHMENT",),
         }
 
         missing = []
@@ -85,20 +86,12 @@ class CoreConfig:
         return os.getenv("GCS_DATABASES_BUCKET", os.getenv("GCS_BUCKET_NAME"))
 
     @property
-    def filestore_id(self) -> str:
-        return os.getenv("FILESTORE_ID")
-
-    @property
     def filestore_ip(self) -> Optional[str]:
         return os.getenv("FILESTORE_IP")
 
     @property
-    def filestore_network(self) -> Optional[str]:
-        return os.getenv("FILESTORE_NETWORK")
-
-    @property
-    def network_project_number(self) -> Optional[str]:
-        return os.getenv("NETWORK_PROJECT_NUMBER")
+    def vertex_ai_network_attachment(self) -> Optional[str]:
+        return os.getenv("VERTEX_AI_NETWORK_ATTACHMENT")
 
     @property
     def nfs_share(self) -> str:
@@ -137,6 +130,5 @@ class CoreConfig:
             "region": self.region,
             "zone": self.zone,
             "bucket_name": self.bucket_name,
-            "filestore_id": self.filestore_id,
             "supported_gpus": self.supported_gpus,
         }

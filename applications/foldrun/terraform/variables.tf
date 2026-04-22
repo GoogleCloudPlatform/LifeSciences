@@ -41,6 +41,12 @@ variable "subnet_cidr" {
   default     = "10.0.0.0/24"
 }
 
+variable "vertex_ai_subnet_cidr" {
+  description = "CIDR block for Vertex AI PSC interface network attachments"
+  type        = string
+  default     = "10.0.1.0/28"
+}
+
 variable "peering_cidr" {
   description = "CIDR block for VPC Peering (Private Services Access)"
   type        = string
@@ -65,13 +71,11 @@ variable "network_project_id" {
   default     = ""
 }
 
-variable "network_project_number" {
-  description = "The number of the project where the existing VPC network is located. Required by Vertex AI for Shared VPC."
+variable "vertex_ai_network_attachment_id" {
+  description = "ID of the existing Network Attachment to use for Vertex AI PSC interfaces. If not provided and creating a network, a new one will be created."
   type        = string
   default     = ""
 }
-
-
 
 variable "filestore_tier" {
   description = "Tier for the Filestore instance (BASIC_SSD avoids throughput throttling during concurrent database downloads)"

@@ -43,7 +43,8 @@ class TestConfig:
             "GCP_PROJECT_ID",
             "GCP_REGION",
             "GCS_BUCKET_NAME",
-            "FILESTORE_ID",
+            "FILESTORE_IP",
+            "VERTEX_AI_NETWORK_ATTACHMENT",
             "ALPHAFOLD_COMPONENTS_IMAGE",
         ]:
             monkeypatch.delenv(var, raising=False)
@@ -92,7 +93,6 @@ class TestConfig:
             "region",
             "zone",
             "bucket_name",
-            "filestore_id",
             "base_image",
             "viewer_url",
             "supported_gpus",

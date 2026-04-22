@@ -42,7 +42,6 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from foldrun_app.core import batch as batch_utils
 from foldrun_app.core.config import CoreConfig
 from foldrun_app.core.download import (
     _get_models,
@@ -55,19 +54,13 @@ from foldrun_app.core.download import (
 
 def get_infra_params(config: CoreConfig) -> dict:
     """Resolve infrastructure parameters needed for Batch submission."""
-    filestore_ip, filestore_network = batch_utils.get_filestore_info(
-        project_id=config.project_id,
-        zone=config.zone,
-        filestore_id=config.filestore_id,
-        filestore_ip=config.filestore_ip,
-        filestore_network=config.filestore_network,
-    )
+    if not config.filestore_ip:
+        raise ValueError("FILESTORE_IP environment variable must be set.")
     return {
         "project_id": config.project_id,
         "region": config.region,
         "zone": config.zone,
-        "filestore_ip": filestore_ip,
-        "filestore_network": filestore_network,
+        "filestore_ip": config.filestore_ip,
         "nfs_share": config.nfs_share,
         "nfs_mount": config.nfs_mount_point,
         "gcs_bucket": config.databases_bucket_name,

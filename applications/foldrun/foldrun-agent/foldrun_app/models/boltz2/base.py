@@ -35,18 +35,14 @@ class BOLTZ2Tool(BaseTool):
         self,
         hardware_config: Dict[str, Any],
         filestore_ip: str = None,
-        filestore_network: str = None,
     ):
         """Set up environment variables for BOLTZ2 pipeline compilation."""
         nfs_server = filestore_ip or self.config.filestore_ip or ""
-        network = filestore_network or self.config.filestore_network or ""
-
         env_vars = {
             "BOLTZ2_COMPONENTS_IMAGE": self.config.base_image,
             "NFS_SERVER": nfs_server,
             "NFS_PATH": self.config.nfs_share,
             "NFS_MOUNT_POINT": self.config.nfs_mount_point,
-            "NETWORK": network,
             "BOLTZ2_CACHE_PATH": self.config.cache_path,
             "PREDICT_MACHINE_TYPE": hardware_config.get("predict_machine", "a2-highgpu-1g"),
             "PREDICT_ACCELERATOR_TYPE": hardware_config.get("predict_accel", "NVIDIA_TESLA_A100"),

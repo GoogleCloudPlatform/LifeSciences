@@ -14,7 +14,6 @@
 
 """Tests for OF3 pipeline compilation and config isolation."""
 
-import json
 import os
 import sys
 import tempfile
@@ -30,7 +29,6 @@ def mock_env():
         "GCP_PROJECT_ID": "test-project",
         "GCP_REGION": "us-central1",
         "GCS_BUCKET_NAME": "test-bucket",
-        "FILESTORE_ID": "test-nfs",
         "ALPHAFOLD_COMPONENTS_IMAGE": "af2-image:latest",
         "OPENFOLD3_COMPONENTS_IMAGE": "of3-image:stable",
         "NFS_SERVER": "10.1.0.2",

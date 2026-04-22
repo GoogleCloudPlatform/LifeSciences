@@ -26,7 +26,6 @@ def mock_env():
         "GCP_PROJECT_ID": "test-project",
         "GCP_REGION": "us-central1",
         "GCS_BUCKET_NAME": "test-bucket",
-        "FILESTORE_ID": "test-nfs",
         "BOLTZ2_COMPONENTS_IMAGE": "test-boltz2-image:stable",
     }
     with patch.dict(os.environ, env, clear=False):

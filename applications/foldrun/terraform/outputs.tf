@@ -67,15 +67,22 @@ output "subnet_id" {
   value       = local.subnet_id
 }
 
+output "vertex_ai_subnet_id" {
+  description = "The subnetwork ID for Vertex AI PSC interfaces"
+  value       = local.create_psc_network_attachment ? google_compute_subnetwork.vertex_ai_psc[0].id : ""
+}
+
 output "network_id" {
   description = "The resolved network ID (full path)"
   value       = local.network_id
 }
 
-output "network_project_number" {
-  description = "The resolved network project number"
-  value       = local.network_project_number
+output "vertex_ai_network_attachment" {
+  description = "The resolved Vertex AI network attachment ID"
+  value       = local.psc_network_attachment_id
 }
 
-
-
+output "filestore_ip" {
+  description = "The IP address of the Filestore instance"
+  value       = google_filestore_instance.foldrun_nfs.networks[0].ip_addresses[0]
+}

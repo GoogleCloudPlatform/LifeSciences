@@ -149,11 +149,6 @@ class TestDownloadToolResponse:
         tool = self._make_tool(mock_env_vars)
 
         with (
-            patch.object(
-                tool,
-                "_get_filestore_info",
-                return_value=("10.0.0.1", "projects/123/global/networks/default"),
-            ),
             patch("google.cloud.compute_v1.SubnetworksClient") as mock_subnets,
         ):
             mock_subnet = MagicMock()
@@ -176,11 +171,6 @@ class TestDownloadToolResponse:
         tool = self._make_tool(mock_env_vars)
 
         with (
-            patch.object(
-                tool,
-                "_get_filestore_info",
-                return_value=("10.0.0.1", "projects/123/global/networks/default"),
-            ),
             patch("google.cloud.compute_v1.SubnetworksClient") as mock_subnets,
         ):
             mock_subnet = MagicMock()
@@ -203,11 +193,6 @@ class TestDownloadToolResponse:
         tool = self._make_tool(mock_env_vars)
 
         with (
-            patch.object(
-                tool,
-                "_get_filestore_info",
-                return_value=("10.0.0.1", "projects/123/global/networks/default"),
-            ),
             patch("google.cloud.compute_v1.SubnetworksClient") as mock_subnets,
         ):
             mock_subnet = MagicMock()
@@ -226,80 +211,6 @@ class TestDownloadToolResponse:
                 assert "createdb" not in script, "Download should not chain MMseqs2 conversion"
                 assert "createindex" not in script, "Download should not chain MMseqs2 conversion"
                 assert "localssd" not in script, "Download should not use local SSD"
-
-
-# ------------------------------------------------------------------ #
-# Network qualification
-# ------------------------------------------------------------------ #
-
-
-class TestNetworkQualification:
-    """Verify _get_filestore_info always returns fully qualified network."""
-
-    def test_short_network_name_gets_qualified(self, mock_env_vars):
-        """Filestore API returning short name gets fully qualified."""
-        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
-            from foldrun_app.models.af2.base import AF2Tool
-            from foldrun_app.models.af2.config import Config
-
-            class DummyTool(AF2Tool):
-                def run(self, arguments):
-                    return {}
-
-            tool_config = {"name": "test", "description": "test"}
-            config = Config()
-            tool = DummyTool(tool_config, config)
-
-            mock_instance = MagicMock()
-            mock_instance.networks = [MagicMock()]
-            mock_instance.networks[0].ip_addresses = ["10.1.0.2"]
-            mock_instance.networks[0].network = "foldrun-network"  # Short name
-
-            mock_project = MagicMock()
-            mock_project.name = "projects/1051554583006"
-
-            with patch("google.cloud.filestore_v1.CloudFilestoreManagerClient") as mock_fs:
-                mock_fs.return_value.get_instance.return_value = mock_instance
-                with patch("google.cloud.resourcemanager_v3.ProjectsClient") as mock_rm:
-                    mock_rm.return_value.get_project.return_value = mock_project
-
-                    ip, network = tool._get_filestore_info()
-
-                    assert ip == "10.1.0.2"
-                    assert network == "projects/1051554583006/global/networks/foldrun-network"
-
-    def test_full_path_network_gets_requalified(self, mock_env_vars):
-        """Filestore API returning project_id path gets converted to project_number."""
-        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
-            from foldrun_app.models.af2.base import AF2Tool
-            from foldrun_app.models.af2.config import Config
-
-            class DummyTool(AF2Tool):
-                def run(self, arguments):
-                    return {}
-
-            tool_config = {"name": "test", "description": "test"}
-            config = Config()
-            tool = DummyTool(tool_config, config)
-
-            mock_instance = MagicMock()
-            mock_instance.networks = [MagicMock()]
-            mock_instance.networks[0].ip_addresses = ["10.1.0.2"]
-            mock_instance.networks[
-                0
-            ].network = "projects/my-project/global/networks/foldrun-network"
-
-            mock_project = MagicMock()
-            mock_project.name = "projects/1051554583006"
-
-            with patch("google.cloud.filestore_v1.CloudFilestoreManagerClient") as mock_fs:
-                mock_fs.return_value.get_instance.return_value = mock_instance
-                with patch("google.cloud.resourcemanager_v3.ProjectsClient") as mock_rm:
-                    mock_rm.return_value.get_project.return_value = mock_project
-
-                    ip, network = tool._get_filestore_info()
-
-                    assert network == "projects/1051554583006/global/networks/foldrun-network"
 
 
 # ------------------------------------------------------------------ #
@@ -325,21 +236,16 @@ class TestConversionLocalSSD:
 
         tool = self._make_tool(mock_env_vars)
 
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
-                tool.run({"databases": ["uniref90"]})
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
+            tool.run({"databases": ["uniref90"]})
 
-                assert mock_submit.call_args[1]["local_ssd_count"] == MMSEQS2_LOCAL_SSD_COUNT
-                assert MMSEQS2_LOCAL_SSD_COUNT == 2
+            assert mock_submit.call_args[1]["local_ssd_count"] == MMSEQS2_LOCAL_SSD_COUNT
+            assert MMSEQS2_LOCAL_SSD_COUNT == 2
 
 
 # ------------------------------------------------------------------ #
@@ -380,133 +286,103 @@ class TestConvertMMseqs2Tool:
         """When databases is None, submits one job per indexable database (3 total)."""
         tool = self._make_tool(mock_env_vars)
 
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
 
-                result = tool.run({})
+            result = tool.run({})
 
-                # Should submit 3 parallel jobs, one per database
-                assert mock_submit.call_count == 3
-                job_ids = [call[1]["job_id"] for call in mock_submit.call_args_list]
-                assert any("uniref90" in jid for jid in job_ids)
-                assert any("mgnify" in jid for jid in job_ids)
-                assert any("small-bfd" in jid for jid in job_ids)
-                assert result["status"] == "submitted"
-                assert len(result["jobs"]) == 3
+            # Should submit 3 parallel jobs, one per database
+            assert mock_submit.call_count == 3
+            job_ids = [call[1]["job_id"] for call in mock_submit.call_args_list]
+            assert any("uniref90" in jid for jid in job_ids)
+            assert any("mgnify" in jid for jid in job_ids)
+            assert any("small-bfd" in jid for jid in job_ids)
+            assert result["status"] == "submitted"
+            assert len(result["jobs"]) == 3
 
     def test_specific_databases_only(self, mock_env_vars):
         """Only requested databases get a conversion job."""
         tool = self._make_tool(mock_env_vars)
 
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
 
-                result = tool.run({"databases": ["uniref90"]})
+            result = tool.run({"databases": ["uniref90"]})
 
-                assert mock_submit.call_count == 1
-                assert "uniref90" in mock_submit.call_args[1]["job_id"]
-                assert len(result["jobs"]) == 1
+            assert mock_submit.call_count == 1
+            assert "uniref90" in mock_submit.call_args[1]["job_id"]
+            assert len(result["jobs"]) == 1
 
     def test_conversion_script_includes_gpu_preparation(self, mock_env_vars):
         """Conversion script includes makepaddedseqdb and createindex for GPU readiness."""
         tool = self._make_tool(mock_env_vars)
 
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
 
-                tool.run({"databases": ["uniref90"]})
+            tool.run({"databases": ["uniref90"]})
 
-                # Extract the script from the submitted batch job
-                script = mock_submit.call_args[1]["script"]
+            # Extract the script from the submitted batch job
+            script = mock_submit.call_args[1]["script"]
 
-                # Should set up local SSD RAID-0 for fast scratch I/O
-                assert "RAID-0" in script, "Script must set up local SSD RAID-0"
-                assert "mdadm" in script, "Script must use mdadm for RAID"
-                assert "/mnt/localssd" in script, "Script must mount local SSD"
-                # Should create temp db, then pad it, then index it
-                assert "createdb" in script
-                assert "_tmp'" in script, "createdb should write to a _tmp path"
-                assert "makepaddedseqdb" in script, (
-                    "Script must include makepaddedseqdb for GPU support"
-                )
-                assert "createindex" in script, (
-                    "Script must include createindex for GPU k-mer index"
-                )
-                assert "--split 1" in script, (
-                    "uniref90 should use --split 1 (single-pass on n1-highmem-32)"
-                )
-                assert "--index-subset 2" in script
-                assert "--remove-tmp-files 1" in script, (
-                    "createindex must clean up intermediates during build"
-                )
-                # Should copy results to NFS and clean up
-                assert "cp " in script and "localssd" in script, (
-                    "Must copy results from local SSD to NFS"
-                )
-                assert "rm -f" in script and "_tmp" in script
+            # Should set up local SSD RAID-0 for fast scratch I/O
+            assert "RAID-0" in script, "Script must set up local SSD RAID-0"
+            assert "mdadm" in script, "Script must use mdadm for RAID"
+            assert "/mnt/localssd" in script, "Script must mount local SSD"
+            # Should create temp db, then pad it, then index it
+            assert "createdb" in script
+            assert "_tmp'" in script, "createdb should write to a _tmp path"
+            assert "makepaddedseqdb" in script, (
+                "Script must include makepaddedseqdb for GPU support"
+            )
+            assert "createindex" in script, (
+                "Script must include createindex for GPU k-mer index"
+            )
+            assert "--split 1" in script, (
+                "uniref90 should use --split 1 (single-pass on n1-highmem-32)"
+            )
+            assert "--index-subset 2" in script
+            assert "--remove-tmp-files 1" in script, (
+                "createindex must clean up intermediates during build"
+            )
+            # Should copy results to NFS and clean up
+            assert "cp " in script and "localssd" in script, (
+                "Must copy results from local SSD to NFS"
+            )
+            assert "rm -f" in script and "_tmp" in script
 
     def test_conversion_script_cleanup_includes_tmp(self, mock_env_vars):
         """Pre-cleanup section removes both final and _tmp artifacts on retry."""
         tool = self._make_tool(mock_env_vars)
 
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
 
-                tool.run({"databases": ["uniref90"]})
+            tool.run({"databases": ["uniref90"]})
 
-                script = mock_submit.call_args[1]["script"]
+            script = mock_submit.call_args[1]["script"]
 
-                # Pre-cleanup should handle both the final db and _tmp artifacts
-                lines = script.split("\n")
-                cleanup_lines = [l for l in lines if "rm -f" in l and "Cleaning" not in l]
-                tmp_cleanup = [l for l in cleanup_lines if "_tmp" in l]
-                assert len(tmp_cleanup) >= 1, "Should clean up _tmp files from failed previous runs"
-
-    def test_filestore_failure_returns_error(self, mock_env_vars):
-        """Filestore info failure returns error status."""
-        tool = self._make_tool(mock_env_vars)
-
-        with patch.object(tool, "_get_filestore_info", side_effect=Exception("No Filestore")):
-            result = tool.run({"databases": ["uniref90"]})
-
-            assert result["status"] == "error"
-            assert "Filestore" in result["message"]
+            # Pre-cleanup should handle both the final db and _tmp artifacts
+            lines = script.split("\n")
+            cleanup_lines = [l for l in lines if "rm -f" in l and "Cleaning" not in l]
+            tmp_cleanup = [l for l in cleanup_lines if "_tmp" in l]
+            assert len(tmp_cleanup) >= 1, "Should clean up _tmp files from failed previous runs"
 
 
 # ------------------------------------------------------------------ #
@@ -760,7 +636,7 @@ class TestCompileEnvMMseqs2:
         tool = self._make_tool(mock_env_vars)
         hw = tool._get_hardware_config("L4", msa_method="mmseqs2")
 
-        tool._setup_compile_env(hw, "10.0.0.1", "projects/123/global/networks/default")
+        tool._setup_compile_env(hw, "10.0.0.1")
 
         assert os.environ.get("MMSEQS2_DATA_PIPELINE_MACHINE_TYPE") == "g2-standard-12"
         assert os.environ.get("MMSEQS2_ACCELERATOR_TYPE") == "NVIDIA_L4"
@@ -779,7 +655,7 @@ class TestCompileEnvMMseqs2:
         ]:
             os.environ.pop(key, None)
 
-        tool._setup_compile_env(hw, "10.0.0.1", "projects/123/global/networks/default")
+        tool._setup_compile_env(hw, "10.0.0.1")
 
         assert "MMSEQS2_DATA_PIPELINE_MACHINE_TYPE" not in os.environ
 
@@ -840,33 +716,29 @@ class TestSubmitToolMMseqs2Validation:
         assert "use_small_bfd=True" in result["message"]
 
     def _run_with_mocked_pipeline(self, tool, arguments):
-        """Run tool.run() with all post-validation GCP calls mocked.
-
-        Patches load_vertex_pipeline at the import site in each submit tool
-        module so we don't need to import the pipeline components (which
-        require sys.path manipulation for `import config`).
-        """
+        """Run tool.run() with all post-validation GCP calls mocked."""
+        from unittest.mock import mock_open
+        pipeline_mock_content = "{}"
         with (
             patch.object(tool, "_upload_to_gcs"),
-            patch.object(
-                tool,
-                "_get_filestore_info",
-                return_value=("10.0.0.1", "projects/123/global/networks/default"),
-            ),
-            patch("google.cloud.aiplatform.PipelineJob") as mock_pj,
+            patch("google.cloud.aiplatform_v1.PipelineServiceClient") as mock_client_cls,
             patch(
                 "foldrun_app.models.af2.utils.pipeline_utils.load_vertex_pipeline",
                 return_value=MagicMock(),
             ),
             patch("kfp.compiler.Compiler"),
+            patch("builtins.open", mock_open(read_data=pipeline_mock_content)),
             patch("os.remove"),
         ):
-            mock_job = MagicMock()
-            mock_job.resource_name = "projects/123/locations/us-central1/pipelineJobs/test-job"
-            mock_pj.return_value = mock_job
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+
+            mock_response = MagicMock()
+            mock_response.name = "projects/123/locations/us-central1/pipelineJobs/test-job"
+            mock_client.create_pipeline_job.return_value = mock_response
 
             result = tool.run(arguments)
-            return result, mock_pj
+            return result, mock_client
 
     def test_monomer_jackhmmer_allows_full_bfd(self, mock_env_vars):
         """Monomer: jackhmmer + use_small_bfd=False passes msa_method validation."""
@@ -922,8 +794,9 @@ class TestSubmitToolMMseqs2Validation:
             },
         )
 
-        call_kwargs = mock_pj.call_args[1]
-        assert call_kwargs["labels"]["msa_method"] == "mmseqs2"
+        call_args = mock_pj.create_pipeline_job.call_args
+        request = call_args[1]["request"]
+        assert request.pipeline_job.labels["msa_method"] == "mmseqs2"
 
 
 # ------------------------------------------------------------------ #

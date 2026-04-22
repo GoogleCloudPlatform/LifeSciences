@@ -93,7 +93,9 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
                     mountPoint=config.NFS_MOUNT_POINT,
                 )
             ],
-            network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
+            psc_interface_config={
+                "network_attachment": os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT", "placeholder")
+            },
             strategy=dp_strategy,
         )
         if dp_accel_type and dp_accel_count > 0:

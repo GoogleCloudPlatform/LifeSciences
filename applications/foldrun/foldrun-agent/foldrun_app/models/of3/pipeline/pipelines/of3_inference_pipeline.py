@@ -89,7 +89,9 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
                     mountPoint=config.NFS_MOUNT_POINT,
                 )
             ],
-            network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
+            psc_interface_config={
+                "network_attachment": os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT", "placeholder")
+            },
             strategy="STANDARD",  # CPU-only, no FLEX_START needed
         )
 
@@ -148,7 +150,9 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
                     mountPoint=config.NFS_MOUNT_POINT,
                 )
             ],
-            network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
+            psc_interface_config={
+                "network_attachment": os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT", "placeholder")
+            },
             strategy=strategy,
             max_wait_duration=max_wait,
         )

@@ -38,86 +38,9 @@ MACHINE_MEMORY_MB = {
 }
 
 
-def get_filestore_info(
-    project_id: str,
-    zone: str,
-    filestore_id: str,
-    filestore_ip: str = None,
-    filestore_network: str = None,
-):
-    """Get Filestore IP and network, from env vars or Filestore API.
-
-    Returns:
-        Tuple of (filestore_ip, filestore_network) where network is fully
-        qualified as projects/{number}/global/networks/{name}.
-    """
-    if filestore_ip and filestore_network:
-        return filestore_ip, filestore_network
-
-    from google.cloud import filestore_v1
-
-    client = filestore_v1.CloudFilestoreManagerClient()
-    name = f"projects/{project_id}/locations/{zone}/instances/{filestore_id}"
-    instance = client.get_instance(name=name)
-    ip = instance.networks[0].ip_addresses[0]
-    network = instance.networks[0].network
-
-    parts = network.split("/")
-    if len(parts) >= 5:
-        network_project = parts[1]
-        network_name = parts[4]
-        if network_project.isdigit():
-            network = f"projects/{network_project}/global/networks/{network_name}"
-        else:
-            try:
-                net_project_number = get_project_number(network_project)
-                network = f"projects/{net_project_number}/global/networks/{network_name}"
-            except Exception as e:
-                logger.warning(
-                    f"Failed to get project number for {network_project}: {e}. Using project ID."
-                )
-                network = f"projects/{network_project}/global/networks/{network_name}"
-
-    logger.info(f"Retrieved Filestore info: IP={ip}, Network={network}")
-    return ip, network
-
-
-def get_project_number(project_id: str) -> str:
-    """Get the GCP project number from the project ID."""
-    from google.cloud import resourcemanager_v3
-
-    client = resourcemanager_v3.ProjectsClient()
-    project = client.get_project(name=f"projects/{project_id}")
-    return project.name.split("/")[-1]
-
-
-def resolve_subnet(project_id: str, region: str, network: str) -> str:
-    """Find the subnet name for a VPC network in a given region."""
-    from google.cloud import compute_v1
-
-    vpc_name = network.split("/")[-1] if "/" in network else network
-    subnets_client = compute_v1.SubnetworksClient()
-    request = compute_v1.ListSubnetworksRequest(
-        project=project_id,
-        region=region,
-    )
-    matching = [
-        s
-        for s in subnets_client.list(request=request)
-        if s.network.endswith(f"/networks/{vpc_name}")
-    ]
-    if not matching:
-        raise RuntimeError(
-            f"No subnets found for VPC '{vpc_name}' in {region}. "
-            "Batch VMs need a subnet on the same VPC as Filestore."
-        )
-    return matching[0].name
-
-
 def get_or_create_instance_template(
     project_id: str,
     machine_type: str,
-    network: str,
     subnet: str,
     local_ssd_count: int = 0,
 ) -> str:
@@ -164,7 +87,6 @@ def get_or_create_instance_template(
         props.disks.append(local_ssd)
 
     nic = compute_v1.NetworkInterface()
-    nic.network = network
     nic.subnetwork = subnet
     props.network_interfaces = [nic]
 
@@ -196,11 +118,10 @@ def submit_batch_job(
     script: str,
     machine_type: str,
     filestore_ip: str,
-    filestore_network: str,
     nfs_share: str,
     nfs_mount: str,
     labels: Optional[Dict[str, str]] = None,
-    subnet_name: Optional[str] = None,
+    subnet_id: Optional[str] = None,
     local_ssd_count: int = 0,
 ) -> Dict[str, Any]:
     """Submit a Cloud Batch job with NFS volume mount.
@@ -247,29 +168,15 @@ def submit_batch_job(
     task_group.task_count = 1
     task_group.parallelism = 1
 
-    if not subnet_name:
-        subnet_name = os.getenv("SUBNET_ID") or resolve_subnet(
-            project_id, region, filestore_network
-        )
-
-    if "global/networks/" in filestore_network:
-        batch_network = filestore_network
-    else:
-        net_name = (
-            filestore_network.split("/")[-1] if "/" in filestore_network else filestore_network
-        )
-        batch_network = f"projects/{project_id}/global/networks/{net_name}"
-
-    if subnet_name.startswith("projects/"):
-        batch_subnet = subnet_name
-    else:
-        batch_subnet = f"projects/{project_id}/regions/{region}/subnetworks/{subnet_name}"
+    if not subnet_id:
+        subnet_id = os.getenv("SUBNET_ID")
+        if not subnet_id:
+            raise ValueError("SUBNET_ID environment variable must be set.")
 
     instance_template_url = get_or_create_instance_template(
         project_id=project_id,
         machine_type=machine_type,
-        network=batch_network,
-        subnet=batch_subnet,
+        subnet=subnet_id,
         local_ssd_count=local_ssd_count,
     )
 

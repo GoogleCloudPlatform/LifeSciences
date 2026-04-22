@@ -141,17 +141,19 @@ GCS_SOURCE_BUCKET=THEIR_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 
 ### Step 2c: Shared VPC Configuration (Optional)
 
-If you are deploying FoldRun into a Shared VPC (where the network belongs to a host project), follow these steps to ensure correct permissions:
+If you are deploying FoldRun into a Shared VPC (where the network belongs to a host project), follow these steps to ensure correct permissions and PSC configuration:
 
 **1. Create `terraform.tfvars`:**
-In the `applications/foldrun/terraform/` directory, create a `terraform.tfvars` file with your network details:
+In the `applications/foldrun/terraform/` directory, create a `terraform.tfvars` file with your network details and the existing network attachment name for Vertex AI:
 ```hcl
-network_name           = "your-existing-vpc-name"
-subnet_name            = "your-existing-subnet-name"
-network_project_id     = "your-host-project-id"
-network_project_number = "your-host-project-number"
+network_name                      = "your-existing-vpc-name"
+subnet_name                       = "your-existing-subnet-name"
+network_project_id                = "your-host-project-id"
+vertex_ai_network_attachment_name = "your-existing-network-attachment-name"
 ```
 
+> [!NOTE]
+> In a Shared VPC scenario, network administrators usually create the network attachment. Refer to the [Vertex AI documentation](https://docs.cloud.google.com/vertex-ai/docs/general/vpc-psc-i-setup) for instructions on how to create a network attachment in the host project.
 
 **2. Enable Cloud Run API and Grant Permissions:**
 Enable the Cloud Run API in your service project so that the Cloud Run Service Agent is created:
@@ -172,17 +174,25 @@ Run the deployment script with only the `infra` step:
 ```
 
 **4. Grant IAM permissions on the Host Project:**
-The previous step created the service account needed for the batch jobs. Now you must grant the Cloud Batch Service Agent the `Compute Network User` role on the host project or specific subnet.
+The previous step created the service accounts needed for batch jobs and pipelines. Now you must grant permissions on the host project.
 
 Ask your host project administrator to run these commands (replacing `HOST_PROJECT_ID`, `SERVICE_PROJECT_ID`, and `PROJECT_NUMBER`):
 
-```bash
-gcloud compute networks subnets add-iam-policy-binding SUBNET_NAME \
-  --region REGION \
-  --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-cloudbatch.iam.gserviceaccount.com" \
-  --role="roles/compute.networkUser" \
-  --project HOST_PROJECT_ID
-```
+*   **For Cloud Batch**: Grant `Compute Network User` role on the subnet:
+    ```bash
+    gcloud compute networks subnets add-iam-policy-binding SUBNET_NAME \
+      --region REGION \
+      --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-cloudbatch.iam.gserviceaccount.com" \
+      --role="roles/compute.networkUser" \
+      --project HOST_PROJECT_ID
+    ```
+
+*   **For Vertex AI Pipelines**: Grant `Compute Network Admin` role on the host project (needed for PSC interface):
+    ```bash
+    gcloud projects add-iam-policy-binding HOST_PROJECT_ID \
+      --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-aiplatform.iam.gserviceaccount.com" \
+      --role="roles/compute.networkAdmin"
+    ```
 
 **5. Complete the deployment:**
 Now run the deployment script regularly to build containers and deploy the application:

@@ -26,7 +26,6 @@ def mock_env():
         "GCP_PROJECT_ID": "test-project",
         "GCP_REGION": "us-central1",
         "GCS_BUCKET_NAME": "test-bucket",
-        "FILESTORE_ID": "test-nfs",
         "BOLTZ2_COMPONENTS_IMAGE": "test-boltz2-image:stable",
         "BOLTZ2_CACHE_PATH": "boltz2/cache",
     }
@@ -77,7 +76,6 @@ class TestBOLTZ2Config:
             "region",
             "zone",
             "bucket_name",
-            "filestore_id",
             "base_image",
             "cache_path",
             "supported_gpus",

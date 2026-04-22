@@ -21,7 +21,7 @@ import tempfile
 from datetime import datetime
 from typing import Any, Dict
 
-from google.cloud import aiplatform as vertex_ai
+from google.cloud import aiplatform_v1
 
 from ..base import BOLTZ2Tool
 from ..utils.input_converter import count_tokens, fasta_to_boltz2_yaml, is_boltz2_yaml, validate_boltz2_yaml
@@ -48,7 +48,9 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             Job submission details.
         """
         input_data = arguments.get("input")
-        job_name = arguments.get("job_name", f"boltz2_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        now = datetime.now()
+        job_id = f"boltz2-inference-pipeline-{now.strftime('%Y%m%d%H%M%S')}"
+        job_name = arguments.get("job_name", f"boltz2_{now.strftime('%Y%m%d_%H%M%S')}")
         num_model_seeds = arguments.get("num_model_seeds", 1)
         num_diffusion_samples = arguments.get("num_diffusion_samples", 5)
         gpu_type = arguments.get("gpu_type", "auto")
@@ -97,12 +99,12 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         gcs_query_path = f"gs://{self.config.bucket_name}/boltz2_queries/{job_name}.yaml"
         self._upload_to_gcs(temp_yaml.name, gcs_query_path)
 
-        # Get Filestore info
-        if not self.config.filestore_ip:
-            filestore_ip, filestore_network = self._get_filestore_info()
-        else:
-            filestore_ip = self.config.filestore_ip
-            filestore_network = self.config.filestore_network
+        filestore_ip = self.config.filestore_ip
+        if not filestore_ip:
+            return {
+                "status": "error",
+                "message": "FILESTORE_IP environment variable must be set.",
+            }
 
         # Setup hardware configuration
         hardware_config = self._get_hardware_config(
@@ -117,7 +119,7 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         }
 
         # Setup environment for pipeline compilation
-        self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
+        self._setup_compile_env(hardware_config, filestore_ip=filestore_ip)
 
         # Load and compile pipeline
         from ..utils.pipeline_utils import load_vertex_pipeline
@@ -172,10 +174,38 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             "labels": labels,
         }
 
-        pipeline_job = vertex_ai.PipelineJob(**job_kwargs)
-        pipeline_job.submit(
-            network=filestore_network, service_account=os.environ.get("PIPELINES_SA_EMAIL")
+        import json
+
+        with open(pipeline_path, "r") as f:
+            pipeline_spec = json.load(f)
+
+        client = aiplatform_v1.PipelineServiceClient(
+            client_options={"api_endpoint": f"{self.config.region}-aiplatform.googleapis.com"}
         )
+
+        network_attachment = os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT")
+
+        psc_interface_config = aiplatform_v1.PscInterfaceConfig(
+            network_attachment=network_attachment
+        )
+
+        request = aiplatform_v1.CreatePipelineJobRequest(
+            parent=f"projects/{self.config.project_id}/locations/{self.config.region}",
+            pipeline_job=aiplatform_v1.PipelineJob(
+                display_name=job_name,
+                pipeline_spec=pipeline_spec,
+                runtime_config=aiplatform_v1.PipelineJob.RuntimeConfig(
+                    gcs_output_directory=pipeline_root,
+                    parameter_values=job_kwargs["parameter_values"],
+                ),
+                psc_interface_config=psc_interface_config,
+                labels=labels,
+                service_account=os.environ.get("PIPELINES_SA_EMAIL"),
+            ),
+            pipeline_job_id=job_id,
+        )
+
+        response = client.create_pipeline_job(request=request)
 
         # Clean up temp files
         os.remove(pipeline_path)
@@ -200,10 +230,10 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             num_chains += 1
 
         return {
-            "job_id": pipeline_job.resource_name,
+            "job_id": job_id,
             "job_name": job_name,
             "status": "submitted",
-            "console_url": f"https://console.cloud.google.com/vertex-ai/locations/{self.config.region}/pipelines/runs/{pipeline_job.resource_name.split('/')[-1]}?project={self.config.project_id}",
+            "console_url": f"https://console.cloud.google.com/vertex-ai/locations/{self.config.region}/pipelines/runs/{job_id}?project={self.config.project_id}",
             "input_info": {
                 "name": query_name,
                 "num_tokens": num_tokens,

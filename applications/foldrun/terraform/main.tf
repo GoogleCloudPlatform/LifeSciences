@@ -110,8 +110,7 @@ resource "time_sleep" "service_agent_creation_sleep" {
 locals {
   create_network = var.network_name == ""
 
-  network_project_id     = var.network_project_id != "" ? var.network_project_id : var.project_id
-  network_project_number = var.network_project_number != "" ? var.network_project_number : data.google_project.project.number
+  network_project_id = var.network_project_id != "" ? var.network_project_id : var.project_id
 
   network_name = local.create_network ? google_compute_network.foldrun_vpc[0].name : var.network_name
   network_id   = local.create_network ? google_compute_network.foldrun_vpc[0].id : data.google_compute_network.existing_vpc[0].id
@@ -146,6 +145,16 @@ resource "google_compute_subnetwork" "foldrun_subnet" {
   name                     = "${var.vpc_name}-subnet"
   project                  = var.project_id
   ip_cidr_range            = var.subnet_cidr
+  region                   = var.region
+  network                  = google_compute_network.foldrun_vpc[0].id
+  private_ip_google_access = true
+}
+
+resource "google_compute_subnetwork" "vertex_ai_psc" {
+  count                    = local.create_network ? 1 : 0
+  name                     = "${var.vpc_name}-vertex-ai-psc"
+  project                  = var.project_id
+  ip_cidr_range            = var.vertex_ai_subnet_cidr
   region                   = var.region
   network                  = google_compute_network.foldrun_vpc[0].id
   private_ip_google_access = true
@@ -189,6 +198,30 @@ resource "google_compute_router_nat" "foldrun_nat" {
   region                             = var.region
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+}
+
+# ==============================================================================
+# Network Attachment (required for Vertex AI Private Service Connect)
+# ==============================================================================
+locals {
+  create_psc_network_attachment = var.vertex_ai_network_attachment_id == "" && local.create_network
+  psc_network_attachment_id     = local.create_psc_network_attachment ? google_compute_network_attachment.vertex_ai_attachment[0].id : var.vertex_ai_network_attachment_id
+}
+
+resource "google_compute_network_attachment" "vertex_ai_attachment" {
+  count                 = local.create_psc_network_attachment ? 1 : 0
+  name                  = "foldrun-vertex-ai-attachment"
+  project               = var.project_id
+  region                = var.region
+  connection_preference = "ACCEPT_AUTOMATIC"
+  subnetworks           = [google_compute_subnetwork.vertex_ai_psc[0].id]
+}
+
+resource "google_project_iam_member" "vertex_ai_network_admin" {
+  count   = local.create_network ? 1 : 0
+  project = var.project_id
+  role    = "roles/compute.networkAdmin"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-aiplatform.iam.gserviceaccount.com"
 }
 
 # ==============================================================================

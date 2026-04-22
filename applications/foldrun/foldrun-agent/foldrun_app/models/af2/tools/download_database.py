@@ -105,12 +105,11 @@ class DownloadDatabaseTool(AF2Tool):
         if not gcs_output_path.endswith("/"):
             gcs_output_path += "/"
 
-        try:
-            filestore_ip, filestore_network = self._get_filestore_info()
-        except Exception as e:
+        filestore_ip = self.config.filestore_ip
+        if not filestore_ip:
             return {
                 "status": "error",
-                "message": f"Failed to get Filestore info: {str(e)}. Ensure FILESTORE_ID is configured.",
+                "message": "FILESTORE_IP environment variable must be set.",
             }
 
         nfs_mount = self.config.nfs_mount_point
@@ -150,7 +149,6 @@ class DownloadDatabaseTool(AF2Tool):
                 script=full_script,
                 machine_type=machine_type,
                 filestore_ip=filestore_ip,
-                filestore_network=filestore_network,
                 nfs_share=nfs_share,
                 nfs_mount=nfs_mount,
                 labels={
@@ -216,12 +214,11 @@ class ConvertMMseqs2Tool(AF2Tool):
 
         machine_type_override = arguments.get("machine_type")
 
-        try:
-            filestore_ip, filestore_network = self._get_filestore_info()
-        except Exception as e:
+        filestore_ip = self.config.filestore_ip
+        if not filestore_ip:
             return {
                 "status": "error",
-                "message": f"Failed to get Filestore info: {str(e)}",
+                "message": "FILESTORE_IP environment variable must be set.",
             }
 
         nfs_mount = self.config.nfs_mount_point
@@ -289,7 +286,6 @@ class ConvertMMseqs2Tool(AF2Tool):
                     script=script,
                     machine_type=machine_type,
                     filestore_ip=filestore_ip,
-                    filestore_network=filestore_network,
                     nfs_share=nfs_share,
                     nfs_mount=nfs_mount,
                     labels={

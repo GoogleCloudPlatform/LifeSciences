@@ -63,7 +63,6 @@ usage() {
     echo "  GCS_BUCKET         Pipeline data bucket (default: PROJECT_ID-foldrun-data)"
     echo "  DATABASES_BUCKET   Genomic databases bucket (default: PROJECT_ID-foldrun-gdbs)"
     echo "  AR_REPO            Artifact Registry repo name (default: foldrun-repo)"
-    echo "  FILESTORE_ID       Filestore instance ID (default: foldrun-nfs)"
     echo "  AGENT_SA_EMAIL     Agent service account email"
     echo "  BUILD_SA_EMAIL     Cloud Build service account email"
     echo "  PIPELINES_SA_EMAIL Vertex AI Pipelines service account email"
@@ -203,14 +202,13 @@ extract_terraform_outputs() {
     # Apply naming-convention defaults first (no terraform needed)
     export GCS_BUCKET="${GCS_BUCKET:-${PROJECT_ID}-foldrun-data}"
     export AR_REPO="${AR_REPO:-foldrun-repo}"
-    export FILESTORE_ID="${FILESTORE_ID:-foldrun-nfs}"
     export AGENT_SA_EMAIL="${AGENT_SA_EMAIL:-foldrun-agent-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export BUILD_SA_EMAIL="${BUILD_SA_EMAIL:-foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export PIPELINES_SA_EMAIL="${PIPELINES_SA_EMAIL:-pipelines-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export DATABASES_BUCKET="${DATABASES_BUCKET:-${PROJECT_ID}-foldrun-gdbs}"
     export SUBNET_ID="${SUBNET_ID:-}"
-    export NETWORK_ID="${NETWORK_ID:-}"
-    export NETWORK_PROJECT_NUMBER="${NETWORK_PROJECT_NUMBER:-}"
+    export VERTEX_AI_NETWORK_ATTACHMENT="${VERTEX_AI_NETWORK_ATTACHMENT:-}"
+    export FILESTORE_IP="${FILESTORE_IP:-}"
 
     # If terraform is available and state exists, cross-check and prefer its outputs
     # (useful immediately after --steps infra when non-default names may have been used)
@@ -220,14 +218,13 @@ extract_terraform_outputs() {
             _tf() { terraform output -raw "$1" 2>/dev/null; }
             v=$(_tf gcs_bucket_name);       [[ -n "$v" ]] && export GCS_BUCKET="$v"
             v=$(_tf artifact_registry_repo); [[ -n "$v" ]] && export AR_REPO="$v"
-            v=$(_tf filestore_id);           [[ -n "$v" ]] && export FILESTORE_ID="$v"
             v=$(_tf agent_sa_email);         [[ -n "$v" ]] && export AGENT_SA_EMAIL="$v"
             v=$(_tf build_sa_email);         [[ -n "$v" ]] && export BUILD_SA_EMAIL="$v"
             v=$(_tf pipelines_sa_email);     [[ -n "$v" ]] && export PIPELINES_SA_EMAIL="$v"
             v=$(_tf databases_bucket_name);  [[ -n "$v" ]] && export DATABASES_BUCKET="$v"
             v=$(_tf subnet_id);              [[ -n "$v" ]] && export SUBNET_ID="$v"
-            v=$(_tf network_id);             [[ -n "$v" ]] && export NETWORK_ID="$v"
-            v=$(_tf network_project_number); [[ -n "$v" ]] && export NETWORK_PROJECT_NUMBER="$v"
+            v=$(_tf vertex_ai_network_attachment); [[ -n "$v" ]] && export VERTEX_AI_NETWORK_ATTACHMENT="$v"
+            v=$(_tf filestore_ip);                 [[ -n "$v" ]] && export FILESTORE_IP="$v"
             unset -f _tf
         fi
         cd ..
@@ -236,14 +233,13 @@ extract_terraform_outputs() {
     echo "Configuration:"
     echo "  GCS_BUCKET=$GCS_BUCKET"
     echo "  AR_REPO=$AR_REPO"
-    echo "  FILESTORE_ID=$FILESTORE_ID"
     echo "  DATABASES_BUCKET=$DATABASES_BUCKET"
     echo "  AGENT_SA_EMAIL=$AGENT_SA_EMAIL"
     echo "  BUILD_SA_EMAIL=$BUILD_SA_EMAIL"
     echo "  PIPELINES_SA_EMAIL=$PIPELINES_SA_EMAIL"
     echo "  SUBNET_ID=$SUBNET_ID"
-    echo "  NETWORK_ID=$NETWORK_ID"
-    echo "  NETWORK_PROJECT_NUMBER=$NETWORK_PROJECT_NUMBER"
+    echo "  VERTEX_AI_NETWORK_ATTACHMENT=$VERTEX_AI_NETWORK_ATTACHMENT"
+    echo "  FILESTORE_IP=$FILESTORE_IP"
 }
 
 # ==============================================================================
@@ -301,7 +297,6 @@ if $run_build; then
     echo "Substitutions:"
     echo "  _REGION=${REGION}"
     echo "  _BUCKET_NAME=${GCS_BUCKET}"
-    echo "  _FILESTORE_ID=${FILESTORE_ID}"
     echo "  _AR_REPO=${AR_REPO}"
     echo "  _AGENT_SA_EMAIL=${AGENT_SA_EMAIL}"
     echo "  _PIPELINES_SA_EMAIL=${PIPELINES_SA_EMAIL}"
@@ -311,7 +306,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_VERTEX_AI_NETWORK_ATTACHMENT="$VERTEX_AI_NETWORK_ATTACHMENT",_FILESTORE_IP="$FILESTORE_IP",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi

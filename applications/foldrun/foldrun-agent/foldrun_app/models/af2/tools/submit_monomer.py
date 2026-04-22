@@ -20,7 +20,7 @@ import tempfile
 from datetime import datetime
 from typing import Any, Dict
 
-from google.cloud import aiplatform as vertex_ai
+from google.cloud import aiplatform_v1
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,9 @@ class AF2SubmitMonomerTool(AF2Tool):
         """
         # Extract parameters
         sequence = arguments.get("sequence")
-        job_name = arguments.get("job_name", f"monomer_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        now = datetime.now()
+        job_id = f"alphafold2-inference-pipeline-{now.strftime('%Y%m%d%H%M%S')}"
+        job_name = arguments.get("job_name", f"monomer_{now.strftime('%Y%m%d_%H%M%S')}")
         max_template_date = arguments.get(
             "max_template_date", "2025-04-01"
         )  # Matches DB download date (April 2025)
@@ -121,12 +123,12 @@ class AF2SubmitMonomerTool(AF2Tool):
         gcs_sequence_path = f"gs://{self.config.bucket_name}/fasta/{job_name}.fasta"
         self._upload_to_gcs(fasta_path, gcs_sequence_path)
 
-        # Get Filestore info if not already configured
-        if not self.config.filestore_ip:
-            filestore_ip, filestore_network = self._get_filestore_info()
-        else:
-            filestore_ip = self.config.filestore_ip
-            filestore_network = self.config.filestore_network
+        filestore_ip = self.config.filestore_ip
+        if not filestore_ip:
+            return {
+                "status": "error",
+                "message": "FILESTORE_IP environment variable must be set.",
+            }
 
         # Setup hardware configuration and environment (auto-selects GPU and MSA method)
         hardware_config = self._get_hardware_config(
@@ -148,7 +150,7 @@ class AF2SubmitMonomerTool(AF2Tool):
         }
 
         # Pass filestore info to environment setup
-        self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
+        self._setup_compile_env(hardware_config, filestore_ip=filestore_ip)
 
         # Import the vendored pipeline
         from ..utils.pipeline_utils import load_vertex_pipeline
@@ -199,10 +201,38 @@ class AF2SubmitMonomerTool(AF2Tool):
         }
 
         # Submit pipeline job (DWS scheduling already baked into compiled pipeline if enabled)
-        pipeline_job = vertex_ai.PipelineJob(**job_kwargs)
-        pipeline_job.submit(
-            network=filestore_network, service_account=os.environ.get("PIPELINES_SA_EMAIL")
+        import json
+
+        with open(pipeline_path, "r") as f:
+            pipeline_spec = json.load(f)
+
+        client = aiplatform_v1.PipelineServiceClient(
+            client_options={"api_endpoint": f"{self.config.region}-aiplatform.googleapis.com"}
         )
+
+        network_attachment = os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT")
+
+        psc_interface_config = aiplatform_v1.PscInterfaceConfig(
+            network_attachment=network_attachment
+        )
+
+        request = aiplatform_v1.CreatePipelineJobRequest(
+            parent=f"projects/{self.config.project_id}/locations/{self.config.region}",
+            pipeline_job=aiplatform_v1.PipelineJob(
+                display_name=job_name,
+                pipeline_spec=pipeline_spec,
+                runtime_config=aiplatform_v1.PipelineJob.RuntimeConfig(
+                    gcs_output_directory=pipeline_root,
+                    parameter_values=job_kwargs["parameter_values"],
+                ),
+                psc_interface_config=psc_interface_config,
+                labels=labels,
+                service_account=os.environ.get("PIPELINES_SA_EMAIL"),
+            ),
+            pipeline_job_id=job_id,
+        )
+
+        response = client.create_pipeline_job(request=request)
 
         # Clean up
         os.remove(pipeline_path)
@@ -211,10 +241,10 @@ class AF2SubmitMonomerTool(AF2Tool):
 
         # Return result
         return {
-            "job_id": pipeline_job.resource_name,
+            "job_id": job_id,
             "job_name": job_name,
             "status": "submitted",
-            "console_url": f"https://console.cloud.google.com/vertex-ai/locations/{self.config.region}/pipelines/runs/{pipeline_job.resource_name.split('/')[-1]}?project={self.config.project_id}",
+            "console_url": f"https://console.cloud.google.com/vertex-ai/locations/{self.config.region}/pipelines/runs/{job_id}?project={self.config.project_id}",
             "sequence_info": {"name": seq_name, "length": seq_length, "type": "monomer"},
             "hardware": {
                 "data_pipeline": f"{hardware_config.get('dp_machine', hardware_config['data_pipeline'])} (MMseqs2-GPU)"

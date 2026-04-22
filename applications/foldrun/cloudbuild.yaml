@@ -307,23 +307,20 @@ steps:
         export GCP_REGION=${_REGION}
         export GCS_BUCKET_NAME=${_BUCKET_NAME}
         export GCS_DATABASES_BUCKET=${_DATABASES_BUCKET}
-        export FILESTORE_ID=${_FILESTORE_ID}
         export ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest
         export OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
         export BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest
+        export FILESTORE_IP=${_FILESTORE_IP}
+        export VERTEX_AI_NETWORK_ATTACHMENT=${_VERTEX_AI_NETWORK_ATTACHMENT}
 
         VIEWER_URL=$$(cat /workspace/viewer_url.txt)
         export AF2_VIEWER_URL=$$VIEWER_URL
-
-        ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,BOLTZ2_ANALYSIS_JOB_NAME=boltz2-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}"
-        [[ -n "${_NETWORK_ID}" ]] && ENV_VARS="$$ENV_VARS,NETWORK=${_NETWORK_ID}"
-        [[ -n "${_NETWORK_PROJECT_NUMBER}" ]] && ENV_VARS="$$ENV_VARS,NETWORK_PROJECT_NUMBER=${_NETWORK_PROJECT_NUMBER}"
 
         uv run -m foldrun_app.app_utils.deploy \
           --project=$PROJECT_ID \
           --location=${_REGION} \
           --service-account=${_AGENT_SA_EMAIL} \
-          --set-env-vars=$$ENV_VARS
+          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,BOLTZ2_ANALYSIS_JOB_NAME=boltz2-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL},VERTEX_AI_NETWORK_ATTACHMENT=${_VERTEX_AI_NETWORK_ATTACHMENT},FILESTORE_IP=${_FILESTORE_IP}
     waitFor: ['deploy-viewer', 'build-push-af2-components', 'build-push-of3-components', 'build-push-boltz2-components']
 
   # ============================================================================
@@ -405,12 +402,11 @@ steps:
 
 substitutions:
   _REGION: us-central1
-  _NETWORK_ID: ""
-  _NETWORK_PROJECT_NUMBER: ""
+  _VERTEX_AI_NETWORK_ATTACHMENT: ""
+  _FILESTORE_IP: ""
   _AR_REPO: foldrun-repo
   _BUCKET_NAME: required_bucket_name
   _DATABASES_BUCKET: required_databases_bucket_name
-  _FILESTORE_ID: foldrun-nfs
   _AGENT_SA_EMAIL: required_sa_email
   _PIPELINES_SA_EMAIL: required_pipelines_sa_email
   _AF2_VERSION: "42719e135a62438aa651d2bc1d143626083c3703"
