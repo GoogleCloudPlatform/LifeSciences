@@ -61,7 +61,7 @@ RUN wget -q -P /tmp \
 ENV PATH="/opt/conda/bin:$PATH"
 ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
 RUN conda install --quiet --yes conda==24.11.1 pip python=3.11 \
-    && conda install --quiet --yes --channel nvidia cuda=${CUDA_VERSION} \
+    && conda install --quiet --yes --channel nvidia/label/cuda-${CUDA} cuda==${CUDA} \
     && conda clean --all --force-pkgs-dirs --yes
 
 # Currently needed to avoid undefined_symbol error before running any system tools like git.
