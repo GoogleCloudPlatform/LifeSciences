@@ -36,8 +36,13 @@ PROJECT_ID = os.environ["PROJECT_ID"]
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 REGION = os.environ.get("REGION", "us-central1")
 
-# Initialize GCS client
-storage_client = storage.Client(project=PROJECT_ID)
+# Initialize GCS client with explicit credentials so quota project is set
+# correctly when running locally with user ADC (e.g. Docker / Cloud Shell).
+_creds, _ = google.auth.default(
+    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    quota_project_id=PROJECT_ID,
+)
+storage_client = storage.Client(project=PROJECT_ID, credentials=_creds)
 
 
 def parse_gcs_uri(uri):
