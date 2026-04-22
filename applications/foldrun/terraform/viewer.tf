@@ -33,6 +33,13 @@ resource "google_storage_bucket_iam_member" "foldrun_viewer_bucket_access" {
   member = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
+# Allow the viewer to list Vertex AI pipeline jobs for the job picker
+resource "google_project_iam_member" "foldrun_viewer_aiplatform" {
+  project = var.project_id
+  role    = "roles/aiplatform.viewer"
+  member  = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
 resource "google_cloud_run_v2_service" "foldrun_viewer" {
   name        = "foldrun-viewer"
   project     = var.project_id
