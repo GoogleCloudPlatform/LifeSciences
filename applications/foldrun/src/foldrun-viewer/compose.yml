@@ -9,4 +9,4 @@ services:
       REGION: ${REGION:-us-central1}
       GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
     volumes:
-      - ~/.config/gcloud:/root/.config/gcloud:ro
+      - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
