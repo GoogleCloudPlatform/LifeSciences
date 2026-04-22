@@ -36,11 +36,15 @@ PROJECT_ID = os.environ["PROJECT_ID"]
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 REGION = os.environ.get("REGION", "us-central1")
 
-# Initialize GCS client with explicit credentials so quota project is set
-# correctly when running locally with user ADC (e.g. Docker / Cloud Shell).
+# Initialize GCS client. When running locally via Docker with user ADC
+# (GOOGLE_APPLICATION_CREDENTIALS set), we must specify quota_project_id so
+# GCS requests aren't rejected for missing billing project. On Cloud Run the
+# service account already has implicit quota project — setting it explicitly
+# causes a serviceusage.services.use permission error.
+_quota_project = PROJECT_ID if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") else None
 _creds, _ = google.auth.default(
     scopes=["https://www.googleapis.com/auth/cloud-platform"],
-    quota_project_id=PROJECT_ID,
+    quota_project_id=_quota_project,
 )
 storage_client = storage.Client(project=PROJECT_ID, credentials=_creds)
 
@@ -305,9 +309,10 @@ def list_jobs():
     Returns an empty list with an error message if credentials are unavailable.
     """
     try:
+        quota_project = PROJECT_ID if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") else None
         creds, _ = google.auth.default(
             scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            quota_project_id=PROJECT_ID,
+            quota_project_id=quota_project,
         )
         authed = google.auth.transport.requests.AuthorizedSession(creds)
 
