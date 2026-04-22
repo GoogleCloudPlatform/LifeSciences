@@ -24,7 +24,7 @@
 
 ## Tech Stack
 
-- **Agent**: Google ADK with up to 30 native FunctionTools (AF2 + OF3 + Boltz-2), deployed to Vertex AI Agent Engine
+- **Agent**: Google ADK with up to 30 native Skills (AF2 + OF3 + Boltz-2), deployed to Vertex AI Agent Engine
 - **A2A**: Agent-to-Agent protocol proxy (Cloud Run) for agent interoperability
 - **AI**: Gemini (via Vertex AI)
 - **Compute**: Vertex AI Pipelines, Cloud Run, Cloud Batch
@@ -304,7 +304,7 @@ The dominant cost is Filestore (~$770/mo). Current databases (AF2 reduced + OF3)
 foldrun/
 ├── foldrun-agent/              # AI Agent (Google ADK)
 │   ├── foldrun_app/
-│   │   ├── agent.py            # Agent definition (Gemini + FunctionTools)
+│   │   ├── agent.py            # Agent definition (Gemini + Skills)
 │   │   ├── core/               # Shared infrastructure (model-agnostic)
 │   │   │   ├── base_tool.py    # BaseTool (GCS, Vertex AI, NFS)
 │   │   │   ├── config.py       # GCP project, NFS, GCS config
@@ -364,7 +364,7 @@ foldrun/
                      └───────┬──────────┘
                              │ Forwards to
 ┌──────────────────┐         │
-│  foldrun-agent   │ ←───────┘  Conversational AI (Gemini Flash + up to 30 FunctionTools)
+│  foldrun-agent   │ ←───────┘  Conversational AI (Gemini Flash + up to 30 Skills)
 │  (Agent Engine)  │
 └───────┬──────────┘
         │ Native tool calls
