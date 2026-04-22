@@ -27,7 +27,7 @@ Built with **Google ADK** using **native Skills** — all skills run directly wi
 | Covalent modifications or glycans | **Boltz-2** (only model supporting these) |
 | RNA + covalent mod | **Boltz-2** (no RNA MSA, but necessary for covalent features) |
 
-Boltz-2 is optional — enabled by setting `BOLTZ2_COMPONENTS_IMAGE` in the environment.
+Boltz-2 is enabled by setting `BOLTZ2_COMPONENTS_IMAGE` in the environment.
 
 ## Features
 
@@ -91,7 +91,7 @@ foldrun-agent/
 │   │   │   ├── pipeline/           # KFP: ConfigureSeeds → MSA(protein+RNA) → ParallelFor[Predict]
 │   │   │   ├── tools/              # 4 tools: submit, analyze, get_results, open_viewer
 │   │   │   └── utils/              # Input converter (FASTA → OF3 JSON)
-│   │   └── boltz2/                 # Boltz-2 plugin (optional)
+│   │   └── boltz2/                 # Boltz-2 plugin
 │   │       ├── config.py           # BOLTZ2Config (A100/A100_80GB, unified cache path)
 │   │       ├── base.py             # BOLTZ2Tool base class
 │   │       ├── startup.py          # Singleton config + GPU detection (A100+ only)
@@ -126,7 +126,7 @@ Skill count depends on which models are configured:
 |-------|-------|-----------|
 | AF2 (always loaded) | **20** | `ALPHAFOLD_COMPONENTS_IMAGE` set |
 | OF3 (optional) | **+4** | `OPENFOLD3_COMPONENTS_IMAGE` set |
-| Boltz-2 (optional) | **+4** | `BOLTZ2_COMPONENTS_IMAGE` set |
+| Boltz-2 | **+4** | `BOLTZ2_COMPONENTS_IMAGE` set |
 | **Maximum total** | **28** | All three models configured |
 
 ### AF2 Skills (20)
@@ -150,7 +150,7 @@ Skill count depends on which models are configured:
 | `of3_get_analysis_results` | Retrieve analysis results (pLDDT, PDE, ipTM, Gemini interpretation) |
 | `open_of3_structure_viewer` | Open 3D viewer for OF3 results |
 
-### Boltz-2 Skills (4, optional)
+### Boltz-2 Skills (4)
 
 | Skill | Description |
 |------|-------------|
@@ -179,7 +179,7 @@ Skill count depends on which models are configured:
 | `OPENFOLD3_COMPONENTS_IMAGE` | OF3 pipeline container image (enables OF3 tools) |
 | `OF3_ANALYSIS_JOB_NAME` | Cloud Run Job name (default: `of3-analysis-job`) |
 
-### Optional — Boltz-2
+### Boltz-2
 
 | Variable | Description |
 |----------|-------------|
