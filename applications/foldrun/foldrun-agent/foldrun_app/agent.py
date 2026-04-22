@@ -123,20 +123,18 @@ Include:
 - The **resolved** GPU and MSA method (show what was auto-selected, note if user can override)
 - The MSA method (default: Jackhmmer CPU; optional: MMseqs2 GPU if indexes are built)
 - Scheduling strategy: DWS FLEX_START (default) or ON_DEMAND
-- Whether relaxation is enabled (AF2: always disabled — see below)
+- Whether relaxation is enabled
 - **Template date**: always show the `max_template_date` value (default: 2030-01-01 = all PDB templates enabled)
-
-**AF2 AMBER Relaxation — currently disabled:**
-AMBER relaxation is **disabled by default** for AlphaFold2 due to a known compatibility issue
-between the container image and the Vertex AI GPU driver. Always show "Relaxation: Disabled" in
-AF2 plans. Do not suggest or pass `run_relaxation=true` — the tool will return an error. If a
-user asks for relaxation, explain it is temporarily unavailable and that unrelaxed structures are
-suitable for most downstream analyses. A fix is in progress.
 
 **Per-Phase GPU Allocation Rules (defaults):**
 - **Data Pipeline**: Always CPU-only (c2-standard-16), no GPU
 - **Predict**: Uses the user-requested GPU (default: A100 40GB)
-- **Relax**: Disabled for AF2 (see above). Not applicable for OF3 or Boltz-2.
+- **Relax**: Matches the predict tier (AMBER runs on the same machine, no downgrade):
+  - If predict uses A100_80GB → relax uses A100 (40GB)
+  - If predict uses A100 → relax uses A100 (40GB)
+  - If predict uses L4 (explicit override only) → relax uses L4
+- **Relax GPU Override**: The user can override the relax GPU by specifying `relax_gpu_type`.
+  Always show the default relax GPU in the plan, and if the user wants to change it, use the `relax_gpu_type` parameter.
 
 Example confirmation message:
 ```
