@@ -17,13 +17,18 @@ FoldRun Structure Viewer
 Cloud Run web application for viewing AlphaFold2, OpenFold3, and Boltz-2 predictions
 """
 
+import base64
+import functools
 import json
 import logging
 import os
+import time
+import urllib.request
+import uuid
 
 import google.auth
 import google.auth.transport.requests
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request, stream_with_context
 from google.cloud import storage
 
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +40,11 @@ app = Flask(__name__)
 PROJECT_ID = os.environ["PROJECT_ID"]
 BUCKET_NAME = os.environ["BUCKET_NAME"]
 REGION = os.environ.get("REGION", "us-central1")
+
+# Chat configuration (optional — chat tab is hidden when A2A_URL is unset)
+A2A_URL = os.environ.get("A2A_URL", "").rstrip("/")
+# Google Group email that controls chat access (empty = allow all IAP-authed users)
+CHAT_ACCESS_GROUP = os.environ.get("CHAT_ACCESS_GROUP", "")
 
 # Initialize GCS client. When running locally via Docker with user ADC
 # (GOOGLE_APPLICATION_CREDENTIALS set), we must specify quota_project_id so
@@ -360,6 +370,180 @@ def list_jobs():
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")
         return jsonify({"jobs": [], "error": str(e)}), 500
+
+
+# ── Chat: IAP identity helpers ────────────────────────────────────────────────
+
+def _get_iap_email() -> str | None:
+    """Decode the IAP JWT assertion header to extract the user's email.
+    IAP has already verified the signature — we just decode the payload."""
+    token = request.headers.get("X-Goog-IAP-JWT-Assertion", "")
+    if not token:
+        return None
+    try:
+        payload_b64 = token.split(".")[1]
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        return payload.get("email")
+    except Exception:
+        return None
+
+
+# Group membership cache: {email: (allowed, expires_monotonic)}
+_group_cache: dict[str, tuple[bool, float]] = {}
+_GROUP_CACHE_TTL = 300  # 5 minutes
+_group_resource_cache: dict[str, str] = {}  # group_email -> resource_name
+
+
+def _check_group_membership(email: str) -> bool:
+    """Return True if email is in CHAT_ACCESS_GROUP. Caches results 5 min."""
+    if not CHAT_ACCESS_GROUP:
+        return True  # no group configured → allow all IAP-authenticated users
+
+    now = time.monotonic()
+    if email in _group_cache:
+        allowed, expires = _group_cache[email]
+        if now < expires:
+            return allowed
+
+    try:
+        authed = google.auth.transport.requests.AuthorizedSession(_creds)
+
+        # Resolve group email → resource name (cached permanently per process)
+        if CHAT_ACCESS_GROUP not in _group_resource_cache:
+            resp = authed.get(
+                "https://cloudidentity.googleapis.com/v1/groups:lookup",
+                params={"groupKey.id": CHAT_ACCESS_GROUP},
+                timeout=5,
+            )
+            resp.raise_for_status()
+            _group_resource_cache[CHAT_ACCESS_GROUP] = resp.json()["name"]
+
+        group_name = _group_resource_cache[CHAT_ACCESS_GROUP]
+
+        resp = authed.get(
+            f"https://cloudidentity.googleapis.com/v1/{group_name}/memberships:checkTransitiveMembership",
+            params={"query": f"member_key_id == '{email}'"},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        allowed = resp.json().get("hasMembership", False)
+    except Exception as e:
+        logger.error(f"Group membership check failed for {email}: {e}")
+        allowed = False
+
+    _group_cache[email] = (allowed, now + _GROUP_CACHE_TTL)
+    return allowed
+
+
+def _require_chat_access(f):
+    """Decorator: 401/403 if the caller lacks chat access."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if not CHAT_ACCESS_GROUP:
+            return f(*args, **kwargs)
+        email = _get_iap_email()
+        if not email:
+            return jsonify({"error": "Authentication required"}), 401
+        if not _check_group_membership(email):
+            return jsonify({"error": "Access restricted to demo team", "group": CHAT_ACCESS_GROUP}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _get_id_token(audience: str) -> str:
+    """Fetch a Cloud Run ID token for service-to-service auth via the metadata server."""
+    url = (
+        "http://metadata.google.internal/computeMetadata/v1/instance"
+        f"/service-accounts/default/identity?audience={audience}"
+    )
+    req = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return resp.read().decode()
+
+
+# ── Chat routes ───────────────────────────────────────────────────────────────
+
+@app.route("/api/chat/access")
+def chat_access():
+    """Check whether the current user has chat access and whether chat is configured."""
+    if not A2A_URL:
+        return jsonify({"enabled": False, "reason": "Chat not configured on this deployment"})
+    if not CHAT_ACCESS_GROUP:
+        return jsonify({"enabled": True, "group": None})
+    email = _get_iap_email()
+    if not email:
+        return jsonify({"enabled": False, "reason": "not_authenticated"}), 401
+    allowed = _check_group_membership(email)
+    status = 200 if allowed else 403
+    return jsonify({"enabled": allowed, "email": email, "group": CHAT_ACCESS_GROUP}), status
+
+
+@app.route("/api/chat", methods=["POST"])
+@_require_chat_access
+def chat():
+    """Proxy a chat message to foldrun-a2a and stream the response as SSE."""
+    if not A2A_URL:
+        return jsonify({"error": "Chat not configured (A2A_URL not set)"}), 503
+
+    data = request.get_json(silent=True) or {}
+    message = data.get("message", "").strip()
+    context_id = data.get("context_id") or str(uuid.uuid4())
+    job_id = data.get("job_id", "")
+
+    if not message:
+        return jsonify({"error": "message is required"}), 400
+
+    # Prefix first message with job context so the agent knows what we're looking at
+    if job_id:
+        message = f"[Viewing job: {job_id}]\n\n{message}"
+
+    def generate():
+        try:
+            token = _get_id_token(A2A_URL)
+            task_id = str(uuid.uuid4())
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": task_id,
+                "params": {
+                    "id": task_id,
+                    "contextId": context_id,
+                    "message": {
+                        "role": "user",
+                        "parts": [{"type": "text", "text": message}],
+                    },
+                },
+            }
+            import requests as http_requests
+            resp = http_requests.post(
+                f"{A2A_URL}/",
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=120,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+
+            text = ""
+            try:
+                for part in result["result"]["status"]["message"]["parts"]:
+                    if part.get("type") == "text":
+                        text += part["text"]
+            except (KeyError, TypeError):
+                text = json.dumps(result)
+
+            yield f"data: {json.dumps({'text': text, 'context_id': context_id, 'done': True})}\n\n"
+
+        except Exception as e:
+            logger.error(f"Chat proxy error: {e}")
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/health")

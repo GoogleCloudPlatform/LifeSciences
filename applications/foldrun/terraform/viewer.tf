@@ -40,6 +40,32 @@ resource "google_project_iam_member" "foldrun_viewer_aiplatform" {
   member  = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
+# Allow the viewer to check Cloud Identity group membership for chat access control
+# Only provisioned when chat_access_group is configured
+resource "google_project_iam_member" "foldrun_viewer_group_viewer" {
+  count   = var.chat_access_group != "" ? 1 : 0
+  project = var.project_id
+  role    = "roles/cloudidentity.groupViewer"
+  member  = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
+# Allow the viewer SA to invoke the A2A proxy for the chat endpoint
+# foldrun-a2a is deployed via Cloud Build (not terraform), so use a data source
+data "google_cloud_run_v2_service" "foldrun_a2a" {
+  name     = "foldrun-a2a"
+  project  = var.project_id
+  location = var.region
+}
+
+resource "google_cloud_run_v2_service_iam_member" "foldrun_viewer_a2a_invoker" {
+  provider = google-beta
+  project  = data.google_cloud_run_v2_service.foldrun_a2a.project
+  location = data.google_cloud_run_v2_service.foldrun_a2a.location
+  name     = data.google_cloud_run_v2_service.foldrun_a2a.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
 resource "google_cloud_run_v2_service" "foldrun_viewer" {
   name        = "foldrun-viewer"
   project     = var.project_id

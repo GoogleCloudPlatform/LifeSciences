@@ -211,6 +211,7 @@ extract_terraform_outputs() {
     export SUBNET_ID="${SUBNET_ID:-}"
     export NETWORK_ID="${NETWORK_ID:-}"
     export NETWORK_PROJECT_NUMBER="${NETWORK_PROJECT_NUMBER:-}"
+    export CHAT_ACCESS_GROUP="${CHAT_ACCESS_GROUP:-}"
 
     # If terraform is available and state exists, cross-check and prefer its outputs
     # (useful immediately after --steps infra when non-default names may have been used)
@@ -311,7 +312,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER",_CHAT_ACCESS_GROUP="$CHAT_ACCESS_GROUP",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi

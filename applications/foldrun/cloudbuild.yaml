@@ -63,10 +63,12 @@ steps:
       - |
         _t=",${_BUILD_TARGET},"
         if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",viewer,"* ]]; then
+          VIEWER_ENV="PROJECT_ID=$PROJECT_ID,BUCKET_NAME=${_BUCKET_NAME},REGION=${_REGION}"
+          [[ -n "${_CHAT_ACCESS_GROUP}" ]] && VIEWER_ENV="$$VIEWER_ENV,CHAT_ACCESS_GROUP=${_CHAT_ACCESS_GROUP}"
           gcloud run deploy foldrun-viewer \
             --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest \
             --region ${_REGION} \
-            --set-env-vars PROJECT_ID=$PROJECT_ID,BUCKET_NAME=${_BUCKET_NAME},REGION=${_REGION}
+            --set-env-vars "$$VIEWER_ENV"
 
           gcloud run services describe foldrun-viewer \
             --region ${_REGION} \
@@ -397,7 +399,35 @@ steps:
         echo ""
         echo "A2A proxy deployed: $$A2A_URL"
         echo "Agent card:         $$A2A_URL/.well-known/agent.json"
+
+        # Write A2A URL for the viewer update step
+        echo -n "$$A2A_URL" > /workspace/a2a_url.txt
     waitFor: ['build-push-a2a', 'deploy-agent-engine']
+
+  # Wire A2A URL into the viewer after the A2A service is deployed
+  - id: 'update-viewer-a2a-url'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        _t=",${_BUILD_TARGET},"
+        if [[ "${_BUILD_TARGET}" != "all" ]] && [[ "$$_t" != *",viewer,"* ]] && \
+           [[ "$$_t" != *",af2,"* ]] && [[ "$$_t" != *",of3,"* ]] && \
+           [[ "$$_t" != *",boltz2,"* ]] && [[ "${_BUILD_TARGET}" != "agent" ]]; then
+          echo "Skipping viewer A2A URL update (BUILD_TARGET=${_BUILD_TARGET})"
+          exit 0
+        fi
+        A2A_URL=$$(cat /workspace/a2a_url.txt 2>/dev/null || echo "")
+        if [[ -z "$$A2A_URL" ]]; then
+          echo "No A2A URL found, skipping viewer update"
+          exit 0
+        fi
+        echo "Updating viewer with A2A_URL=$$A2A_URL"
+        gcloud run services update foldrun-viewer \
+          --region ${_REGION} \
+          --update-env-vars A2A_URL=$$A2A_URL
+    waitFor: ['deploy-a2a']
 
   # ============================================================================
   # 5. Data Download — handled locally by deploy-all.sh, not here.
@@ -407,6 +437,7 @@ substitutions:
   _REGION: us-central1
   _NETWORK_ID: ""
   _NETWORK_PROJECT_NUMBER: ""
+  _CHAT_ACCESS_GROUP: ""
   _AR_REPO: foldrun-repo
   _BUCKET_NAME: required_bucket_name
   _DATABASES_BUCKET: required_databases_bucket_name

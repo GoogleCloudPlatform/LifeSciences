@@ -65,9 +65,179 @@
 
         .analysis-panel {
             background: #fafafa;
-            overflow-y: auto;
-            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
+
+        /* ── Right-panel tab bar ── */
+        .panel-tabs {
+            display: flex;
+            border-bottom: 2px solid #4285F4;
+            background: #f8f9fa;
+            flex-shrink: 0;
+        }
+
+        .panel-tab-btn {
+            padding: 14px 22px;
+            border: none;
+            background: none;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #80868b;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: color 0.15s, border-color 0.15s;
+        }
+
+        .panel-tab-btn.active {
+            color: #4285F4;
+            border-bottom-color: #4285F4;
+        }
+
+        .panel-tab-btn:hover:not(.active) { color: #333; }
+
+        .panel-tab-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .panel-tab-pane {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .panel-tab-pane.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #analysis-pane { padding: 30px; }
+
+        /* ── Chat panel ── */
+        #chat-pane {
+            padding: 0;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .chat-msg {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .chat-msg.user {
+            align-self: flex-end;
+            background: #4285F4;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-msg.agent {
+            align-self: flex-start;
+            background: white;
+            border: 1px solid #dadce0;
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-msg.agent .markdown-content h1,
+        .chat-msg.agent .markdown-content h2,
+        .chat-msg.agent .markdown-content h3 {
+            font-size: 1em;
+            margin: 8px 0 4px;
+        }
+
+        .chat-msg.agent .markdown-content p { margin: 0 0 6px; }
+        .chat-msg.agent .markdown-content p:last-child { margin-bottom: 0; }
+        .chat-msg.agent .markdown-content code {
+            background: #f1f3f4;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.85em;
+        }
+        .chat-msg.agent .markdown-content ul,
+        .chat-msg.agent .markdown-content ol { margin: 4px 0 4px 16px; }
+
+        .chat-msg.thinking {
+            align-self: flex-start;
+            color: #80868b;
+            font-style: italic;
+            font-size: 0.85rem;
+            background: none;
+            border: none;
+            padding: 4px 0;
+        }
+
+        .chat-input-row {
+            display: flex;
+            gap: 8px;
+            padding: 14px 16px;
+            border-top: 1px solid #dadce0;
+            background: white;
+            flex-shrink: 0;
+        }
+
+        #chat-input {
+            flex: 1;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.9rem;
+            resize: none;
+            font-family: inherit;
+            line-height: 1.4;
+            max-height: 120px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        #chat-input:focus { border-color: #4285F4; }
+
+        #chat-send-btn {
+            background: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            align-self: flex-end;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+
+        #chat-send-btn:hover { background: #1a73e8; }
+        #chat-send-btn:disabled { background: #dadce0; cursor: not-allowed; }
+
+        .chat-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #80868b;
+            font-size: 0.9rem;
+        }
+
+        .chat-empty .chat-empty-icon { font-size: 2.5rem; margin-bottom: 10px; }
+
+        .chat-restricted {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .chat-restricted h3 { color: #c5221f; margin-bottom: 8px; }
+        .chat-restricted p { color: #80868b; font-size: 0.9rem; }
 
         .panel-header {
             background: #f8f9fa;
@@ -537,12 +707,34 @@
             </div>
         </div>
 
-        <!-- Right Panel: Analysis -->
+        <!-- Right Panel: Analysis + Chat tabs -->
         <div class="analysis-panel">
-            <div id="analysis-content">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>Loading analysis...</p>
+            <div class="panel-tabs">
+                <button class="panel-tab-btn active" onclick="switchRightTab('analysis')" id="tab-btn-analysis">Analysis</button>
+                <button class="panel-tab-btn" onclick="switchRightTab('chat')" id="tab-btn-chat">Ask FoldRun 🤖</button>
+            </div>
+
+            <!-- Analysis pane -->
+            <div class="panel-tab-pane active" id="analysis-pane">
+                <div id="analysis-content">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading analysis...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat pane -->
+            <div class="panel-tab-pane" id="chat-pane">
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-empty" id="chat-empty-state">
+                        <div class="chat-empty-icon">🤖</div>
+                        <p>Ask FoldRun about this structure,<br>prediction quality, or next steps.</p>
+                    </div>
+                </div>
+                <div class="chat-input-row">
+                    <textarea id="chat-input" rows="1" placeholder="Ask about this prediction…" onkeydown="chatKeydown(event)"></textarea>
+                    <button id="chat-send-btn" onclick="sendChat()">Send</button>
                 </div>
             </div>
         </div>
@@ -1262,6 +1454,137 @@
         window.addEventListener('DOMContentLoaded', () => {
             initViewer();
             loadAnalysis();
+            initChat();
+        });
+
+        // ── Right-panel tab switching ─────────────────────────────────────────
+        function switchRightTab(name) {
+            document.querySelectorAll('.panel-tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.panel-tab-pane').forEach(p => p.classList.remove('active'));
+            document.getElementById(`tab-btn-${name}`).classList.add('active');
+            document.getElementById(`${name}-pane`).classList.add('active');
+        }
+
+        // ── Chat ─────────────────────────────────────────────────────────────
+        let chatContextId = null;
+        let chatBusy = false;
+
+        async function initChat() {
+            try {
+                const resp = await fetch('/api/chat/access');
+                const data = await resp.json();
+                if (!data.enabled) {
+                    const btn = document.getElementById('tab-btn-chat');
+                    btn.disabled = true;
+                    btn.title = data.reason || 'Chat not available';
+                    document.getElementById('chat-messages').innerHTML = `
+                        <div class="chat-restricted">
+                            <h3>Chat unavailable</h3>
+                            <p>${data.reason || 'Access restricted.'}</p>
+                        </div>`;
+                }
+            } catch (e) {
+                // Non-fatal — chat access check failure just disables the tab
+                document.getElementById('tab-btn-chat').disabled = true;
+            }
+        }
+
+        function chatKeydown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChat();
+            }
+        }
+
+        function appendMessage(role, html) {
+            const el = document.createElement('div');
+            el.className = `chat-msg ${role}`;
+            el.innerHTML = html;
+            const container = document.getElementById('chat-messages');
+            document.getElementById('chat-empty-state')?.remove();
+            container.appendChild(el);
+            container.scrollTop = container.scrollHeight;
+            return el;
+        }
+
+        async function sendChat() {
+            if (chatBusy) return;
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            chatBusy = true;
+            input.value = '';
+            input.style.height = 'auto';
+            document.getElementById('chat-send-btn').disabled = true;
+
+            appendMessage('user', escapeHtml(message));
+            const thinking = appendMessage('thinking', '● Thinking…');
+
+            const jobId = '{{ job_id }}';
+
+            try {
+                const resp = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        message,
+                        context_id: chatContextId,
+                        job_id: jobId || undefined,
+                    }),
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    thinking.remove();
+                    appendMessage('agent', `<em style="color:#c5221f">Error: ${err.error || resp.statusText}</em>`);
+                    return;
+                }
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buf = '';
+
+                thinking.remove();
+                const agentEl = appendMessage('agent', '<div class="markdown-content"></div>');
+                const contentEl = agentEl.querySelector('.markdown-content');
+
+                while (true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    buf += decoder.decode(value, {stream: true});
+                    const lines = buf.split('\n');
+                    buf = lines.pop();
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const data = JSON.parse(line.slice(6));
+                        if (data.context_id) chatContextId = data.context_id;
+                        if (data.text) contentEl.innerHTML = marked.parse(data.text);
+                        if (data.error) contentEl.innerHTML = `<em style="color:#c5221f">${escapeHtml(data.error)}</em>`;
+                        document.getElementById('chat-messages').scrollTop = 999999;
+                    }
+                }
+            } catch (e) {
+                thinking.remove();
+                appendMessage('agent', `<em style="color:#c5221f">Connection error: ${escapeHtml(e.message)}</em>`);
+            } finally {
+                chatBusy = false;
+                document.getElementById('chat-send-btn').disabled = false;
+                input.focus();
+            }
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        // Auto-grow textarea
+        document.addEventListener('DOMContentLoaded', () => {
+            const ta = document.getElementById('chat-input');
+            if (ta) ta.addEventListener('input', () => {
+                ta.style.height = 'auto';
+                ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+            });
         });
     </script>
 </body>
