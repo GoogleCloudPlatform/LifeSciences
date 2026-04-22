@@ -1,0 +1,12 @@
+services:
+  viewer:
+    image: us-central1-docker.pkg.dev/${PROJECT_ID:-gnext26-foldrun}/foldrun-repo/foldrun-viewer:latest
+    ports:
+      - "8080:8080"
+    environment:
+      PROJECT_ID: ${PROJECT_ID:-gnext26-foldrun}
+      BUCKET_NAME: ${BUCKET_NAME:-gnext26-foldrun-foldrun-data}
+      REGION: ${REGION:-us-central1}
+      GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro
