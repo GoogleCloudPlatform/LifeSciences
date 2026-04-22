@@ -470,7 +470,7 @@
 </head>
 <body>
     <div class="header">
-        <h1>🧬 FoldRun Structure & Analysis</h1>
+        <h1><a href="/" style="color: inherit; text-decoration: none;">🧬 FoldRun Structure & Analysis</a></h1>
         {% if job_id %}
         <p class="subtitle">Job: <a href="https://console.cloud.google.com/vertex-ai/pipelines/locations/{{ region }}/runs/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link">{{ job_id }}</a>{% if gcs_console_url %} &middot; <a href="{{ gcs_console_url }}" target="_blank" class="job-link">View files in GCS</a>{% endif %}</p>
         <div id="job-info-summary" class="job-info-summary"></div>
