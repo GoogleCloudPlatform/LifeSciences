@@ -357,8 +357,6 @@ foldrun/
 
 ## Architecture
 
-![FoldRun Architecture](img/foldrun-architecture.png)
-
 ```
                      ┌──────────────────┐
   A2A clients ──→    │  foldrun-a2a     │ ← A2A protocol proxy (Cloud Run)
