@@ -301,7 +301,8 @@ def list_jobs():
     """
     try:
         creds, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            quota_project_id=PROJECT_ID,
         )
         authed = google.auth.transport.requests.AuthorizedSession(creds)
 

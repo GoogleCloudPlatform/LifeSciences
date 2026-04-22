@@ -53,6 +53,8 @@ docker run --rm \
   -e PROJECT_ID="$PROJECT_ID" \
   -e BUCKET_NAME="$BUCKET_NAME" \
   -e REGION="$REGION" \
+  -e GOOGLE_CLOUD_PROJECT="$PROJECT_ID" \
+  -e GOOGLE_CLOUD_QUOTA_PROJECT="$PROJECT_ID" \
   -e GOOGLE_APPLICATION_CREDENTIALS="/gcloud/application_default_credentials.json" \
   -p 8080:8080 \
   -v "${GCLOUD_CONFIG_DIR}:/gcloud:ro" \
