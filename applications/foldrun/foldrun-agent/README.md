@@ -4,6 +4,8 @@ AI-powered protein structure prediction assistant supporting **AlphaFold2**, **O
 
 ## Overview
 
+![FoldRun Architecture](../img/foldrun-architecture.png)
+
 FoldRun Agent is a modular, stateful conversational agent for biomolecular structure prediction. It manages the full prediction lifecycle through natural language:
 
 - Submit structure predictions (AF2 monomers/multimers, OF3 and Boltz-2 multi-molecule complexes)
@@ -13,7 +15,7 @@ FoldRun Agent is a modular, stateful conversational agent for biomolecular struc
 - Query the AlphaFold Database for existing structures
 - Estimate and track compute costs
 
-Built with **Google ADK** using **native FunctionTools** — all tools run directly within the agent process, no external server dependency.
+Built with **Google ADK** using **native Skills** — all skills run directly within the agent process, no external server dependency.
 
 ## Model Selection Guide
 
@@ -30,8 +32,8 @@ Boltz-2 is optional — enabled by setting `BOLTZ2_COMPONENTS_IMAGE` in the envi
 ## Features
 
 - **Multi-Model**: AF2 (L4/A100), OF3 (A100), Boltz-2 (A100) with automatic GPU tier selection
-- **Native FunctionTools**: Up to 30 tools depending on model configuration
-- **Conditional Tool Loading**: OF3 and Boltz-2 tools only load when their component images are configured
+- **Native Skills**: Up to 30 skills depending on model configuration
+- **Conditional Skill Loading**: OF3 and Boltz-2 skills only load when their component images are configured
 - **GPU Auto-Detection**: Quota checking and smart GPU selection at startup (per model)
 - **Parallel Analysis**: Cloud Run Jobs for fast parallel structural analysis + Gemini expert interpretation
 - **Affinity Prediction**: Boltz-2 binding affinity (IC50, pIC50, ΔG) when requested
@@ -67,7 +69,7 @@ uv run adk web .
 ```
 foldrun-agent/
 ├── foldrun_app/
-│   ├── agent.py                    # Agent definition, FunctionTool registration, instructions
+│   ├── agent.py                    # Agent definition, skill registration, instructions
 │   ├── core/                       # Shared infrastructure (model-agnostic)
 │   │   ├── base_tool.py            # BaseTool: GCS, Vertex AI, NFS helpers
 │   │   ├── config.py               # CoreConfig: project, region, NFS, GCS
@@ -96,7 +98,7 @@ foldrun-agent/
 │   │       ├── pipeline/           # KFP: ConfigureSeeds → MSA(protein) → ParallelFor[Predict]
 │   │       ├── tools/              # 4 tools: submit, analyze, get_results, open_viewer
 │   │       └── utils/              # Input converter (FASTA → Boltz-2 YAML v1)
-│   └── skills/                     # ADK FunctionTool wrappers (thin, domain-organized)
+│   └── skills/                     # ADK skill wrappers (thin, domain-organized)
 │       ├── _tool_registry.py       # Singleton registry: initializes all model tools
 │       ├── job_submission/         # submit_af2_*, submit_of3_prediction, submit_boltz2_prediction
 │       ├── job_management/         # check_job_status, list_jobs, get_job_details, delete_job, check_gpu_quota
@@ -116,9 +118,9 @@ foldrun-agent/
 └── pyproject.toml
 ```
 
-## Available Tools
+## Available Skills
 
-Tool count depends on which models are configured:
+Skill count depends on which models are configured:
 
 | Scope | Count | Condition |
 |-------|-------|-----------|
@@ -127,9 +129,9 @@ Tool count depends on which models are configured:
 | Boltz-2 (optional) | **+4** | `BOLTZ2_COMPONENTS_IMAGE` set |
 | **Maximum total** | **28** | All three models configured |
 
-### AF2 Tools (20)
+### AF2 Skills (20)
 
-| Category | Tools |
+| Category | Skills |
 |----------|-------|
 | Job Submission (3) | `submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_af2_batch_predictions` |
 | Job Management (5) | `check_job_status`, `list_jobs`, `get_job_details`, `delete_job`, `check_gpu_quota` |
@@ -139,18 +141,18 @@ Tool count depends on which models are configured:
 | Visualization (1) | `open_structure_viewer` |
 | Cost Estimation (3) | `estimate_job_cost`, `estimate_monthly_cost`, `get_actual_job_costs` |
 
-### OF3 Tools (4, optional)
+### OF3 Skills (4, optional)
 
-| Tool | Description |
+| Skill | Description |
 |------|-------------|
 | `submit_of3_prediction` | Submit OF3 job (FASTA auto-converted to OF3 JSON; full RNA MSA via nhmmer) |
 | `of3_analyze_job_parallel` | Trigger parallel analysis via Cloud Run Job |
 | `of3_get_analysis_results` | Retrieve analysis results (pLDDT, PDE, ipTM, Gemini interpretation) |
 | `open_of3_structure_viewer` | Open 3D viewer for OF3 results |
 
-### Boltz-2 Tools (4, optional)
+### Boltz-2 Skills (4, optional)
 
-| Tool | Description |
+| Skill | Description |
 |------|-------------|
 | `submit_boltz2_prediction` | Submit Boltz-2 job (FASTA auto-converted to YAML v1; supports covalent mods, glycans) |
 | `boltz2_analyze_job_parallel` | Trigger parallel analysis; includes affinity parsing if requested |
