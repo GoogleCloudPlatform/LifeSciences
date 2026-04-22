@@ -21,6 +21,8 @@ import json
 import logging
 import os
 
+import google.auth
+import google.auth.transport.requests
 from flask import Flask, abort, jsonify, render_template, request
 from google.cloud import storage
 
@@ -288,6 +290,65 @@ def get_image():
     except Exception as e:
         logger.error(f"Error fetching image from {uri}: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/jobs")
+def list_jobs():
+    """List recent FoldRun pipeline jobs from Vertex AI, sorted by recency.
+
+    Works both in Cloud Run (identity token) and locally via Docker (ADC mount).
+    Returns an empty list with an error message if credentials are unavailable.
+    """
+    try:
+        creds, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        authed = google.auth.transport.requests.AuthorizedSession(creds)
+
+        url = (
+            f"https://{REGION}-aiplatform.googleapis.com/v1"
+            f"/projects/{PROJECT_ID}/locations/{REGION}/pipelineJobs"
+        )
+        resp = authed.get(
+            url,
+            params={
+                "filter": "labels.submitted_by=foldrun-agent",
+                "orderBy": "createTime desc",
+                "pageSize": "50",
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        jobs = []
+        for pj in data.get("pipelineJobs", []):
+            labels = pj.get("labels", {})
+            resource_name = pj.get("name", "")
+            job_id = resource_name.split("/")[-1]
+            jobs.append(
+                {
+                    "job_id": job_id,
+                    "display_name": pj.get("displayName", job_id),
+                    "model_type": labels.get("model_type", "alphafold2"),
+                    "state": pj.get("state", "PIPELINE_STATE_UNSPECIFIED"),
+                    "create_time": pj.get("createTime", ""),
+                }
+            )
+
+        return jsonify({"jobs": jobs})
+
+    except google.auth.exceptions.DefaultCredentialsError:
+        logger.warning("No credentials available for /api/jobs")
+        return jsonify(
+            {
+                "jobs": [],
+                "error": "No credentials found. Ensure GOOGLE_APPLICATION_CREDENTIALS is set.",
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error listing jobs: {e}")
+        return jsonify({"jobs": [], "error": str(e)}), 500
 
 
 @app.route("/health")
