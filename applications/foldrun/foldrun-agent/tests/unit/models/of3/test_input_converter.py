@@ -230,13 +230,57 @@ class TestValidateOF3Json:
                 "test": {
                     "chains": [
                         {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
-                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd": "ATP"},
+                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": ["ATP"]},
                     ]
                 }
             }
         })
         ok, errors, _ = validate_of3_json(data)
         assert ok, errors
+
+    def test_valid_ligand_ccd_string(self):
+        data = json.dumps({
+            "queries": {
+                "test": {
+                    "chains": [
+                        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
+                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": "ATP"},
+                    ]
+                }
+            }
+        })
+        ok, errors, _ = validate_of3_json(data)
+        assert ok, errors
+
+    def test_ligand_ccd_codes_invalid_type(self):
+        data = json.dumps({
+            "queries": {
+                "test": {
+                    "chains": [
+                        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
+                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": 123},
+                    ]
+                }
+            }
+        })
+        ok, errors, _ = validate_of3_json(data)
+        assert not ok
+        assert any("must be a string or a list of strings" in e for e in errors)
+
+    def test_ligand_ccd_codes_not_strings(self):
+        data = json.dumps({
+            "queries": {
+                "test": {
+                    "chains": [
+                        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
+                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": [123]},
+                    ]
+                }
+            }
+        })
+        ok, errors, _ = validate_of3_json(data)
+        assert not ok
+        assert any("must be strings" in e for e in errors)
 
     def test_bad_json_parse_error(self):
         ok, errors, _ = validate_of3_json("{invalid json")
@@ -336,7 +380,7 @@ class TestValidateOF3Json:
         })
         ok, errors, _ = validate_of3_json(data)
         assert not ok
-        assert any("smiles" in e.lower() or "ccd" in e.lower() for e in errors)
+        assert any("smiles" in e.lower() or "ccd_codes" in e.lower() for e in errors)
 
     def test_short_protein_produces_warning(self):
         data = json.dumps({

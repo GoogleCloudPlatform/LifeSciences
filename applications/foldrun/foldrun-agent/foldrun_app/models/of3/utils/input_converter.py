@@ -262,11 +262,24 @@ def validate_of3_json(content: str) -> tuple[bool, list[str], list[str]]:
                             f"very short sequence ({len(str(seq))} residues)"
                         )
             elif mol_type == "ligand":
-                if not chain.get("smiles") and not chain.get("ccd"):
+                if not chain.get("smiles") and not chain.get("ccd_codes"):
                     errors.append(
                         f"queries.{query_name}.chains[{i}].ligand: "
-                        "must provide either 'smiles' or 'ccd'"
+                        "must provide either 'smiles' or 'ccd_codes'"
                     )
+                ccd_codes = chain.get("ccd_codes")
+                if ccd_codes:
+                    if isinstance(ccd_codes, str):
+                        pass
+                    elif isinstance(ccd_codes, list):
+                        if not all(isinstance(c, str) for c in ccd_codes):
+                            errors.append(
+                                f"queries.{query_name}.chains[{i}].ligand: all items in 'ccd_codes' must be strings"
+                            )
+                    else:
+                        errors.append(
+                            f"queries.{query_name}.chains[{i}].ligand: 'ccd_codes' must be a string or a list of strings"
+                        )
 
     return len(errors) == 0, errors, warnings
 
