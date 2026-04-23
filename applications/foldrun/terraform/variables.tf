@@ -29,11 +29,7 @@ variable "zone" {
   default     = "us-central1-a"
 }
 
-variable "vpc_name" {
-  description = "Name of the VPC network"
-  type        = string
-  default     = "foldrun-network"
-}
+
 
 variable "subnet_cidr" {
   description = "CIDR block for the subnet"
@@ -41,8 +37,8 @@ variable "subnet_cidr" {
   default     = "10.0.0.0/24"
 }
 
-variable "vertex_ai_subnet_cidr" {
-  description = "CIDR block for Vertex AI PSC interface network attachments"
+variable "agent_platform_psc_subnet_cidr" {
+  description = "CIDR block for Agent Platform PSC interface network attachments"
   type        = string
   default     = "10.0.1.0/28"
 }
@@ -54,7 +50,7 @@ variable "peering_cidr" {
 }
 
 variable "network_name" {
-  description = "Name of the existing VPC network to use. If not provided, a new VPC will be created."
+  description = "Name of the VPC network. If not provided, a new VPC named 'foldrun-network' will be created."
   type        = string
   default     = ""
 }
@@ -71,8 +67,8 @@ variable "network_project_id" {
   default     = ""
 }
 
-variable "vertex_ai_network_attachment_id" {
-  description = "ID of the existing Network Attachment to use for Vertex AI PSC interfaces. If not provided and creating a network, a new one will be created."
+variable "agent_platform_network_attachment_id" {
+  description = "ID of the existing Network Attachment to use for Agent Platform PSC interfaces. If not provided and creating a network, a new one will be created."
   type        = string
   default     = ""
 }

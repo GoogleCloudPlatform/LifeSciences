@@ -86,18 +86,18 @@ else
     echo "❌ [Cloud Run] boltz2-analysis-job is missing"
 fi
 
-# 4. Check Agent Engine (via REST API since gcloud subcommand is not available)
+# 4. Check Agent Runtime (via REST API since gcloud subcommand is not available)
 ACCESS_TOKEN=$(gcloud auth print-access-token 2>/dev/null)
 if [ -n "$ACCESS_TOKEN" ]; then
     AGENT_RESULT=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
         "https://$REGION-aiplatform.googleapis.com/v1beta1/projects/$PROJECT_ID/locations/$REGION/reasoningEngines" 2>/dev/null)
     if echo "$AGENT_RESULT" | grep -q "FoldRun_Agent"; then
-        echo "✅ [Vertex AI] FoldRun Agent Engine is deployed"
+        echo "✅ [Agent Platform] FoldRun Agent Runtime is deployed"
     else
-        echo "❌ [Vertex AI] FoldRun Agent Engine is missing"
+        echo "❌ [Agent Platform] FoldRun Agent Runtime is missing"
     fi
 else
-    echo "⚠️  [Vertex AI] Could not retrieve access token to check Agent Engine"
+    echo "⚠️  [Agent Platform] Could not retrieve access token to check Agent Runtime"
 fi
 
 # 5. Check Data Download State

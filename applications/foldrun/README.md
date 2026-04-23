@@ -7,7 +7,7 @@
 
 - **Conversational AI**: Natural language interface powered by Gemini for submitting, monitoring, and analyzing predictions
 - **Multi-Model Support**: Plugin architecture for AF2, OpenFold3, Boltz — shared databases, independent pipelines
-- **Automated Execution**: Provisions infrastructure and launches pipelines on Vertex AI with optimal compute selection
+- **Automated Execution**: Provisions infrastructure and launches pipelines on Agent Platform with optimal compute selection
 - **Parallel Analysis**: Cloud Run jobs calculate structural metrics (pLDDT, PAE) and generate expert biological insights using Gemini
 - **Interactive Visualization**: Web-based 3D structure viewer with confidence coloring and analysis dashboards
 - **Smart Database Management**: YAML-driven downloads via Cloud Batch with GCS-based gap detection — shared databases downloaded once across models
@@ -22,10 +22,10 @@
 
 ## Tech Stack
 
-- **Agent**: Google ADK with up to 30 native Skills (AF2 + OF3 + Boltz-2), deployed to Vertex AI Agent Engine
+- **Agent**: Google ADK with up to 30 native Skills (AF2 + OF3 + Boltz-2), deployed to Agent Runtime
 - **A2A**: Agent-to-Agent protocol proxy (Cloud Run) for agent interoperability
-- **AI**: Gemini (via Vertex AI)
-- **Compute**: Vertex AI Pipelines, Cloud Run, Cloud Batch
+- **AI**: Gemini (via Agent Platform)
+- **Compute**: Agent Platform Pipelines, Cloud Run, Cloud Batch
 - **Storage**: GCS (artifacts/results), Filestore (genetic databases)
 - **Infrastructure**: Terraform, Cloud Build
 - **Language**: Python 3.10+
@@ -144,16 +144,16 @@ GCS_SOURCE_BUCKET=THEIR_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 If you are deploying FoldRun into a Shared VPC (where the network belongs to a host project), follow these steps to ensure correct permissions and PSC configuration:
 
 **1. Create `terraform.tfvars`:**
-In the `applications/foldrun/terraform/` directory, create a `terraform.tfvars` file with your network details and the existing network attachment name for Vertex AI:
+In the `applications/foldrun/terraform/` directory, create a `terraform.tfvars` file with your network details and the existing network attachment name for Agent Platform:
 ```hcl
 network_name                      = "your-existing-vpc-name"
 subnet_name                       = "your-existing-subnet-name"
 network_project_id                = "your-host-project-id"
-vertex_ai_network_attachment_name = "your-existing-network-attachment-name"
+agent_platform_network_attachment_name = "your-existing-network-attachment-name"
 ```
 
 > [!NOTE]
-> In a Shared VPC scenario, network administrators usually create the network attachment. Refer to the [Vertex AI documentation](https://docs.cloud.google.com/vertex-ai/docs/general/vpc-psc-i-setup) for instructions on how to create a network attachment in the host project.
+> In a Shared VPC scenario, network administrators usually create the network attachment. Refer to the [Agent Platform documentation](https://docs.cloud.google.com/vertex-ai/docs/general/vpc-psc-i-setup) for instructions on how to create a network attachment in the host project.
 
 **2. Enable Cloud Run API and Grant Permissions:**
 Enable the Cloud Run API in your service project so that the Cloud Run Service Agent is created:
@@ -187,7 +187,7 @@ Ask your host project administrator to run these commands (replacing `HOST_PROJE
       --project HOST_PROJECT_ID
     ```
 
-*   **For Vertex AI Pipelines**: Grant `Compute Network Admin` role on the host project (needed for PSC interface):
+*   **For Agent Platform Pipelines**: Grant `Compute Network Admin` role on the host project (needed for PSC interface):
     ```bash
     gcloud projects add-iam-policy-binding HOST_PROJECT_ID \
       --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-aiplatform.iam.gserviceaccount.com" \
@@ -268,7 +268,7 @@ Expected output:
 ✅ [Cloud Run] af2-analysis-job is deployed
 ✅ [Cloud Run] of3-analysis-job is deployed
 ✅ [Cloud Run] boltz2-analysis-job is deployed
-✅ [Vertex AI] FoldRun Agent Engine is deployed
+✅ [Agent Platform] FoldRun Agent Runtime is deployed
 ✅ [Data] Databases present (12 folders)
    ✅ AF2 core databases (uniref90 etc.)
    ✅ OF3 weights + CCD
@@ -277,7 +277,7 @@ Expected output:
 
 ### Step 4: Use the Agent
 
-Open the Agent Engine playground:
+Open the Agent Runtime playground:
 ```
 https://console.cloud.google.com/vertex-ai/agents/locations/YOUR_REGION/agent-engines/YOUR_ENGINE_ID/playground?project=YOUR_PROJECT_ID
 ```
@@ -375,7 +375,7 @@ foldrun/
 │   ├── foldrun_app/
 │   │   ├── agent.py            # Agent definition (Gemini + Skills)
 │   │   ├── core/               # Shared infrastructure (model-agnostic)
-│   │   │   ├── base_tool.py    # BaseTool (GCS, Vertex AI, NFS)
+│   │   │   ├── base_tool.py    # BaseTool (GCS, Agent Platform, NFS)
 │   │   │   ├── config.py       # GCP project, NFS, GCS config
 │   │   │   ├── hardware.py     # GPU quota detection
 │   │   │   ├── batch.py        # Cloud Batch job submission
@@ -437,10 +437,10 @@ foldrun/
 │  (Agent Engine)  │
 └───────┬──────────┘
         │ Native tool calls
-        ├──→ Vertex AI Pipelines  ← AF2 + OF3 + Boltz-2 structure prediction
-        ├──→ Cloud Batch          ← Genetic database downloads
-        ├──→ Cloud Run Jobs       ← Parallel analysis (AF2 + OF3 + Boltz-2) + Gemini Pro expert analysis
-        └──→ Cloud Run Service    ← Interactive 3D structure viewer (AF2 + OF3 + Boltz-2)
+        ├──→ Agent Platform Pipelines  ← AF2 + OF3 + Boltz-2 structure prediction
+        ├──→ Cloud Batch               ← Genetic database downloads
+        ├──→ Cloud Run Jobs            ← Parallel analysis (AF2 + OF3 + Boltz-2) + Gemini Pro expert analysis
+        └──→ Cloud Run Service         ← Interactive 3D structure viewer (AF2 + OF3 + Boltz-2)
 ```
 
 ## Why FoldRun vs ColabFold / Public Servers
@@ -452,7 +452,7 @@ but don't meet enterprise requirements for drug discovery pipelines:
 |---|---|---|
 | **Data sovereignty** | Sequences sent to external servers | Everything stays in your GCP project — VPC, no egress |
 | **MSA computation** | ColabFold MMseqs2 server (external) | Local Jackhmmer/nhmmer on NFS-mounted databases |
-| **Audit trail** | None | Full Vertex AI pipeline lineage, Cloud Logging |
+| **Audit trail** | None | Full Agent Platform pipeline lineage, Cloud Logging |
 | **IP protection** | No control over sequence retention | Your GCS bucket, your retention policies |
 | **Regulatory** | Not GxP-compatible | Runs in your compliant GCP org with IAM controls |
 | **GPU control** | Shared / queued | Dedicated A100s via DWS, configurable scheduling |

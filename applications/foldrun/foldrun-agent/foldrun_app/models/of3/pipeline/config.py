@@ -22,7 +22,6 @@ OPENFOLD3_COMPONENTS_IMAGE = os.getenv("OPENFOLD3_COMPONENTS_IMAGE")
 NFS_SERVER = os.getenv("NFS_SERVER")
 NFS_PATH = os.getenv("NFS_PATH")
 NFS_MOUNT_POINT = os.getenv("NFS_MOUNT_POINT", "/mnt/nfs/foldrun")
-NETWORK = os.getenv("NETWORK")
 
 # OF3 model weights and CCD on NFS
 OF3_PARAMS_PATH = os.getenv("OF3_PARAMS_PATH", "of3/params")
@@ -52,3 +51,5 @@ PDB_MMCIF_PATH = os.getenv("PDB_MMCIF_PATH", "pdb_mmcif/mmcif_files")
 # RNA database paths (OF3-specific, relative to NFS mount point)
 RFAM_PATH = os.getenv("RFAM_PATH", "of3/rfam/Rfam.cm")
 RNACENTRAL_PATH = os.getenv("RNACENTRAL_PATH", "of3/rnacentral/rnacentral_active.fasta")
+
+AGENT_PLATFORM_NETWORK_ATTACHMENT = os.getenv("AGENT_PLATFORM_NETWORK_ATTACHMENT")

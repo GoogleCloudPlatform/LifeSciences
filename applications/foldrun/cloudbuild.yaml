@@ -19,7 +19,7 @@
 #   af2            - alphafold-components container
 #   of3            - openfold3-components container
 #   boltz2         - boltz2-components container
-#   agent          - Vertex AI Agent Engine only (no container rebuilds)
+#   agent          - Agent Runtime only (no container rebuilds)
 #   af2-analysis   - af2-analysis-job Cloud Run Job
 #   of3-analysis   - of3-analysis-job Cloud Run Job
 #   boltz2-analysis- boltz2-analysis-job Cloud Run Job
@@ -74,7 +74,7 @@ steps:
           echo "Viewer URL: $$(cat /workspace/viewer_url.txt)"
         else
           echo "Skipping viewer deploy (BUILD_TARGET=${_BUILD_TARGET})"
-          # Fetch existing URL so deploy-agent-engine can use it
+          # Fetch existing URL so deploy-agent-runtime can use it
           gcloud run services describe foldrun-viewer \
             --region ${_REGION} \
             --format 'value(status.url)' > /workspace/viewer_url.txt 2>/dev/null || echo "" > /workspace/viewer_url.txt
@@ -269,11 +269,11 @@ steps:
     waitFor: ['-']
 
   # ============================================================================
-  # 4. FoldRun Agent (Vertex AI Agent Engine)
+  # 4. FoldRun Agent (Agent Runtime)
   # Runs whenever any component or the agent itself is in the target.
   # Skipped only for analysis-job-only targets.
   # ============================================================================
-  - id: 'deploy-agent-engine'
+  - id: 'deploy-agent-runtime'
     name: 'python:3.12-slim'
     dir: 'foldrun-agent'
     entrypoint: bash
@@ -311,7 +311,7 @@ steps:
         export OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
         export BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest
         export FILESTORE_IP=${_FILESTORE_IP}
-        export VERTEX_AI_NETWORK_ATTACHMENT=${_VERTEX_AI_NETWORK_ATTACHMENT}
+        export AGENT_PLATFORM_NETWORK_ATTACHMENT=${_AGENT_PLATFORM_NETWORK_ATTACHMENT}
 
         VIEWER_URL=$$(cat /workspace/viewer_url.txt)
         export AF2_VIEWER_URL=$$VIEWER_URL
@@ -320,7 +320,7 @@ steps:
           --project=$PROJECT_ID \
           --location=${_REGION} \
           --service-account=${_AGENT_SA_EMAIL} \
-          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,BOLTZ2_ANALYSIS_JOB_NAME=boltz2-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL},VERTEX_AI_NETWORK_ATTACHMENT=${_VERTEX_AI_NETWORK_ATTACHMENT},FILESTORE_IP=${_FILESTORE_IP}
+          --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest,AF2_VIEWER_URL=$$VIEWER_URL,OF3_ANALYSIS_JOB_NAME=of3-analysis-job,BOLTZ2_ANALYSIS_JOB_NAME=boltz2-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL},AGENT_PLATFORM_NETWORK_ATTACHMENT=${_AGENT_PLATFORM_NETWORK_ATTACHMENT},FILESTORE_IP=${_FILESTORE_IP}
     waitFor: ['deploy-viewer', 'build-push-af2-components', 'build-push-of3-components', 'build-push-boltz2-components']
 
   # ============================================================================
@@ -394,7 +394,7 @@ steps:
         echo ""
         echo "A2A proxy deployed: $$A2A_URL"
         echo "Agent card:         $$A2A_URL/.well-known/agent.json"
-    waitFor: ['build-push-a2a', 'deploy-agent-engine']
+    waitFor: ['build-push-a2a', 'deploy-agent-runtime']
 
   # ============================================================================
   # 5. Data Download — handled locally by deploy-all.sh, not here.
@@ -402,7 +402,7 @@ steps:
 
 substitutions:
   _REGION: us-central1
-  _VERTEX_AI_NETWORK_ATTACHMENT: ""
+  _AGENT_PLATFORM_NETWORK_ATTACHMENT: ""
   _FILESTORE_IP: ""
   _AR_REPO: foldrun-repo
   _BUCKET_NAME: required_bucket_name

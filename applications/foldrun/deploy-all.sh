@@ -65,7 +65,7 @@ usage() {
     echo "  AR_REPO            Artifact Registry repo name (default: foldrun-repo)"
     echo "  AGENT_SA_EMAIL     Agent service account email"
     echo "  BUILD_SA_EMAIL     Cloud Build service account email"
-    echo "  PIPELINES_SA_EMAIL Vertex AI Pipelines service account email"
+    echo "  PIPELINES_SA_EMAIL Agent Platform Pipelines service account email"
     echo ""
     echo "Examples:"
     echo "  $0                                      # Full deploy (infra + build + data)"
@@ -207,7 +207,7 @@ extract_terraform_outputs() {
     export PIPELINES_SA_EMAIL="${PIPELINES_SA_EMAIL:-pipelines-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export DATABASES_BUCKET="${DATABASES_BUCKET:-${PROJECT_ID}-foldrun-gdbs}"
     export SUBNET_ID="${SUBNET_ID:-}"
-    export VERTEX_AI_NETWORK_ATTACHMENT="${VERTEX_AI_NETWORK_ATTACHMENT:-}"
+    export AGENT_PLATFORM_NETWORK_ATTACHMENT="${AGENT_PLATFORM_NETWORK_ATTACHMENT:-}"
     export FILESTORE_IP="${FILESTORE_IP:-}"
 
     # If terraform is available and state exists, cross-check and prefer its outputs
@@ -223,7 +223,7 @@ extract_terraform_outputs() {
             v=$(_tf pipelines_sa_email);     [[ -n "$v" ]] && export PIPELINES_SA_EMAIL="$v"
             v=$(_tf databases_bucket_name);  [[ -n "$v" ]] && export DATABASES_BUCKET="$v"
             v=$(_tf subnet_id);              [[ -n "$v" ]] && export SUBNET_ID="$v"
-            v=$(_tf vertex_ai_network_attachment); [[ -n "$v" ]] && export VERTEX_AI_NETWORK_ATTACHMENT="$v"
+            v=$(_tf agent_platform_network_attachment); [[ -n "$v" ]] && export AGENT_PLATFORM_NETWORK_ATTACHMENT="$v"
             v=$(_tf filestore_ip);                 [[ -n "$v" ]] && export FILESTORE_IP="$v"
             unset -f _tf
         fi
@@ -238,7 +238,7 @@ extract_terraform_outputs() {
     echo "  BUILD_SA_EMAIL=$BUILD_SA_EMAIL"
     echo "  PIPELINES_SA_EMAIL=$PIPELINES_SA_EMAIL"
     echo "  SUBNET_ID=$SUBNET_ID"
-    echo "  VERTEX_AI_NETWORK_ATTACHMENT=$VERTEX_AI_NETWORK_ATTACHMENT"
+    echo "  AGENT_PLATFORM_NETWORK_ATTACHMENT=$AGENT_PLATFORM_NETWORK_ATTACHMENT"
     echo "  FILESTORE_IP=$FILESTORE_IP"
 }
 
@@ -306,7 +306,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_VERTEX_AI_NETWORK_ATTACHMENT="$VERTEX_AI_NETWORK_ATTACHMENT",_FILESTORE_IP="$FILESTORE_IP",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_AGENT_PLATFORM_NETWORK_ATTACHMENT="$AGENT_PLATFORM_NETWORK_ATTACHMENT",_FILESTORE_IP="$FILESTORE_IP",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi

@@ -44,7 +44,7 @@ class TestConfig:
             "GCP_REGION",
             "GCS_BUCKET_NAME",
             "FILESTORE_IP",
-            "VERTEX_AI_NETWORK_ATTACHMENT",
+            "AGENT_PLATFORM_NETWORK_ATTACHMENT",
             "ALPHAFOLD_COMPONENTS_IMAGE",
         ]:
             monkeypatch.delenv(var, raising=False)

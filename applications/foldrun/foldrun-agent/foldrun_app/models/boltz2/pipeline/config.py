@@ -22,7 +22,6 @@ BOLTZ2_COMPONENTS_IMAGE = os.getenv("BOLTZ2_COMPONENTS_IMAGE")
 NFS_SERVER = os.getenv("NFS_SERVER")
 NFS_PATH = os.getenv("NFS_PATH")
 NFS_MOUNT_POINT = os.getenv("NFS_MOUNT_POINT", "/mnt/nfs/foldrun")
-NETWORK = os.getenv("NETWORK")
 
 # Boltz-2 cache directory on NFS — must contain boltz2_conf.ckpt and mols/
 BOLTZ2_CACHE_PATH = os.getenv("BOLTZ2_CACHE_PATH", "boltz2/cache")
@@ -45,3 +44,5 @@ PDB_SEQRES_PATH = os.getenv("PDB_SEQRES_PATH", "pdb_seqres/pdb_seqres.txt")
 UNIPROT_PATH = os.getenv("UNIPROT_PATH", "uniprot/uniprot.fasta")
 
 # Note: RNA, DNA, ligand chains do not support external MSA in Boltz-2 schema
+
+AGENT_PLATFORM_NETWORK_ATTACHMENT = os.getenv("AGENT_PLATFORM_NETWORK_ATTACHMENT")

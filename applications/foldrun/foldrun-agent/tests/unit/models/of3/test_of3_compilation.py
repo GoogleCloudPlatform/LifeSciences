@@ -34,7 +34,7 @@ def mock_env():
         "NFS_SERVER": "10.1.0.2",
         "NFS_PATH": "/datasets",
         "NFS_MOUNT_POINT": "/mnt/nfs/foldrun",
-        "NETWORK": "projects/123/global/networks/test-net",
+        "AGENT_PLATFORM_NETWORK_ATTACHMENT": "projects/123/global/networks/test-net",
         "PREDICT_MACHINE_TYPE": "a2-highgpu-1g",
         "PREDICT_ACCELERATOR_TYPE": "NVIDIA_TESLA_A100",
         "PREDICT_ACCELERATOR_COUNT": "1",

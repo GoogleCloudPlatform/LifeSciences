@@ -67,9 +67,9 @@ output "subnet_id" {
   value       = local.subnet_id
 }
 
-output "vertex_ai_subnet_id" {
-  description = "The subnetwork ID for Vertex AI PSC interfaces"
-  value       = local.create_psc_network_attachment ? google_compute_subnetwork.vertex_ai_psc[0].id : ""
+output "agent_platform_psc_subnet_id" {
+  description = "The subnetwork ID for Agent Platform PSC interfaces"
+  value       = local.create_psc_network_attachment ? google_compute_subnetwork.agent_platform_psc[0].id : ""
 }
 
 output "network_id" {
@@ -77,8 +77,8 @@ output "network_id" {
   value       = local.network_id
 }
 
-output "vertex_ai_network_attachment" {
-  description = "The resolved Vertex AI network attachment ID"
+output "agent_platform_network_attachment" {
+  description = "The resolved Agent Platform network attachment ID"
   value       = local.psc_network_attachment_id
 }
 

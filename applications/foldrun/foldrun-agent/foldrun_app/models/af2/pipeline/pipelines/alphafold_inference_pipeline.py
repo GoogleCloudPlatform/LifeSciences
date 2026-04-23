@@ -94,7 +94,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
                 )
             ],
             psc_interface_config={
-                "network_attachment": os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT", "placeholder")
+                "network_attachment": config.AGENT_PLATFORM_NETWORK_ATTACHMENT
             },
             strategy=dp_strategy,
         )

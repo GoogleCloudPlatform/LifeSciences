@@ -112,6 +112,8 @@ locals {
 
   network_project_id = var.network_project_id != "" ? var.network_project_id : var.project_id
 
+  effective_vpc_name = var.network_name != "" ? var.network_name : "foldrun-network"
+
   network_name = local.create_network ? google_compute_network.foldrun_vpc[0].name : var.network_name
   network_id   = local.create_network ? google_compute_network.foldrun_vpc[0].id : data.google_compute_network.existing_vpc[0].id
 
@@ -134,7 +136,7 @@ data "google_compute_subnetwork" "existing_subnet" {
 
 resource "google_compute_network" "foldrun_vpc" {
   count                   = local.create_network ? 1 : 0
-  name                    = var.vpc_name
+  name                    = local.effective_vpc_name
   project                 = var.project_id
   auto_create_subnetworks = false
   depends_on              = [google_project_service.apis]
@@ -142,7 +144,7 @@ resource "google_compute_network" "foldrun_vpc" {
 
 resource "google_compute_subnetwork" "foldrun_subnet" {
   count                    = local.create_network ? 1 : 0
-  name                     = "${var.vpc_name}-subnet"
+  name                     = "${local.effective_vpc_name}-subnet"
   project                  = var.project_id
   ip_cidr_range            = var.subnet_cidr
   region                   = var.region
@@ -150,11 +152,11 @@ resource "google_compute_subnetwork" "foldrun_subnet" {
   private_ip_google_access = true
 }
 
-resource "google_compute_subnetwork" "vertex_ai_psc" {
+resource "google_compute_subnetwork" "agent_platform_psc" {
   count                    = local.create_network ? 1 : 0
-  name                     = "${var.vpc_name}-vertex-ai-psc"
+  name                     = "${local.effective_vpc_name}-agent-platform-psc"
   project                  = var.project_id
-  ip_cidr_range            = var.vertex_ai_subnet_cidr
+  ip_cidr_range            = var.agent_platform_psc_subnet_cidr
   region                   = var.region
   network                  = google_compute_network.foldrun_vpc[0].id
   private_ip_google_access = true
@@ -162,7 +164,7 @@ resource "google_compute_subnetwork" "vertex_ai_psc" {
 
 resource "google_compute_firewall" "foldrun_allow_internal" {
   count   = local.create_network ? 1 : 0
-  name    = "${var.vpc_name}-allow-internal"
+  name    = "${local.effective_vpc_name}-allow-internal"
   project = var.project_id
   network = google_compute_network.foldrun_vpc[0].id
 
@@ -184,7 +186,7 @@ resource "google_compute_firewall" "foldrun_allow_internal" {
 # ==============================================================================
 resource "google_compute_router" "foldrun_router" {
   count   = local.create_network ? 1 : 0
-  name    = "${var.vpc_name}-router"
+  name    = "${local.effective_vpc_name}-router"
   project = var.project_id
   region  = var.region
   network = google_compute_network.foldrun_vpc[0].id
@@ -192,7 +194,7 @@ resource "google_compute_router" "foldrun_router" {
 
 resource "google_compute_router_nat" "foldrun_nat" {
   count                              = local.create_network ? 1 : 0
-  name                               = "${var.vpc_name}-nat"
+  name                               = "${local.effective_vpc_name}-nat"
   project                            = var.project_id
   router                             = google_compute_router.foldrun_router[0].name
   region                             = var.region
@@ -201,23 +203,23 @@ resource "google_compute_router_nat" "foldrun_nat" {
 }
 
 # ==============================================================================
-# Network Attachment (required for Vertex AI Private Service Connect)
+# Network Attachment (required for Agent Platform Private Service Connect)
 # ==============================================================================
 locals {
-  create_psc_network_attachment = var.vertex_ai_network_attachment_id == "" && local.create_network
-  psc_network_attachment_id     = local.create_psc_network_attachment ? google_compute_network_attachment.vertex_ai_attachment[0].id : var.vertex_ai_network_attachment_id
+  create_psc_network_attachment = var.agent_platform_network_attachment_id == "" && local.create_network
+  psc_network_attachment_id     = local.create_psc_network_attachment ? google_compute_network_attachment.agent_platform_attachment[0].id : var.agent_platform_network_attachment_id
 }
 
-resource "google_compute_network_attachment" "vertex_ai_attachment" {
+resource "google_compute_network_attachment" "agent_platform_attachment" {
   count                 = local.create_psc_network_attachment ? 1 : 0
-  name                  = "foldrun-vertex-ai-attachment"
+  name                  = "foldrun-agent-platform-attachment"
   project               = var.project_id
   region                = var.region
   connection_preference = "ACCEPT_AUTOMATIC"
-  subnetworks           = [google_compute_subnetwork.vertex_ai_psc[0].id]
+  subnetworks           = [google_compute_subnetwork.agent_platform_psc[0].id]
 }
 
-resource "google_project_iam_member" "vertex_ai_network_admin" {
+resource "google_project_iam_member" "agent_platform_network_admin" {
   count   = local.create_network ? 1 : 0
   project = var.project_id
   role    = "roles/compute.networkAdmin"
@@ -229,7 +231,7 @@ resource "google_project_iam_member" "vertex_ai_network_admin" {
 # ==============================================================================
 resource "google_compute_global_address" "private_ip_alloc" {
   count         = local.create_network ? 1 : 0
-  name          = "${var.vpc_name}-peering-range"
+  name          = "${local.effective_vpc_name}-peering-range"
   project       = var.project_id
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
@@ -315,7 +317,7 @@ resource "google_artifact_registry_repository" "foldrun_repo" {
   depends_on    = [google_project_service.apis]
 }
 
-# Grant Vertex AI custom code SA read access to Artifact Registry (needed to pull pipeline images).
+# Grant Agent Platform custom code SA read access to Artifact Registry (needed to pull pipeline images).
 resource "google_artifact_registry_repository_iam_member" "aiplatform_cc_sa" {
   project    = google_artifact_registry_repository.foldrun_repo.project
   location   = google_artifact_registry_repository.foldrun_repo.location

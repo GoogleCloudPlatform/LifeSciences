@@ -90,7 +90,7 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
                 )
             ],
             psc_interface_config={
-                "network_attachment": os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT", "placeholder")
+                "network_attachment": config.AGENT_PLATFORM_NETWORK_ATTACHMENT
             },
             strategy="STANDARD",  # CPU-only, no FLEX_START needed
         )
@@ -151,7 +151,7 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
                 )
             ],
             psc_interface_config={
-                "network_attachment": os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT", "placeholder")
+                "network_attachment": config.AGENT_PLATFORM_NETWORK_ATTACHMENT
             },
             strategy=strategy,
             max_wait_duration=max_wait,

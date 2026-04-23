@@ -210,10 +210,8 @@ class AF2SubmitMonomerTool(AF2Tool):
             client_options={"api_endpoint": f"{self.config.region}-aiplatform.googleapis.com"}
         )
 
-        network_attachment = os.environ.get("VERTEX_AI_NETWORK_ATTACHMENT")
-
         psc_interface_config = aiplatform_v1.PscInterfaceConfig(
-            network_attachment=network_attachment
+            network_attachment=self.config.agent_platform_network_attachment
         )
 
         request = aiplatform_v1.CreatePipelineJobRequest(
