@@ -112,3 +112,9 @@ variable "iap_access_domain" {
   description = "Domain to grant IAP access to the viewer (e.g., your-company.com)"
   type        = string
 }
+
+variable "chat_access_group" {
+  description = "Google Group email whose members can access the Ask FoldRun chat tab (e.g., foldrun-demo@your-company.com). Empty = all IAP-authenticated users."
+  type        = string
+  default     = ""
+}
