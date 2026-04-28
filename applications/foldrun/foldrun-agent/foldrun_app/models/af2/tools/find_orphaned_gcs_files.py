@@ -19,8 +19,6 @@ from typing import Any, Dict
 
 from google.cloud import storage
 
-from foldrun_app.app_utils.gcs_retry import GCS_RETRY
-
 from ..base import AF2Tool
 from ..utils.vertex_utils import list_pipeline_jobs
 
@@ -103,7 +101,7 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
 
         # Get all timestamped directories
         # Note: We need to consume the iterator before accessing .prefixes
-        blobs_iterator = bucket.list_blobs(prefix=timestamped_prefix, delimiter="/", retry=GCS_RETRY)
+        blobs_iterator = bucket.list_blobs(prefix=timestamped_prefix, delimiter="/")
 
         # Consume the iterator to populate the prefixes
         _ = list(blobs_iterator)  # This forces the iterator to fetch all pages
@@ -136,7 +134,7 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
             if not is_active:
                 # This directory is orphaned
                 logger.info(f"Directory {dir_path} is ORPHANED (no matching pipeline root)")
-                dir_blobs = list(bucket.list_blobs(prefix=prefix, retry=GCS_RETRY))
+                dir_blobs = list(bucket.list_blobs(prefix=prefix))
                 dir_size = sum(blob.size for blob in dir_blobs)
 
                 orphaned_dirs.append(
@@ -156,7 +154,7 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
         orphaned_fasta = []
         if check_fasta:
             logger.info("Scanning FASTA files...")
-            fasta_blobs = bucket.list_blobs(prefix="fasta/", retry=GCS_RETRY)
+            fasta_blobs = bucket.list_blobs(prefix="fasta/")
 
             for blob in fasta_blobs:
                 # Extract job name from fasta/job-name.fasta

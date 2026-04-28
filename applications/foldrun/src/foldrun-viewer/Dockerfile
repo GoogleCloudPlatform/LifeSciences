@@ -34,7 +34,7 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 
 # Copy application files
-COPY app.py gcs_retry.py ./
+COPY app.py .
 COPY templates/ templates/
 
 # Create non-root user for security

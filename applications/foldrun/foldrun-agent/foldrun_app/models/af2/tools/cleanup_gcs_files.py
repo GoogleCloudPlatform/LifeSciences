@@ -18,8 +18,6 @@ from typing import Any, Dict, List
 
 from google.cloud import storage
 
-from foldrun_app.app_utils.gcs_retry import GCS_RETRY
-
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job
 
@@ -97,7 +95,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
             if gcs_path.endswith("/"):
                 # List all files in this directory
                 try:
-                    dir_blobs = bucket.list_blobs(prefix=blob_name, retry=GCS_RETRY)
+                    dir_blobs = bucket.list_blobs(prefix=blob_name)
                     for blob in dir_blobs:
                         files_to_process.append(
                             {
@@ -228,7 +226,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         # Strategy 1: If we have the pipeline_root from Vertex AI, use it directly
         if pipeline_root:
             try:
-                dir_blobs = bucket.list_blobs(prefix=pipeline_root, retry=GCS_RETRY)
+                dir_blobs = bucket.list_blobs(prefix=pipeline_root)
                 for blob in dir_blobs:
                     found_files["pipeline_runs"].append(
                         {
@@ -246,7 +244,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         if timestamp_search:
             timestamped_dir = f"pipeline_runs/{timestamp_search}/"
             try:
-                dir_blobs = bucket.list_blobs(prefix=timestamped_dir, retry=GCS_RETRY)
+                dir_blobs = bucket.list_blobs(prefix=timestamped_dir)
                 for blob in dir_blobs:
                     blob_path = f"gs://{self.config.bucket_name}/{blob.name}"
                     if not any(f["path"] == blob_path for f in found_files["pipeline_runs"]):
@@ -267,10 +265,10 @@ class AF2CleanupGCSFilesTool(AF2Tool):
             timestamped_prefix = "pipeline_runs/"
             try:
                 # List all timestamped directories
-                blobs = bucket.list_blobs(prefix=timestamped_prefix, delimiter="/", retry=GCS_RETRY)
+                blobs = bucket.list_blobs(prefix=timestamped_prefix, delimiter="/")
                 for prefix in blobs.prefixes:
                     # Search within each timestamped directory for job name
-                    dir_blobs = bucket.list_blobs(prefix=prefix, retry=GCS_RETRY)
+                    dir_blobs = bucket.list_blobs(prefix=prefix)
                     for blob in dir_blobs:
                         if job_name.lower() in blob.name.lower():
                             blob_path = f"gs://{self.config.bucket_name}/{blob.name}"

@@ -39,7 +39,7 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 
 # Copy application files
-COPY main.py gcs_retry.py ./
+COPY main.py .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

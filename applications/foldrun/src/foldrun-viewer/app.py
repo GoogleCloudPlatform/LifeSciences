@@ -24,8 +24,6 @@ import os
 from flask import Flask, abort, jsonify, render_template, request
 from google.cloud import storage
 
-from gcs_retry import GCS_RETRY
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -60,7 +58,7 @@ def load_gcs_file(uri, as_json=False):
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
 
-        content = blob.download_as_bytes(retry=GCS_RETRY)
+        content = blob.download_as_bytes()
 
         if as_json:
             return json.loads(content.decode("utf-8"))
@@ -106,12 +104,12 @@ def get_analysis_summary(job_id=None, summary_uri=None):
 
     # Simpler approach: list all blobs matching the pattern
     summary_blobs = list(
-        bucket.list_blobs(prefix=prefix, match_glob="**/analysis/summary.json", retry=GCS_RETRY)
+        bucket.list_blobs(prefix=prefix, match_glob="**/analysis/summary.json")
     )
 
     if not summary_blobs:
         # Fallback: try listing all blobs under prefix and filter
-        all_blobs = list(bucket.list_blobs(prefix=prefix, retry=GCS_RETRY))
+        all_blobs = list(bucket.list_blobs(prefix=prefix))
         summary_blobs = [
             b for b in all_blobs if b.name.endswith("/analysis/summary.json")
         ]
@@ -305,7 +303,7 @@ def get_image():
         blob = bucket.blob(blob_path)
 
         # Download image content
-        image_bytes = blob.download_as_bytes(retry=GCS_RETRY)
+        image_bytes = blob.download_as_bytes()
 
         # Determine content type based on file extension
         content_type = "image/png"

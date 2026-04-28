@@ -18,8 +18,6 @@ from typing import Any, Dict
 
 from google.cloud import storage
 
-from foldrun_app.app_utils.gcs_retry import GCS_RETRY
-
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job
 
@@ -84,7 +82,7 @@ class AF2GetJobDetailsTool(AF2Tool):
                 storage_client = storage.Client(project=self.config.project_id)
                 bucket = storage_client.bucket(bucket_name)
                 blob = bucket.blob(blob_path)
-                fasta_content = blob.download_as_text(retry=GCS_RETRY)
+                fasta_content = blob.download_as_text()
 
                 if is_of3:
                     # OF3 input is JSON

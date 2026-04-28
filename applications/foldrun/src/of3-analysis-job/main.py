@@ -32,8 +32,6 @@ from google import genai
 from google.cloud import storage
 from google.genai import types
 
-from gcs_retry import GCS_RETRY
-
 matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -66,7 +64,7 @@ def download_from_gcs(gcs_uri: str, local_path: str) -> None:
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     blob.reload()
-    blob.download_to_filename(local_path, retry=GCS_RETRY)
+    blob.download_to_filename(local_path)
 
     size_mb = blob.size / 1024 / 1024 if blob.size else 0
     logger.info(f"Downloaded {gcs_uri} ({size_mb:.2f} MB)")
@@ -84,7 +82,7 @@ def upload_to_gcs(local_path: str, gcs_uri: str) -> None:
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
-    blob.upload_from_filename(local_path, retry=GCS_RETRY)
+    blob.upload_from_filename(local_path)
 
     logger.info(f"Uploaded {local_path} to {gcs_uri}")
 
@@ -102,7 +100,7 @@ def download_json_from_gcs(gcs_uri: str) -> dict:
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
 
-    content = blob.download_as_string(retry=GCS_RETRY)
+    content = blob.download_as_string()
     return json.loads(content)
 
 
@@ -119,7 +117,7 @@ def download_image_from_gcs(gcs_uri: str) -> bytes:
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
 
-    return blob.download_as_bytes(retry=GCS_RETRY)
+    return blob.download_as_bytes()
 
 
 def calculate_plddt_stats(plddt_scores: list) -> dict:
@@ -244,7 +242,7 @@ def download_text_from_gcs(gcs_uri: str) -> str:
     storage_client = storage.Client()
     bucket = storage_client.bucket(parts[0])
     blob = bucket.blob(parts[1] if len(parts) > 1 else "")
-    return blob.download_as_text(retry=GCS_RETRY)
+    return blob.download_as_text()
 
 
 def plot_plddt(
@@ -758,7 +756,7 @@ def main():
             analysis_prefix = analysis_path.replace(f"gs://{bucket_name}/", "")
 
             while waited < max_wait:
-                blobs = bucket_obj.list_blobs(prefix=analysis_prefix, retry=GCS_RETRY)
+                blobs = bucket_obj.list_blobs(prefix=analysis_prefix)
                 completed_files = [
                     b.name
                     for b in blobs
@@ -1018,7 +1016,7 @@ def consolidate_results(job_id: str, analysis_path: str):
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
 
-    blobs = bucket.list_blobs(prefix=prefix, retry=GCS_RETRY)
+    blobs = bucket.list_blobs(prefix=prefix)
     completed_files = []
 
     for blob in blobs:

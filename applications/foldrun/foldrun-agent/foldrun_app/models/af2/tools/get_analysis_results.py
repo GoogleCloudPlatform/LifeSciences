@@ -22,8 +22,6 @@ from urllib.parse import quote_plus
 
 from google.cloud import run_v2, storage
 
-from foldrun_app.app_utils.gcs_retry import GCS_RETRY
-
 from ..base import AF2Tool
 
 logger = logging.getLogger(__name__)
@@ -123,7 +121,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
 
-        content = blob.download_as_text(retry=GCS_RETRY)
+        content = blob.download_as_text()
         return json.loads(content)
 
     def _write_to_gcs(self, gcs_uri: str, data: Dict[str, Any]) -> None:
@@ -139,11 +137,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
 
-        blob.upload_from_string(
-            json.dumps(data, indent=2),
-            content_type="application/json",
-            retry=GCS_RETRY,
-        )
+        blob.upload_from_string(json.dumps(data, indent=2), content_type="application/json")
 
     def _list_completed_analyses(self, analysis_path: str) -> List[str]:
         """List all completed analysis files in GCS."""
@@ -158,7 +152,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
         bucket = storage_client.bucket(bucket_name)
 
         # List all prediction analysis files
-        blobs = bucket.list_blobs(prefix=prefix, retry=GCS_RETRY)
+        blobs = bucket.list_blobs(prefix=prefix)
         completed = []
 
         for blob in blobs:
@@ -626,7 +620,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
                 blob = bucket.blob(parts[1])
 
                 if blob.exists():
-                    content = blob.download_as_text(retry=GCS_RETRY)
+                    content = blob.download_as_text()
                     # Parse FASTA (skip header line)
                     lines = content.strip().split("\n")
                     sequence = "".join(line for line in lines if not line.startswith(">"))
