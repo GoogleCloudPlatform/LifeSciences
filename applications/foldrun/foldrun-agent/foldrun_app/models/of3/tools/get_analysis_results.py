@@ -22,6 +22,8 @@ from urllib.parse import quote_plus
 
 from google.cloud import run_v2, storage
 
+from foldrun_app.app_utils.gcs_retry import GCS_RETRY
+
 from ..base import OF3Tool
 
 logger = logging.getLogger(__name__)
@@ -61,7 +63,7 @@ class OF3GetAnalysisResultsTool(OF3Tool):
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
 
-        content = blob.download_as_text()
+        content = blob.download_as_text(retry=GCS_RETRY)
         return json.loads(content)
 
     def _check_cloudrun_execution_status(self, execution_name: str) -> Dict[str, Any] | None:
@@ -106,7 +108,7 @@ class OF3GetAnalysisResultsTool(OF3Tool):
         storage_client = storage.Client(project=self.config.project_id)
         bucket = storage_client.bucket(bucket_name)
 
-        blobs = bucket.list_blobs(prefix=prefix)
+        blobs = bucket.list_blobs(prefix=prefix, retry=GCS_RETRY)
         return [
             f"gs://{bucket_name}/{blob.name}"
             for blob in blobs

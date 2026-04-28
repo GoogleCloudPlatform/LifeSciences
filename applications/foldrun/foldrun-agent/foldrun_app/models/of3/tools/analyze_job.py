@@ -22,6 +22,8 @@ from typing import Any, Dict
 
 from google.cloud import run_v2, storage
 
+from foldrun_app.app_utils.gcs_retry import GCS_RETRY
+
 from ..base import OF3Tool
 
 logger = logging.getLogger(__name__)
@@ -65,7 +67,11 @@ class OF3JobAnalysisTool(OF3Tool):
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
 
-        blob.upload_from_string(json.dumps(data, indent=2), content_type="application/json")
+        blob.upload_from_string(
+            json.dumps(data, indent=2),
+            content_type="application/json",
+            retry=GCS_RETRY,
+        )
 
     def _check_existing_analysis(self, analysis_path: str) -> tuple[bool, dict | None]:
         """Check if analysis already exists."""
@@ -77,7 +83,7 @@ class OF3JobAnalysisTool(OF3Tool):
 
             summary_blob = bucket.blob(f"{prefix}summary.json")
             if summary_blob.exists():
-                content = summary_blob.download_as_string()
+                content = summary_blob.download_as_string(retry=GCS_RETRY)
                 return True, json.loads(content)
 
             return False, None
@@ -104,7 +110,7 @@ class OF3JobAnalysisTool(OF3Tool):
 
         # List all blobs under pipeline root to find OF3 output files
         # Pattern: predict-of3_*/query_name/seed_N/*_confidences_aggregated.json
-        all_blobs = list(bucket.list_blobs(prefix=prefix))
+        all_blobs = list(bucket.list_blobs(prefix=prefix, retry=GCS_RETRY))
 
         samples = []
         seen = set()

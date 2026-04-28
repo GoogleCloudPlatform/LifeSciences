@@ -21,6 +21,7 @@ from typing import Any, Dict
 from google.cloud import aiplatform as vertex_ai
 from google.cloud import storage
 
+from foldrun_app.app_utils.gcs_retry import GCS_RETRY
 from foldrun_app.core.config import CoreConfig
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,7 @@ class BaseTool:
 
         bucket = self.storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
-        blob.upload_from_filename(local_path)
+        blob.upload_from_filename(local_path, retry=GCS_RETRY)
 
         logger.info(f"Uploaded {local_path} to {gcs_path}")
         return gcs_path
@@ -131,7 +132,7 @@ class BaseTool:
 
         bucket = self.storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
-        blob.download_to_filename(local_path)
+        blob.download_to_filename(local_path, retry=GCS_RETRY)
 
         logger.info(f"Downloaded {gcs_path} to {local_path}")
         return local_path

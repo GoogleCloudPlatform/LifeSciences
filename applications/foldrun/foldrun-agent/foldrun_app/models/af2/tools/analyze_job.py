@@ -22,6 +22,8 @@ from typing import Any, Dict
 
 from google.cloud import run_v2, storage
 
+from foldrun_app.app_utils.gcs_retry import GCS_RETRY
+
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job, get_task_details
 
@@ -78,7 +80,11 @@ class AF2JobAnalysisTool(AF2Tool):
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
 
-        blob.upload_from_string(json.dumps(data, indent=2), content_type="application/json")
+        blob.upload_from_string(
+            json.dumps(data, indent=2),
+            content_type="application/json",
+            retry=GCS_RETRY,
+        )
 
         logger.info(f"Wrote data to {gcs_uri}")
 
@@ -99,7 +105,7 @@ class AF2JobAnalysisTool(AF2Tool):
             if summary_blob.exists():
                 logger.info(f"Found existing summary.json at {analysis_path}summary.json")
                 # Download and return the summary data
-                content = summary_blob.download_as_string()
+                content = summary_blob.download_as_string(retry=GCS_RETRY)
                 summary_data = json.loads(content)
                 return True, summary_data
 

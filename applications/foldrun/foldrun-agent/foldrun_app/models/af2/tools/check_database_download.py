@@ -19,6 +19,8 @@ from typing import Any, Dict
 
 from google.cloud import batch_v1
 
+from foldrun_app.app_utils.gcs_retry import GCS_RETRY
+
 from ..base import AF2Tool
 
 logger = logging.getLogger(__name__)
@@ -157,7 +159,7 @@ class AF2CheckDatabaseDownloadTool(AF2Tool):
             prefix = "/".join(path.split("/")[1:])
 
             bucket = self.storage_client.bucket(bucket_name)
-            blobs = list(bucket.list_blobs(prefix=prefix, max_results=100))
+            blobs = list(bucket.list_blobs(prefix=prefix, max_results=100, retry=GCS_RETRY))
 
             total_size_bytes = sum(b.size for b in blobs if b.size)
             total_size_gb = round(total_size_bytes / (1024**3), 2)

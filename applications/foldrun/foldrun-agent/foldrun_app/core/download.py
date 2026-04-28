@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 from google.cloud import storage
 
+from foldrun_app.app_utils.gcs_retry import GCS_RETRY
 from foldrun_app.core import batch as batch_utils
 
 logger = logging.getLogger(__name__)
@@ -116,7 +117,7 @@ def check_gcs_exists(gcs_bucket: str, nfs_path: str) -> bool:
         client = storage.Client()
         bucket = client.bucket(gcs_bucket)
         prefix = nfs_path.rstrip("/") + "/"
-        blobs = list(bucket.list_blobs(prefix=prefix, max_results=1))
+        blobs = list(bucket.list_blobs(prefix=prefix, max_results=1, retry=GCS_RETRY))
         return len(blobs) > 0
     except Exception as e:
         logger.warning(f"Could not check GCS for {nfs_path}: {e}")
