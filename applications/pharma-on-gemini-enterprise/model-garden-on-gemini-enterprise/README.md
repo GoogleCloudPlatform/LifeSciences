@@ -23,19 +23,19 @@ Before using Claude models, you need to enable them in your Google Cloud project
 
 **Step 1.** In the Google Cloud Console, search for **Model Garden**.
 
-![Search for Model Garden in the Cloud Console](docs/images/01-search-model-garden.png)
+![Search for Model Garden in the Cloud Console](model_garden_agent/docs/images/01-search-model-garden.png)
 
 **Step 2.** In Model Garden, search for **Claude** to find the available Anthropic models.
 
-![Search for Claude models in Model Garden](docs/images/02-model-garden-search-claude.png)
+![Search for Claude models in Model Garden](model_garden_agent/docs/images/02-model-garden-search-claude.png)
 
 **Step 3.** Select a Claude model and fill out the enablement form with your business details.
 
-![Claude model enablement form](docs/images/03-claude-enablement-form.png)
+![Claude model enablement form](model_garden_agent/docs/images/03-claude-enablement-form.png)
 
 **Step 4.** Review the pricing and accept the terms and agreements, then click **Agree**.
 
-![Review pricing and accept agreements](docs/images/04-claude-pricing-agreement.png)
+![Review pricing and accept agreements](model_garden_agent/docs/images/04-claude-pricing-agreement.png)
 
 ## Setup
 
@@ -137,11 +137,11 @@ AgentEngine created. Resource name: projects/123456789/locations/us-central1/rea
 
 **Step 1.** In the Cloud Console, search for **Agent Engine**.
 
-![Search for Agent Engine in the Cloud Console](docs/images/05-search-agent-engine.png)
+![Search for Agent Engine in the Cloud Console](model_garden_agent/docs/images/05-search-agent-engine.png)
 
 **Step 2.** You should see your deployed **Model Garden Agent** in the Agent Engine console.
 
-![Agent Engine console showing the deployed agent](docs/images/06-agent-engine-deployed.png)
+![Agent Engine console showing the deployed agent](model_garden_agent/docs/images/06-agent-engine-deployed.png)
 
 ## Query the Deployed Agent
 
@@ -182,23 +182,23 @@ Once your agent is deployed to Agent Engine, you can make it available to users 
 
 **Step 1.** Open the [Gemini Enterprise admin console](https://admin.google.com), navigate to **Apps > Gemini Enterprise > Agents**, and click **+ Add agent**.
 
-![Gemini Enterprise admin console - Agents list](docs/images/07-gemini-enterprise-agents-admin.png)
+![Gemini Enterprise admin console - Agents list](model_garden_agent/docs/images/07-gemini-enterprise-agents-admin.png)
 
 **Step 2.** In the "Add an agent" dialog, select **Custom agent via Agent Engine** to connect your deployed Agent Engine agent.
 
-![Choose agent type dialog](docs/images/08-add-agent-type.png)
+![Choose agent type dialog](model_garden_agent/docs/images/08-add-agent-type.png)
 
 **Step 3.** Configure agent authorization. You can add OAuth or service account authorizations if your agent needs to access protected resources, or click **Skip** to proceed without authorization.
 
-![Agent authorization configuration](docs/images/09-agent-authorization.png)
+![Agent authorization configuration](model_garden_agent/docs/images/09-agent-authorization.png)
 
 **Step 4.** Once created, the agent appears in the Gemini Enterprise agents gallery under **From your organization**, alongside Google-made agents.
 
-![Agents gallery showing custom agents from your organization](docs/images/10-gemini-enterprise-agents-gallery.png)
+![Agents gallery showing custom agents from your organization](model_garden_agent/docs/images/10-gemini-enterprise-agents-gallery.png)
 
 **Step 5.** Users in your organization can now select the agent from the sidebar and chat with it directly in Gemini Enterprise.
 
-![Chatting with the Anthropic Sonnet agent in Gemini Enterprise](docs/images/11-chat-with-agent.png)
+![Chatting with the Anthropic Sonnet agent in Gemini Enterprise](model_garden_agent/docs/images/11-chat-with-agent.png)
 
 ## Monitor
 
