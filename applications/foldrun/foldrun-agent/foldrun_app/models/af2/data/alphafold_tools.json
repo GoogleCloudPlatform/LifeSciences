@@ -2,7 +2,7 @@
   {
     "type": "AF2SubmitMonomerTool",
     "name": "af2_submit_monomer",
-    "description": "Submit AlphaFold2 monomer protein structure prediction job to Vertex AI. Use this for single-chain proteins.",
+    "description": "Submit AlphaFold2 monomer protein structure prediction job to Agent Platform. Use this for single-chain proteins.",
     "parameter": {
       "type": "object",
       "properties": {
@@ -62,7 +62,7 @@
   {
     "type": "AF2SubmitMultimerTool",
     "name": "af2_submit_multimer",
-    "description": "Submit AlphaFold2 multimer/complex protein structure prediction job to Vertex AI. Use this for multi-chain proteins or protein complexes.",
+    "description": "Submit AlphaFold2 multimer/complex protein structure prediction job to Agent Platform. Use this for multi-chain proteins or protein complexes.",
     "parameter": {
       "type": "object",
       "properties": {
@@ -178,7 +178,7 @@
       "properties": {
         "job_id": {
           "type": "string",
-          "description": "Full job ID or job name from Vertex AI"
+          "description": "Full job ID or job name from Agent Platform"
         }
       },
       "required": [
@@ -189,7 +189,7 @@
   {
     "type": "AF2ListJobsTool",
     "name": "af2_list_jobs",
-    "description": "List AlphaFold2 prediction jobs with detailed metadata similar to Vertex AI console. Supports filtering by state, job type, GPU type, sequence name, sequence length range, and custom labels. Returns comprehensive job information including duration, timestamps, labels, and console URLs.",
+    "description": "List AlphaFold2 prediction jobs with detailed metadata similar to Agent Platform console. Supports filtering by state, job type, GPU type, sequence name, sequence length range, and custom labels. Returns comprehensive job information including duration, timestamps, labels, and console URLs.",
     "parameter": {
       "type": "object",
       "properties": {
@@ -302,7 +302,7 @@
   {
     "type": "AF2DeleteJobTool",
     "name": "af2_delete_job",
-    "description": "Delete a pipeline job from Vertex AI. This removes the job metadata and history. WARNING: This action cannot be undone. Note: This does NOT delete output files in GCS - those must be deleted separately. Requires confirm=true as a safety check.",
+    "description": "Delete a pipeline job from Agent Platform. This removes the job metadata and history. WARNING: This action cannot be undone. Note: This does NOT delete output files in GCS - those must be deleted separately. Requires confirm=true as a safety check.",
     "parameter": {
       "type": "object",
       "properties": {
@@ -373,7 +373,7 @@
   {
     "type": "AF2FindOrphanedGCSFilesTool",
     "name": "af2_find_orphaned_files",
-    "description": "Find all GCS files that don't have corresponding Vertex AI jobs (orphaned files from deleted jobs). Scans pipeline_runs/ and fasta/ directories, compares with active Vertex AI jobs, and reports orphaned files with sizes. Returns list of orphaned directories/files and potential storage cost savings. Use this to identify cleanup opportunities.",
+    "description": "Find all GCS files that don't have corresponding Agent Platform jobs (orphaned files from deleted jobs). Scans pipeline_runs/ and fasta/ directories, compares with active Agent Platform jobs, and reports orphaned files with sizes. Returns list of orphaned directories/files and potential storage cost savings. Use this to identify cleanup opportunities.",
     "parameter": {
       "type": "object",
       "properties": {
@@ -383,7 +383,7 @@
         },
         "max_jobs_to_check": {
           "type": "integer",
-          "description": "Maximum number of jobs to retrieve from Vertex AI (default: 1000)"
+          "description": "Maximum number of jobs to retrieve from Agent Platform (default: 1000)"
         }
       },
       "required": []
@@ -511,7 +511,7 @@
   {
     "type": "AlphaFoldDBGetPrediction",
     "name": "alphafold_db_get_prediction",
-    "description": "Query AlphaFold Database (EMBL-EBI) for pre-computed protein structure predictions. Returns full prediction data including pLDDT scores, PAE, and download links. Use this to check if a structure already exists before running expensive Vertex AI jobs. Requires UniProt accession (e.g., 'P69905'), entry name (e.g., 'HBA_HUMAN'), or CRC64 checksum. For custom/novel sequences not in AlphaFold DB, use af2_submit_monomer or af2_submit_multimer instead.",
+    "description": "Query AlphaFold Database (EMBL-EBI) for pre-computed protein structure predictions. Returns full prediction data including pLDDT scores, PAE, and download links. Use this to check if a structure already exists before running expensive Agent Platform jobs. Requires UniProt accession (e.g., 'P69905'), entry name (e.g., 'HBA_HUMAN'), or CRC64 checksum. For custom/novel sequences not in AlphaFold DB, use af2_submit_monomer or af2_submit_multimer instead.",
     "parameter": {
       "type": "object",
       "properties": {
@@ -532,7 +532,7 @@
   {
     "type": "AlphaFoldDBGetSummary",
     "name": "alphafold_db_get_summary",
-    "description": "Query AlphaFold Database (EMBL-EBI) for lightweight summary of pre-computed protein structure models. Returns sequence length, coverage, confidence scores, oligomeric state, and model metadata. Faster than alphafold_db_get_prediction for quick lookups. Use this to check if a protein is in AlphaFold DB before submitting Vertex AI jobs.",
+    "description": "Query AlphaFold Database (EMBL-EBI) for lightweight summary of pre-computed protein structure models. Returns sequence length, coverage, confidence scores, oligomeric state, and model metadata. Faster than alphafold_db_get_prediction for quick lookups. Use this to check if a protein is in AlphaFold DB before submitting Agent Platform jobs.",
     "parameter": {
       "type": "object",
       "properties": {

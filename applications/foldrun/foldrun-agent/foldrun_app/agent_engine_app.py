@@ -32,7 +32,7 @@ load_dotenv()
 
 class AgentEngineApp(AdkApp):
     def set_up(self) -> None:
-        """Initialize the agent engine app with logging and telemetry."""
+        """Initialize the Agent Runtime app with logging and telemetry."""
         vertexai.init()
         setup_telemetry()
         super().set_up()

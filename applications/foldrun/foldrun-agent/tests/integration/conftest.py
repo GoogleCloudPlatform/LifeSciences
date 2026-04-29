@@ -122,7 +122,7 @@ def mock_tool_backends():
 def mock_env_vars(mock_env_vars, monkeypatch):
     """Override parent mock_env_vars for integration tests.
 
-    Configures the genai SDK to use Vertex AI with ADC so integration
+    Configures the genai SDK to use Agent Platform with ADC so integration
     tests make real LLM calls via Application Default Credentials.
     """
     monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
@@ -140,9 +140,9 @@ def runner(mock_env_vars, mock_tool_backends):
 
     The agent is created with real ADK configuration but:
     - GPU auto-detection is mocked
-    - Vertex AI / GCS clients are mocked
+    - Agent Platform / GCS clients are mocked
     - Tool backends return mock success responses
-    - LLM calls are real (requires Vertex AI access via ADC)
+    - LLM calls are real (requires Agent Platform access via ADC)
     """
     with (
         patch.multiple(

@@ -15,7 +15,7 @@
 """Utility functions that encapsulate AlphaFold inference components.
 
 This is the AUTHORITATIVE copy that gets baked into the Docker container image
-(via Dockerfile: ADD src/components/alphafold_utils.py). It runs inside Vertex AI
+(via Dockerfile: ADD src/components/alphafold_utils.py). It runs inside Agent Platform
 Pipeline tasks at execution time.
 
 A duplicate copy exists at:

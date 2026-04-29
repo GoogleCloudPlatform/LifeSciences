@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # FoldRun A2A Proxy - Cloud Run Dockerfile
-# Thin proxy that exposes the A2A protocol and forwards to Agent Engine.
+# Thin proxy that exposes the A2A protocol and forwards to Agent Runtime.
 
 # Stage 1: Build environment
 FROM python:3.13-slim AS builder

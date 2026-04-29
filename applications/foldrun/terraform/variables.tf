@@ -66,7 +66,7 @@ variable "network_project_id" {
 }
 
 variable "network_project_number" {
-  description = "The number of the project where the existing VPC network is located. Required by Vertex AI for Shared VPC."
+  description = "The number of the project where the existing VPC network is located. Required by Agent Platform for Shared VPC."
   type        = string
   default     = ""
 }

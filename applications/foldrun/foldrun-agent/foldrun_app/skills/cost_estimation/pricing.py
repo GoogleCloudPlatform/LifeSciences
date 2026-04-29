@@ -79,7 +79,7 @@ GPU_PRICE_KEYS = {
     "A100_80GB": "nvidia_a100_80gb",
 }
 
-# Map Vertex AI accelerator type enum to our price key prefix
+# Map Agent Platform accelerator type enum to our price key prefix
 VERTEX_GPU_TO_PRICE_KEY = {
     "NVIDIA_L4": "nvidia_l4",
     "NVIDIA_TESLA_A100": "nvidia_a100",
@@ -207,7 +207,7 @@ INFRASTRUCTURE_MONTHLY = {
     "filestore_2_5tb_basic_ssd": {"description": "Filestore (2.5 TB Basic SSD)", "cost": 768.00},
     "gcs_storage": {"description": "Cloud Storage (~1 TB backups + results)", "cost": 25.00},
     "artifact_registry": {"description": "Artifact Registry", "cost": 5.00},
-    "agent_engine": {"description": "Agent Engine", "cost": 50.00},
+    "agent_engine": {"description": "Agent Runtime", "cost": 50.00},
     "cloud_run_viewer": {"description": "Cloud Run (viewer)", "cost": 20.00},
     "vpc_nat": {"description": "VPC / NAT", "cost": 45.00},
 }
@@ -725,16 +725,16 @@ def estimate_monthly(
 
 
 # ---------------------------------------------------------------------------
-# Actual cost retrieval from Vertex AI job history
+# Actual cost retrieval from Agent Platform job history
 # ---------------------------------------------------------------------------
 
 def _job_hourly_rate(machine_type: str, gpu_enum: Optional[str], gpu_count: int,
                      is_spot: bool, prices: dict) -> float:
-    """Calculate hourly rate for a Vertex AI custom job's hardware config.
+    """Calculate hourly rate for a Agent Platform custom job's hardware config.
 
     Args:
         machine_type: GCE machine type (e.g. "g2-standard-12")
-        gpu_enum: Vertex AI accelerator type enum (e.g. "NVIDIA_L4") or None
+        gpu_enum: Agent Platform accelerator type enum (e.g. "NVIDIA_L4") or None
         gpu_count: Number of GPUs attached
         is_spot: Whether the job used FLEX_START (spot) scheduling
         prices: Price dict from get_prices()
@@ -764,9 +764,9 @@ def get_actual_costs(
     pipeline_job_id: Optional[str] = None,
     limit: int = 50,
 ) -> dict:
-    """Retrieve actual costs for completed Vertex AI jobs.
+    """Retrieve actual costs for completed Agent Platform jobs.
 
-    Fetches custom job metadata from the Vertex AI API, calculates costs
+    Fetches custom job metadata from the Agent Platform API, calculates costs
     from actual runtimes and machine specs, and groups results by pipeline run.
 
     Args:
@@ -806,7 +806,7 @@ def get_actual_costs(
     for job in client.list_custom_jobs(request=request):
         if job.state != aiplatform_v1.JobState.JOB_STATE_SUCCEEDED:
             continue
-        # Skip Vertex AI pipeline orchestrator jobs (not actual compute)
+        # Skip Agent Platform pipeline orchestrator jobs (not actual compute)
         if job.display_name.startswith("caip_pipelines_"):
             continue
         all_jobs.append(job)

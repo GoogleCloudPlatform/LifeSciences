@@ -34,15 +34,15 @@ You do **not** need to configure these manually — `deploy-all.sh` handles ever
 
 | Service Account | ID | Purpose | Key Roles |
 |---|---|---|---|
-| **Agent SA** | `foldrun-agent-sa` | Agent Engine identity | `aiplatform.user`, `batch.jobsEditor`, `run.developer`, `storage.bucketViewer`, `compute.viewer` |
-| **Pipelines SA** | `pipelines-sa` | Vertex AI Pipeline jobs | `aiplatform.user`, `artifactregistry.reader` |
+| **Agent SA** | `foldrun-agent-sa` | Agent Runtime identity | `aiplatform.user`, `batch.jobsEditor`, `run.developer`, `storage.bucketViewer`, `compute.viewer` |
+| **Pipelines SA** | `pipelines-sa` | Agent Platform Pipeline jobs | `aiplatform.user`, `artifactregistry.reader` |
 | **Batch Compute SA** | `batch-compute-sa` | Cloud Batch download/convert jobs | `batch.agentReporter`, `logging.logWriter`, `storage.bucketViewer` |
 | **Build SA** | `foldrun-build-sa` | Cloud Build CI/CD | `aiplatform.user`, `artifactregistry.writer`, `run.developer`, `compute.viewer` |
 | **Viewer SA** | `foldrun-viewer-sa` | Cloud Run viewer service | `storage.objectViewer` (bucket-scoped) |
 | **Analysis SA** | `foldrun-analysis-sa` | Cloud Run analysis jobs | `aiplatform.user`, `storage.objectAdmin` (bucket-scoped) |
 
 Additionally, Terraform grants:
-- **Vertex AI Custom Code SA** (`gcp-sa-aiplatform-cc`): `artifactregistry.reader` on the container repo
+- **Agent Platform Custom Code SA** (`gcp-sa-aiplatform-cc`): `artifactregistry.reader` on the container repo
 - **IAP Service Agent**: `run.invoker` on the viewer service
 
 ### Organization Policies
@@ -61,7 +61,7 @@ Additionally, Terraform grants:
 │  VPC: foldrun-network (10.0.0.0/24)                     │
 │                                                         │
 │  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │ Cloud    │  │ Vertex AI    │  │ Cloud Batch VMs   │  │
+│  │ Cloud    │  │ Agent Platform    │  │ Cloud Batch VMs   │  │
 │  │ NAT      │  │ Pipeline VMs │  │ (DB downloads)    │  │
 │  │ (egress) │  │ (GPU)        │  │                   │  │
 │  └──────────┘  └──────────────┘  └───────────────────┘  │
@@ -105,7 +105,7 @@ This runs three stages sequentially:
 | Stage | What it does | Time |
 |-------|-------------|------|
 | **infra** | Enables 14 GCP APIs, creates Terraform state bucket, provisions VPC, Cloud NAT, Filestore, GCS buckets, Artifact Registry, service accounts, Cloud Run services | ~15 min |
-| **build** | Cloud Build: builds 4 container images (AF2 components, OF3 components, viewer, analysis jobs), deploys to Cloud Run, deploys agent to Vertex AI Agent Engine | ~15 min |
+| **build** | Cloud Build: builds 4 container images (AF2 components, OF3 components, viewer, analysis jobs), deploys to Cloud Run, deploys agent to Agent Runtime | ~15 min |
 | **data** | Interactive prompt for database setup (see below) | 15 min – 4 hrs |
 
 ### Step C: Database Setup
@@ -172,7 +172,7 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 | Cloud Run Job | `af2-analysis-job` | AF2 parallel analysis + Gemini |
 | Cloud Run Job | `of3-analysis-job` | OF3 parallel analysis + Gemini |
 | Cloud Run Service | `foldrun-a2a` | A2A protocol proxy (optional) |
-| Agent Engine | `FoldRun Assistant` | Deployed Gemini agent |
+| Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent |
 
 ## 4. Testing and Validation
 
@@ -188,7 +188,7 @@ Expected output:
 ✅ [Storage] Bucket created
 ✅ [Cloud Run] foldrun-viewer service is deployed and active
 ✅ [Cloud Run] af2-analysis-job is deployed
-✅ [Vertex AI] FoldRun Agent Engine is deployed
+✅ [Agent Platform] FoldRun Agent Runtime is deployed
 ✅ [Data] Genetic database download is COMPLETE (12/12 folders found)
 ```
 
@@ -214,7 +214,7 @@ cd foldrun-agent
 uv run python -m foldrun_app.cli --query "Predict the structure of ubiquitin"
 ```
 
-Or use the Agent Engine playground (see Production Access below).
+Or use the Agent Runtime playground (see Production Access below).
 
 ### Monitor Database Downloads
 
@@ -228,15 +228,15 @@ gcloud batch jobs list --project=YOUR_PROJECT_ID --location=YOUR_REGION
 
 ## 5. Production Access
 
-### Agent Engine Playground
+### Agent Runtime Playground
 
-The agent is accessible via the Vertex AI Console:
+The agent is accessible via the Agent Platform Console:
 
-1. Navigate to **Vertex AI > Agents**
-2. Select **FoldRun Assistant**
+1. Navigate to **Agent Platform > Agents > Deployments**
+2. Select **FoldRun_Agent**
 3. Use the **Playground** tab
 
-The Agent Engine ID is printed at the end of deployment and saved in
+The Agent Runtime ID is printed at the end of deployment and saved in
 `foldrun-agent/deployment_metadata.json`.
 
 **Example prompts:**
@@ -264,7 +264,7 @@ access the viewer.
 
 The A2A (Agent-to-Agent) proxy exposes the FoldRun agent via the [A2A protocol](https://google.github.io/a2a/),
 enabling interoperability with other A2A-compatible agents. The proxy is a thin Cloud Run
-service that forwards requests to the Agent Engine deployment.
+service that forwards requests to the Agent Runtime deployment.
 
 ### Deploy the A2A Proxy
 
@@ -276,7 +276,7 @@ cd src/foldrun-a2a
 bash deploy.sh YOUR_PROJECT_ID
 ```
 
-The script reads the Agent Engine resource ID from `foldrun-agent/deployment_metadata.json`
+The script reads the Agent Runtime resource ID from `foldrun-agent/deployment_metadata.json`
 (created by the agent deploy step). You can also set it explicitly:
 
 ```bash
@@ -371,7 +371,7 @@ gcloud run services describe foldrun-a2a --region=YOUR_REGION --format='value(st
 | Predictions fail after deploy | Databases still downloading | Check `gcloud batch jobs list`; wait for downloads to complete |
 | Viewer shows 403 | IAP not configured for your domain | Set `iap_access_domain` in Terraform and re-apply |
 | A2A proxy returns 403 | Caller lacks `run.invoker` role | Grant `roles/run.invoker` on the `foldrun-a2a` service (see "Grant Access" in section 5b) |
-| A2A proxy returns 500 | Agent Engine resource ID misconfigured | Check `AGENT_ENGINE_RESOURCE` env var on the Cloud Run service |
+| A2A proxy returns 500 | Agent Runtime resource ID misconfigured | Check `AGENT_ENGINE_RESOURCE` env var on the Cloud Run service |
 
 ## 7. Local Development
 
@@ -396,7 +396,7 @@ uv run adk web foldrun_app
 |-----------|----------------------|
 | Filestore (2.5TB Basic SSD) | ~$770/mo |
 | GCS (~500GB databases + results) | ~$15/mo |
-| Agent Engine (idle) | ~$0 (pay per query) |
+| Agent Runtime (idle) | ~$0 (pay per query) |
 | Cloud Run (viewer + analysis, idle) | ~$0 (scale to zero) |
 | GPU predictions (per job) | $2–15 per job (L4: ~$2, A100: ~$8–15) |
 | Gemini API (per analysis) | ~$0.01–0.05 per analysis |

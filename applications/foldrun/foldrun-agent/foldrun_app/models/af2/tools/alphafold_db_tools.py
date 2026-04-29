@@ -15,7 +15,7 @@
 """AlphaFold Database query tools.
 
 These tools query the public AlphaFold Database (EMBL-EBI) for pre-computed
-protein structure predictions. They complement the Vertex AI prediction tools
+protein structure predictions. They complement the Agent Platform prediction tools
 by allowing users to check if a structure already exists before running
 expensive compute jobs.
 
@@ -65,7 +65,7 @@ class AlphaFoldDBGetPrediction(AF2Tool):
             if "Not found" in result["error"]:
                 result["suggestion"] = (
                     "This protein may not be in AlphaFold DB. "
-                    "Use af2_submit_monomer or af2_submit_multimer to run a custom prediction on Vertex AI."
+                    "Use af2_submit_monomer or af2_submit_multimer to run a custom prediction on Agent Platform."
                 )
             return result
 

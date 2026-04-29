@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # ==============================================================================
-# Agent Engine Service Account & IAM
+# Agent Runtime Service Account & IAM
 # ==============================================================================
 resource "google_service_account" "agent_sa" {
   account_id   = "foldrun-agent-sa"
@@ -53,9 +53,9 @@ resource "google_storage_bucket_iam_member" "foldrun_agent_bucket_access" {
 }
 
 # ==============================================================================
-# Agent Engine Deployment
+# Agent Runtime Deployment
 # ==============================================================================
-# Agent Engine is deployed via Cloud Build (cloudbuild.yaml step 4) using the
+# Agent Runtime is deployed via Cloud Build (cloudbuild.yaml step 4) using the
 # real FoldRun agent code, not via Terraform. Terraform only provisions the
 # infrastructure (VPC, Filestore, buckets, IAM) that the agent depends on.
 #

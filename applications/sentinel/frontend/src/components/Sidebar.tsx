@@ -109,7 +109,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAnalyze, isLoading, error }) => {
         // For GCS videos, we also want to tell the viewer to use the proxy URL
         payload.display_url = selectedStorageItem.url;
       } else {
-        // Use GS URI for backend analysis (Vertex AI handles it)
+        // Use GS URI for backend analysis (Agent Platform handles it)
         payload.image_url = selectedStorageItem.uri;
         // Use Proxy URL for frontend display
         payload.display_url = selectedStorageItem.url;

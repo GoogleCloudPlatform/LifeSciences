@@ -97,7 +97,7 @@ def estimate_monthly_cost(
 
     Calculates total cost across three categories:
     - Compute: GPU prediction costs based on job volumes (varies by pricing mode)
-    - Infrastructure: always-on services (Filestore, GCS, Agent Engine, etc.)
+    - Infrastructure: always-on services (Filestore, GCS, Agent Runtime, etc.)
     - Other: Gemini API, logging, egress, database refreshes
 
     Args:
@@ -132,7 +132,7 @@ def get_actual_job_costs(
 ) -> dict:
     """Retrieve actual costs for completed FoldRun prediction jobs.
 
-    Queries Vertex AI for completed custom jobs submitted by FoldRun, calculates
+    Queries Agent Platform for completed custom jobs submitted by FoldRun, calculates
     actual costs from real runtimes and machine specs using list pricing, and
     groups results by pipeline run. Also compares actuals against estimates.
 
@@ -145,7 +145,7 @@ def get_actual_job_costs(
         pipeline_job_id: Optional pipeline billing ID to get costs for a specific
             prediction run. If not provided, returns costs for all recent jobs.
             This is the numeric ID from the pipeline run (visible in job labels
-            or Vertex AI console).
+            or Agent Platform console).
         limit: Maximum number of jobs to retrieve (default 50).
 
     Returns:

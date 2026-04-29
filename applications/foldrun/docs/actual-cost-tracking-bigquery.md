@@ -4,7 +4,7 @@ This document explains how to query the **actual billed cost** of a FoldRun pred
 
 ## Why the Agent Estimator Isn't Enough
 
-The `get_actual_job_costs` tool computes cost from Vertex AI job metadata (machine type × runtime × catalog rate). This is accurate for list pricing but misses:
+The `get_actual_job_costs` tool computes cost from Agent Platform job metadata (machine type × runtime × catalog rate). This is accurate for list pricing but misses:
 
 - **Committed Use Discounts (CUDs)** — 1yr/3yr GPU reservations reduce effective GPU cost by 20-40%
 - **Sustained Use Discounts (SUDs)** — automatically applied when a resource runs >25% of the month
@@ -16,19 +16,19 @@ The Cloud Billing API does not expose spend data at the resource or label level 
 
 ## How the Billing Label Works
 
-When FoldRun submits an AF2, OF3, or Boltz2 prediction via the Vertex AI Pipelines API, Vertex AI automatically stamps every GCE resource provisioned for that run with the label:
+When FoldRun submits an AF2, OF3, or Boltz2 prediction via the Agent Platform Pipelines API, Agent Platform automatically stamps every GCE resource provisioned for that run with the label:
 
 ```
 vertex-ai-pipelines-run-billing-id = <pipeline_billing_id>
 ```
 
-This label propagates to every billable line item for that run — GPU instances, CPU instances, disks, and network egress. The `pipeline_billing_id` value can be found on the submitted job in Vertex AI and is also captured in the FoldRun job labels under the same key.
+This label propagates to every billable line item for that run — GPU instances, CPU instances, disks, and network egress. The `pipeline_billing_id` value can be found on the submitted job in Agent Platform and is also captured in the FoldRun job labels under the same key.
 
 FoldRun additionally applies its own labels at submission time (see `submit_monomer.py`, `submit_multimer.py`, etc.):
 
 | Label | Value | Example |
 |---|---|---|
-| `vertex-ai-pipelines-run-billing-id` | Set by Vertex AI | `abc123def456` |
+| `vertex-ai-pipelines-run-billing-id` | Set by Agent Platform | `abc123def456` |
 | `submitted_by` | `foldrun-agent` | `foldrun-agent` |
 | `model_type` | `alphafold2`, `openfold3`, `boltz2` | `alphafold2` |
 | `job_type` | `monomer`, `multimer` | `monomer` |
@@ -85,7 +85,7 @@ FROM `{project}.{dataset}.gcp_billing_export_resource_v1_{billing_account}`
    , UNNEST(labels) AS label
 
 WHERE label.key   = 'vertex-ai-pipelines-run-billing-id'
-  AND label.value = '{pipeline_billing_id}'   -- from job labels or Vertex AI console
+  AND label.value = '{pipeline_billing_id}'   -- from job labels or Agent Platform console
   AND DATE(_PARTITIONTIME) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
 
 GROUP BY pipeline_billing_id, service, resource_sku, usage_unit
@@ -96,7 +96,7 @@ ORDER BY net_cost DESC
 - `{project}` — BigQuery project where export lands
 - `{dataset}` — export dataset name
 - `{billing_account}` — billing account ID with underscores (e.g. `ABCDEF_123456_FEDCBA`)
-- `{pipeline_billing_id}` — the pipeline billing ID from the job (visible in Vertex AI job labels or FoldRun job details)
+- `{pipeline_billing_id}` — the pipeline billing ID from the job (visible in Agent Platform job labels or FoldRun job details)
 
 ### All FoldRun runs in the last 30 days
 
@@ -167,8 +167,8 @@ ORDER BY month DESC, net_cost DESC
 |---|---|
 | **1-2 day lag** | Billing data is not real-time. Use the agent estimator for same-day cost awareness. |
 | **Partition filter required** | Always include `DATE(_PARTITIONTIME) >= ...` to avoid full table scans (the table can be very large) |
-| **Labels on custom jobs only** | The `vertex-ai-pipelines-run-billing-id` label is on GCE resources (GPU/CPU instances). Vertex AI API calls (model serving, etc.) are billed separately without this label. For FoldRun, nearly all cost is GCE. |
-| **Pipeline orchestrator not labeled** | The Vertex AI pipeline orchestration overhead (the `caip_pipelines_*` jobs) is billed under a separate SKU and is typically a few cents per run. |
+| **Labels on custom jobs only** | The `vertex-ai-pipelines-run-billing-id` label is on GCE resources (GPU/CPU instances). Agent Platform API calls (model serving, etc.) are billed separately without this label. For FoldRun, nearly all cost is GCE. |
+| **Pipeline orchestrator not labeled** | The Agent Platform pipeline orchestration overhead (the `caip_pipelines_*` jobs) is billed under a separate SKU and is typically a few cents per run. |
 
 ## Wiring Into the Agent (Future)
 
@@ -183,7 +183,7 @@ BILLING_ACCOUNT_ID=ABCDEF-123456-FEDCBA      # with dashes, normalized internall
 
 The tool would:
 1. Try BigQuery first for jobs > 2 days old (accounting for export lag)
-2. Fall back to the Vertex AI job metadata estimator for recent jobs
+2. Fall back to the Agent Platform job metadata estimator for recent jobs
 3. Surface a `data_source` field in results so the agent can tell the user which method was used
 
 Until then, use the queries above directly in the BigQuery console or via `bq query`.

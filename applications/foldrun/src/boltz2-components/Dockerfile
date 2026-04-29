@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 
 # Pin PyTorch to a cu121 wheel BEFORE installing Boltz-2.
 # boltz[cuda] would otherwise resolve and install the latest PyTorch wheel,
-# which as of Boltz-2 2.2.x is compiled against CUDA 12.4+. Vertex AI A100
+# which as of Boltz-2 2.2.x is compiled against CUDA 12.4+. Agent Platform A100
 # nodes report CUDA driver version 12.2 (12020 in PyTorch's encoding), which
 # is too old for CUDA 12.4-compiled PyTorch and causes a hard RuntimeError at
 # GPU initialization. Pinning here ensures boltz uses an already-installed

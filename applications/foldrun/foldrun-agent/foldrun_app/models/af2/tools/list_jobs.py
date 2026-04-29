@@ -62,7 +62,7 @@ class AF2ListJobsTool(AF2Tool):
         Stores analysis results at the pipeline root level (gcs_output_directory).
 
         Args:
-            job: Vertex AI PipelineJob object
+            job: Agent Platform PipelineJob object
 
         Returns:
             GCS path for analysis files (e.g., gs://bucket/pipeline_runs/YYYYMMDD_HHMMSS/analysis/)
@@ -92,7 +92,7 @@ class AF2ListJobsTool(AF2Tool):
         instead of scanning all blobs in the bucket.
 
         Args:
-            job: Vertex AI PipelineJob object
+            job: Agent Platform PipelineJob object
 
         Returns:
             True if analysis summary.json exists for this job
@@ -148,7 +148,7 @@ class AF2ListJobsTool(AF2Tool):
         )  # Default True - batch check is efficient
 
         # Client-side filters (applied after fetching)
-        # NOTE: Vertex AI Pipelines API doesn't support filtering by state, so we apply it client-side
+        # NOTE: Agent Platform Pipelines API doesn't support filtering by state, so we apply it client-side
         seq_name_filter = arguments.get("seq_name")
         min_seq_length = arguments.get("min_seq_length")
         max_seq_length = arguments.get("max_seq_length")

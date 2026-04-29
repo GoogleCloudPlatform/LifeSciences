@@ -22,9 +22,9 @@ Sentinel code is a content analysis starter code and is for administrative and o
 
 > [!IMPORTANT]
 > **A Note for Developers and Administrators:**
-> By default, Vertex AI may collect data to improve service quality. Data collection and logging are **only disabled** if the user explicitly disables **Vertex AI data caching** within the Google Cloud project settings. 
+> By default, Agent Platform may collect data to improve service quality. Data collection and logging are **only disabled** if the user explicitly disables **Agent Platform data caching** within the Google Cloud project settings. 
 
-For technical details on how to configure these settings, please refer to the official [Vertex AI Zero Data Retention Documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention).
+For technical details on how to configure these settings, please refer to the official [Gemini Enterprise Agent Platform and zero data retention documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/vertex-ai-zero-data-retention).
 
 
 ## Local Development
@@ -34,8 +34,8 @@ For technical details on how to configure these settings, please refer to the of
 - Python 3.12+
 - `uv` package manager (**required** - faster than pip/venv)
 - Node.js and npm (for frontend)
-- Google Cloud Project (for Vertex AI - preferred) OR Google Gemini API key (for AI Studio)
-- Google Cloud SDK (for Vertex AI authentication)
+- Google Cloud Project (for Agent Platform - preferred) OR Google Gemini API key (for AI Studio)
+- Google Cloud SDK (for Agent Platform authentication)
 
 ### Setup
 
@@ -65,7 +65,7 @@ For technical details on how to configure these settings, please refer to the of
    
    Copy `.env.example` to `.env`.
 
-   * **Vertex AI (Recommended)**:
+   * **Agent Platform (Recommended)**:
       * Set `GOOGLE_GENAI_USE_VERTEXAI=true`.
       * Set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`.
       * Set `GCS_BUCKET_NAME` for image features.
@@ -116,7 +116,7 @@ The application is containerized using a multi-stage Docker build that serves th
       docker run -p 8080:8080 --env-file .env sentinel
       ```
 
-   * **Run with Vertex AI**
+   * **Run with Agent Platform**
 
       You need to provide your Google Cloud credentials to the container.
 
@@ -144,7 +144,7 @@ Deploying Sentinel to Google Cloud Run is the recommended way to run the applica
 
 - Google Cloud Project with billing enabled
 - `gcloud` CLI installed and authenticated
-- APIs enabled: Cloud Run, Artifact Registry, Vertex AI, IAP, Cloud Resource Manager, Cloud Storage
+- APIs enabled: Cloud Run, Artifact Registry, Agent Platform, IAP, Cloud Resource Manager, Cloud Storage
 - GCS Bucket for storing image features
 
 ### Deployment Steps
@@ -219,8 +219,8 @@ Follow these steps to build and deploy the Sentinel application using Cloud Run 
      --role="roles/storage.objectUser"
    ```
 
-8. **Grant Vertex AI Permissions**:
-   Grant the Service Account access to Vertex AI for using the Gemini API.
+8. **Grant Agent Platform Permissions**:
+   Grant the Service Account access to Agent Platform for using the Gemini API.
    ```bash
    gcloud projects add-iam-policy-binding $PROJECT_ID \
      --member="serviceAccount:$SA_EMAIL" \

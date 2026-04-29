@@ -38,7 +38,7 @@ tests/
 
 ## Unit Tests
 
-Unit tests mock all external dependencies (GCP APIs, Vertex AI, GCS). They verify
+Unit tests mock all external dependencies (GCP APIs, Agent Platform, GCS). They verify
 internal logic without network calls and run in CI without credentials.
 
 ### What They Cover

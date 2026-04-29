@@ -27,7 +27,7 @@ def query_alphafold_db_prediction(
     Query AlphaFold Database (EMBL-EBI) for pre-computed protein structure predictions.
 
     Check if a structure already exists in the public AlphaFold Database before
-    running expensive Vertex AI jobs. Returns full prediction data including
+    running expensive Agent Platform jobs. Returns full prediction data including
     pLDDT scores, PAE, and download links.
 
     Args:

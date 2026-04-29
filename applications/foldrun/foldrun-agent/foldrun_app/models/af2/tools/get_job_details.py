@@ -49,7 +49,7 @@ class AF2GetJobDetailsTool(AF2Tool):
         if not job_id:
             raise ValueError("job_id is required")
 
-        # Step 1: Get job metadata from Vertex AI
+        # Step 1: Get job metadata from Agent Platform
         job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
 
         # Extract metadata

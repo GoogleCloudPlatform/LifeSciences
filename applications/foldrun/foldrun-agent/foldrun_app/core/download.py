@@ -56,7 +56,7 @@ def _get_models(db_config: Dict[str, Any]) -> List[str]:
 def load_manifest(path: Optional[Path] = None) -> Dict[str, Any]:
     """Load and return the databases.yaml manifest.
 
-    Returns empty dict if the file doesn't exist (e.g., in Agent Engine
+    Returns empty dict if the file doesn't exist (e.g., in Agent Runtime
     where databases.yaml isn't bundled — download tools aren't used there).
     """
     path = path or DATABASES_YAML

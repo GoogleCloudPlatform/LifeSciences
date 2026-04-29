@@ -15,7 +15,7 @@
 """FoldRun Agent - Main agent logic.
 
 Multi-model protein structure prediction agent supporting AlphaFold2 and
-OpenFold3. Deployed to Vertex AI Agent Engine or run locally via ADK.
+OpenFold3. Deployed to Agent Runtime or run locally via ADK.
 """
 
 import os
@@ -105,7 +105,7 @@ Boltz-2 natively uses YAML input. `submit_boltz2_prediction` will automatically 
 
 **Data Handling Notice**
 When a user submits their FIRST prediction in a session, include this note in the confirmation:
-"Your protein sequence will be stored in your project's Cloud Storage bucket, processed by Vertex AI Pipelines, and analyzed by Gemini — all within your GCP project. No data is sent outside Google Cloud. Results persist until you delete them."
+"Your protein sequence will be stored in your project's Cloud Storage bucket, processed by Agent Platform Pipelines, and analyzed by Gemini — all within your GCP project. No data is sent outside Google Cloud. Results persist until you delete them."
 Do NOT repeat this notice on subsequent submissions in the same session.
 
 **CRITICAL: Pre-Submission Confirmation Required**
@@ -200,13 +200,13 @@ Wait for explicit user confirmation (e.g., "yes", "submit", "go ahead") before c
   - Tell the user: "I can retry your failed job — completed steps will be cached so only the failed tasks re-run"
   - If the failure was a transient provisioning error, the retry will likely succeed (tasks now auto-retry 2x with backoff)
   - If the failure was a code/data error, suggest checking get_job_details with detail_level='detailed' first
-- **Delete jobs**: Use delete_job to remove pipeline jobs from Vertex AI
+- **Delete jobs**: Use delete_job to remove pipeline jobs from Agent Platform
   - Requires confirm=true as a safety check
   - WARNING: This action cannot be undone
-  - Only deletes job metadata from Vertex AI, NOT the GCS output files
+  - Only deletes job metadata from Agent Platform, NOT the GCS output files
   - Use this to clean up failed or unnecessary jobs
-- **Find orphaned files**: Use find_orphaned_gcs_files to discover ALL GCS files without Vertex AI jobs
-  - Scans entire bucket and compares with active Vertex AI jobs
+- **Find orphaned files**: Use find_orphaned_gcs_files to discover ALL GCS files without Agent Platform jobs
+  - Scans entire bucket and compares with active Agent Platform jobs
   - Identifies orphaned files from deleted jobs (both pipeline outputs AND FASTA files)
   - Reports total sizes and storage usage
   - Returns separate lists: orphaned_pipeline_dirs and orphaned_fasta_files
@@ -288,10 +288,10 @@ Wait for explicit user confirmation (e.g., "yes", "submit", "go ahead") before c
 - **Monthly projection**: Use estimate_monthly_cost for budget planning and TCO analysis
   - Input monthly job volumes by type (AF2 monomer, multimer, OF3)
   - Returns compute + infrastructure + other costs with monthly and annual totals for both pricing modes
-  - Infrastructure includes: Filestore, GCS, Artifact Registry, Agent Engine, Cloud Run, VPC/NAT
+  - Infrastructure includes: Filestore, GCS, Artifact Registry, Agent Runtime, Cloud Run, VPC/NAT
   - Use include_infrastructure=False to see compute-only costs
 - **Actual costs**: Use get_actual_job_costs to retrieve costs for completed prediction jobs
-  - Calculates costs from actual Vertex AI job runtimes and machine specs
+  - Calculates costs from actual Agent Platform job runtimes and machine specs
   - Groups costs by pipeline run with per-phase breakdown (MSA, predict, relax)
   - Shows estimate vs actual comparison with accuracy percentage
   - Provide a pipeline_job_id for a specific run, or omit to see all recent jobs
@@ -900,7 +900,7 @@ def create_alphafold_agent(model: str = None) -> Agent:
     """
     gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
-    # Preview models require the global endpoint. Agent Engine overrides
+    # Preview models require the global endpoint. Agent Runtime overrides
     # GOOGLE_CLOUD_LOCATION to its deployment region (e.g. us-central1),
     # but preview models only exist at global. Force it here before the
     # genai client is created.

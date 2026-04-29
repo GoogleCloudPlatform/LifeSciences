@@ -2,7 +2,7 @@
   {
     "type": "OF3SubmitPredictionTool",
     "name": "of3_submit_prediction",
-    "description": "Submit OpenFold3 structure prediction job to Vertex AI. Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted to OF3 JSON) or native OF3 JSON input.",
+    "description": "Submit OpenFold3 structure prediction job to Agent Platform. Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted to OF3 JSON) or native OF3 JSON input.",
     "parameter": {
       "type": "object",
       "properties": {

@@ -261,7 +261,7 @@ class TestToolRouting:
             user_id="test",
             session_id=session_id,
             new_message=make_user_message(
-                "Find any orphaned GCS files that don't have Vertex AI jobs"
+                "Find any orphaned GCS files that don't have Agent Platform jobs"
             ),
             run_config=run_config,
         ):

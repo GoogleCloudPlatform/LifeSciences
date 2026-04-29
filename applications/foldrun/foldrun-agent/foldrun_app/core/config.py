@@ -43,7 +43,7 @@ class CoreConfig:
     def _validate(self):
         """Validate required shared environment variables.
 
-        GCP_PROJECT_ID and GCP_REGION can be provided by Agent Engine as
+        GCP_PROJECT_ID and GCP_REGION can be provided by Agent Runtime as
         GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION respectively.
         """
         required_checks = {

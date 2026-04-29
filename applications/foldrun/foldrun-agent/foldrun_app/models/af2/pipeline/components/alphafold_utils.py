@@ -18,7 +18,7 @@ NOTE: This is a NON-EXECUTING reference copy for IDE support and type checking.
 The authoritative runtime copy lives at:
   src/alphafold-components/src/components/alphafold_utils.py
 
-That copy is baked into the Docker container image and runs inside Vertex AI
+That copy is baked into the Docker container image and runs inside Agent Platform
 Pipeline tasks. Any bug fixes or new functions MUST be applied there first.
 
 TODO: Eliminate this duplicate by referencing the authoritative copy directly

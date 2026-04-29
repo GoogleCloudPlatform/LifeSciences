@@ -31,7 +31,7 @@ _shared_storage_client = None
 
 
 def _ensure_clients(config: CoreConfig):
-    """Initialize Vertex AI SDK and GCS client once, reuse thereafter."""
+    """Initialize Agent Platform SDK and GCS client once, reuse thereafter."""
     global _vertex_initialized, _shared_storage_client
 
     if not _vertex_initialized:
@@ -41,7 +41,7 @@ def _ensure_clients(config: CoreConfig):
             staging_bucket=f"gs://{config.bucket_name}/staging",
         )
         _vertex_initialized = True
-        logger.info("Vertex AI SDK initialized (shared)")
+        logger.info("Agent Platform SDK initialized (shared)")
 
     if _shared_storage_client is None:
         _shared_storage_client = storage.Client(project=config.project_id)
@@ -164,7 +164,7 @@ class BaseTool:
             project = projects_client.get_project(name=project_name)
             project_number = project.name.split("/")[-1]  # Extract number from "projects/123456789"
 
-            # Ensure network is fully qualified as required by Vertex AI:
+            # Ensure network is fully qualified as required by Agent Platform:
             #   projects/{project_number}/global/networks/{network}
             # Filestore API may return just the name or a project_id-based path.
             match = re.match(r"projects/([^/]+)/global/networks/([^/]+)", filestore_network)

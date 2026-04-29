@@ -31,7 +31,7 @@ def submit_af2_monomer_prediction(
     enable_flex_start: bool = True,
     msa_method: str = "auto",
 ) -> dict:
-    """Submit AlphaFold2 monomer protein structure prediction job to Vertex AI.
+    """Submit AlphaFold2 monomer protein structure prediction job to Agent Platform.
 
     Args:
         gpu_type: GPU for predict phase. "auto" (default) selects based on
@@ -72,7 +72,7 @@ def submit_af2_multimer_prediction(
     enable_flex_start: bool = True,
     msa_method: str = "auto",
 ) -> dict:
-    """Submit AlphaFold2 multimer/complex protein structure prediction job to Vertex AI.
+    """Submit AlphaFold2 multimer/complex protein structure prediction job to Agent Platform.
 
     Args:
         gpu_type: GPU for predict phase. "auto" (default) selects based on
@@ -115,7 +115,7 @@ def submit_of3_prediction(
     enable_flex_start: bool = True,
     use_templates: bool = True,
 ) -> dict:
-    """Submit OpenFold3 structure prediction job to Vertex AI.
+    """Submit OpenFold3 structure prediction job to Agent Platform.
 
     Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted
     to OF3 JSON) or native OF3 JSON input.
@@ -160,7 +160,7 @@ def submit_boltz2_prediction(
     gpu_type: str = "auto",
     enable_flex_start: bool = True,
 ) -> dict:
-    """Submit Boltz2 structure prediction job to Vertex AI.
+    """Submit Boltz2 structure prediction job to Agent Platform.
 
     Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted
     to Boltz2 YAML) or native Boltz2 YAML input.

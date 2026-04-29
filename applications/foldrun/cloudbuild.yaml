@@ -19,7 +19,7 @@
 #   af2            - alphafold-components container
 #   of3            - openfold3-components container
 #   boltz2         - boltz2-components container
-#   agent          - Vertex AI Agent Engine only (no container rebuilds)
+#   agent          - Agent Runtime only (no container rebuilds)
 #   af2-analysis   - af2-analysis-job Cloud Run Job
 #   of3-analysis   - of3-analysis-job Cloud Run Job
 #   boltz2-analysis- boltz2-analysis-job Cloud Run Job
@@ -269,7 +269,7 @@ steps:
     waitFor: ['-']
 
   # ============================================================================
-  # 4. FoldRun Agent (Vertex AI Agent Engine)
+  # 4. FoldRun Agent (Agent Runtime)
   # Runs whenever any component or the agent itself is in the target.
   # Skipped only for analysis-job-only targets.
   # ============================================================================
@@ -373,7 +373,7 @@ steps:
         fi
 
         AGENT_ENGINE_RESOURCE=$$(python3 -c "import json; print(json.load(open('/workspace/foldrun-agent/deployment_metadata.json'))['remote_agent_engine_id'])")
-        echo "Agent Engine resource: $$AGENT_ENGINE_RESOURCE"
+        echo "Agent Runtime resource: $$AGENT_ENGINE_RESOURCE"
 
         gcloud run deploy foldrun-a2a \
           --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest \

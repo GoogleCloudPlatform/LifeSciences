@@ -42,7 +42,7 @@ class AF2JobAnalysisTool(AF2Tool):
         Stores analysis results at the pipeline root level (gcs_output_directory).
 
         Args:
-            job: Vertex AI PipelineJob object (not just job_id)
+            job: Agent Platform PipelineJob object (not just job_id)
 
         Returns:
             GCS path for analysis files (e.g., gs://bucket/pipeline_runs/YYYYMMDD_HHMMSS/analysis/)

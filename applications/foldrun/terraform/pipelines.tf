@@ -34,7 +34,7 @@ resource "google_project_iam_member" "pipelines_roles" {
   member  = "serviceAccount:${google_service_account.pipelines.email}"
 }
 
-# Initialize the default Vertex AI metadata store — required for pipeline jobs
+# Initialize the default Agent Platform metadata store — required for pipeline jobs
 # to record lineage and artifacts. Not auto-created on programmatic deployments.
 resource "google_vertex_ai_metadata_store" "default" {
   provider = google-beta

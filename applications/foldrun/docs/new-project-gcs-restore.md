@@ -187,7 +187,7 @@ Expected output when complete:
 ✅ [Cloud Run] af2-analysis-job is deployed
 ✅ [Cloud Run] of3-analysis-job is deployed
 ✅ [Cloud Run] boltz2-analysis-job is deployed
-✅ [Vertex AI] FoldRun Agent Engine is deployed
+✅ [Agent Platform] FoldRun Agent Runtime is deployed
 ✅ [Data] Databases present (13 folders)
    ✅ AF2 core databases (uniref90 etc.)
    ✅ OF3 weights + CCD

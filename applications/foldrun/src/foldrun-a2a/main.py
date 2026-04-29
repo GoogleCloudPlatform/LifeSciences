@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """FoldRun A2A proxy — thin Cloud Run service that exposes the A2A protocol
-and forwards requests to the FoldRun Agent Engine deployment.
+and forwards requests to the FoldRun Agent Runtime deployment.
 """
 
 import asyncio
@@ -47,7 +47,7 @@ AGENT_ENGINE_RESOURCE = os.environ.get(
 )
 
 class AgentEngineProxyExecutor(AgentExecutor):
-    """A2A executor that proxies requests to Agent Engine."""
+    """A2A executor that proxies requests to Agent Runtime."""
 
     def __init__(self):
         self._engine = None
@@ -57,7 +57,7 @@ class AgentEngineProxyExecutor(AgentExecutor):
         if self._engine is None:
             from vertexai import agent_engines
             self._engine = agent_engines.get(AGENT_ENGINE_RESOURCE)
-            logger.info(f"Connected to Agent Engine: {AGENT_ENGINE_RESOURCE}")
+            logger.info(f"Connected to Agent Runtime: {AGENT_ENGINE_RESOURCE}")
         return self._engine
 
     def _get_or_create_session(self, context_id: str) -> str:
@@ -152,7 +152,7 @@ class AgentEngineProxyExecutor(AgentExecutor):
             )
 
         except Exception as e:
-            logger.exception(f"Error proxying to Agent Engine: {e}")
+            logger.exception(f"Error proxying to Agent Runtime: {e}")
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     taskId=task_id,

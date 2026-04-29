@@ -159,7 +159,7 @@ class OF3JobAnalysisTool(OF3Tool):
 
         logger.info(f"Starting OF3 parallel analysis for job {job_id}")
 
-        # Get job from Vertex AI
+        # Get job from Agent Platform
         from foldrun_app.core.vertex_utils import get_pipeline_job
 
         try:

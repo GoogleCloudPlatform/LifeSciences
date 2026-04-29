@@ -23,7 +23,7 @@ foldrun_skills = [
         id="protein_structure_prediction",
         name="Protein Structure Prediction",
         description=(
-            "Submit protein structure prediction jobs on Vertex AI Pipelines "
+            "Submit protein structure prediction jobs on Agent Platform Pipelines "
             "with automatic GPU selection. Supports three models: "
             "AlphaFold2 (protein monomers and multimers), "
             "OpenFold3 (protein + RNA/DNA/ligands, best RNA accuracy via nhmmer MSA), "

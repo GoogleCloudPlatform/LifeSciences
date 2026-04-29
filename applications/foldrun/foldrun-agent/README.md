@@ -9,7 +9,7 @@ AI-powered protein structure prediction assistant supporting **AlphaFold2**, **O
 FoldRun Agent is a modular, stateful conversational agent for biomolecular structure prediction. It manages the full prediction lifecycle through natural language:
 
 - Submit structure predictions (AF2 monomers/multimers, OF3 and Boltz-2 multi-molecule complexes)
-- Monitor job progress on Vertex AI Pipelines
+- Monitor job progress on Agent Platform Pipelines
 - Run parallel structural analysis via Cloud Run Jobs
 - Visualize results in the interactive 3D viewer
 - Query the AlphaFold Database for existing structures
@@ -42,7 +42,7 @@ Boltz-2 is enabled by setting `BOLTZ2_COMPONENTS_IMAGE` in the environment.
 ## Prerequisites
 
 - Python 3.10+
-- Google Cloud Project with Vertex AI enabled
+- Google Cloud Project with Agent Platform enabled
 - Application Default Credentials (`gcloud auth application-default login`)
 - GCS bucket for pipeline artifacts and results
 - Filestore instance (NFS) for genetic databases and model weights
@@ -71,7 +71,7 @@ foldrun-agent/
 ├── foldrun_app/
 │   ├── agent.py                    # Agent definition, skill registration, instructions
 │   ├── core/                       # Shared infrastructure (model-agnostic)
-│   │   ├── base_tool.py            # BaseTool: GCS, Vertex AI, NFS helpers
+│   │   ├── base_tool.py            # BaseTool: GCS, Agent Platform, NFS helpers
 │   │   ├── config.py               # CoreConfig: project, region, NFS, GCS
 │   │   ├── hardware.py             # GPU quota detection
 │   │   ├── model_registry.py       # Plugin registry (register_model / list_models)
@@ -193,7 +193,7 @@ Skill count depends on which models are configured:
 |----------|-------------|
 | `AF2_VIEWER_URL` | FoldRun viewer Cloud Run URL (shared by all models) |
 | `GEMINI_ANALYSIS_MODEL` | Gemini model for expert analysis (default: `gemini-3.1-pro-preview`) |
-| `PIPELINES_SA_EMAIL` | Service account email for Vertex AI Pipeline submissions |
+| `PIPELINES_SA_EMAIL` | Service account email for Agent Platform Pipeline submissions |
 
 ## GPU Requirements by Model
 

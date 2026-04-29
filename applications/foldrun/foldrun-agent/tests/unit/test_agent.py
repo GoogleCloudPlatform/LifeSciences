@@ -20,7 +20,7 @@ import pytest
 
 
 def _mock_startup():
-    """Context manager that mocks startup dependencies (GPU detection, Vertex AI)."""
+    """Context manager that mocks startup dependencies (GPU detection, Agent Platform)."""
     return patch.multiple(
         "foldrun_app.models.af2.startup",
         _auto_detect_gpus=MagicMock(),

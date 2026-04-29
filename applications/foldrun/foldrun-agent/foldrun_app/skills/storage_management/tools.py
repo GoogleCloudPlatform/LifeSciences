@@ -29,7 +29,7 @@ def cleanup_gcs_files(
     """
     Find and optionally delete GCS output files for a job.
 
-    Works even if the job has been deleted from Vertex AI - just pass the job name directly.
+    Works even if the job has been deleted from Agent Platform - just pass the job name directly.
     Searches for pipeline outputs in GCS and optionally deletes them. This is useful
     for cleaning up storage after failed or unnecessary jobs.
 
@@ -43,7 +43,7 @@ def cleanup_gcs_files(
     3. Call again with search_only=False and confirm_delete=True to delete
 
     Args:
-        job_id: Job ID or job name to search for (works even if job deleted from Vertex AI)
+        job_id: Job ID or job name to search for (works even if job deleted from Agent Platform)
         gcs_paths: List of GCS paths to delete (for bulk mode)
         search_only: If True, only list files without deleting (default: True)
         confirm_delete: Must be True to actually delete files (safety check)
@@ -69,21 +69,21 @@ def find_orphaned_gcs_files(
     max_jobs_to_check: int = 1000,
 ) -> dict:
     """
-    Find all GCS files that don't have corresponding Vertex AI jobs.
+    Find all GCS files that don't have corresponding Agent Platform jobs.
 
     This tool identifies "orphaned" files from jobs that have been deleted from
-    Vertex AI but still have files consuming storage in GCS. Useful for bulk cleanup
+    Agent Platform but still have files consuming storage in GCS. Useful for bulk cleanup
     and identifying storage cost savings opportunities.
 
     The tool:
-    1. Retrieves all pipeline jobs from Vertex AI
+    1. Retrieves all pipeline jobs from Agent Platform
     2. Scans pipeline_runs/ and fasta/ directories in GCS
     3. Identifies files/directories without corresponding jobs
     4. Reports sizes and potential cost savings
 
     Args:
         check_fasta: Also check for orphaned FASTA files (default: True)
-        max_jobs_to_check: Maximum number of jobs to retrieve from Vertex AI (default: 1000)
+        max_jobs_to_check: Maximum number of jobs to retrieve from Agent Platform (default: 1000)
 
     Returns:
         List of orphaned directories and files with sizes and cleanup instructions

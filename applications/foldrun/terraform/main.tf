@@ -282,7 +282,7 @@ resource "google_artifact_registry_repository" "foldrun_repo" {
   depends_on    = [google_project_service.apis]
 }
 
-# Grant Vertex AI custom code SA read access to Artifact Registry (needed to pull pipeline images).
+# Grant Agent Platform custom code SA read access to Artifact Registry (needed to pull pipeline images).
 resource "google_artifact_registry_repository_iam_member" "aiplatform_cc_sa" {
   project    = google_artifact_registry_repository.foldrun_repo.project
   location   = google_artifact_registry_repository.foldrun_repo.location

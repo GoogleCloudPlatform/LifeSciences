@@ -37,7 +37,7 @@ def list_jobs(
     check_analysis: bool = True,
 ) -> dict:
     """
-    List AlphaFold2 prediction jobs with detailed metadata similar to Vertex AI console.
+    List AlphaFold2 prediction jobs with detailed metadata similar to Agent Platform console.
 
     IMPORTANT: Use simple lowercase values for the state parameter:
     - state: Use "running", "failed", "succeeded", "pending", or "cancelled" (lowercase, simple words)
@@ -89,9 +89,9 @@ def get_job_details(job_id: str) -> dict:
 
 def delete_job(job_id: str, confirm: bool = False) -> dict:
     """
-    Delete a pipeline job from Vertex AI.
+    Delete a pipeline job from Agent Platform.
 
-    This removes the job metadata and history from Vertex AI Pipelines.
+    This removes the job metadata and history from Agent Platform Pipelines.
     WARNING: This action cannot be undone.
 
     Note: This does NOT delete the output files in GCS - those must be deleted separately

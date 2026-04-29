@@ -86,7 +86,7 @@ def inject_dws_into_runtime_config(pipeline_job_dict: Dict[str, Any]) -> Dict[st
     Returns:
         Modified pipeline job dictionary
     """
-    # This approach would require modifying the actual Vertex AI API request
+    # This approach would require modifying the actual Agent Platform API request
     # which is harder with the high-level SDK
 
     # For now, this is a placeholder for potential future implementation

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for finding GCS files that don't have corresponding Vertex AI jobs."""
+"""Tool for finding GCS files that don't have corresponding Agent Platform jobs."""
 
 import logging
 from typing import Any, Dict
@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 
 
 class AF2FindOrphanedGCSFilesTool(AF2Tool):
-    """Tool for finding GCS files without corresponding Vertex AI jobs."""
+    """Tool for finding GCS files without corresponding Agent Platform jobs."""
 
     def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Find GCS files that don't have corresponding Vertex AI pipeline jobs.
+        Find GCS files that don't have corresponding Agent Platform pipeline jobs.
 
         This helps identify orphaned files from deleted jobs that are still
         consuming storage space.
@@ -38,7 +38,7 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
         Args:
             arguments: {
                 'check_fasta': Also check for orphaned FASTA files (default: True),
-                'max_jobs_to_check': Maximum number of jobs to retrieve from Vertex AI (default: 1000)
+                'max_jobs_to_check': Maximum number of jobs to retrieve from Agent Platform (default: 1000)
             }
 
         Returns:
@@ -48,9 +48,9 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
         check_fasta = arguments.get("check_fasta", True)
         max_jobs_to_check = arguments.get("max_jobs_to_check", 1000)
 
-        # Step 1: Get all job names and pipeline roots from Vertex AI
-        logger.info("Fetching all pipeline jobs from Vertex AI...")
-        # Vertex AI API has a max page_size of 100, but list_pipeline_jobs handles pagination
+        # Step 1: Get all job names and pipeline roots from Agent Platform
+        logger.info("Fetching all pipeline jobs from Agent Platform...")
+        # Agent Platform API has a max page_size of 100, but list_pipeline_jobs handles pagination
         # So we can still retrieve max_jobs_to_check jobs, just in smaller pages
         page_size = min(max_jobs_to_check, 100)  # Cap at 100 per API limit
         jobs = list_pipeline_jobs(
@@ -67,7 +67,7 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
             vertex_job_names.add(job.display_name)
 
             # Extract pipeline root from runtime_config.gcs_output_directory
-            # This is where Vertex AI stores the actual output directory for the pipeline
+            # This is where Agent Platform stores the actual output directory for the pipeline
             if hasattr(job, "runtime_config") and job.runtime_config:
                 if (
                     hasattr(job.runtime_config, "gcs_output_directory")
@@ -84,7 +84,7 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
                         logger.debug(f"Added pipeline root: {root_path}")
 
         logger.info(
-            f"Found {len(vertex_job_names)} jobs and {len(vertex_pipeline_roots)} pipeline roots in Vertex AI"
+            f"Found {len(vertex_job_names)} jobs and {len(vertex_pipeline_roots)} pipeline roots in Agent Platform"
         )
 
         # Step 2: Scan GCS for pipeline run directories

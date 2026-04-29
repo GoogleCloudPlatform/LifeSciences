@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared Vertex AI utilities used across all model plugins (AF2, OF3, Boltz-2)."""
+"""Shared Agent Platform utilities used across all model plugins (AF2, OF3, Boltz-2)."""
 
 from google.cloud import aiplatform_v1 as vertex_ai
 
 
 def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.PipelineJob:
-    """Get a Vertex AI pipeline job by ID.
+    """Get a Agent Platform pipeline job by ID.
 
     Accepts either a full resource name (projects/.../pipelineJobs/...)
     or a short job name/ID and constructs the full name automatically.

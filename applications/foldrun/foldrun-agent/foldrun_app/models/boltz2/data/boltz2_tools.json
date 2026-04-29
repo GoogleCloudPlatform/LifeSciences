@@ -2,7 +2,7 @@
   {
     "type": "BOLTZ2SubmitPredictionTool",
     "name": "boltz2_submit_prediction",
-    "description": "Submit Boltz2 structure prediction job to Vertex AI. Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted to BOLTZ2 YAML) or native BOLTZ2 YAML input.",
+    "description": "Submit Boltz2 structure prediction job to Agent Platform. Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted to BOLTZ2 YAML) or native BOLTZ2 YAML input.",
     "parameter": {
       "type": "object",
       "properties": {

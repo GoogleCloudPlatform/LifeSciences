@@ -166,7 +166,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
 
         logger.info(f"Starting BOLTZ2 parallel analysis for job {job_id}")
 
-        # Get job from Vertex AI
+        # Get job from Agent Platform
         from foldrun_app.core.vertex_utils import get_pipeline_job
 
         try:
@@ -196,7 +196,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
 
         # Resolve query YAML URI now, while we have the pipeline job in hand.
         # The agent reads labels reliably; passing the resolved URI in task_config
-        # avoids a second Vertex AI API call from inside the Cloud Run Job.
+        # avoids a second Agent Platform API call from inside the Cloud Run Job.
         query_yaml_uri = None
         try:
             labels = dict(job.labels) if hasattr(job, "labels") and job.labels else {}

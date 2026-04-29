@@ -1,13 +1,13 @@
 <table><tr>
 <td width="160" valign="middle"><a href="https://youtu.be/umTLrEF5L7A"><img src="img/foldrun-sticker.svg" alt="FoldRun" width="150"/></a></td>
-<td valign="middle"><strong>FoldRun</strong> is an AI-powered orchestration platform for protein structure prediction on Google Cloud. It provides a conversational interface that manages the entire lifecycle — from sequence input to structural validation — using Gemini and Google Agent Engine. Supports multiple structure prediction models (AlphaFold2, OpenFold3, Boltz) via a plugin architecture with shared infrastructure.</td>
+<td valign="middle"><strong>FoldRun</strong> is an AI-powered orchestration platform for protein structure prediction on Google Cloud. It provides a conversational interface that manages the entire lifecycle — from sequence input to structural validation — using Gemini and Google Agent Runtime. Supports multiple structure prediction models (AlphaFold2, OpenFold3, Boltz) via a plugin architecture with shared infrastructure.</td>
 </tr></table>
 
 ## Features
 
 - **Conversational AI**: Natural language interface powered by Gemini for submitting, monitoring, and analyzing predictions
 - **Multi-Model Support**: Plugin architecture for AF2, OpenFold3, Boltz — shared databases, independent pipelines
-- **Automated Execution**: Provisions infrastructure and launches pipelines on Vertex AI with optimal compute selection
+- **Automated Execution**: Provisions infrastructure and launches pipelines on Agent Platform with optimal compute selection
 - **Parallel Analysis**: Cloud Run jobs calculate structural metrics (pLDDT, PAE) and generate expert biological insights using Gemini
 - **Interactive Visualization**: Web-based 3D structure viewer with confidence coloring and analysis dashboards
 - **Smart Database Management**: YAML-driven downloads via Cloud Batch with GCS-based gap detection — shared databases downloaded once across models
@@ -22,10 +22,10 @@
 
 ## Tech Stack
 
-- **Agent**: Google ADK with up to 30 native Skills (AF2 + OF3 + Boltz-2), deployed to Vertex AI Agent Engine
+- **Agent**: Google ADK with up to 30 native Skills (AF2 + OF3 + Boltz-2), deployed to Agent Runtime
 - **A2A**: Agent-to-Agent protocol proxy (Cloud Run) for agent interoperability
-- **AI**: Gemini (via Vertex AI)
-- **Compute**: Vertex AI Pipelines, Cloud Run, Cloud Batch
+- **AI**: Gemini (via Agent Platform)
+- **Compute**: Agent Platform Pipelines, Cloud Run, Cloud Batch
 - **Storage**: GCS (artifacts/results), Filestore (genetic databases)
 - **Infrastructure**: Terraform, Cloud Build
 - **Language**: Python 3.10+
@@ -223,7 +223,7 @@ Available `--build-target` values:
 | `af2` | alphafold-components container + agent |
 | `boltz2` | boltz2-components container + agent |
 | `viewer` | foldrun-viewer Cloud Run service + agent |
-| `agent` | Agent Engine only (no container rebuilds) |
+| `agent` | Agent Runtime only (no container rebuilds) |
 | `of3-analysis` | of3-analysis-job Cloud Run Job only |
 | `af2-analysis` | af2-analysis-job Cloud Run Job only |
 | `boltz2-analysis` | boltz2-analysis-job Cloud Run Job only |
@@ -258,7 +258,7 @@ Expected output:
 ✅ [Cloud Run] af2-analysis-job is deployed
 ✅ [Cloud Run] of3-analysis-job is deployed
 ✅ [Cloud Run] boltz2-analysis-job is deployed
-✅ [Vertex AI] FoldRun Agent Engine is deployed
+✅ [Agent Platform] FoldRun Agent Runtime is deployed
 ✅ [Data] Databases present (12 folders)
    ✅ AF2 core databases (uniref90 etc.)
    ✅ OF3 weights + CCD
@@ -267,7 +267,7 @@ Expected output:
 
 ### Step 4: Use the Agent
 
-Open the Agent Engine playground:
+Open the Agent Runtime playground:
 ```
 https://console.cloud.google.com/vertex-ai/agents/locations/YOUR_REGION/agent-engines/YOUR_ENGINE_ID/playground?project=YOUR_PROJECT_ID
 ```
@@ -324,7 +324,7 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | Cloud Run Job | `boltz2-analysis-job` | Boltz-2 parallel analysis |
 | Cloud Run Service | `foldrun-a2a` | A2A protocol proxy for agent interop |
 | Service Account | `foldrun-agent-sa` | Agent's GCP identity |
-| Agent Engine | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
+| Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
 
 ### Local Development
 
@@ -348,7 +348,7 @@ uv run adk web foldrun_app
 | Filestore (2.5TB Basic SSD) | ~$770/mo |
 | GCS (~1TB database backups) | ~$20/mo |
 | Artifact Registry (~16GB) | ~$2/mo |
-| Agent Engine (idle) | ~$0 (pay per query) |
+| Agent Runtime (idle) | ~$0 (pay per query) |
 | Cloud Run (viewer, idle) | ~$0 (scale to zero) |
 | AF2 prediction (per job, A100) | ~$8 per job (MSA + 5 seeds predict + relax) |
 | OF3 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
@@ -365,7 +365,7 @@ foldrun/
 │   ├── foldrun_app/
 │   │   ├── agent.py            # Agent definition (Gemini + Skills)
 │   │   ├── core/               # Shared infrastructure (model-agnostic)
-│   │   │   ├── base_tool.py    # BaseTool (GCS, Vertex AI, NFS)
+│   │   │   ├── base_tool.py    # BaseTool (GCS, Agent Platform, NFS)
 │   │   │   ├── config.py       # GCP project, NFS, GCS config
 │   │   │   ├── hardware.py     # GPU quota detection
 │   │   │   ├── batch.py        # Cloud Batch job submission
@@ -424,10 +424,10 @@ foldrun/
                              │ Forwards to
 ┌──────────────────┐         │
 │  foldrun-agent   │ ←───────┘  Conversational AI (Gemini Flash + up to 30 Skills)
-│  (Agent Engine)  │
+│  (Agent Runtime)  │
 └───────┬──────────┘
         │ Native tool calls
-        ├──→ Vertex AI Pipelines  ← AF2 + OF3 + Boltz-2 structure prediction
+        ├──→ Agent Platform Pipelines  ← AF2 + OF3 + Boltz-2 structure prediction
         ├──→ Cloud Batch          ← Genetic database downloads
         ├──→ Cloud Run Jobs       ← Parallel analysis (AF2 + OF3 + Boltz-2) + Gemini Pro expert analysis
         └──→ Cloud Run Service    ← Interactive 3D structure viewer (AF2 + OF3 + Boltz-2)
@@ -442,7 +442,7 @@ but don't meet enterprise requirements for drug discovery pipelines:
 |---|---|---|
 | **Data sovereignty** | Sequences sent to external servers | Everything stays in your GCP project — VPC, no egress |
 | **MSA computation** | ColabFold MMseqs2 server (external) | Local Jackhmmer/nhmmer on NFS-mounted databases |
-| **Audit trail** | None | Full Vertex AI pipeline lineage, Cloud Logging |
+| **Audit trail** | None | Full Agent Platform pipeline lineage, Cloud Logging |
 | **IP protection** | No control over sequence retention | Your GCS bucket, your retention policies |
 | **Regulatory** | Not GxP-compatible | Runs in your compliant GCP org with IAM controls |
 | **GPU control** | Shared / queued | Dedicated A100s via DWS, configurable scheduling |

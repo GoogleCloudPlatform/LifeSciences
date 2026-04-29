@@ -66,7 +66,7 @@ echo "Step 2: Creating/Updating Cloud Run Job..."
 # Get bucket name from environment or use default
 BUCKET_NAME=${GCS_BUCKET:-${PROJECT_ID}-foldrun-data}
 
-echo "Gemini expert analysis will use Vertex AI with Application Default Credentials"
+echo "Gemini expert analysis will use Agent Platform with Application Default Credentials"
 
 # Create or update the job
 gcloud run jobs deploy $JOB_NAME \

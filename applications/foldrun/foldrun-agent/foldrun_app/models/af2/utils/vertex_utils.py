@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Vertex AI utilities for pipeline management."""
+"""Agent Platform utilities for pipeline management."""
 
 import logging
 from typing import Any, Dict, List, Optional

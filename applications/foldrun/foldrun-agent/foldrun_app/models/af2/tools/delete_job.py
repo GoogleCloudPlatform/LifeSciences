@@ -44,12 +44,12 @@ class AF2DeleteJobTool(AF2Tool):
 
     def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Delete a pipeline job from Vertex AI.
+        Delete a pipeline job from Agent Platform.
 
         If the job is still running, it will be cancelled first and then
         deleted once cancellation completes.
 
-        This removes the job metadata and history from Vertex AI Pipelines.
+        This removes the job metadata and history from Agent Platform Pipelines.
         Note: This does NOT delete the output files in GCS - those must be
         deleted separately.
 
@@ -84,7 +84,7 @@ class AF2DeleteJobTool(AF2Tool):
             "created": job.create_time.isoformat() if job.create_time else None,
         }
 
-        # Initialize Vertex AI
+        # Initialize Agent Platform
         vertex_ai.init(project=self.config.project_id, location=self.config.region)
 
         # Get the pipeline job using the resource name
@@ -134,7 +134,7 @@ class AF2DeleteJobTool(AF2Tool):
             "deleted_job": job_info,
             "message": f"Successfully {action.lower()} pipeline job: {job.display_name}",
             "note": (
-                "Job metadata has been removed from Vertex AI. "
+                "Job metadata has been removed from Agent Platform. "
                 "Output files in GCS were NOT deleted and must be removed manually if needed."
             ),
             "gcs_cleanup_hint": (

@@ -419,7 +419,7 @@ def get_image():
 
 @app.route("/api/jobs")
 def list_jobs():
-    """List recent FoldRun pipeline jobs from Vertex AI, sorted by recency.
+    """List recent FoldRun pipeline jobs from Agent Platform, sorted by recency.
 
     Works both in Cloud Run (identity token) and locally via Docker (ADC mount).
     Returns an empty list with an error message if credentials are unavailable.

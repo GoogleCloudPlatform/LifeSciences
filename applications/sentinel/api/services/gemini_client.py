@@ -70,7 +70,7 @@ class GeminiClient:
 
         if settings.google_genai_use_vertexai:
             logger.info(
-                f"Initializing Gemini Client with Vertex AI (Project: {self.project}, Location: {self.location})"
+                f"Initializing Gemini Client with Agent Platform (Project: {self.project}, Location: {self.location})"
             )
             self.client = genai.Client(
                 vertexai=True, project=self.project, location=self.location
@@ -314,7 +314,7 @@ class GeminiClient:
         try:
             mime_type = "image/jpeg"
 
-            # Handle Vertex AI with GCS
+            # Handle Agent Platform with GCS
             if settings.google_genai_use_vertexai:
                 if image_data:
                     file_uri = await self._upload_to_gcs(image_data, mime_type)

@@ -16,7 +16,7 @@
 # Deploy FoldRun A2A proxy to Cloud Run.
 #
 # Thin proxy that exposes A2A protocol and forwards requests to
-# the FoldRun Agent Engine deployment.
+# the FoldRun Agent Runtime deployment.
 #
 # Usage:
 #   bash deploy.sh <PROJECT_ID> [SERVICE_NAME] [REGION]
@@ -39,7 +39,7 @@ SUBNET_NAME="${SUBNET_NAME:-${VPC_NAME}-subnet}"
 AR_REPO="${AR_REPO:-foldrun-repo}"
 IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/${SERVICE_NAME}:latest"
 
-# Agent Engine resource (read from deployment metadata or override)
+# Agent Runtime resource (read from deployment metadata or override)
 AGENT_ENGINE_RESOURCE="${AGENT_ENGINE_RESOURCE:-}"
 if [[ -z "${AGENT_ENGINE_RESOURCE}" ]]; then
   METADATA_FILE="${SCRIPT_DIR}/../../foldrun-agent/deployment_metadata.json"
@@ -64,7 +64,7 @@ echo "  Region:          ${REGION}"
 echo "  Image:           ${IMAGE_PATH}"
 echo "  Service Account: ${SERVICE_ACCOUNT}"
 echo "  Network:         ${VPC_NAME} / ${SUBNET_NAME}"
-echo "  Agent Engine:    ${AGENT_ENGINE_RESOURCE}"
+echo "  Agent Runtime:    ${AGENT_ENGINE_RESOURCE}"
 echo ""
 
 # Set the project

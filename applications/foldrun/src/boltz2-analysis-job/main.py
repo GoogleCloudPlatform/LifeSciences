@@ -1052,7 +1052,7 @@ IMPORTANT: Begin your response directly with the analysis. Do NOT include any pr
             else os.getenv("REGION", "us-central1")
         )
         logger.info(
-            f"Initializing Google GenAI (Vertex AI): project={project_id}, location={location}, model={gemini_model}"
+            f"Initializing Google GenAI (Agent Platform): project={project_id}, location={location}, model={gemini_model}"
         )
 
         with genai.Client(
@@ -1182,7 +1182,7 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
         logger.error("No analyses found to consolidate")
         return
 
-    # Get job metadata from Vertex AI
+    # Get job metadata from Agent Platform
     all_labels = {}
     job_metadata = {"labels": {}, "parameters": {}}
     try:

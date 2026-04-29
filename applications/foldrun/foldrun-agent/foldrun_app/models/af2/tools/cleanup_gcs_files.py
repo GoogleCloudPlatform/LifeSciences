@@ -178,7 +178,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         """Original job-based cleanup logic."""
 
         # Try to get job details to find the exact job name
-        # If job has been deleted from Vertex AI, use the job_id as the job name
+        # If job has been deleted from Agent Platform, use the job_id as the job name
         job_name = None
         job_exists = True
         pipeline_root = None
@@ -197,7 +197,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
                     if pipeline_root.startswith("gs://"):
                         pipeline_root = "/".join(pipeline_root.split("/")[3:])
         except Exception:
-            # Job doesn't exist in Vertex AI anymore
+            # Job doesn't exist in Agent Platform anymore
             # Use job_id as job_name (user can pass the job name directly)
             job_exists = False
             job_name = job_id
@@ -225,7 +225,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         # Search for files in different locations
         found_files = {"pipeline_runs": [], "fasta": [], "total_size_bytes": 0}
 
-        # Strategy 1: If we have the pipeline_root from Vertex AI, use it directly
+        # Strategy 1: If we have the pipeline_root from Agent Platform, use it directly
         if pipeline_root:
             try:
                 dir_blobs = bucket.list_blobs(prefix=pipeline_root)
@@ -329,7 +329,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
 
         if not job_exists:
             result["note_vertex_deleted"] = (
-                f"Job '{job_name}' no longer exists in Vertex AI. "
+                f"Job '{job_name}' no longer exists in Agent Platform. "
                 f"Searching GCS using the provided job name/ID. "
                 f"If no files are found, verify the exact job name."
             )

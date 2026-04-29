@@ -64,7 +64,7 @@ Larger GPUs cost more per hour but can be required for large proteins that would
 
 ### Estimate vs Actual Accuracy
 
-The estimator was calibrated against production job data from Vertex AI. Use `get_actual_job_costs` to compare:
+The estimator was calibrated against production job data from Agent Platform. Use `get_actual_job_costs` to compare:
 
 | Metric (76-residue monomer, L4) | Estimated | Actual | Error |
 |---|---|---|---|
@@ -114,7 +114,7 @@ The estimator was calibrated against production job data from Vertex AI. Use `ge
 | Filestore (2.5TB BASIC_SSD) | $768 | $9,216 |
 | GCS (~1TB backups + growing results) | $25 | $300 |
 | Artifact Registry | $5 | $60 |
-| Agent Engine | $50 | $600 |
+| Agent Runtime | $50 | $600 |
 | Cloud Run (viewer) | $20 | $240 |
 | VPC / NAT | $45 | $540 |
 | **Infrastructure subtotal** | **~$913** | **~$10,956** |
@@ -205,4 +205,4 @@ Beyond infrastructure costs, FoldRun's agentic orchestration layer reduces the o
 - Separate analysis and visualization tooling
 - 1-2 FTEs of engineer/scientist time for pipeline maintenance
 
-FoldRun provides all of this through a conversational AI interface backed by 26 native tools, deployed as a managed agent on Vertex AI.
+FoldRun provides all of this through a conversational AI interface backed by 26 native tools, deployed as a managed agent on Agent Platform.

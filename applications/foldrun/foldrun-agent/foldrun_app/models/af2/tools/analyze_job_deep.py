@@ -52,7 +52,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
         try:
             logger.info(f"Performing {detail_level} analysis for job: {job_id}")
 
-            # Initialize Vertex AI
+            # Initialize Agent Platform
             aiplatform.init(project=self.config.project_id, location=self.config.region)
 
             # Get the pipeline job
@@ -388,7 +388,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
 
         if not guidance["likely_causes"]:
             guidance["likely_causes"] = ["Unknown failure - check Console URL for detailed logs"]
-            guidance["recommended_actions"] = ["Review task logs in Vertex AI Console"]
+            guidance["recommended_actions"] = ["Review task logs in Agent Platform Console"]
 
         return guidance
 

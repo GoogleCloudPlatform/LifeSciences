@@ -38,7 +38,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
         gs://bucket/pipeline_runs/YYYYMMDD_HHMMSS/analysis/
 
         Args:
-            job: Vertex AI PipelineJob object (not just job_id)
+            job: Agent Platform PipelineJob object (not just job_id)
 
         Returns:
             GCS path for analysis files (e.g., gs://bucket/pipeline_runs/.../analysis/)
@@ -360,7 +360,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             "segment_start": 1,
             "segment_end": sequence_length,
             "confidence_type": "pLDDT",
-            "provider": "Vertex AI AlphaFold2",
+            "provider": "Agent Platform AlphaFold2",
         }
 
         # Add sequence if available

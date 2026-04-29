@@ -22,7 +22,7 @@ from api.config import Settings
 
 
 def test_config_vertex_ai_false_valid():
-    """Test configuration when using AI Studio (Vertex AI False) with API key."""
+    """Test configuration when using AI Studio (Agent Platform False) with API key."""
     with mock.patch.dict(
         os.environ,
         {"GOOGLE_GENAI_USE_VERTEXAI": "false", "GEMINI_API_KEY": "test-key"},
@@ -46,7 +46,7 @@ def test_config_vertex_ai_false_missing_api_key():
 
 
 def test_config_vertex_ai_true_valid():
-    """Test configuration when using Vertex AI with required fields."""
+    """Test configuration when using Agent Platform with required fields."""
     with mock.patch.dict(
         os.environ,
         {
@@ -63,7 +63,7 @@ def test_config_vertex_ai_true_valid():
 
 
 def test_config_vertex_ai_true_missing_project():
-    """Test failure when using Vertex AI without project."""
+    """Test failure when using Agent Platform without project."""
     with mock.patch.dict(
         os.environ,
         {"GOOGLE_GENAI_USE_VERTEXAI": "true", "GOOGLE_CLOUD_LOCATION": "us-central1"},
@@ -77,7 +77,7 @@ def test_config_vertex_ai_true_missing_project():
 
 
 def test_config_vertex_ai_true_missing_location():
-    """Test failure when using Vertex AI without location."""
+    """Test failure when using Agent Platform without location."""
     with mock.patch.dict(
         os.environ,
         {

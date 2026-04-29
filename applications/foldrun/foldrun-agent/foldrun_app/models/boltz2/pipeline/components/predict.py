@@ -75,7 +75,7 @@ def predict_boltz2(
         f"--seed={seed_value}",
         "--override",
         "--no_kernels",      # disable cuequivariance CUDA kernels — requires newer
-                             # driver than Vertex AI A100 nodes currently support
+                             # driver than Agent Platform A100 nodes currently support
         "--write_full_pde",  # write pde_{stem}_model_N.npz for PDE heatmap plots
     ]
 

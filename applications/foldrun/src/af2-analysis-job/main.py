@@ -636,7 +636,7 @@ IMPORTANT: Begin your response directly with the report. Do NOT include any prea
                 logger.warning(f"Could not include PAE plot: {e}")
 
         gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
-        # Initialize GenAI Client with Vertex AI
+        # Initialize GenAI Client with Agent Platform
         project_id = os.environ["PROJECT_ID"]
         # Preview models require the global endpoint
         location = (
@@ -646,7 +646,7 @@ IMPORTANT: Begin your response directly with the report. Do NOT include any prea
         )
 
         logger.info(
-            f"Initializing Google GenAI (Vertex AI): project={project_id}, location={location}, model={gemini_model}"
+            f"Initializing Google GenAI (Agent Platform): project={project_id}, location={location}, model={gemini_model}"
         )
 
         with genai.Client(
@@ -686,7 +686,7 @@ def consolidate_results(job_id: str, analysis_path: str):
     """Consolidate analysis results and generate summary.json with job metadata.
 
     Args:
-        job_id: Vertex AI job ID
+        job_id: Agent Platform job ID
         analysis_path: Full GCS path to analysis directory (e.g., gs://bucket/pipeline_runs/.../analysis/)
     """
     import time
@@ -737,7 +737,7 @@ def consolidate_results(job_id: str, analysis_path: str):
         logger.error("No analyses found to consolidate")
         return
 
-    # Get job metadata from Vertex AI (includes labels)
+    # Get job metadata from Agent Platform (includes labels)
     all_labels = {}  # Initialize to avoid UnboundLocalError
     try:
         from google.cloud import aiplatform_v1 as vertex_ai
@@ -745,7 +745,7 @@ def consolidate_results(job_id: str, analysis_path: str):
         project_id = os.environ["PROJECT_ID"]
         region = os.getenv("REGION", "us-central1")
 
-        logger.info(f"Fetching job metadata from Vertex AI: {job_id}")
+        logger.info(f"Fetching job metadata from Agent Platform: {job_id}")
         logger.info(f"Project: {project_id}, Region: {region}")
 
         client = vertex_ai.PipelineServiceClient(
@@ -764,7 +764,7 @@ def consolidate_results(job_id: str, analysis_path: str):
 
         # Extract all labels
         all_labels = dict(job.labels) if hasattr(job, "labels") and job.labels else {}
-        logger.info(f"Successfully retrieved {len(all_labels)} labels from Vertex AI")
+        logger.info(f"Successfully retrieved {len(all_labels)} labels from Agent Platform")
 
         # Extract pipeline parameters
         pipeline_parameters = {}

@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Vertex AI AlphaFold Pipeline components - vendored for self-contained deployment."""
+"""Agent Platform AlphaFold Pipeline components - vendored for self-contained deployment."""

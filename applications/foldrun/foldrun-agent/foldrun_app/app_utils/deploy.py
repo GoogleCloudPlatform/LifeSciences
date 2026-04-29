@@ -76,7 +76,7 @@ def write_deployment_metadata(
     with open(metadata_file, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
-    logging.info(f"Agent Engine ID written to {metadata_file}")
+    logging.info(f"Agent Runtime ID written to {metadata_file}")
 
 
 def print_deployment_success(
@@ -85,7 +85,7 @@ def print_deployment_success(
     project: str,
 ) -> None:
     """Print deployment success message with console URL."""
-    # Extract agent engine ID and project number for console URL
+    # Extract Agent Runtime ID and project number for console URL
     resource_name_parts = remote_agent.api_resource.name.split("/")
     agent_engine_id = resource_name_parts[-1]
     project_number = resource_name_parts[1]
@@ -115,7 +115,7 @@ def print_deployment_success(
 @click.option(
     "--display-name",
     default="FoldRun_Agent",
-    help="Display name for the agent engine",
+    help="Display name for the Agent Runtime",
 )
 @click.option(
     "--description",
@@ -156,7 +156,7 @@ def print_deployment_success(
 @click.option(
     "--service-account",
     default=None,
-    help="Service account email to use for the agent engine",
+    help="Service account email to use for the Agent Runtime",
 )
 @click.option(
     "--min-instances",
@@ -211,7 +211,7 @@ def deploy_agent_engine_app(
     container_concurrency: int,
     num_workers: int,
 ) -> AgentEngine:
-    """Deploy the agent engine app to Vertex AI."""
+    """Deploy the Agent Runtime app to Agent Platform."""
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -245,7 +245,7 @@ def deploy_agent_engine_app(
     full_env_vars.update(env_vars)
 
     # Filter out reserved environment variables
-    # Agent Engine doesn't allow setting these as they are managed by the platform
+    # Agent Runtime doesn't allow setting these as they are managed by the platform
     reserved_vars = [
         "GOOGLE_CLOUD_PROJECT",
         "GOOGLE_CLOUD_LOCATION",
@@ -267,7 +267,7 @@ def deploy_agent_engine_app(
     env_vars["GOOGLE_CLOUD_REGION"] = location
     env_vars["NUM_WORKERS"] = str(num_workers)
 
-    # Enable telemetry by default for Agent Engine
+    # Enable telemetry by default for Agent Runtime
     env_vars.setdefault("GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", "true")
     # Capture telemetry metadata only — NOT prompt/response content (privacy)
     env_vars.setdefault("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "false")
@@ -283,7 +283,7 @@ def deploy_agent_engine_app(
     print("""
     ╔═══════════════════════════════════════════════════════════╗
     ║                                                           ║
-    ║   🤖 DEPLOYING AGENT TO VERTEX AI AGENT ENGINE 🤖         ║
+    ║   🤖 DEPLOYING AGENT TO Agent Runtime 🤖         ║
     ║                                                           ║
     ╚═══════════════════════════════════════════════════════════╝
     """)
@@ -359,7 +359,7 @@ def deploy_agent_engine_app(
     else:
         click.echo(f"\n🚀 Creating new agent: {display_name}")
 
-    click.echo("🚀 Deploying to Vertex AI Agent Engine (this can take 3-5 minutes)...")
+    click.echo("🚀 Deploying to Agent Runtime (this can take 3-5 minutes)...")
 
     if matching_agents:
         remote_agent = client.agent_engines.update(
