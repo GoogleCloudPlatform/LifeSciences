@@ -54,8 +54,15 @@ class TestConfigModuleIsolation:
         """Loading AF2 pipeline then OF3 pipeline uses correct base images."""
         # Clear any cached config and pipeline modules
         for key in list(sys.modules.keys()):
-            if "pipeline.pipelines" in key or key == "config":
+            if key in {
+                "foldrun_app.models.af2.pipeline.config",
+                "foldrun_app.models.of3.pipeline.config",
+            } or "pipeline.pipelines" in key:
                 del sys.modules[key]
+        for pkg_name in ("foldrun_app.models.af2.pipeline", "foldrun_app.models.of3.pipeline"):
+            pkg = sys.modules.get(pkg_name)
+            if pkg and hasattr(pkg, "config"):
+                delattr(pkg, "config")
 
         # Load AF2 pipeline
         from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline as load_af2
@@ -85,8 +92,15 @@ class TestConfigModuleIsolation:
     def test_of3_then_af2_config_isolation(self):
         """Loading OF3 pipeline then AF2 pipeline uses correct base images."""
         for key in list(sys.modules.keys()):
-            if "pipeline.pipelines" in key or key == "config":
+            if key in {
+                "foldrun_app.models.af2.pipeline.config",
+                "foldrun_app.models.of3.pipeline.config",
+            } or "pipeline.pipelines" in key:
                 del sys.modules[key]
+        for pkg_name in ("foldrun_app.models.af2.pipeline", "foldrun_app.models.of3.pipeline"):
+            pkg = sys.modules.get(pkg_name)
+            if pkg and hasattr(pkg, "config"):
+                delattr(pkg, "config")
 
         # Load OF3 first
         from foldrun_app.models.of3.utils.pipeline_utils import load_vertex_pipeline as load_of3

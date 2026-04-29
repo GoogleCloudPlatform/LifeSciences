@@ -176,7 +176,7 @@ class OF3SubmitPredictionTool(OF3Tool):
 
         pipeline_job = vertex_ai.PipelineJob(**job_kwargs)
         pipeline_job.submit(
-            network=filestore_network, service_account=os.environ.get("PIPELINES_SA_EMAIL")
+            network=filestore_network, service_account=self.config.pipelines_sa_email
         )
 
         # Clean up temp files

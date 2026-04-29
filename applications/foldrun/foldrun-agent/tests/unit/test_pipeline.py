@@ -77,7 +77,7 @@ class TestPipelineRetryPolicies:
     def test_retry_on_configure_run(self):
         """ConfigureRunOp has retry policy."""
         source = self._read_pipeline_source()
-        config_idx = source.index("Configure Pipeline Run")
+        config_idx = source.index("AF2 Configure Run")
         data_idx = source.index("DataPipelineOp")
         retry_after_config = source.index("set_retry", config_idx)
         assert retry_after_config < data_idx, (
