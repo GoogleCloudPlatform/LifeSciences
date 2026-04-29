@@ -421,26 +421,26 @@ def get_image():
 def list_jobs():
     """List recent FoldRun pipeline jobs from Agent Platform, sorted by recency.
 
-    Works both in Cloud Run (identity token) and locally via Docker (ADC mount).
-    Returns an empty list with an error message if credentials are unavailable.
-    Includes a has_analysis flag indicating whether analysis/summary.json exists.
+    Supports pagination via ?page_token=<token>. Returns 20 jobs per page plus
+    a next_page_token if more results exist.
     """
     try:
         authed = _get_authed_session()
+        page_token = request.args.get("page_token", "")
 
         url = (
             f"https://{REGION}-aiplatform.googleapis.com/v1"
             f"/projects/{PROJECT_ID}/locations/{REGION}/pipelineJobs"
         )
-        resp = authed.get(
-            url,
-            params={
-                "filter": "labels.submitted_by=foldrun-agent",
-                "orderBy": "createTime desc",
-                "pageSize": "50",
-            },
-            timeout=10,
-        )
+        params = {
+            "filter": "labels.submitted_by=foldrun-agent",
+            "orderBy": "createTime desc",
+            "pageSize": "20",
+        }
+        if page_token:
+            params["pageToken"] = page_token
+
+        resp = authed.get(url, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
 
@@ -456,7 +456,7 @@ def list_jobs():
                     "model_type": labels.get("model_type", "alphafold2"),
                     "state": pj.get("state", "PIPELINE_STATE_UNSPECIFIED"),
                     "create_time": pj.get("createTime", ""),
-                    "has_analysis": False,    # populated below
+                    "has_analysis": False,
                     "analysis_running": False,
                 }
             )
@@ -470,7 +470,10 @@ def list_jobs():
                 job["has_analysis"] = ts in complete_ts
                 job["analysis_running"] = ts in running_ts
 
-        return jsonify({"jobs": jobs})
+        return jsonify({
+            "jobs": jobs,
+            "next_page_token": data.get("nextPageToken", ""),
+        })
 
     except google.auth.exceptions.DefaultCredentialsError:
         logger.warning("No credentials available for /api/jobs")
@@ -483,6 +486,26 @@ def list_jobs():
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")
         return jsonify({"jobs": [], "error": str(e)}), 500
+
+
+@app.route("/api/quality/<job_id>")
+def job_quality(job_id):
+    """Return quality assessment for a single analyzed job (lazy-loaded by the UI).
+
+    Reads quality_metrics from the job's analysis/summary.json. Returns 404 if
+    no summary exists yet. Called per-row after the job list renders so it never
+    blocks the initial page load.
+    """
+    try:
+        summary = get_analysis_summary(job_id=job_id)
+        qm = summary.get("quality_metrics", {})
+        return jsonify({
+            "quality_assessment": qm.get("quality_assessment", ""),
+            "best_model_plddt": qm.get("best_model_plddt"),
+            "best_model_pae": qm.get("best_model_pae"),
+        })
+    except Exception:
+        return jsonify({"quality_assessment": ""}), 404
 
 
 @app.route("/api/analyze", methods=["POST"])

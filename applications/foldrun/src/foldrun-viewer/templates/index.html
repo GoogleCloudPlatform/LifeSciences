@@ -72,6 +72,33 @@
 
         .refresh-btn:hover { background: #e8f0fe; }
 
+        .quality-badge {
+            display: inline-block;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 10px;
+            white-space: nowrap;
+        }
+        .quality-very-high { background: #d2e3fc; color: #0053D6; }
+        .quality-high      { background: #d3f0fb; color: #0077A8; }
+        .quality-low       { background: #fef7d0; color: #8a6d00; }
+        .quality-very-low  { background: #fde8e0; color: #b83200; }
+        .quality-loading   { color: #aaa; font-size: 0.72rem; }
+
+        .load-more-btn {
+            display: block;
+            margin: 16px auto 0;
+            background: none;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            padding: 6px 24px;
+            color: #444;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .load-more-btn:hover { background: #f1f3f4; }
+
         .filter-row {
             display: flex;
             gap: 10px;
@@ -361,7 +388,15 @@
 
     <script>
         let allJobs = [];
+        let nextPageToken = '';
         let refreshTimer = null;
+
+        const QUALITY_META = {
+            very_high_confidence: { label: 'Very High', cls: 'quality-very-high' },
+            high_confidence:      { label: 'High',      cls: 'quality-high'      },
+            low_confidence:       { label: 'Low',        cls: 'quality-low'       },
+            very_low_confidence:  { label: 'Very Low',  cls: 'quality-very-low'  },
+        };
 
         const MODEL_LABELS = {
             alphafold2: 'AlphaFold2',
@@ -433,14 +468,28 @@
                     actionBtn = `<a class="view-btn disabled" href="#">View</a>`;
                 }
 
+                const qualityEl = j.has_analysis
+                    ? `<span class="quality-loading" id="quality-${j.job_id}">…</span>`
+                    : `<span></span>`;
+
                 return `<div class="job-row" id="row-${j.job_id}">
                     <span class="model-badge ${badge}">${label}</span>
                     <span class="state-chip ${sm.cls}">${sm.label}</span>
+                    ${qualityEl}
                     <span class="job-name" title="${j.job_id}">${j.display_name || j.job_id}</span>
                     <span class="job-time">${relativeTime(j.create_time)}</span>
                     ${actionBtn}
                 </div>`;
             }).join('');
+
+            // Load more button
+            if (nextPageToken) {
+                container.insertAdjacentHTML('beforeend',
+                    `<button class="load-more-btn" onclick="loadMore()">Load more</button>`);
+            }
+
+            // Lazy-load quality badges for analyzed jobs
+            filtered.filter(j => j.has_analysis).forEach(j => loadQuality(j.job_id));
         }
 
         async function analyzeJob(jobId, modelType, btn) {
@@ -472,11 +521,42 @@
             }
         }
 
+        async function loadQuality(jobId) {
+            try {
+                const resp = await fetch(`/api/quality/${encodeURIComponent(jobId)}`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const el = document.getElementById(`quality-${jobId}`);
+                if (!el) return;
+                const meta = QUALITY_META[data.quality_assessment];
+                if (meta) {
+                    el.className = `quality-badge ${meta.cls}`;
+                    el.textContent = meta.label;
+                } else {
+                    el.textContent = '';
+                }
+            } catch (_) { /* badge stays blank on error */ }
+        }
+
+        async function loadMore() {
+            if (!nextPageToken) return;
+            try {
+                const resp = await fetch(`/api/jobs?page_token=${encodeURIComponent(nextPageToken)}`);
+                const data = await resp.json();
+                allJobs = allJobs.concat(data.jobs || []);
+                nextPageToken = data.next_page_token || '';
+                renderJobs();
+            } catch (err) {
+                console.error('Load more failed:', err);
+            }
+        }
+
         async function loadJobs() {
             document.getElementById('jobs-container').innerHTML =
                 '<div class="jobs-loading">Loading recent jobs…</div>';
 
             clearTimeout(refreshTimer);
+            nextPageToken = '';
 
             try {
                 const resp = await fetch('/api/jobs');
@@ -489,16 +569,17 @@
                 }
 
                 allJobs = data.jobs || [];
+                nextPageToken = data.next_page_token || '';
                 renderJobs();
 
-                // Auto-refresh while any job is running
+                // Auto-refresh while any job is running — 60s to reduce GCS polling load
                 const hasRunning = allJobs.some(j =>
                     j.state === 'PIPELINE_STATE_RUNNING' ||
                     j.state === 'PIPELINE_STATE_PENDING' ||
                     j.state === 'PIPELINE_STATE_QUEUED'
                 );
                 if (hasRunning) {
-                    refreshTimer = setTimeout(loadJobs, 30000);
+                    refreshTimer = setTimeout(loadJobs, 60000);
                 }
             } catch (err) {
                 document.getElementById('jobs-container').innerHTML =
