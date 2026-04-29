@@ -15,10 +15,16 @@
 import logging
 import os
 
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
 
 def setup_telemetry() -> str | None:
     """Configure OpenTelemetry and GenAI telemetry with GCS upload."""
     os.environ.setdefault("GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", "true")
+
+    # Instrument FastAPI globally — Agent Engine owns the app instance so we
+    # can't call instrument_app(app) directly; instrument() covers all apps.
+    FastAPIInstrumentor().instrument()
 
     bucket = os.environ.get("LOGS_BUCKET_NAME")
     capture_content = os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "false")

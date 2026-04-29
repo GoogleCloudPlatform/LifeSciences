@@ -85,6 +85,10 @@ class CoreConfig:
         return os.getenv("GCS_DATABASES_BUCKET", os.getenv("GCS_BUCKET_NAME"))
 
     @property
+    def pipelines_sa_email(self) -> str:
+        return os.getenv("PIPELINES_SA_EMAIL", f"pipelines-sa@{self.project_id}.iam.gserviceaccount.com")
+
+    @property
     def filestore_id(self) -> str:
         return os.getenv("FILESTORE_ID")
 

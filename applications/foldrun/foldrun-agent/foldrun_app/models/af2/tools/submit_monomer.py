@@ -201,7 +201,7 @@ class AF2SubmitMonomerTool(AF2Tool):
         # Submit pipeline job (DWS scheduling already baked into compiled pipeline if enabled)
         pipeline_job = vertex_ai.PipelineJob(**job_kwargs)
         pipeline_job.submit(
-            network=filestore_network, service_account=os.environ.get("PIPELINES_SA_EMAIL")
+            network=filestore_network, service_account=self.config.pipelines_sa_email
         )
 
         # Clean up

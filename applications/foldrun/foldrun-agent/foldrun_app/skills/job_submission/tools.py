@@ -101,7 +101,7 @@ def submit_af2_multimer_prediction(
     )
 
 
-def submit_af2_batch_predictions(batch_config: list) -> dict:
+def submit_af2_batch_predictions(batch_config: list[dict]) -> dict:
     """Submit multiple AlphaFold2 prediction jobs in batch."""
     return get_tool("af2_submit_batch").run({"batch_config": batch_config})
 

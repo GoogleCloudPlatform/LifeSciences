@@ -21,7 +21,7 @@ from foldrun_app.skills._tool_registry import get_tool
 
 def cleanup_gcs_files(
     job_id: Optional[str] = None,
-    gcs_paths: Optional[list] = None,
+    gcs_paths: Optional[list[str]] = None,
     search_only: bool = True,
     confirm_delete: bool = False,
     include_fasta: bool = False,

@@ -23,6 +23,7 @@ dependencies = [
     "google-cloud-run>=0.10.0",
     "google-cloud-compute>=1.19.0",
     "google-cloud-logging>=3.0.0",
+    "opentelemetry-instrumentation-fastapi>=0.59b0",
     "google-cloud-batch>=0.17.0",
     "google-cloud-artifact-registry>=1.11.0",
     "google-cloud-service-usage>=1.8.0",
