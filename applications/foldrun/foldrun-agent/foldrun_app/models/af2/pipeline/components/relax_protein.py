@@ -44,22 +44,40 @@ def relax(
     os.environ["TF_FORCE_UNIFIED_MEMORY"] = tf_force_unified_memory
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = xla_python_client_mem_fraction
 
+    import shutil
+
     t0 = time.time()
     logging.info("Starting model relaxation ...")
 
     relaxed_protein.uri = f"{relaxed_protein.uri}.pdb"
-    relaxed_protein_pdb = relax_protein(
-        unrelaxed_protein_path=unrelaxed_protein.path,
-        relaxed_protein_path=relaxed_protein.path,
-        max_iterations=max_iterations,
-        tolerance=tolerance,
-        stiffness=stiffness,
-        exclude_residues=exclude_residues,
-        max_outer_iterations=max_outer_iterations,
-        use_gpu=use_gpu,
-    )
-
     relaxed_protein.metadata["category"] = "relaxed_protein"
+    relaxed_protein.metadata["relax_failed"] = False
 
-    t1 = time.time()
-    logging.info(f"Model relaxation completed. Elapsed time: {t1 - t0}")
+    try:
+        relax_protein(
+            unrelaxed_protein_path=unrelaxed_protein.path,
+            relaxed_protein_path=relaxed_protein.path,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+            stiffness=stiffness,
+            exclude_residues=exclude_residues,
+            max_outer_iterations=max_outer_iterations,
+            use_gpu=use_gpu,
+        )
+        t1 = time.time()
+        logging.info(f"Model relaxation completed. Elapsed time: {t1 - t0}")
+
+    except ValueError as e:
+        # AMBER minimization can fail on highly disordered structures.
+        # Fall back to the unrelaxed structure so the pipeline doesn't fail —
+        # the unrelaxed PDB is still scientifically valid for downstream analysis.
+        t1 = time.time()
+        warning = (
+            f"AMBER relaxation failed after {t1 - t0:.1f}s: {e}. "
+            "Falling back to unrelaxed structure. "
+            "pLDDT and PAE scores are unaffected."
+        )
+        logging.warning(f"RELAX_FALLBACK: {warning}")
+        shutil.copy(unrelaxed_protein.path, relaxed_protein.path)
+        relaxed_protein.metadata["relax_failed"] = True
+        relaxed_protein.metadata["relax_warning"] = warning

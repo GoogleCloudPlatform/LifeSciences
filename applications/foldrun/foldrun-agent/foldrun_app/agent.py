@@ -482,6 +482,7 @@ If the user is experienced and moving fast, keep suggestions brief (one line).
     * What GPU type that task was actually using (may differ from job-level gpu_type label)
     * Whether FLEX_START was enabled for that task
     * Example: "The relax task failed waiting for an NVIDIA_L4 GPU (24h timeout)" NOT "failed waiting for A100"
+    * **AMBER Relaxation Fallback**: If a relax task completed successfully but logs show "RELAX_FALLBACK", it means AMBER minimization failed on a disordered structure and the unrelaxed PDB was used instead. The job did NOT fail — results are still valid. When presenting results for such a job, clearly inform the user: "Note: AMBER relaxation failed for [N] structure(s) due to highly disordered regions. Unrelaxed structures were used instead — pLDDT and PAE confidence scores are unaffected. The structures are still suitable for downstream analysis."
 - **CRITICAL: Job Deletion Safety**
   - NEVER delete a job without explicit user confirmation
   - When asked to delete a job, first explain what will be deleted and what won't (GCS files remain)
