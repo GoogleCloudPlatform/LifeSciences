@@ -33,11 +33,44 @@ resource "google_storage_bucket_iam_member" "foldrun_viewer_bucket_access" {
   member = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
+# Allow the viewer to write task_config.json and analysis_metadata.json to GCS
+# when triggering analysis from the UI
+resource "google_storage_bucket_iam_member" "foldrun_viewer_bucket_write" {
+  bucket = google_storage_bucket.foldrun_bucket.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
 # Allow the viewer to list Vertex AI pipeline jobs for the job picker
 resource "google_project_iam_member" "foldrun_viewer_aiplatform" {
   project = var.project_id
   role    = "roles/aiplatform.viewer"
   member  = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
+# Allow the viewer to trigger the Cloud Run analysis jobs from the UI
+resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_af2_analysis" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_job.af2_analysis_job.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_of3_analysis" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_job.of3_analysis_job.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_boltz2_analysis" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_job.boltz2_analysis_job.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
 resource "google_cloud_run_v2_service" "foldrun_viewer" {

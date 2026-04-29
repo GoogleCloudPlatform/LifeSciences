@@ -38,7 +38,7 @@ COPY app.py .
 COPY templates/ templates/
 
 # Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app && chmod o+w /app
 USER appuser
 
 # Set environment variables
