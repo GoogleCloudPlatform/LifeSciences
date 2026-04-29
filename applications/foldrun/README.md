@@ -141,41 +141,49 @@ GCS_SOURCE_BUCKET=THEIR_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 
 ### Step 2c: Shared VPC Configuration (Optional)
 
-If you are deploying FoldRun into a Shared VPC (where the network belongs to a host project), follow these steps to ensure correct permissions:
+If FoldRun is deployed into a Shared VPC (network owned by a host project), you need to configure network values and grant IAM permissions.
 
-**1. Create `terraform.tfvars`:**
-In the `applications/foldrun/terraform/` directory, create a `terraform.tfvars` file with your network details:
+**1. Create a `.env` file with your network details:**
+In the `applications/foldrun/` directory (alongside `deploy-all.sh`):
+```bash
+cp .env.example .env
+```
+Then edit `.env` and set the three Shared VPC values:
+```bash
+# Full resource path of the VPC network in the host project
+NETWORK_ID=projects/HOST_PROJECT_ID/global/networks/NETWORK_NAME
+
+# Full resource path of the subnet
+SUBNET_ID=projects/HOST_PROJECT_ID/regions/REGION/subnetworks/SUBNET_NAME
+
+# Numeric project number of the host project
+# gcloud projects describe HOST_PROJECT_ID --format='value(projectNumber)'
+NETWORK_PROJECT_NUMBER=123456789012
+```
+Also set these in `terraform/terraform.tfvars` so `--steps infra` uses the same network:
 ```hcl
-network_name           = "your-existing-vpc-name"
-subnet_name            = "your-existing-subnet-name"
-network_project_id     = "your-host-project-id"
-network_project_number = "your-host-project-number"
+network_name           = "NETWORK_NAME"
+subnet_name            = "SUBNET_NAME"
+network_project_id     = "HOST_PROJECT_ID"
+network_project_number = "123456789012"
 ```
 
-
-**2. Enable Cloud Run API and Grant Permissions:**
-Enable the Cloud Run API in your service project so that the Cloud Run Service Agent is created:
+**2. Enable Cloud Run API and grant host project permissions:**
 ```bash
 gcloud services enable run.googleapis.com --project=YOUR_PROJECT_ID
-```
-Then, grant the Cloud Run Service Agent the `Compute Network User` role on the host project or `roles/compute.networkUser` on the specific subnet and `roles/compute.networkViewer` on the host project:
-```bash
+
 gcloud projects add-iam-policy-binding HOST_PROJECT_ID \
   --member="serviceAccount:service-PROJECT_NUMBER@serverless-robot-prod.iam.gserviceaccount.com" \
   --role="roles/compute.networkUser"
 ```
 
-**3. Provision your infrastructure (creates other service accounts):**
-Run the deployment script with only the `infra` step:
+**3. Provision infrastructure:**
 ```bash
 ./deploy-all.sh YOUR_PROJECT_ID --steps infra
 ```
 
-**4. Grant IAM permissions on the Host Project:**
-The previous step created the service account needed for the batch jobs. Now you must grant the Cloud Batch Service Agent the `Compute Network User` role on the host project or specific subnet.
-
-Ask your host project administrator to run these commands (replacing `HOST_PROJECT_ID`, `SERVICE_PROJECT_ID`, and `PROJECT_NUMBER`):
-
+**4. Grant Cloud Batch permissions on the host project:**
+Ask your host project admin to run (replacing placeholders):
 ```bash
 gcloud compute networks subnets add-iam-policy-binding SUBNET_NAME \
   --region REGION \
@@ -185,9 +193,8 @@ gcloud compute networks subnets add-iam-policy-binding SUBNET_NAME \
 ```
 
 **5. Complete the deployment:**
-Now run the deployment script regularly to build containers and deploy the application:
 ```bash
-./deploy-all.sh YOUR_PROJECT_ID
+./deploy-all.sh YOUR_PROJECT_ID --steps build,data
 ```
 
 
@@ -197,6 +204,12 @@ Now run the deployment script regularly to build containers and deploy the appli
 ./deploy-all.sh YOUR_PROJECT_ID --steps build    # Only Cloud Build (all containers)
 ./deploy-all.sh YOUR_PROJECT_ID --steps data     # Only database downloads
 DOWNLOAD_MODE=full ./deploy-all.sh YOUR_PROJECT_ID  # Full BFD database (~272GB)
+```
+
+**Custom resource names or Shared VPC?** Copy `.env.example` to `.env` and set overrides there — no need to prefix every command with env vars:
+```bash
+cp .env.example .env   # then edit .env with your values
+./deploy-all.sh YOUR_PROJECT_ID --steps build
 ```
 
 **Targeted rebuilds** — rebuild only what changed (much faster than full build):

@@ -207,19 +207,15 @@ echo ""
 # Helper: Resolve deployment configuration for build and data steps.
 #
 # All FoldRun resources follow predictable naming conventions derived from
-# PROJECT_ID — no terraform required for build/data steps run against an
-# already-provisioned project.
+# PROJECT_ID — no terraform required. Override any value via:
+#   1. Environment variable set before invoking the script (highest priority)
+#   2. A .env file in the same directory as deploy-all.sh (loaded above)
+#   3. FoldRun naming conventions derived from PROJECT_ID (defaults below)
 #
-# Priority (highest to lowest):
-#   1. Environment variable overrides (for custom deployments or CI/CD)
-#   2. Terraform outputs (if terraform is installed and state is accessible)
-#   3. FoldRun naming conventions (PROJECT_ID-based defaults)
-#
-# This means `--steps build` and `--steps data` work without terraform
-# installed, as long as infra was previously provisioned by `--steps infra`.
+# Shared VPC users: set NETWORK_ID, SUBNET_ID, NETWORK_PROJECT_NUMBER
+# in a .env file — see README Step 2c.
 # ==============================================================================
 extract_terraform_outputs() {
-    # Apply naming-convention defaults first (no terraform needed)
     export GCS_BUCKET="${GCS_BUCKET:-${PROJECT_ID}-foldrun-data}"
     export AR_REPO="${AR_REPO:-foldrun-repo}"
     export FILESTORE_ID="${FILESTORE_ID:-foldrun-nfs}"
@@ -230,44 +226,6 @@ extract_terraform_outputs() {
     export SUBNET_ID="${SUBNET_ID:-}"
     export NETWORK_ID="${NETWORK_ID:-}"
     export NETWORK_PROJECT_NUMBER="${NETWORK_PROJECT_NUMBER:-}"
-
-    # If terraform is available and state exists, cross-check and prefer its outputs
-    # (useful immediately after --steps infra when non-default names may have been used)
-    if command -v terraform &>/dev/null; then
-        # Run terraform output cross-check in a subshell to prevent any
-        # terraform failures from propagating to the parent shell under set -e.
-        # Exports are written to a temp file and sourced back.
-        _tf_env=$(mktemp)
-        (
-            cd "$TERRAFORM_DIR" || exit 0
-            terraform init -reconfigure -input=false > /dev/null 2>&1 || exit 0
-            # terraform output exits non-zero when output is absent — always exit 0.
-            # In C locale, [:print:] covers only ASCII 0x20-0x7e, so box-drawing chars
-            # (UTF-8 multi-byte, e.g. ╷ │ ╵) and ANSI escape sequences (\x1b) are
-            # filtered out before the value reaches the env file.
-            _tf() { terraform output -raw "$1" 2>/dev/null \
-                | LC_ALL=C grep -v '^[^[:print:]]' \
-                | head -1 \
-                || true; }
-            v=$(_tf gcs_bucket_name);        if [[ -n "$v" ]]; then echo "GCS_BUCKET=$v"; fi
-            v=$(_tf artifact_registry_repo); if [[ -n "$v" ]]; then echo "AR_REPO=$v"; fi
-            v=$(_tf filestore_id);           if [[ -n "$v" ]]; then echo "FILESTORE_ID=$v"; fi
-            v=$(_tf agent_sa_email);         if [[ -n "$v" ]]; then echo "AGENT_SA_EMAIL=$v"; fi
-            v=$(_tf build_sa_email);         if [[ -n "$v" ]]; then echo "BUILD_SA_EMAIL=$v"; fi
-            v=$(_tf pipelines_sa_email);     if [[ -n "$v" ]]; then echo "PIPELINES_SA_EMAIL=$v"; fi
-            v=$(_tf databases_bucket_name);  if [[ -n "$v" ]]; then echo "DATABASES_BUCKET=$v"; fi
-            v=$(_tf subnet_id);              if [[ -n "$v" ]]; then echo "SUBNET_ID=$v"; fi
-            v=$(_tf network_id);             if [[ -n "$v" ]]; then echo "NETWORK_ID=$v"; fi
-            v=$(_tf network_project_number); if [[ -n "$v" ]]; then echo "NETWORK_PROJECT_NUMBER=$v"; fi
-        ) > "$_tf_env" 2>/dev/null || true
-        # Source any values that terraform provided, overriding naming-convention defaults.
-        # Only export keys that are valid shell identifiers (letters/digits/underscores,
-        # not starting with a digit) to guard against terraform warning lines leaking in.
-        while IFS='=' read -r key val; do
-            [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="$val"
-        done < "$_tf_env"
-        rm -f "$_tf_env"
-    fi
 
     echo "Configuration:"
     echo "  GCS_BUCKET=$GCS_BUCKET"
