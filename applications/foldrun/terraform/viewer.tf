@@ -48,6 +48,17 @@ resource "google_project_iam_member" "foldrun_viewer_aiplatform" {
   member  = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
+# Minimal custom role: only run.jobs.run + run.jobs.runWithOverrides.
+# roles/run.invoker only has run.jobs.run; roles/run.developer is too broad
+# (includes delete, update, create). This custom role is the least privilege needed.
+resource "google_project_iam_custom_role" "foldrun_job_runner" {
+  role_id     = "foldrun_job_runner"
+  title       = "FoldRun Job Runner"
+  description = "Allows triggering Cloud Run Jobs with overrides from the FoldRun viewer"
+  permissions = ["run.jobs.run", "run.jobs.runWithOverrides"]
+  project     = var.project_id
+}
+
 # Allow the viewer SA to act as the analysis SA when triggering Cloud Run jobs.
 # The Cloud Run v2 :run endpoint requires actAs on the job's service account
 # in addition to run.jobs.run on the job resource.
@@ -62,7 +73,7 @@ resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_af2_analysis" 
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.af2_analysis_job.name
-  role     = "roles/run.developer"
+  role     = "projects/${var.project_id}/roles/foldrun_job_runner"
   member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
@@ -70,7 +81,7 @@ resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_of3_analysis" 
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.of3_analysis_job.name
-  role     = "roles/run.developer"
+  role     = "projects/${var.project_id}/roles/foldrun_job_runner"
   member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
@@ -78,7 +89,7 @@ resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_boltz2_analysi
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.boltz2_analysis_job.name
-  role     = "roles/run.developer"
+  role     = "projects/${var.project_id}/roles/foldrun_job_runner"
   member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
