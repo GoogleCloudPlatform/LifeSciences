@@ -185,6 +185,26 @@
             pointer-events: none;
         }
 
+        .analyze-btn {
+            background: #e8f0fe;
+            color: #1a73e8;
+            border: 1px solid #1a73e8;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .analyze-btn:hover { background: #d2e3fc; }
+
+        .analyze-btn:disabled {
+            background: #f1f3f4;
+            color: #80868b;
+            border-color: #dadce0;
+            cursor: default;
+        }
+
         /* ── Feature grid ── */
         .feature-grid {
             display: grid;
@@ -371,8 +391,12 @@
             return `${Math.floor(h / 24)}d ago`;
         }
 
-        function canView(state) {
-            return state === 'PIPELINE_STATE_SUCCEEDED';
+        function canView(job) {
+            return job.state === 'PIPELINE_STATE_SUCCEEDED' && job.has_analysis;
+        }
+
+        function canAnalyze(job) {
+            return job.state === 'PIPELINE_STATE_SUCCEEDED' && !job.has_analysis && !job.analysis_running;
         }
 
         function renderJobs() {
@@ -395,18 +419,57 @@
                 const sm    = STATE_META[j.state] || { label: j.state.replace('PIPELINE_STATE_',''), cls: 'state-pending' };
                 const badge = `badge-${j.model_type}`;
                 const label = MODEL_LABELS[j.model_type] || j.model_type;
-                const viewable = canView(j.state);
-                const btnCls = viewable ? 'view-btn' : 'view-btn disabled';
-                const btnHref = viewable ? `/job/${encodeURIComponent(j.job_id)}` : '#';
 
-                return `<div class="job-row">
+                let actionBtn;
+                if (canView(j)) {
+                    actionBtn = `<a class="view-btn" href="/job/${encodeURIComponent(j.job_id)}">View</a>`;
+                } else if (j.analysis_running) {
+                    actionBtn = `<a class="view-btn disabled" href="#" title="Analysis in progress">View</a>
+                                 <button class="analyze-btn" disabled title="Analysis already running">Analyzing…</button>`;
+                } else if (canAnalyze(j)) {
+                    actionBtn = `<a class="view-btn disabled" href="#" title="Run analysis first">View</a>
+                                 <button class="analyze-btn" onclick="analyzeJob('${j.job_id}','${j.model_type}',this)">Analyze</button>`;
+                } else {
+                    actionBtn = `<a class="view-btn disabled" href="#">View</a>`;
+                }
+
+                return `<div class="job-row" id="row-${j.job_id}">
                     <span class="model-badge ${badge}">${label}</span>
                     <span class="state-chip ${sm.cls}">${sm.label}</span>
                     <span class="job-name" title="${j.job_id}">${j.display_name || j.job_id}</span>
                     <span class="job-time">${relativeTime(j.create_time)}</span>
-                    <a class="${btnCls}" href="${btnHref}">View</a>
+                    ${actionBtn}
                 </div>`;
             }).join('');
+        }
+
+        async function analyzeJob(jobId, modelType, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Submitting…';
+
+            try {
+                const resp = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({job_id: jobId, model_type: modelType}),
+                });
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    btn.disabled = false;
+                    btn.textContent = 'Analyze';
+                    alert(`Analysis failed: ${data.error || resp.statusText}`);
+                    return;
+                }
+
+                // Refresh the job list — server will now return analysis_running=true
+                // which will replace the Analyze button with the disabled "Analyzing…" state
+                await loadJobs();
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Analyze';
+                alert(`Error: ${err.message}`);
+            }
         }
 
         async function loadJobs() {
