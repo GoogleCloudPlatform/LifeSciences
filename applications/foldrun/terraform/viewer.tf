@@ -62,7 +62,7 @@ resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_af2_analysis" 
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.af2_analysis_job.name
-  role     = "roles/run.invoker"
+  role     = "roles/run.developer"
   member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
@@ -70,7 +70,7 @@ resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_of3_analysis" 
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.of3_analysis_job.name
-  role     = "roles/run.invoker"
+  role     = "roles/run.developer"
   member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
@@ -78,7 +78,7 @@ resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_boltz2_analysi
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_job.boltz2_analysis_job.name
-  role     = "roles/run.invoker"
+  role     = "roles/run.developer"
   member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
