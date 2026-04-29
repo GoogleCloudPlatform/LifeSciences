@@ -235,9 +235,11 @@ extract_terraform_outputs() {
             v=$(_tf network_id);             if [[ -n "$v" ]]; then echo "NETWORK_ID=$v"; fi
             v=$(_tf network_project_number); if [[ -n "$v" ]]; then echo "NETWORK_PROJECT_NUMBER=$v"; fi
         ) > "$_tf_env" 2>/dev/null || true
-        # Source any values that terraform provided, overriding naming-convention defaults
+        # Source any values that terraform provided, overriding naming-convention defaults.
+        # Only export keys that are valid shell identifiers (letters/digits/underscores,
+        # not starting with a digit) to guard against terraform warning lines leaking in.
         while IFS='=' read -r key val; do
-            [[ -n "$key" ]] && export "$key"="$val"
+            [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="$val"
         done < "$_tf_env"
         rm -f "$_tf_env"
     fi
