@@ -137,6 +137,25 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ==============================================================================
+# Optional .env file support
+# Load a .env file from the script directory if present. Only sets variables
+# that are not already set in the environment, so explicit env var overrides
+# and CI/CD injected values always take precedence.
+# ==============================================================================
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_SCRIPT_DIR/.env" ]]; then
+    echo "Loading configuration from $_SCRIPT_DIR/.env"
+    while IFS='=' read -r key val; do
+        # Skip comments, empty lines, and invalid identifiers
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        # Only set if not already in the environment
+        [[ -z "${!key+x}" ]] && export "$key"="$val"
+    done < "$_SCRIPT_DIR/.env"
+fi
+
+# ==============================================================================
 # Configuration
 # ==============================================================================
 PROJECT_ID=${POSITIONAL_ARGS[0]:-$(gcloud config get-value project)}
