@@ -29,11 +29,6 @@ echo "==========================================================================
 echo "🔍 FoldRun Ecosystem Status Checklist"
 echo "================================================================================"
 
-if [ -z "$PROJECT_ID" ]; then
-    echo "❌ Error: Project ID not found. Run 'gcloud config set project YOUR_PROJECT_ID'"
-    exit 1
-fi
-
 echo "Project: $PROJECT_ID"
 echo "Region:  $REGION"
 echo "--------------------------------------------------------------------------------"
@@ -54,33 +49,33 @@ else
 fi
 
 # 2. Check Cloud Run Viewer
-if gcloud run services describe foldrun-viewer --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
+if gcloud run services describe foldrun-viewer --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "✅ [Cloud Run] foldrun-viewer service is deployed and active"
 else
     echo "❌ [Cloud Run] foldrun-viewer service is missing"
 fi
 
 # 2b. Check Cloud Run A2A Proxy (optional)
-if gcloud run services describe foldrun-a2a --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
+if gcloud run services describe foldrun-a2a --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "✅ [Cloud Run] foldrun-a2a A2A proxy is deployed and active"
 else
     echo "⚠️  [Cloud Run] foldrun-a2a A2A proxy is not deployed (optional — deploy with src/foldrun-a2a/deploy.sh)"
 fi
 
 # 3. Check Cloud Run Analysis Jobs
-if gcloud run jobs describe af2-analysis-job --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
+if gcloud run jobs describe af2-analysis-job --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "✅ [Cloud Run] af2-analysis-job is deployed"
 else
     echo "❌ [Cloud Run] af2-analysis-job is missing"
 fi
 
-if gcloud run jobs describe of3-analysis-job --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
+if gcloud run jobs describe of3-analysis-job --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "✅ [Cloud Run] of3-analysis-job is deployed"
 else
     echo "❌ [Cloud Run] of3-analysis-job is missing"
 fi
 
-if gcloud run jobs describe boltz2-analysis-job --region=$REGION --project=$PROJECT_ID >/dev/null 2>&1; then
+if gcloud run jobs describe boltz2-analysis-job --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "✅ [Cloud Run] boltz2-analysis-job is deployed"
 else
     echo "❌ [Cloud Run] boltz2-analysis-job is missing"

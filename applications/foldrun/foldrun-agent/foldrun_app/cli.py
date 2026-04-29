@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AlphaFold2 ADK Agent - AI Agent for protein structure prediction using native FunctionTools."""
+"""FoldRun ADK Agent - AI Agent for protein structure prediction (AlphaFold2 + OpenFold3) using native FunctionTools."""
 
 import asyncio
 import logging
@@ -99,15 +99,13 @@ async def run_with_retry(runner, user_id, session_id, message, max_retries=MAX_R
                     await asyncio.sleep(wait_time)
                     continue
             raise
-        except Exception:
-            raise
 
     if last_error:
         raise last_error
 
 
 async def create_pretty_agent():
-    """Create and configure the AlphaFold2 ADK agent with pretty console output."""
+    """Create and configure the FoldRun ADK agent with pretty console output."""
 
     # Display configuration banner
     project_id = os.getenv("GCP_PROJECT_ID", "Not configured")
@@ -116,7 +114,7 @@ async def create_pretty_agent():
     viewer_base_url = os.getenv("AF2_VIEWER_URL", "Not configured")
     gemini_model = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
-    config_info = f"""[bold cyan]AlphaFold2 Agent Configuration[/bold cyan]
+    config_info = f"""[bold cyan]FoldRun Agent Configuration[/bold cyan]
 
 [bold]Google Cloud:[/bold]
   Project ID: [yellow]{project_id}[/yellow]
@@ -155,7 +153,7 @@ async def create_pretty_agent():
 
 
 async def run_interactive_session(agent: Agent):
-    """Run an interactive session with the AlphaFold2 agent."""
+    """Run an interactive session with the FoldRun agent."""
 
     # Create session and artifact services
     session_service = InMemorySessionService()
@@ -172,7 +170,7 @@ async def run_interactive_session(agent: Agent):
     # Welcome message
     console.print(
         Panel.fit(
-            "[bold green]AlphaFold2 ADK Agent[/bold green]\n\n"
+            "[bold green]FoldRun ADK Agent[/bold green]\n\n"
             "I can help you with:\n"
             "• Submitting protein structure predictions\n"
             "• Monitoring job progress\n"
@@ -309,12 +307,12 @@ async def run_single_query(agent: Agent, query: str):
 
 
 async def main():
-    """Main entry point for the AlphaFold2 ADK agent."""
+    """Main entry point for the FoldRun ADK agent."""
 
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="AlphaFold2 ADK Agent - AI assistant for protein structure prediction"
+        description="FoldRun ADK Agent - AI assistant for protein structure prediction (AlphaFold2 + OpenFold3)"
     )
     parser.add_argument("--query", type=str, help="Run a single query instead of interactive mode")
     parser.add_argument(
