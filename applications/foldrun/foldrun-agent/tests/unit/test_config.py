@@ -100,3 +100,17 @@ class TestConfig:
         assert set(d.keys()) == expected_keys
         assert d["project_id"] == _EXPECTED["GCP_PROJECT_ID"]
         assert d["bucket_name"] == _EXPECTED["GCS_BUCKET_NAME"]
+
+    def test_pipelines_sa_email_explicit(self, mock_env_vars, monkeypatch):
+        """Explicit PIPELINES_SA_EMAIL env var is used as-is."""
+        monkeypatch.setenv("PIPELINES_SA_EMAIL", "custom-sa@my-project.iam.gserviceaccount.com")
+        config = Config()
+        assert config.pipelines_sa_email == "custom-sa@my-project.iam.gserviceaccount.com"
+
+    def test_pipelines_sa_email_fallback(self, mock_env_vars, monkeypatch):
+        """pipelines_sa_email falls back to pipelines-sa@{project_id}.iam.gserviceaccount.com."""
+        monkeypatch.delenv("PIPELINES_SA_EMAIL", raising=False)
+        monkeypatch.setattr("foldrun_app.core.config.load_dotenv", lambda *a, **kw: None)
+        config = Config()
+        expected = f"pipelines-sa@{_EXPECTED['GCP_PROJECT_ID']}.iam.gserviceaccount.com"
+        assert config.pipelines_sa_email == expected
