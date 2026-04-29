@@ -48,6 +48,15 @@ resource "google_project_iam_member" "foldrun_viewer_aiplatform" {
   member  = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
+# Allow the viewer SA to act as the analysis SA when triggering Cloud Run jobs.
+# The Cloud Run v2 :run endpoint requires actAs on the job's service account
+# in addition to run.jobs.run on the job resource.
+resource "google_service_account_iam_member" "foldrun_viewer_actas_analysis" {
+  service_account_id = google_service_account.foldrun_analysis.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
 # Allow the viewer to trigger the Cloud Run analysis jobs from the UI
 resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_af2_analysis" {
   project  = var.project_id
