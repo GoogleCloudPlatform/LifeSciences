@@ -241,8 +241,14 @@ extract_terraform_outputs() {
         (
             cd "$TERRAFORM_DIR" || exit 0
             terraform init -reconfigure -input=false > /dev/null 2>&1 || exit 0
-            # terraform output exits non-zero when output is absent — always exit 0
-            _tf() { terraform output -raw "$1" 2>/dev/null || true; }
+            # terraform output exits non-zero when output is absent — always exit 0.
+            # In C locale, [:print:] covers only ASCII 0x20-0x7e, so box-drawing chars
+            # (UTF-8 multi-byte, e.g. ╷ │ ╵) and ANSI escape sequences (\x1b) are
+            # filtered out before the value reaches the env file.
+            _tf() { terraform output -raw "$1" 2>/dev/null \
+                | LC_ALL=C grep -v '^[^[:print:]]' \
+                | head -1 \
+                || true; }
             v=$(_tf gcs_bucket_name);        if [[ -n "$v" ]]; then echo "GCS_BUCKET=$v"; fi
             v=$(_tf artifact_registry_repo); if [[ -n "$v" ]]; then echo "AR_REPO=$v"; fi
             v=$(_tf filestore_id);           if [[ -n "$v" ]]; then echo "FILESTORE_ID=$v"; fi
