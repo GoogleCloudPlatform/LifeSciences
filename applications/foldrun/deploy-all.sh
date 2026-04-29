@@ -231,18 +231,21 @@ extract_terraform_outputs() {
     export NETWORK_ID="${NETWORK_ID:-}"
     export NETWORK_PROJECT_NUMBER="${NETWORK_PROJECT_NUMBER:-}"
 
-    # If terraform is available and state exists, cross-check and prefer its outputs
-    # (useful immediately after --steps infra when non-default names may have been used)
+    # If terraform is available, cross-check naming-convention defaults against
+    # actual state outputs (important for Shared VPC and custom resource names).
+    # Uses terraform output -json which is stable and safe to machine-parse —
+    # no box-drawing chars or ANSI codes, returns {} cleanly on empty state.
     if command -v terraform &>/dev/null; then
-        # Run terraform output cross-check in a subshell to prevent any
-        # terraform failures from propagating to the parent shell under set -e.
-        # Exports are written to a temp file and sourced back.
         _tf_env=$(mktemp)
         (
             cd "$TERRAFORM_DIR" || exit 0
             terraform init -reconfigure -input=false > /dev/null 2>&1 || exit 0
-            # terraform output exits non-zero when output is absent — always exit 0
-            _tf() { terraform output -raw "$1" 2>/dev/null || true; }
+            # -json outputs a stable JSON object; empty state returns {}
+            tf_json=$(terraform output -json 2>/dev/null) || tf_json="{}"
+            # Extract each key if present and non-null in the JSON
+            _tf() { echo "$tf_json" | python3 -c \
+                "import json,sys; d=json.load(sys.stdin); v=d.get('$1',{}).get('value',''); print(v) if v else None" \
+                2>/dev/null || true; }
             v=$(_tf gcs_bucket_name);        if [[ -n "$v" ]]; then echo "GCS_BUCKET=$v"; fi
             v=$(_tf artifact_registry_repo); if [[ -n "$v" ]]; then echo "AR_REPO=$v"; fi
             v=$(_tf filestore_id);           if [[ -n "$v" ]]; then echo "FILESTORE_ID=$v"; fi
@@ -254,9 +257,6 @@ extract_terraform_outputs() {
             v=$(_tf network_id);             if [[ -n "$v" ]]; then echo "NETWORK_ID=$v"; fi
             v=$(_tf network_project_number); if [[ -n "$v" ]]; then echo "NETWORK_PROJECT_NUMBER=$v"; fi
         ) > "$_tf_env" 2>/dev/null || true
-        # Source any values that terraform provided, overriding naming-convention defaults.
-        # Only export keys that are valid shell identifiers (letters/digits/underscores,
-        # not starting with a digit) to guard against terraform warning lines leaking in.
         while IFS='=' read -r key val; do
             [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="$val"
         done < "$_tf_env"
