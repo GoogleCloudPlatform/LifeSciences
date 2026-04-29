@@ -215,22 +215,31 @@ extract_terraform_outputs() {
     # If terraform is available and state exists, cross-check and prefer its outputs
     # (useful immediately after --steps infra when non-default names may have been used)
     if command -v terraform &>/dev/null; then
-        cd "$TERRAFORM_DIR"
-        if terraform init -reconfigure -input=false > /dev/null 2>&1; then
-            _tf() { terraform output -raw "$1" 2>/dev/null; }
-            v=$(_tf gcs_bucket_name);       [[ -n "$v" ]] && export GCS_BUCKET="$v"
-            v=$(_tf artifact_registry_repo); [[ -n "$v" ]] && export AR_REPO="$v"
-            v=$(_tf filestore_id);           [[ -n "$v" ]] && export FILESTORE_ID="$v"
-            v=$(_tf agent_sa_email);         [[ -n "$v" ]] && export AGENT_SA_EMAIL="$v"
-            v=$(_tf build_sa_email);         [[ -n "$v" ]] && export BUILD_SA_EMAIL="$v"
-            v=$(_tf pipelines_sa_email);     [[ -n "$v" ]] && export PIPELINES_SA_EMAIL="$v"
-            v=$(_tf databases_bucket_name);  [[ -n "$v" ]] && export DATABASES_BUCKET="$v"
-            v=$(_tf subnet_id);              [[ -n "$v" ]] && export SUBNET_ID="$v"
-            v=$(_tf network_id);             [[ -n "$v" ]] && export NETWORK_ID="$v"
-            v=$(_tf network_project_number); [[ -n "$v" ]] && export NETWORK_PROJECT_NUMBER="$v"
-            unset -f _tf
-        fi
-        cd ..
+        # Run terraform output cross-check in a subshell to prevent any
+        # terraform failures from propagating to the parent shell under set -e.
+        # Exports are written to a temp file and sourced back.
+        _tf_env=$(mktemp)
+        (
+            cd "$TERRAFORM_DIR" || exit 0
+            terraform init -reconfigure -input=false > /dev/null 2>&1 || exit 0
+            # terraform output exits non-zero when output is absent — always exit 0
+            _tf() { terraform output -raw "$1" 2>/dev/null || true; }
+            v=$(_tf gcs_bucket_name);        if [[ -n "$v" ]]; then echo "GCS_BUCKET=$v"; fi
+            v=$(_tf artifact_registry_repo); if [[ -n "$v" ]]; then echo "AR_REPO=$v"; fi
+            v=$(_tf filestore_id);           if [[ -n "$v" ]]; then echo "FILESTORE_ID=$v"; fi
+            v=$(_tf agent_sa_email);         if [[ -n "$v" ]]; then echo "AGENT_SA_EMAIL=$v"; fi
+            v=$(_tf build_sa_email);         if [[ -n "$v" ]]; then echo "BUILD_SA_EMAIL=$v"; fi
+            v=$(_tf pipelines_sa_email);     if [[ -n "$v" ]]; then echo "PIPELINES_SA_EMAIL=$v"; fi
+            v=$(_tf databases_bucket_name);  if [[ -n "$v" ]]; then echo "DATABASES_BUCKET=$v"; fi
+            v=$(_tf subnet_id);              if [[ -n "$v" ]]; then echo "SUBNET_ID=$v"; fi
+            v=$(_tf network_id);             if [[ -n "$v" ]]; then echo "NETWORK_ID=$v"; fi
+            v=$(_tf network_project_number); if [[ -n "$v" ]]; then echo "NETWORK_PROJECT_NUMBER=$v"; fi
+        ) > "$_tf_env" 2>/dev/null || true
+        # Source any values that terraform provided, overriding naming-convention defaults
+        while IFS='=' read -r key val; do
+            [[ -n "$key" ]] && export "$key"="$val"
+        done < "$_tf_env"
+        rm -f "$_tf_env"
     fi
 
     echo "Configuration:"
