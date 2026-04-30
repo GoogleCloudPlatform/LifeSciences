@@ -14,7 +14,7 @@
 """KFP component that generates seed configs for OF3 ParallelFor.
 
 Lightweight CPU component — generates seed values matching OF3's internal
-seed generation logic (random.seed(42), then N random ints).
+seed generation logic (random.seed(base_seed), then N random ints).
 """
 
 from typing import NamedTuple
@@ -27,6 +27,7 @@ from kfp import dsl
 )
 def configure_seeds_of3(
     num_model_seeds: int,
+    base_seed: int,
 ) -> NamedTuple(
     "ConfigureSeedsOutputs",
     [
@@ -35,14 +36,14 @@ def configure_seeds_of3(
 ):
     """Generate seed configs for ParallelFor.
 
-    Matches OF3's internal seed generation: random.seed(42), then
+    Matches OF3's internal seed generation: random.seed(base_seed), then
     N random ints from [0, 2^32).
     """
     import random
     from collections import namedtuple
 
     # Match OF3's seed generation logic from experiment_runner.py
-    random.seed(42)
+    random.seed(base_seed)
     seeds = [random.randint(0, 2**32 - 1) for _ in range(num_model_seeds)]
 
     seed_configs = [{"seed_value": s} for s in seeds]

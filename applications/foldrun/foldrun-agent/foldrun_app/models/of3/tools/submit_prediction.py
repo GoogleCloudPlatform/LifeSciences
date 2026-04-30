@@ -59,6 +59,11 @@ class OF3SubmitPredictionTool(OF3Tool):
         enable_flex_start = arguments.get("enable_flex_start", True)
         use_templates = arguments.get("use_templates", True)
 
+        import random
+        base_seed = arguments.get("base_seed")
+        if base_seed is None:
+            base_seed = random.randint(0, 2**32 - 1)
+
         # Determine input type and load content
         is_gcs = isinstance(input_data, str) and input_data.startswith("gs://")
         is_file = os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
@@ -169,6 +174,7 @@ class OF3SubmitPredictionTool(OF3Tool):
                 "num_model_seeds": num_model_seeds,
                 "num_diffusion_samples": num_diffusion_samples,
                 "use_templates": use_templates,
+                "base_seed": base_seed,
             },
             "enable_caching": True,
             "labels": labels,
@@ -205,6 +211,7 @@ class OF3SubmitPredictionTool(OF3Tool):
                 "num_model_seeds": num_model_seeds,
                 "num_diffusion_samples": num_diffusion_samples,
                 "use_templates": use_templates,
+                "base_seed": base_seed,
             },
             "hardware": {
                 "msa_pipeline": f"{hardware_config['msa_machine']} (CPU-only, Jackhmmer/nhmmer{', +pdb_seqres template search' if use_templates else ''})",

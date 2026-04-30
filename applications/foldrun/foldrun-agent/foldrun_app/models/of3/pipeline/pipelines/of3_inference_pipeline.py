@@ -60,6 +60,7 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
         num_model_seeds: int = 5,
         num_diffusion_samples: int = 5,
         use_templates: bool = True,
+        base_seed: int = 42,
     ):
         """OpenFold3 Inference Pipeline.
 
@@ -75,6 +76,7 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
         # Step 1: Generate seed configs for ParallelFor
         configure_seeds_task = ConfigureSeedsOF3(  # type: ignore
             num_model_seeds=num_model_seeds,
+            base_seed=base_seed,
         ).set_display_name("Configure OF3 Seeds")
 
         # Step 2: MSA pipeline — CPU-only, NFS-mounted databases
