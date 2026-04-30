@@ -36,6 +36,7 @@ COPY --from=builder /install /usr/local
 # Copy application files
 COPY app.py .
 COPY templates/ templates/
+COPY static/ static/
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app && chmod o+w /app
