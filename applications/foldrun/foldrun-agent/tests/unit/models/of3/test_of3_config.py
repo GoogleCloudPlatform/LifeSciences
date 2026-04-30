@@ -72,7 +72,7 @@ class TestOF3Config:
         from foldrun_app.models.of3.config import OF3Config
 
         config = OF3Config()
-        assert config.params_path == "of3/params/of3_ft3_v1.pt"
+        assert config.params_path == "of3/params/of3-p2-155k.pt"
 
     def test_config_to_dict(self):
         from foldrun_app.models.of3.config import OF3Config

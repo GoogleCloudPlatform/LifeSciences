@@ -414,7 +414,7 @@ substitutions:
   _AGENT_SA_EMAIL: required_sa_email
   _PIPELINES_SA_EMAIL: required_pipelines_sa_email
   _AF2_VERSION: "42719e135a62438aa651d2bc1d143626083c3703"
-  _OF3_VERSION: "0.3.1"
+  _OF3_VERSION: "0.4.0"
   _BOLTZ_VERSION: "2.2.1"
   _BUILD_TARGET: "all"
 timeout: 3600s

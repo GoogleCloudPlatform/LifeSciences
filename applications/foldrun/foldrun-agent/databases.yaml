@@ -261,7 +261,7 @@ databases:
     nfs_path: of3/params
     script: |
       apt-get install -y awscli
-      aws s3 cp --no-sign-request s3://openfold/openfold3_params/of3_ft3_v1.pt {dest}/of3_ft3_v1.pt
+      aws s3 cp --no-sign-request s3://openfold3-data/openfold3-parameters/of3-p2-155k.pt {dest}/of3-p2-155k.pt
 
   of3_ccd:
     models: [of3]

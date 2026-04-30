@@ -55,7 +55,7 @@ usage() {
     echo "Environment variables:"
     echo "  DOWNLOAD_MODE      Database download mode: reduced (default) or full"
     echo "  AF2_VERSION        AlphaFold2 git commit to build (default: pinned commit)"
-    echo "  OF3_VERSION        OpenFold3 Docker image tag to use (default: 0.3.1)"
+    echo "  OF3_VERSION        OpenFold3 Docker image tag to use (default: 0.4.0)"
     echo "  BOLTZ_VERSION      Boltz-2 pip package version to install (default: 2.2.1)"
     echo ""
     echo "  The following override the auto-detected naming conventions for"
@@ -162,7 +162,7 @@ PROJECT_ID=${POSITIONAL_ARGS[0]:-$(gcloud config get-value project)}
 REGION=${POSITIONAL_ARGS[1]:-"us-central1"}
 DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
 AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
-OF3_VERSION=${OF3_VERSION:-"0.3.1"}
+OF3_VERSION=${OF3_VERSION:-"0.4.0"}
 BOLTZ_VERSION=${BOLTZ_VERSION:-"2.2.1"}
 IAP_ACCESS_DOMAIN=${IAP_ACCESS_DOMAIN:-$(gcloud config get-value account | awk -F '@' '{print $2}')}
 TERRAFORM_DIR="terraform"

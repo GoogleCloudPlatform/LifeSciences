@@ -53,7 +53,7 @@ class OF3Config(CoreConfig):
         OF3's checkpoint loader treats directories as DeepSpeed checkpoints
         requiring a 'latest' pointer file.
         """
-        return os.getenv("OF3_PARAMS_PATH", "of3/params/of3_ft3_v1.pt")
+        return os.getenv("OF3_PARAMS_PATH", "of3/params/of3-p2-155k.pt")
 
     @property
     def ccd_path(self) -> str:

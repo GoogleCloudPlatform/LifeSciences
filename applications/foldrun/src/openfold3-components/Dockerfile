@@ -1,4 +1,4 @@
-ARG OF3_VERSION="0.3.1"
+ARG OF3_VERSION="0.4.0"
 FROM openfoldconsortium/openfold3:${OF3_VERSION}
 
 # The base OF3 image installs jackhmmer via conda (at /opt/conda/bin/jackhmmer).
