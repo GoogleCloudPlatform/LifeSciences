@@ -498,7 +498,8 @@ def job_quality(job_id):
     """
     try:
         summary = get_analysis_summary(job_id=job_id)
-        qm = summary.get("quality_metrics", {})
+        # quality_metrics is nested under summary["summary"], not at the root
+        qm = summary.get("summary", {}).get("quality_metrics", {})
         return jsonify({
             "quality_assessment": qm.get("quality_assessment", ""),
             "best_model_plddt": qm.get("best_model_plddt"),
