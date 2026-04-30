@@ -132,10 +132,11 @@
         .jobs-error { color: #c5221f; }
 
         .job-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: 82px 90px 78px 1fr 64px 150px;
             align-items: center;
-            gap: 12px;
-            padding: 14px 18px;
+            gap: 10px;
+            padding: 12px 18px;
             border-bottom: 1px solid #f1f3f4;
             transition: background 0.15s;
         }
@@ -468,7 +469,8 @@
                     actionBtn = `<a class="view-btn disabled" href="#">View</a>`;
                 }
 
-                const qualityEl = j.has_analysis
+                const showQuality = j.has_analysis && j.state === 'PIPELINE_STATE_SUCCEEDED';
+                const qualityEl = showQuality
                     ? `<span class="quality-loading" id="quality-${j.job_id}">…</span>`
                     : `<span></span>`;
 
@@ -488,8 +490,10 @@
                     `<button class="load-more-btn" onclick="loadMore()">Load more</button>`);
             }
 
-            // Lazy-load quality badges for analyzed jobs
-            filtered.filter(j => j.has_analysis).forEach(j => loadQuality(j.job_id));
+            // Lazy-load quality badges — succeeded jobs with analysis only
+            filtered
+                .filter(j => j.has_analysis && j.state === 'PIPELINE_STATE_SUCCEEDED')
+                .forEach(j => loadQuality(j.job_id));
         }
 
         async function analyzeJob(jobId, modelType, btn) {
