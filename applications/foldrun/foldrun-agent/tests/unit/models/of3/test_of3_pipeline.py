@@ -139,8 +139,8 @@ class TestOF3MSAPipelineSource:
     def test_msa_writes_to_nfs(self):
         """MSA pipeline writes MSA files to NFS-shared directory."""
         source = self._read_msa_source()
-        assert "nfs_msa_base" in source
-        assert "of3_msas" in source
+        assert "nfs_msa_cache_base" in source
+        assert "of3_msas_cache" in source
         assert "uuid" in source
 
     def test_msa_runs_jackhmmer_uniref90_and_mgnify(self):

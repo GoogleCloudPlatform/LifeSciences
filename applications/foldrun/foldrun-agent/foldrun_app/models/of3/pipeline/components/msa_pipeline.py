@@ -43,6 +43,8 @@ def msa_pipeline_of3(
     import subprocess
     import time
     import uuid
+    import hashlib
+    import shutil
 
     logging.basicConfig(level=logging.INFO)
     logging.info("Starting OF3 MSA pipeline")
@@ -59,17 +61,15 @@ def msa_pipeline_of3(
     mgnify_path = os.path.join(mount_path, ref_databases.metadata["mgnify"])
     pdb_seqres_path = os.path.join(mount_path, ref_databases.metadata["pdb_seqres"])
     rfam_path = os.path.join(mount_path, ref_databases.metadata.get("rfam", ""))
-    rnacentral_path = os.path.join(
-        mount_path, ref_databases.metadata.get("rnacentral", "")
-    )
+    rnacentral_path = os.path.join(mount_path, ref_databases.metadata.get("rnacentral", ""))
 
-    # Write MSA output files to NFS so the predict task (same NFS mount) can read them.
-    # A UUID ensures uniqueness across concurrent pipeline runs.
+    # Cache & Temp directories on NFS
+    nfs_msa_cache_base = os.path.join(mount_path, "of3_msas_cache")
+    nfs_msa_tmp_base = os.path.join(mount_path, "of3_msas_tmp")
+    os.makedirs(nfs_msa_cache_base, exist_ok=True)
+    os.makedirs(nfs_msa_tmp_base, exist_ok=True)
+
     run_id = str(uuid.uuid4())[:12]
-    nfs_msa_base = os.path.join(mount_path, "of3_msas", run_id)
-    os.makedirs(nfs_msa_base, exist_ok=True)
-    logging.info(f"MSA output directory on NFS: {nfs_msa_base}")
-
     num_msa_chains = 0
     num_template_chains = 0
 
@@ -87,7 +87,54 @@ def msa_pipeline_of3(
 
             # Unique key for this chain's MSA directory
             seq_key = f"{query_name}_{chain_id}"
-            seq_dir = os.path.join(nfs_msa_base, seq_key)
+
+            if seq_type not in ("protein", "rna"):
+                logging.info(f"Skipping MSA for {seq_type} chain {seq_key}")
+                continue
+
+            sequence = chain.get("sequence", "")
+            if not sequence:
+                logging.warning(f"Empty sequence for chain {seq_key}, skipping MSA")
+                continue
+
+            seq_hash = hashlib.sha256(sequence.encode()).hexdigest()
+            seq_cache_dir = os.path.join(nfs_msa_cache_base, f"{seq_type}_{seq_hash}")
+
+            # Cache lookup
+            cache_hit = False
+            if os.path.exists(seq_cache_dir):
+                if seq_type == "protein":
+                    required_files = ["uniref90_hits.sto", "mgnify_hits.sto"]
+                    if use_templates and os.path.exists(pdb_seqres_path):
+                        required_files.append("pdb_seqres.sto")
+                elif seq_type == "rna":
+                    required_files = []
+                    if rfam_path and os.path.exists(rfam_path):
+                        required_files.append("rfam_hits.sto")
+                    if rnacentral_path and os.path.exists(rnacentral_path):
+                        required_files.append("rnacentral_hits.sto")
+                else:
+                    required_files = []
+
+                cache_hit = True
+                for f in required_files:
+                    if not os.path.exists(os.path.join(seq_cache_dir, f)):
+                        cache_hit = False
+                        break
+
+            if cache_hit:
+                logging.info(f"Cache hit for chain {seq_key} ({seq_type}_{seq_hash}). Reusing MSAs.")
+                chain["main_msa_file_paths"] = seq_cache_dir
+                num_msa_chains += 1
+                if seq_type == "protein" and use_templates and os.path.exists(pdb_seqres_path):
+                    chain["template_alignment_file_path"] = os.path.join(seq_cache_dir, "pdb_seqres.sto")
+                    num_template_chains += 1
+                continue
+
+            logging.info(
+                f"Cache miss for chain {seq_key} ({seq_type}_{seq_hash}). Generating MSAs."
+            )
+            seq_dir = os.path.join(nfs_msa_tmp_base, f"{seq_type}_{seq_hash}_{run_id}")
             os.makedirs(seq_dir, exist_ok=True)
 
             if seq_type == "protein":
@@ -99,7 +146,7 @@ def msa_pipeline_of3(
                 # Write query FASTA for HMMER tools
                 tmp_fasta = os.path.join(seq_dir, "query.fasta")
                 with open(tmp_fasta, "w") as f:
-                    f.write(f">{seq_key}\n{sequence}\n")
+                    f.write(f">{seq_type}_{seq_hash}\n{sequence}\n")
 
                 msa_files = []
 
@@ -183,14 +230,12 @@ def msa_pipeline_of3(
             elif seq_type == "rna":
                 sequence = chain.get("sequence", "")
                 if not sequence:
-                    logging.warning(
-                        f"Empty RNA sequence for chain {seq_key}, skipping MSA"
-                    )
+                    logging.warning(f"Empty RNA sequence for chain {seq_key}, skipping MSA")
                     continue
 
                 tmp_fasta = os.path.join(seq_dir, "query.fasta")
                 with open(tmp_fasta, "w") as f:
-                    f.write(f">{seq_key}\n{sequence}\n")
+                    f.write(f">{seq_type}_{seq_hash}\n{sequence}\n")
 
                 rna_files = []
 
@@ -235,6 +280,23 @@ def msa_pipeline_of3(
 
                 logging.info(f"RNA MSA complete for {seq_key}")
 
+            # Cache promotion (atomic rename to cache dir)
+            try:
+                os.rename(seq_dir, seq_cache_dir)
+                logging.info(f"Cached MSAs for {seq_type}_{seq_hash}")
+            except (FileExistsError, OSError):
+                logging.info(
+                    f"Cache already populated for {seq_type}_{seq_hash} by concurrent run or existing cache."
+                )
+                shutil.rmtree(seq_dir)
+
+            # Point to the cache directory
+            if os.path.exists(seq_cache_dir):
+                if seq_type in ("protein", "rna"):
+                    chain["main_msa_file_paths"] = seq_cache_dir
+                    if seq_type == "protein" and "template_alignment_file_path" in chain:
+                        chain["template_alignment_file_path"] = os.path.join(seq_cache_dir, "pdb_seqres.sto")
+
     # Write updated query JSON (with injected MSA and template paths)
     updated_query_json.uri = f"{updated_query_json.uri}.json"
     with open(updated_query_json.path, "w") as f:
@@ -243,7 +305,7 @@ def msa_pipeline_of3(
     updated_query_json.metadata["category"] = "updated_query_json"
     updated_query_json.metadata["msa_chains"] = num_msa_chains
     updated_query_json.metadata["template_chains"] = num_template_chains
-    updated_query_json.metadata["nfs_msa_base"] = nfs_msa_base
+    updated_query_json.metadata["nfs_msa_cache_base"] = nfs_msa_cache_base
     updated_query_json.metadata["use_templates"] = use_templates
 
     t1 = time.time()
