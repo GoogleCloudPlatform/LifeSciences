@@ -47,44 +47,12 @@ def relax(
     import shutil
 
     t0 = time.time()
+    logging.info("Starting model relaxation ...")
 
     relaxed_protein.uri = f"{relaxed_protein.uri}.pdb"
     relaxed_protein.metadata["category"] = "relaxed_protein"
     relaxed_protein.metadata["relax_failed"] = False
 
-    # Read mean pLDDT from the b-factor column of the unrelaxed PDB.
-    # AlphaFold writes per-residue pLDDT into b-factors at prediction time.
-    def _mean_plddt_from_pdb(path: str) -> float:
-        scores = []
-        with open(path) as f:
-            for line in f:
-                if line.startswith(("ATOM  ", "HETATM")):
-                    try:
-                        scores.append(float(line[60:66]))
-                    except ValueError:
-                        pass
-        return sum(scores) / len(scores) if scores else 100.0
-
-    mean_plddt = _mean_plddt_from_pdb(unrelaxed_protein.path)
-    logging.info(f"Mean pLDDT: {mean_plddt:.1f}")
-
-    # Skip relaxation for very low confidence structures (pLDDT < 50).
-    # These are too disordered for AMBER to converge meaningfully, and attempting
-    # it wastes GPU time. The fallback catch below handles unexpected failures
-    # on structures that pass this threshold but still fail to minimize.
-    if mean_plddt < 50.0:
-        warning = (
-            f"Skipping AMBER relaxation — mean pLDDT {mean_plddt:.1f} < 50 "
-            "(very low confidence; structure too disordered to relax meaningfully). "
-            "Unrelaxed structure used. pLDDT and PAE scores are unaffected."
-        )
-        logging.warning(f"RELAX_FALLBACK: {warning}")
-        shutil.copy(unrelaxed_protein.path, relaxed_protein.path)
-        relaxed_protein.metadata["relax_failed"] = True
-        relaxed_protein.metadata["relax_warning"] = warning
-        return
-
-    logging.info("Starting model relaxation ...")
     try:
         relax_protein(
             unrelaxed_protein_path=unrelaxed_protein.path,
@@ -100,8 +68,9 @@ def relax(
         logging.info(f"Model relaxation completed. Elapsed time: {t1 - t0}")
 
     except ValueError as e:
-        # AMBER minimization can fail on higher-confidence structures with
-        # locally strained geometry. Fall back to unrelaxed — still valid.
+        # AMBER minimization can fail on highly disordered structures.
+        # Fall back to the unrelaxed structure so the pipeline doesn't fail —
+        # the unrelaxed PDB is still scientifically valid for downstream analysis.
         t1 = time.time()
         warning = (
             f"AMBER relaxation failed after {t1 - t0:.1f}s: {e}. "
