@@ -48,8 +48,8 @@ echo "Credentials: $ADC_FILE"
 echo ""
 
 if [ "$BUILD" = true ]; then
-  echo "Building image from local source..."
-  docker build -t "$LOCAL_IMAGE" "$(dirname "$0")"
+  echo "Building image from local source (no cache)..."
+  docker build --no-cache -t "$LOCAL_IMAGE" "$(dirname "$0")"
   IMAGE="$LOCAL_IMAGE"
 else
   echo "Configuring Docker for Artifact Registry..."
