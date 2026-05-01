@@ -161,3 +161,11 @@ class TestBOLTZ2MSAPipelineSource:
         source = self._read_msa_source()
         assert "FileExistsError" in source
         assert "shutil.rmtree" in source
+
+    def test_msa_strips_intermediates_before_cache_promotion(self):
+        """Intermediates are deleted before rename so cache entry only contains combined.a3m."""
+        source = self._read_msa_source()
+        assert "os.remove(intermediate)" in source
+        # All five intermediates must be listed for removal
+        for name in ("tmp_fasta", "uniref90_sto", "uniref90_a3m", "mgnify_sto", "mgnify_a3m"):
+            assert name in source

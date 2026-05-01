@@ -199,6 +199,15 @@ def msa_pipeline_boltz2(
 
         logging.info(f"Protein MSA complete for {seq_id}")
 
+        # Strip intermediates — only combined.a3m is needed for future cache hits.
+        # Removes query.fasta, uniref90.sto, uniref90.a3m, mgnify.sto, mgnify.a3m
+        # before the rename so the cache entry stays lean (~50–100 MB vs ~300–400 MB).
+        for intermediate in (tmp_fasta, uniref90_sto, uniref90_a3m, mgnify_sto, mgnify_a3m):
+            try:
+                os.remove(intermediate)
+            except OSError:
+                pass
+
         # Cache promotion: atomic rename so concurrent runs don't corrupt the cache
         try:
             os.rename(seq_dir, seq_cache_dir)
