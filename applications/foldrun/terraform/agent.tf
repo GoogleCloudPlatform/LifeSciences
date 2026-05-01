@@ -52,6 +52,12 @@ resource "google_storage_bucket_iam_member" "foldrun_agent_bucket_access" {
   member = "serviceAccount:${google_service_account.agent_sa.email}"
 }
 
+resource "google_storage_bucket_iam_member" "foldrun_agent_databases_bucket_access" {
+  bucket = google_storage_bucket.databases_bucket.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.agent_sa.email}"
+}
+
 # ==============================================================================
 # Agent Runtime Deployment
 # ==============================================================================

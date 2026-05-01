@@ -51,6 +51,17 @@ class OF3SubmitPredictionTool(OF3Tool):
         Returns:
             Job submission details.
         """
+        # Pre-flight check for OF3 parameters in GCS
+        bucket = self.storage_client.bucket(self.config.databases_bucket_name)
+        if not bucket.blob(self.config.params_path).exists():
+            return {
+                "status": "error",
+                "message": (
+                    f"OpenFold3 parameters file ({self.config.params_path}) was not found in GCS bucket gs://{self.config.databases_bucket_name}. "
+                    f"Please update your data using `./deploy-all.sh {self.config.project_id} --steps data --db of3_params --force`"
+                )
+            }
+
         input_data = arguments.get("input")
         job_name = arguments.get("job_name", f"of3_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         num_model_seeds = arguments.get("num_model_seeds", 1)
