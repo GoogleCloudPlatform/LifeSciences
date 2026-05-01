@@ -54,6 +54,11 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         gpu_type = arguments.get("gpu_type", "auto")
         enable_flex_start = arguments.get("enable_flex_start", True)
 
+        import random
+        base_seed = arguments.get("base_seed")
+        if base_seed is None:
+            base_seed = random.randint(0, 2**32 - 1)
+
         # Determine input type and load content
         is_gcs = isinstance(input_data, str) and input_data.startswith("gs://")
         is_file = os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
@@ -167,6 +172,7 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
                 "nfs_cache_path": f"{self.config.nfs_mount_point}/{self.config.cache_path}",
                 "num_model_seeds": num_model_seeds,
                 "num_diffusion_samples": num_diffusion_samples,
+                "base_seed": base_seed,
             },
             "enable_caching": True,
             "labels": labels,
@@ -211,6 +217,7 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
                 "molecule_types": mol_types,
                 "num_model_seeds": num_model_seeds,
                 "num_diffusion_samples": num_diffusion_samples,
+                "base_seed": base_seed,
             },
             "hardware": {
                 "msa_pipeline": f"{hardware_config['msa_machine']} (CPU-only, Jackhmmer protein MSA)",

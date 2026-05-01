@@ -13,8 +13,7 @@
 # limitations under the License.
 """KFP component that generates seed configs for BOLTZ2 ParallelFor.
 
-Lightweight CPU component — generates seed values matching BOLTZ2's internal
-seed generation logic (random.seed(42), then N random ints).
+Lightweight CPU component — generates seed values from a configurable base seed.
 """
 
 from typing import NamedTuple
@@ -27,6 +26,7 @@ from kfp import dsl
 )
 def configure_seeds_boltz2(
     num_model_seeds: int,
+    base_seed: int,
 ) -> NamedTuple(
     "ConfigureSeedsOutputs",
     [
@@ -35,14 +35,14 @@ def configure_seeds_boltz2(
 ):
     """Generate seed configs for ParallelFor.
 
-    Matches BOLTZ2's internal seed generation: random.seed(42), then
-    N random ints from [0, 2^32).
+    Uses random.seed(base_seed), then N random ints from [0, 2^32).
+    base_seed is randomized per run by submit_prediction so independent
+    jobs explore different regions of conformational space.
     """
     import random
     from collections import namedtuple
 
-    # Match BOLTZ2's seed generation logic from experiment_runner.py
-    random.seed(42)
+    random.seed(base_seed)
     seeds = [random.randint(0, 2**32 - 1) for _ in range(num_model_seeds)]
 
     seed_configs = [{"seed_value": s} for s in seeds]

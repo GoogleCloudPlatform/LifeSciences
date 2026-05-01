@@ -50,6 +50,7 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
         nfs_cache_path: str,
         num_model_seeds: int = 5,
         num_diffusion_samples: int = 5,
+        base_seed: int = 42,
     ):
         """Boltz2 Inference Pipeline.
 
@@ -59,6 +60,7 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
         # Step 1: Generate seed configs for ParallelFor
         configure_seeds_task = ConfigureSeedsBOLTZ2(  # type: ignore
             num_model_seeds=num_model_seeds,
+            base_seed=base_seed,
         ).set_display_name("Configure BOLTZ2 Seeds")
 
         # Step 2: MSA pipeline — CPU-only, NFS-mounted databases
