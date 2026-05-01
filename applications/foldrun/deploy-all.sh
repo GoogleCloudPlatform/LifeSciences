@@ -369,10 +369,14 @@ if $run_data; then
         FORCE_ARG="--force"
     fi
 
-    # If GCS_SOURCE_BUCKET is already set (e.g., from env), use it directly
+    # If GCS_SOURCE_BUCKET is already set (e.g., from env), use it directly.
+    # If a specific --db target is given, skip the menu and download from internet.
     if [[ -n "${GCS_SOURCE_BUCKET:-}" ]]; then
         echo "Restoring databases from GCS: gs://${GCS_SOURCE_BUCKET}/"
         uv run python scripts/setup_data.py $DB_ARG $FORCE_ARG --source-bucket "$GCS_SOURCE_BUCKET"
+    elif [[ -n "$DB_NAME" ]]; then
+        echo "Downloading $DB_NAME from internet..."
+        uv run python scripts/setup_data.py $DB_ARG $FORCE_ARG
     else
         echo ""
         echo "================================================================================"
