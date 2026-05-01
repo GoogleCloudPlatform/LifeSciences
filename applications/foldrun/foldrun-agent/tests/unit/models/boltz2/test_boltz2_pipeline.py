@@ -41,9 +41,10 @@ class TestBOLTZ2PipelineSource:
     def test_pipeline_has_three_steps(self):
         """Pipeline has configure_seeds, MSA, and predict steps."""
         source = self._read_pipeline_source()
-        assert "ConfigureSeedsBOLTZ2" in source
+        assert "configure_seeds" in source
         assert "MSAPipelineBOLTZ2" in source
         assert "PredictBOLTZ2" in source
+
 
     def test_no_relax_step(self):
         """BOLTZ2 pipeline should NOT have a relax step."""

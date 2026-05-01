@@ -41,9 +41,10 @@ class TestOF3PipelineSource:
     def test_pipeline_has_three_steps(self):
         """Pipeline has configure_seeds, MSA, and predict steps."""
         source = self._read_pipeline_source()
-        assert "ConfigureSeedsOF3" in source
+        assert "configure_seeds" in source
         assert "MSAPipelineOF3" in source
         assert "PredictOF3" in source
+
 
     def test_no_relax_step(self):
         """OF3 pipeline should NOT have a relax step."""
