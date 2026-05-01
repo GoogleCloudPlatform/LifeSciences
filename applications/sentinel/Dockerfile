@@ -21,7 +21,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Build the API
-FROM python:3.12-slim AS build-api
+FROM python:3.14-slim AS build-api
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Omit development dependencies
@@ -40,7 +40,7 @@ COPY api ./api
 RUN uv sync
 
 # Stage 3: Final image without uv
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Create non-root user
 RUN groupadd --system --gid 999 nonroot \
