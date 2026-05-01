@@ -1,4 +1,4 @@
-a2a-sdk[http-server]>=0.3.4,<1.0.0
+a2a-sdk[http-server]>=1.0.2,<1.1.0
 google-cloud-aiplatform[agent_engines]>=1.143.0
 uvicorn>=0.27.0
 starlette>=0.36.3
