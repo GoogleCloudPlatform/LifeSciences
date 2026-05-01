@@ -28,13 +28,25 @@ def msa_pipeline_boltz2(
 
     Protein chains: Jackhmmer against uniref90, mgnify → combined .a3m injected as msa: field.
     RNA, DNA, ligand chains: no MSA — Boltz-2 schema only supports msa: for protein.
+
+    MSA files are written to a sequence-hash-keyed directory on NFS so that:
+    - The predict task (which mounts the same NFS) can read the embedded paths.
+    - Identical sequences reuse cached MSAs across pipeline runs (cache hit = no jackhmmer).
+
+    Cache layout on NFS:
+      boltz2_msas_cache/protein_<sha256>/combined.a3m   ← canonical cache entry
+      boltz2_msas_tmp/protein_<sha256>_<run_id>/        ← in-progress temp dir (atomic rename)
     """
     import yaml
     import logging
     import os
     import subprocess
     import time
+    import uuid
+    import hashlib
+    import shutil
 
+    logging.basicConfig(level=logging.INFO)
     logging.info("Starting BOLTZ2 MSA pipeline")
     t0 = time.time()
 
@@ -95,79 +107,111 @@ def msa_pipeline_boltz2(
     uniref90_path = os.path.join(mount_path, ref_databases.metadata["uniref90"])
     mgnify_path = os.path.join(mount_path, ref_databases.metadata["mgnify"])
 
-    # Output directory for MSA files
-    msa_output_dir = os.path.join(os.path.dirname(updated_query_json.path), "msas")
-    os.makedirs(msa_output_dir, exist_ok=True)
+    # Cache & Temp directories on NFS
+    nfs_msa_cache_base = os.path.join(mount_path, "boltz2_msas_cache")
+    nfs_msa_tmp_base = os.path.join(mount_path, "boltz2_msas_tmp")
+    os.makedirs(nfs_msa_cache_base, exist_ok=True)
+    os.makedirs(nfs_msa_tmp_base, exist_ok=True)
 
-    # Process each sequence in the query
-    msa_file_paths = {}
+    run_id = str(uuid.uuid4())[:12]
+    num_msa_sequences = 0
+
     for i, seq_entry in enumerate(query_data.get("sequences", [])):
-        if "protein" in seq_entry:
-            prot_data = seq_entry["protein"]
-            seq_id = prot_data.get("id", f"seq_{i}")
-            if isinstance(seq_id, list):
-                seq_id = seq_id[0]  # handle [A, B] identical chains
+        if "protein" not in seq_entry:
+            # RNA, DNA, and ligand chains: no msa: injection (not supported by Boltz-2 schema)
+            continue
 
-            # Run jackhmmer for protein sequences
-            seq_msa_dir = os.path.join(msa_output_dir, str(seq_id))
-            os.makedirs(seq_msa_dir, exist_ok=True)
+        prot_data = seq_entry["protein"]
+        seq_id = prot_data.get("id", f"seq_{i}")
+        if isinstance(seq_id, list):
+            seq_id = seq_id[0]  # handle [A, B] identical chains
 
-            # Write sequence to tmp FASTA
-            tmp_fasta = os.path.join(seq_msa_dir, f"{seq_id}.fasta")
-            with open(tmp_fasta, "w") as f:
-                f.write(f">{seq_id}\n{prot_data['sequence']}\n")
+        sequence = prot_data.get("sequence", "")
+        if not sequence:
+            logging.warning(f"Empty sequence for chain {seq_id}, skipping MSA")
+            continue
 
-            # Jackhmmer against uniref90
-            uniref90_sto = os.path.join(seq_msa_dir, "uniref90.sto")
-            uniref90_a3m = os.path.join(seq_msa_dir, "uniref90.a3m")
-            subprocess.run(
-                [
-                    "jackhmmer",
-                    "--noali",
-                    "-N",
-                    "1",
-                    "--cpu",
-                    "8",
-                    "-A",
-                    uniref90_sto,
-                    tmp_fasta,
-                    uniref90_path,
-                ],
-                check=True,
+        seq_hash = hashlib.sha256(sequence.encode()).hexdigest()
+        seq_cache_dir = os.path.join(nfs_msa_cache_base, f"protein_{seq_hash}")
+
+        # Cache lookup: combined.a3m is the canonical output for a Boltz2 protein MSA
+        if os.path.exists(os.path.join(seq_cache_dir, "combined.a3m")):
+            logging.info(f"Cache hit for chain {seq_id} (protein_{seq_hash}). Reusing MSA.")
+            prot_data["msa"] = os.path.join(seq_cache_dir, "combined.a3m")
+            num_msa_sequences += 1
+            continue
+
+        logging.info(f"Cache miss for chain {seq_id} (protein_{seq_hash}). Generating MSA.")
+        seq_dir = os.path.join(nfs_msa_tmp_base, f"protein_{seq_hash}_{run_id}")
+        os.makedirs(seq_dir, exist_ok=True)
+
+        # Write sequence to tmp FASTA
+        tmp_fasta = os.path.join(seq_dir, "query.fasta")
+        with open(tmp_fasta, "w") as f:
+            f.write(f">protein_{seq_hash}\n{sequence}\n")
+
+        # Jackhmmer against uniref90
+        uniref90_sto = os.path.join(seq_dir, "uniref90.sto")
+        uniref90_a3m = os.path.join(seq_dir, "uniref90.a3m")
+        subprocess.run(
+            [
+                "jackhmmer",
+                "--noali",
+                "-N",
+                "1",
+                "--cpu",
+                "8",
+                "-A",
+                uniref90_sto,
+                tmp_fasta,
+                uniref90_path,
+            ],
+            check=True,
+        )
+        sto_to_a3m(uniref90_sto, uniref90_a3m)
+
+        # Jackhmmer against mgnify
+        mgnify_sto = os.path.join(seq_dir, "mgnify.sto")
+        mgnify_a3m = os.path.join(seq_dir, "mgnify.a3m")
+        subprocess.run(
+            [
+                "jackhmmer",
+                "--noali",
+                "-N",
+                "1",
+                "--cpu",
+                "8",
+                "-A",
+                mgnify_sto,
+                tmp_fasta,
+                mgnify_path,
+            ],
+            check=True,
+        )
+        sto_to_a3m(mgnify_sto, mgnify_a3m)
+
+        # Combine A3M files
+        combined_a3m = os.path.join(seq_dir, "combined.a3m")
+        with open(combined_a3m, "w") as fout:
+            with open(uniref90_a3m) as fin1, open(mgnify_a3m) as fin2:
+                fout.write(fin1.read())
+                fout.write(fin2.read())
+
+        logging.info(f"Protein MSA complete for {seq_id}")
+
+        # Cache promotion: atomic rename so concurrent runs don't corrupt the cache
+        try:
+            os.rename(seq_dir, seq_cache_dir)
+            logging.info(f"Cached MSA for protein_{seq_hash}")
+        except (FileExistsError, OSError):
+            logging.info(
+                f"Cache already populated for protein_{seq_hash} by concurrent run or existing cache."
             )
-            sto_to_a3m(uniref90_sto, uniref90_a3m)
+            shutil.rmtree(seq_dir)
 
-            # Jackhmmer against mgnify
-            mgnify_sto = os.path.join(seq_msa_dir, "mgnify.sto")
-            mgnify_a3m = os.path.join(seq_msa_dir, "mgnify.a3m")
-            subprocess.run(
-                [
-                    "jackhmmer",
-                    "--noali",
-                    "-N",
-                    "1",
-                    "--cpu",
-                    "8",
-                    "-A",
-                    mgnify_sto,
-                    tmp_fasta,
-                    mgnify_path,
-                ],
-                check=True,
-            )
-            sto_to_a3m(mgnify_sto, mgnify_a3m)
-
-            # Combine A3M files
-            combined_a3m = os.path.join(seq_msa_dir, "combined.a3m")
-            with open(combined_a3m, "w") as fout:
-                with open(uniref90_a3m) as fin1, open(mgnify_a3m) as fin2:
-                    fout.write(fin1.read())
-                    fout.write(fin2.read())
-
-            prot_data["msa"] = combined_a3m
-            msa_file_paths[str(seq_id)] = combined_a3m
-            logging.info(f"Protein MSA complete for {seq_id}")
-        # RNA, DNA, and ligand chains: no msa: injection (not supported by Boltz-2 schema)
+        if os.path.exists(os.path.join(seq_cache_dir, "combined.a3m")):
+            prot_data["msa"] = os.path.join(seq_cache_dir, "combined.a3m")
+            num_msa_sequences += 1
 
     # Write updated query YAML
     updated_query_json.uri = f"{updated_query_json.uri}.yaml"
@@ -175,7 +219,12 @@ def msa_pipeline_boltz2(
         yaml.dump(query_data, f)
 
     updated_query_json.metadata["category"] = "updated_query_json"
-    updated_query_json.metadata["msa_sequences"] = len(msa_file_paths)
+    updated_query_json.metadata["msa_sequences"] = num_msa_sequences
+    updated_query_json.metadata["nfs_msa_cache_base"] = nfs_msa_cache_base
 
     t1 = time.time()
-    logging.info(f"BOLTZ2 MSA pipeline completed. Elapsed time: {t1 - t0:.1f}s")
+    logging.info(
+        f"BOLTZ2 MSA pipeline completed. "
+        f"MSA sequences: {num_msa_sequences}. "
+        f"Elapsed time: {t1 - t0:.1f}s"
+    )
