@@ -1,0 +1,4 @@
+functions-framework==3.10.1
+google-cloud-storage==3.10.1
+google-auth==2.38.0
+google-cloud-run==0.16.0

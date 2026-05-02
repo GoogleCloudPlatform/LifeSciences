@@ -36,9 +36,13 @@ from google_cloud_pipeline_components.v1.custom_job import create_custom_trainin
 from kfp import dsl
 
 from .. import config
-from ..components import configure_seeds_of3 as ConfigureSeedsOF3
 from ..components import msa_pipeline_of3 as MSAPipelineOF3
 from ..components import predict_of3 as PredictOF3
+
+from ....common_components import configure_seeds, publish_completion_message
+
+
+
 
 
 def create_of3_inference_pipeline(strategy: str = "STANDARD"):
@@ -73,105 +77,118 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
             runner YAML, without requiring internet access.
         """
 
-        # Step 1: Generate seed configs for ParallelFor
-        configure_seeds_task = ConfigureSeedsOF3(  # type: ignore
-            num_model_seeds=num_model_seeds,
-            base_seed=base_seed,
-        ).set_display_name("Configure OF3 Seeds")
-
-        # Step 2: MSA pipeline — CPU-only, NFS-mounted databases
-        MSAPipelineOp = create_custom_training_job_from_component(
-            MSAPipelineOF3,
-            display_name="OF3 MSA Pipeline",
-            machine_type=config.MSA_MACHINE_TYPE,
-            nfs_mounts=[
-                dict(
-                    server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
-                    path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
-                    mountPoint=config.NFS_MOUNT_POINT,
-                )
-            ],
-            network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
-            strategy="STANDARD",  # CPU-only, no FLEX_START needed
+        exit_task = publish_completion_message(
+            project=project,
+            topic_id="foldrun-pipeline-status",
+            model_name="openfold3",
+            job_id=dsl.PIPELINE_JOB_ID_PLACEHOLDER,
+            input_path=query_json_path,
+            gcs_output_dir=dsl.PIPELINE_ROOT_PLACEHOLDER,
         )
 
-        db_metadata = {
-            "uniref90": config.UNIREF90_PATH,
-            "mgnify": config.MGNIFY_PATH,
-            "pdb_seqres": config.PDB_SEQRES_PATH,
-            "uniprot": config.UNIPROT_PATH,
-            "rfam": config.RFAM_PATH,
-            "rnacentral": config.RNACENTRAL_PATH,
-        }
 
-        # Import query JSON from GCS
-        query_json_import = dsl.importer(
-            artifact_uri=query_json_path,
-            artifact_class=dsl.Artifact,
-            reimport=True,
-        ).set_display_name("Query JSON")
+        with dsl.ExitHandler(exit_task, name="pipeline-exit-handler"):
+            # Step 1: Generate seed configs for ParallelFor
+            configure_seeds_task = configure_seeds(  # type: ignore
+                num_model_seeds=num_model_seeds,
+                base_seed=base_seed,
+            ).set_display_name("Configure OF3 Seeds")
 
-        msa_task = MSAPipelineOp(
-            ref_databases=dsl.importer(
-                artifact_uri=config.NFS_MOUNT_POINT,
-                artifact_class=dsl.Dataset,
-                reimport=False,
-                metadata=db_metadata,
+
+            # Step 2: MSA pipeline — CPU-only, NFS-mounted databases
+            MSAPipelineOp = create_custom_training_job_from_component(
+                MSAPipelineOF3,
+                display_name="OF3 MSA Pipeline",
+                machine_type=config.MSA_MACHINE_TYPE,
+                nfs_mounts=[
+                    dict(
+                        server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
+                        path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
+                        mountPoint=config.NFS_MOUNT_POINT,
+                    )
+                ],
+                network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
+                strategy="STANDARD",  # CPU-only, no FLEX_START needed
             )
-            .set_display_name("Reference databases (OF3)")
-            .output,
-            query_json=query_json_import.output,
-            use_templates=use_templates,
-        ).set_retry(
-            num_retries=2,
-            backoff_duration="60s",
-            backoff_factor=2.0,
-        )
 
-        # Step 3: Predict — ParallelFor over seeds, each on its own A100
-        flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
-        max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
+            db_metadata = {
+                "uniref90": config.UNIREF90_PATH,
+                "mgnify": config.MGNIFY_PATH,
+                "pdb_seqres": config.PDB_SEQRES_PATH,
+                "uniprot": config.UNIPROT_PATH,
+                "rfam": config.RFAM_PATH,
+                "rnacentral": config.RNACENTRAL_PATH,
+            }
 
-        # NFS path to pdb_mmcif CIF files for template structure featurization.
-        # This is passed as a string (not a KFP artifact) since it's just a path
-        # on the NFS that the predict task already has mounted.
-        nfs_mmcif_dir = f"{config.NFS_MOUNT_POINT}/{config.PDB_MMCIF_PATH}"
+            # Import query JSON from GCS
+            query_json_import = dsl.importer(
+                artifact_uri=query_json_path,
+                artifact_class=dsl.Artifact,
+                reimport=True,
+            ).set_display_name("Query JSON")
 
-        JobPredictOp = create_custom_training_job_from_component(
-            PredictOF3,
-            display_name="OF3 Predict",
-            machine_type=os.environ.get("PREDICT_MACHINE_TYPE", "a2-highgpu-1g"),
-            accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_TESLA_A100"),
-            accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
-            nfs_mounts=[
-                dict(
-                    server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
-                    path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
-                    mountPoint=config.NFS_MOUNT_POINT,
+            msa_task = MSAPipelineOp(
+                ref_databases=dsl.importer(
+                    artifact_uri=config.NFS_MOUNT_POINT,
+                    artifact_class=dsl.Dataset,
+                    reimport=False,
+                    metadata=db_metadata,
                 )
-            ],
-            network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
-            strategy=strategy,
-            max_wait_duration=max_wait,
-        )
-
-        with dsl.ParallelFor(
-            items=configure_seeds_task.outputs["seed_configs"], name="seed-predict"
-        ) as seed_config:
-            predict_task = JobPredictOp(
-                project=project,
-                location=region,
-                updated_query_json=msa_task.outputs["updated_query_json"],
-                seed_value=seed_config.seed_value,  # type: ignore
-                num_diffusion_samples=num_diffusion_samples,
-                nfs_params_path=nfs_params_path,
+                .set_display_name("Reference databases (OF3)")
+                .output,
+                query_json=query_json_import.output,
                 use_templates=use_templates,
-                nfs_mmcif_dir=nfs_mmcif_dir,
             ).set_retry(
                 num_retries=2,
                 backoff_duration="60s",
                 backoff_factor=2.0,
             )
+
+            # Step 3: Predict — ParallelFor over seeds, each on its own A100
+            flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
+            max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
+
+            # NFS path to pdb_mmcif CIF files for template structure featurization.
+            # This is passed as a string (not a KFP artifact) since it's just a path
+            # on the NFS that the predict task already has mounted.
+            nfs_mmcif_dir = f"{config.NFS_MOUNT_POINT}/{config.PDB_MMCIF_PATH}"
+
+            JobPredictOp = create_custom_training_job_from_component(
+                PredictOF3,
+                display_name="OF3 Predict",
+                machine_type=os.environ.get("PREDICT_MACHINE_TYPE", "a2-highgpu-1g"),
+                accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_TESLA_A100"),
+                accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
+                nfs_mounts=[
+                    dict(
+                        server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
+                        path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
+                        mountPoint=config.NFS_MOUNT_POINT,
+                    )
+                ],
+                network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
+                strategy=strategy,
+                max_wait_duration=max_wait,
+            )
+
+            with dsl.ParallelFor(
+                items=configure_seeds_task.outputs["seed_configs"], name="seed-predict"
+            ) as seed_config:
+                predict_task = JobPredictOp(
+                    project=project,
+                    location=region,
+                    updated_query_json=msa_task.outputs["updated_query_json"],
+                    seed_value=seed_config.seed_value,  # type: ignore
+                    num_diffusion_samples=num_diffusion_samples,
+                    nfs_params_path=nfs_params_path,
+                    use_templates=use_templates,
+                    nfs_mmcif_dir=nfs_mmcif_dir,
+                ).set_retry(
+                    num_retries=2,
+                    backoff_duration="60s",
+                    backoff_factor=2.0,
+                )
+
 
     return of3_inference_pipeline
 

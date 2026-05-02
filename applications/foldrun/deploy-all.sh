@@ -44,6 +44,7 @@ usage() {
     echo "                           of3-analysis   - of3-analysis-job Cloud Run Job"
     echo "                           af2-analysis   - af2-analysis-job Cloud Run Job"
     echo "                           boltz2-analysis- boltz2-analysis-job Cloud Run Job"
+    echo "                           analysis-trigger- analysis-job-trigger Cloud Run Service"
     echo "                         Combine with commas: --build-target of3,viewer"
     echo "  --db DATABASE          With --steps data or convert: target a single database."
     echo "                   data options: bfd, small_bfd, mgnify, pdb70, pdb_mmcif,"

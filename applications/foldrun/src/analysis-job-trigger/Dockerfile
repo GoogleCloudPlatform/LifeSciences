@@ -11,8 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""BOLTZ2 pipeline components."""
 
-from .msa_pipeline import msa_pipeline_boltz2
-from .predict import predict_boltz2
+FROM python:3.13-slim
 
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY main.py .
+
+ENV PORT=8080
+CMD exec functions-framework --target=trigger_analysis --signature-type=cloudevent --port=$PORT

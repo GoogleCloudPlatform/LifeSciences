@@ -27,9 +27,13 @@ from google_cloud_pipeline_components.v1.custom_job import create_custom_trainin
 from kfp import dsl
 
 from .. import config
-from ..components import configure_seeds_boltz2 as ConfigureSeedsBOLTZ2
 from ..components import msa_pipeline_boltz2 as MSAPipelineBOLTZ2
 from ..components import predict_boltz2 as PredictBOLTZ2
+
+from ....common_components import configure_seeds, publish_completion_message
+
+
+
 
 
 def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
@@ -57,94 +61,107 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
         ConfigureSeeds → MSA (CPU) → ParallelFor[Predict(GPU, 1 seed each)]
         """
 
-        # Step 1: Generate seed configs for ParallelFor
-        configure_seeds_task = ConfigureSeedsBOLTZ2(  # type: ignore
-            num_model_seeds=num_model_seeds,
-            base_seed=base_seed,
-        ).set_display_name("Configure BOLTZ2 Seeds")
-
-        # Step 2: MSA pipeline — CPU-only, NFS-mounted databases
-        MSAPipelineOp = create_custom_training_job_from_component(
-            MSAPipelineBOLTZ2,
-            display_name="BOLTZ2 MSA Pipeline",
-            machine_type=config.MSA_MACHINE_TYPE,
-            nfs_mounts=[
-                dict(
-                    server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
-                    path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
-                    mountPoint=config.NFS_MOUNT_POINT,
-                )
-            ],
-            network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
-            strategy="STANDARD",  # CPU-only, no FLEX_START needed
+        exit_task = publish_completion_message(
+            project=project,
+            topic_id="foldrun-pipeline-status",
+            model_name="boltz2",
+            job_id=dsl.PIPELINE_JOB_ID_PLACEHOLDER,
+            input_path=query_json_path,
+            gcs_output_dir=dsl.PIPELINE_ROOT_PLACEHOLDER,
         )
 
-        # Only protein MSA databases needed — RNA has no msa: field in Boltz-2 schema
-        db_metadata = {
-            "uniref90": config.UNIREF90_PATH,
-            "mgnify": config.MGNIFY_PATH,
-        }
 
-        # Import query JSON from GCS
-        query_json_import = dsl.importer(
-            artifact_uri=query_json_path,
-            artifact_class=dsl.Artifact,
-            reimport=True,
-        ).set_display_name("Query YAML")
+        with dsl.ExitHandler(exit_task, name="pipeline-exit-handler"):
+            # Step 1: Generate seed configs for ParallelFor
+            configure_seeds_task = configure_seeds(  # type: ignore
+                num_model_seeds=num_model_seeds,
+                base_seed=base_seed,
+            ).set_display_name("Configure BOLTZ2 Seeds")
 
-        msa_task = MSAPipelineOp(
-            ref_databases=dsl.importer(
-                artifact_uri=config.NFS_MOUNT_POINT,
-                artifact_class=dsl.Dataset,
-                reimport=False,
-                metadata=db_metadata,
+
+            # Step 2: MSA pipeline — CPU-only, NFS-mounted databases
+            MSAPipelineOp = create_custom_training_job_from_component(
+                MSAPipelineBOLTZ2,
+                display_name="BOLTZ2 MSA Pipeline",
+                machine_type=config.MSA_MACHINE_TYPE,
+                nfs_mounts=[
+                    dict(
+                        server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
+                        path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
+                        mountPoint=config.NFS_MOUNT_POINT,
+                    )
+                ],
+                network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
+                strategy="STANDARD",  # CPU-only, no FLEX_START needed
             )
-            .set_display_name("Reference databases (BOLTZ2)")
-            .output,
-            query_json=query_json_import.output,
-        ).set_retry(
-            num_retries=2,
-            backoff_duration="60s",
-            backoff_factor=2.0,
-        )
 
-        # Step 3: Predict — ParallelFor over seeds, each on its own A100
-        flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
-        max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
+            # Only protein MSA databases needed — RNA has no msa: field in Boltz-2 schema
+            db_metadata = {
+                "uniref90": config.UNIREF90_PATH,
+                "mgnify": config.MGNIFY_PATH,
+            }
 
-        JobPredictOp = create_custom_training_job_from_component(
-            PredictBOLTZ2,
-            display_name="BOLTZ2 Predict",
-            machine_type=os.environ.get("PREDICT_MACHINE_TYPE", "a2-highgpu-1g"),
-            accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_TESLA_A100"),
-            accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
-            nfs_mounts=[
-                dict(
-                    server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
-                    path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
-                    mountPoint=config.NFS_MOUNT_POINT,
+            # Import query JSON from GCS
+            query_json_import = dsl.importer(
+                artifact_uri=query_json_path,
+                artifact_class=dsl.Artifact,
+                reimport=True,
+            ).set_display_name("Query YAML")
+
+            msa_task = MSAPipelineOp(
+                ref_databases=dsl.importer(
+                    artifact_uri=config.NFS_MOUNT_POINT,
+                    artifact_class=dsl.Dataset,
+                    reimport=False,
+                    metadata=db_metadata,
                 )
-            ],
-            network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
-            strategy=strategy,
-            max_wait_duration=max_wait,
-        )
-
-        with dsl.ParallelFor(
-            items=configure_seeds_task.outputs["seed_configs"], name="seed-predict"
-        ) as seed_config:
-            predict_task = JobPredictOp(
-                project=project,
-                location=region,
-                updated_query_json=msa_task.outputs["updated_query_json"],
-                seed_value=seed_config.seed_value,  # type: ignore
-                num_diffusion_samples=num_diffusion_samples,
-                nfs_cache_path=nfs_cache_path,
+                .set_display_name("Reference databases (BOLTZ2)")
+                .output,
+                query_json=query_json_import.output,
             ).set_retry(
                 num_retries=2,
                 backoff_duration="60s",
                 backoff_factor=2.0,
             )
+
+            # Step 3: Predict — ParallelFor over seeds, each on its own A100
+            flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
+            max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
+
+            JobPredictOp = create_custom_training_job_from_component(
+                PredictBOLTZ2,
+                display_name="BOLTZ2 Predict",
+                machine_type=os.environ.get("PREDICT_MACHINE_TYPE", "a2-highgpu-1g"),
+                accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_TESLA_A100"),
+                accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
+                nfs_mounts=[
+                    dict(
+                        server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
+                        path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
+                        mountPoint=config.NFS_MOUNT_POINT,
+                    )
+                ],
+                network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
+                strategy=strategy,
+                max_wait_duration=max_wait,
+            )
+
+            with dsl.ParallelFor(
+                items=configure_seeds_task.outputs["seed_configs"], name="seed-predict"
+            ) as seed_config:
+                predict_task = JobPredictOp(
+                    project=project,
+                    location=region,
+                    updated_query_json=msa_task.outputs["updated_query_json"],
+                    seed_value=seed_config.seed_value,  # type: ignore
+                    num_diffusion_samples=num_diffusion_samples,
+                    nfs_cache_path=nfs_cache_path,
+                ).set_retry(
+                    num_retries=2,
+                    backoff_duration="60s",
+                    backoff_factor=2.0,
+                )
+
 
     return boltz2_inference_pipeline
 
