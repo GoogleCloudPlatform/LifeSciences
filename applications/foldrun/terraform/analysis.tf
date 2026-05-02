@@ -211,3 +211,100 @@ resource "google_cloud_run_v2_job" "boltz2_analysis_job" {
 
   depends_on = [google_project_service.apis]
 }
+
+resource "google_service_account" "eventarc_trigger" {
+  project      = var.project_id
+  account_id   = "eventarc-trigger-sa"
+  display_name = "Eventarc Trigger Service Account"
+}
+
+resource "google_service_account" "analysis_job_trigger" {
+  project      = var.project_id
+  account_id   = "analysis-job-trigger-sa"
+  display_name = "Analysis Job Trigger Service Account"
+}
+
+# Allow the analysis trigger to execute analysis jobs
+resource "google_cloud_run_v2_job_iam_member" "foldrun_analysis_trigger" {
+  for_each = toset([
+    google_cloud_run_v2_job.af2_analysis_job.name,
+    google_cloud_run_v2_job.of3_analysis_job.name,
+    google_cloud_run_v2_job.boltz2_analysis_job.name
+  ])
+  project  = var.project_id
+  location = var.region
+  name     = each.value
+  role     = "roles/run.jobsExecutorWithOverrides"
+  member   = "serviceAccount:${google_service_account.analysis_job_trigger.email}"
+}
+
+resource "google_cloud_run_v2_service" "analysis_job_trigger" {
+  project  = var.project_id
+  name     = "analysis-job-trigger"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+
+  template {
+    containers {
+      image = "us-docker.pkg.dev/cloudrun/container/hello"
+    }
+    vpc_access {
+      network_interfaces {
+        network    = local.network_id
+        subnetwork = local.subnet_id
+
+      }
+      egress = "ALL_TRAFFIC"
+    }
+    service_account = google_service_account.analysis_job_trigger.email
+  }
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version
+    ]
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "eventarc_invoker" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.analysis_job_trigger.location
+  name     = google_cloud_run_v2_service.analysis_job_trigger.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.eventarc_trigger.email}"
+}
+
+resource "google_eventarc_trigger" "analysis_trigger" {
+  project  = var.project_id
+  name     = "analysis-job-trigger"
+  location = var.region
+
+  matching_criteria {
+    attribute = "type"
+    value     = "google.cloud.pubsub.topic.v1.messagePublished"
+  }
+
+  destination {
+    cloud_run_service {
+      service = google_cloud_run_v2_service.analysis_job_trigger.name
+      region  = google_cloud_run_v2_service.analysis_job_trigger.location
+    }
+  }
+
+  transport {
+    pubsub {
+      topic = google_pubsub_topic.pipeline_status.id
+    }
+  }
+
+  service_account = google_service_account.eventarc_trigger.email
+
+  depends_on = [
+    google_cloud_run_v2_service.analysis_job_trigger,
+    google_cloud_run_v2_service_iam_member.eventarc_invoker
+  ]
+}
