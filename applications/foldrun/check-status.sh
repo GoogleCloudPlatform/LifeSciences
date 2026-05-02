@@ -62,6 +62,13 @@ else
     echo "⚠️  [Cloud Run] foldrun-a2a A2A proxy is not deployed (optional — deploy with src/foldrun-a2a/deploy.sh)"
 fi
 
+# 2c. Check Cloud Run Analysis Job Trigger
+if gcloud run services describe analysis-job-trigger --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "✅ [Cloud Run] analysis-job-trigger service is deployed and active"
+else
+    echo "❌ [Cloud Run] analysis-job-trigger service is missing"
+fi
+
 # 3. Check Cloud Run Analysis Jobs
 if gcloud run jobs describe af2-analysis-job --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "✅ [Cloud Run] af2-analysis-job is deployed"

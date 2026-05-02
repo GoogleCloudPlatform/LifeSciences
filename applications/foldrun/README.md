@@ -253,8 +253,10 @@ Default versions are defined in `deploy-all.sh` and match the tested, pinned val
 
 Expected output:
 ```
-✅ [Terraform] Infrastructure provisioned
+✅ [Terraform] Infrastructure initialized
+✅ [Storage] Bucket created
 ✅ [Cloud Run] foldrun-viewer service is deployed and active
+✅ [Cloud Run] analysis-job-trigger service is deployed and active
 ✅ [Cloud Run] af2-analysis-job is deployed
 ✅ [Cloud Run] of3-analysis-job is deployed
 ✅ [Cloud Run] boltz2-analysis-job is deployed

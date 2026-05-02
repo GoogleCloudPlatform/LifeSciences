@@ -27,6 +27,7 @@ def publish_completion_message(
     model_name: str,
     job_id: str,
     input_path: str,
+    gcs_output_dir: str,
     status: dsl.PipelineTaskFinalStatus,
 ):
     from google.cloud import pubsub_v1
@@ -39,6 +40,7 @@ def publish_completion_message(
         "model_name": model_name,
         "job_id": job_id,
         "input_path": input_path,
+        "gcs_output_dir": gcs_output_dir,
         "state": status.state,
         "error_code": getattr(status, "error_code", None),
         "error_message": getattr(status, "error_message", None),
@@ -48,6 +50,7 @@ def publish_completion_message(
     future = publisher.publish(topic_path, data)
     future.result()
     print(f"Published message to {topic_path}: {message_dict}")
+
 
 
 @dsl.component(base_image="python:3.14-slim")

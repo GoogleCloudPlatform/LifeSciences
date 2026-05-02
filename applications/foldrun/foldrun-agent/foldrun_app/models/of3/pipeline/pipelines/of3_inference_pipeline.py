@@ -83,7 +83,9 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
             model_name="openfold3",
             job_id=dsl.PIPELINE_JOB_ID_PLACEHOLDER,
             input_path=query_json_path,
+            gcs_output_dir=dsl.PIPELINE_ROOT_PLACEHOLDER,
         )
+
 
         with dsl.ExitHandler(exit_task, name="pipeline-exit-handler"):
             # Step 1: Generate seed configs for ParallelFor

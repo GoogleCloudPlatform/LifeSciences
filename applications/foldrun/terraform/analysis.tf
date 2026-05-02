@@ -224,6 +224,18 @@ resource "google_service_account" "analysis_job_trigger" {
   display_name = "Analysis Job Trigger Service Account"
 }
 
+resource "google_service_account_iam_member" "build_sa_actas_trigger" {
+  service_account_id = google_service_account.analysis_job_trigger.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.foldrun_build.email}"
+}
+
+resource "google_storage_bucket_iam_member" "analysis_job_trigger_bucket" {
+  bucket = google_storage_bucket.foldrun_bucket.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.analysis_job_trigger.email}"
+}
+
 # Allow the analysis trigger to execute analysis jobs
 resource "google_cloud_run_v2_job_iam_member" "foldrun_analysis_trigger" {
   for_each = toset([
@@ -247,6 +259,14 @@ resource "google_cloud_run_v2_service" "analysis_job_trigger" {
   template {
     containers {
       image = "us-docker.pkg.dev/cloudrun/container/hello"
+      env {
+        name  = "PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "REGION"
+        value = var.region
+      }
     }
     vpc_access {
       network_interfaces {

@@ -78,7 +78,9 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             model_name="alphafold2",
             job_id=dsl.PIPELINE_JOB_ID_PLACEHOLDER,
             input_path=sequence_path,
+            gcs_output_dir=dsl.PIPELINE_ROOT_PLACEHOLDER,
         )
+
 
         with dsl.ExitHandler(exit_task, name="pipeline-exit-handler"):
             run_config_task = (
