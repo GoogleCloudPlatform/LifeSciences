@@ -318,22 +318,166 @@ class DuplicateGroup(BaseModel):
     )
 
 
+class CrossLensTheme(BaseModel):
+    """A theme that recurs across findings from multiple lenses."""
+
+    theme: str = Field(
+        ...,
+        description="Short label for the recurring theme (e.g., 'no safety apparatus').",
+    )
+    related_finding_ids: list[str] = Field(
+        ...,
+        description="Findings from any lens that touch this theme.",
+    )
+    discussion: str = Field(
+        ...,
+        description=(
+            "Why this cluster matters as a whole — what a reviewer should "
+            "see when they look at the findings together rather than "
+            "individually."
+        ),
+    )
+
+
+class Defense(BaseModel):
+    """A single argument the submitter's advocate would make."""
+
+    addresses_topic: str = Field(
+        ...,
+        description=(
+            "What this defense is about, in the advocate's own words "
+            "(e.g., 'the curative claim', 'the cymbal-to-ear visual')."
+        ),
+    )
+    related_item_ids: list[str] = Field(
+        default_factory=list,
+        description="ContentInventory item_ids this defense touches.",
+    )
+    argument: str = Field(
+        ...,
+        description="The advocate's argument (2–4 sentences).",
+    )
+    charitable_interpretation: str = Field(
+        ...,
+        description=(
+            "How a reasonable submitter would read or intend this element. "
+            "The point is to give critics a fair counter-frame to weigh."
+        ),
+    )
+    proposed_compromise: Optional[str] = Field(
+        None,
+        description=(
+            "If the advocate would concede a middle-ground revision, "
+            "describe it here."
+        ),
+    )
+    likely_to_dispute: list[ReviewLens] = Field(
+        default_factory=list,
+        description=(
+            "Which review lenses are most likely to push back on this "
+            "defense, in the advocate's estimation."
+        ),
+    )
+
+
+class SubmitterDefenseBrief(BaseModel):
+    """Output of the submitter's advocate agent.
+
+    The advocate runs in parallel with the four critical reviewers and
+    proactively argues for the submission. The critic panel weighs these
+    defenses when calibrating severity and framing the final report.
+    """
+
+    overall_framing: str = Field(
+        ...,
+        description=(
+            "1–3 sentence narrative of how the advocate would frame the "
+            "submission charitably."
+        ),
+    )
+    defenses: list[Defense]
+
+
+class DedupeCriticOutput(BaseModel):
+    """Output of the dedupe-focused critic."""
+
+    duplicate_groups: list[DuplicateGroup] = Field(default_factory=list)
+    cross_lens_themes: list[CrossLensTheme] = Field(
+        default_factory=list,
+        description=(
+            "Thematic clusters across lenses worth surfacing even when "
+            "the underlying findings should remain distinct."
+        ),
+    )
+    rationale: str = Field(
+        ...,
+        description="Brief narrative explaining the dedupe decisions.",
+    )
+
+
+class SeverityCriticOutput(BaseModel):
+    """Output of the severity-calibration-focused critic."""
+
+    severity_adjustments: list[SeverityAdjustment] = Field(default_factory=list)
+    confidence_concerns: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Findings whose confidence score seems miscalibrated relative "
+            "to the underlying observation. Plain-language descriptions."
+        ),
+    )
+    advocate_weighed: bool = Field(
+        ...,
+        description="True if the submitter's defense brief was considered.",
+    )
+    rationale: str = Field(
+        ...,
+        description="Brief narrative explaining the calibration decisions.",
+    )
+
+
+class GapCriticOutput(BaseModel):
+    """Output of the gap-finding-focused critic."""
+
+    gaps_identified: list[str] = Field(
+        default_factory=list,
+        description="Issues the reviewer panel may have missed.",
+    )
+    additional_findings: list[Finding] = Field(
+        default_factory=list,
+        description="Net-new findings the gap critic surfaces.",
+    )
+    completeness_assessment: str = Field(
+        ...,
+        description=(
+            "Brief narrative on coverage — which lenses look thorough, "
+            "which look thin."
+        ),
+    )
+
+
 class CriticAssessment(BaseModel):
-    """Output of the critic agent."""
+    """Consolidated output of the critic stage.
+
+    Produced by the critic_merger from the three specialist critic outputs.
+    Schema kept compatible with what the synthesizer expects.
+    """
 
     overall_assessment: str = Field(
         ...,
         description="Narrative assessment of the reviewer pass as a whole.",
     )
     duplicate_groups: list[DuplicateGroup] = Field(default_factory=list)
+    cross_lens_themes: list[CrossLensTheme] = Field(default_factory=list)
     severity_adjustments: list[SeverityAdjustment] = Field(default_factory=list)
-    gaps_identified: list[str] = Field(
-        default_factory=list,
-        description="Issues the reviewers may have missed, described in plain language.",
-    )
-    additional_findings: list[Finding] = Field(
-        default_factory=list,
-        description="Net-new findings the critic surfaces.",
+    gaps_identified: list[str] = Field(default_factory=list)
+    additional_findings: list[Finding] = Field(default_factory=list)
+    iteration_recommendation: str = Field(
+        ...,
+        description=(
+            "One of: 'another_pass_would_help' or 'reviewers_have_converged'. "
+            "Used by the loop decider to decide whether to iterate again."
+        ),
     )
 
 

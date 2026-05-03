@@ -34,7 +34,12 @@ For each item:
 - `text`: the verbatim text, or for visuals a short factual description.
 - `kind`: pick the closest enum value.
 - `location`: page number for PDFs, section/heading for HTML, region label
-  for images. Include a `quote` field for textual items.
+  for images. Include a `quote` field for textual items. **For image
+  submissions, always populate `bbox` as a normalized
+  `[x_min, y_min, x_max, y_max]` (each value in 0..1, origin top-left)
+  for any visual element or text region you can localise.** It is fine
+  to give a coarse box; downstream reviewers depend on having *some*
+  spatial anchor for visual findings.
 - `notes`: anything the reviewers should know up front (e.g., "footnote
   reference is unresolved", "claim appears to lack a citation marker").
 

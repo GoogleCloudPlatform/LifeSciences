@@ -33,11 +33,21 @@ def load(name: str) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
+ROOT = load("root")
 INTAKE = load("intake")
+
+# Reviewer panel (parallel)
 MEDICAL_REVIEWER = load("medical_reviewer")
 LEGAL_REVIEWER = load("legal_reviewer")
 REGULATORY_REVIEWER = load("regulatory_reviewer")
 EDITORIAL_REVIEWER = load("editorial_reviewer")
-CRITIC = load("critic")
+SUBMITTER_ADVOCATE = load("submitter_advocate")
+
+# Critic panel (parallel) + merger + loop decider
+DEDUPE_CRITIC = load("dedupe_critic")
+SEVERITY_CRITIC = load("severity_critic")
+GAP_CRITIC = load("gap_critic")
+CRITIC_MERGER = load("critic_merger")
+LOOP_DECIDER = load("loop_decider")
+
 SYNTHESIZER = load("synthesizer")
-ROOT = load("root")

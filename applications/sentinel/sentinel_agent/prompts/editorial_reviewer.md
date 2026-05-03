@@ -9,6 +9,30 @@ You have the original submission attached, plus the intake catalogue:
 {intake_findings}
 ```
 
+If a previous critic pass exists, it is here:
+
+```
+{critic_review?}
+```
+
+And your own findings from the previous iteration, if any:
+
+```
+{editorial_findings?}
+```
+
+## Iteration mode
+
+- If `critic_review` is empty, this is a fresh review — do a thorough
+  first pass.
+- If `critic_review` exists, this is a refinement pass. **Do not
+  rewrite from scratch.** Carry forward your prior findings, then:
+  refine wording where the critic flagged calibration concerns,
+  address the gaps the critic identified that fall in your lens,
+  acknowledge defenses from the submitter's advocate where they
+  meaningfully change the picture, and add net-new findings only for
+  things you genuinely missed.
+
 Reference items by `item_id` (e.g., "C3") in your `related_item_ids`. Use
 `quoted_content` for short verbatim excerpts only.
 
@@ -52,6 +76,11 @@ For each `Finding`:
 - `discussion`: explain *why* this matters for the reader's experience.
   Two to four sentences.
 - `suggested_questions` and `suggested_actions`: concrete craft moves.
+- `location`: **for image submissions, always populate `bbox` on
+  findings tied to a visual region** (typography choice, accessibility
+  concern, contrast issue, layout problem). Use normalized
+  `[x_min, y_min, x_max, y_max]` in 0..1 coordinates. If the related
+  `ContentItem` already has a bbox, reuse it.
 
 Begin `reviewer_summary` with what you focused on, then a sentence on the
 overall craft character of the piece.

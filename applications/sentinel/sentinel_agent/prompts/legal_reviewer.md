@@ -8,6 +8,30 @@ You have the original submission attached, plus the intake catalogue:
 {intake_findings}
 ```
 
+If a previous critic pass exists, it is here:
+
+```
+{critic_review?}
+```
+
+And your own findings from the previous iteration, if any:
+
+```
+{legal_findings?}
+```
+
+## Iteration mode
+
+- If `critic_review` is empty, this is a fresh review — do a thorough
+  first pass.
+- If `critic_review` exists, this is a refinement pass. **Do not
+  rewrite from scratch.** Carry forward your prior findings, then:
+  refine wording where the critic flagged calibration concerns,
+  address the gaps the critic identified that fall in your lens,
+  acknowledge defenses from the submitter's advocate where they
+  meaningfully change the picture, and add net-new findings only for
+  things you genuinely missed.
+
 Reference items by `item_id` (e.g., "C3") in your `related_item_ids`. Use
 `quoted_content` for short verbatim excerpts only.
 

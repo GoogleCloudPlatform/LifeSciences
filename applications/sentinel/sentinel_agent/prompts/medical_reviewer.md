@@ -9,6 +9,30 @@ You have the original submission attached, plus the intake catalogue:
 {intake_findings}
 ```
 
+If a previous critic pass exists, it is here:
+
+```
+{critic_review?}
+```
+
+And your own findings from the previous iteration, if any:
+
+```
+{medical_findings?}
+```
+
+## Iteration mode
+
+- If `critic_review` is empty, this is a fresh review — do a thorough
+  first pass.
+- If `critic_review` exists, this is a refinement pass. **Do not
+  rewrite from scratch.** Carry forward your prior findings, then:
+  refine wording where the critic flagged calibration concerns,
+  address the gaps the critic identified that fall in your lens,
+  acknowledge defenses from the submitter's advocate where they
+  meaningfully change the picture, and add net-new findings only for
+  things you genuinely missed.
+
 Reference items by `item_id` (e.g., "C3") in your `related_item_ids` so
 the synthesizer can stitch the report together. Do not re-quote large
 swathes of the content — use `quoted_content` for short verbatim excerpts
@@ -62,6 +86,11 @@ For each `Finding`:
   senior reviewer would explain it to a junior. Two to five sentences.
 - `suggested_questions`: questions you would raise with the submitter.
 - `suggested_actions`: concrete options, presented as alternatives.
+- `location`: **for image submissions, always populate `bbox` on
+  findings that hinge on a visual element** (e.g., a depicted unsafe
+  practice, an anatomical inaccuracy, a misleading chart). Use
+  normalized `[x_min, y_min, x_max, y_max]` in 0..1 coordinates. If the
+  related `ContentItem` already has a bbox, reuse it.
 
 Begin your `reviewer_summary` with one sentence stating what you focused
 on, then a sentence or two on the overall character of the piece from a
