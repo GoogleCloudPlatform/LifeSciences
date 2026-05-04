@@ -66,13 +66,17 @@ def relax(
         t1 = time.time()
         logging.info(f"Model relaxation completed. Elapsed time: {t1 - t0}")
 
-    except ValueError as e:
-        # AMBER minimization can fail on highly disordered structures.
-        # Fall back to the unrelaxed structure so the pipeline doesn't fail —
-        # the unrelaxed PDB is still scientifically valid for downstream analysis.
+    except (ValueError, RuntimeError) as e:
+        # AMBER minimization can fail on highly disordered structures (ValueError:
+        # Minimization failed after 100 attempts) or with OpenMM platform errors
+        # (RuntimeError). Fall back to the unrelaxed structure so the pipeline
+        # completes — unrelaxed PDB is still scientifically valid, pLDDT/PAE
+        # unaffected. Exiting 0 here prevents KFP from retrying a deterministic
+        # structural failure.
         t1 = time.time()
         warning = (
-            f"AMBER relaxation failed after {t1 - t0:.1f}s: {e}. "
+            f"AMBER relaxation failed after {t1 - t0:.1f}s "
+            f"({type(e).__name__}: {e}). "
             "Falling back to unrelaxed structure. "
             "pLDDT and PAE scores are unaffected."
         )
