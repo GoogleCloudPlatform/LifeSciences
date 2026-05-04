@@ -162,7 +162,7 @@ PROJECT_ID=${POSITIONAL_ARGS[0]:-$(gcloud config get-value project)}
 
 if [[ "$PROJECT_ID" == "{self.config.project_id}" ]]; then
     echo "ERROR: You passed the literal string '{self.config.project_id}' as the project ID."
-    echo "Please replace it with your actual GCP project ID (e.g., losiern-foldrun7)."
+    echo "Please replace it with your actual GCP project ID (e.g., my-gcp-project)."
     exit 1
 fi
 
