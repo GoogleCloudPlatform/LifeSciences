@@ -159,6 +159,13 @@ fi
 # Configuration
 # ==============================================================================
 PROJECT_ID=${POSITIONAL_ARGS[0]:-$(gcloud config get-value project)}
+
+if [[ "$PROJECT_ID" == "{self.config.project_id}" ]]; then
+    echo "ERROR: You passed the literal string '{self.config.project_id}' as the project ID."
+    echo "Please replace it with your actual GCP project ID (e.g., losiern-foldrun7)."
+    exit 1
+fi
+
 REGION=${POSITIONAL_ARGS[1]:-"us-central1"}
 DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
 AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
@@ -359,6 +366,8 @@ if $run_data; then
     export GCS_BUCKET_NAME=$GCS_BUCKET
     export GCS_DATABASES_BUCKET=${DATABASES_BUCKET:-$GCS_BUCKET}
     export ALPHAFOLD_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/alphafold-components:latest
+    export OPENFOLD3_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/openfold3-components:latest
+    export BOLTZ2_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/boltz2-components:latest
     export DOWNLOAD_MODE
     DB_ARG=""
     if [[ -n "$DB_NAME" ]]; then
