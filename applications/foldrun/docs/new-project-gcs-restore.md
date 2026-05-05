@@ -56,7 +56,7 @@ This uses Terraform to create all required GCP resources including:
 - Artifact Registry repository
 - Service accounts with appropriate IAM roles
 - Cloud Run services (viewer, A2A proxy)
-- Cloud Run Jobs (AF2, OF3, Boltz-2 analysis)
+- Cloud Run Job (FoldRun prediction analysis)
 
 **Wait for this to complete before proceeding to Step 3.** The batch compute
 service account must exist before the sharing grant can be applied.
@@ -184,9 +184,7 @@ Expected output when complete:
 ```
 ✅ [Terraform] Infrastructure provisioned
 ✅ [Cloud Run] foldrun-viewer service is deployed and active
-✅ [Cloud Run] af2-analysis-job is deployed
-✅ [Cloud Run] of3-analysis-job is deployed
-✅ [Cloud Run] boltz2-analysis-job is deployed
+✅ [Cloud Run] foldrun-analysis-job is deployed
 ✅ [Agent Platform] FoldRun Agent Runtime is deployed
 ✅ [Data] Databases present (13 folders)
    ✅ AF2 core databases (uniref90 etc.)

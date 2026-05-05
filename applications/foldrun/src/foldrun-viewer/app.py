@@ -43,7 +43,9 @@ REGION = os.environ.get("REGION", "us-central1")
 # GCS requests aren't rejected for missing billing project. On Cloud Run the
 # service account already has implicit quota project — setting it explicitly
 # causes a serviceusage.services.use permission error.
-_quota_project = PROJECT_ID if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") else None
+_quota_project = (
+    PROJECT_ID if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") else None
+)
 _creds, _ = google.auth.default(
     scopes=["https://www.googleapis.com/auth/cloud-platform"],
     quota_project_id=_quota_project,
@@ -164,7 +166,9 @@ def get_analysis_summary(job_id=None, summary_uri=None):
 
 def _get_authed_session():
     """Return an AuthorizedSession using application default credentials."""
-    quota_project = PROJECT_ID if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") else None
+    quota_project = (
+        PROJECT_ID if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") else None
+    )
     creds, _ = google.auth.default(
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
         quota_project_id=quota_project,
@@ -214,7 +218,9 @@ def _discover_af2_predictions(pipeline_root: str) -> list:
             uri = f"gs://{bucket_name}/{blob.name}"
             # Best-effort model name from parent directory
             parent = blob.name.split("/")[-2]
-            predictions.append({"uri": uri, "model_name": parent, "ranking_confidence": 0})
+            predictions.append(
+                {"uri": uri, "model_name": parent, "ranking_confidence": 0}
+            )
     return predictions
 
 
@@ -231,7 +237,9 @@ def _discover_of3_predictions(pipeline_root: str) -> list:
         if name.endswith("_confidences_aggregated.json") and name not in seen:
             seen.add(name)
             base = name.replace("_confidences_aggregated.json", "")
-            sample_name = name.split("/")[-1].replace("_confidences_aggregated.json", "")
+            sample_name = name.split("/")[-1].replace(
+                "_confidences_aggregated.json", ""
+            )
             predictions.append(
                 {
                     "cif_uri": f"gs://{bucket_name}/{base}_model.cif",
@@ -259,9 +267,13 @@ def _discover_boltz2_predictions(pipeline_root: str) -> list:
         filename = parts_list[-1]
         if "/confidence_" in name and name not in seen:
             seen.add(name)
-            cif_filename = filename.replace("confidence_", "", 1).replace(".json", ".cif")
+            cif_filename = filename.replace("confidence_", "", 1).replace(
+                ".json", ".cif"
+            )
             cif_name = "/".join(parts_list[:-1] + [cif_filename])
-            pde_filename = filename.replace("confidence_", "pde_", 1).replace(".json", ".npz")
+            pde_filename = filename.replace("confidence_", "pde_", 1).replace(
+                ".json", ".npz"
+            )
             pde_name = "/".join(parts_list[:-1] + [pde_filename])
             sample_name = filename.replace("confidence_", "", 1).replace(".json", "")
             predictions.append(
@@ -296,7 +308,6 @@ def job_viewer(job_id):
     from flask import redirect, url_for
 
     return redirect(url_for("combined_viewer", job_id=job_id))
-
 
 
 @app.route("/combined")
@@ -454,9 +465,7 @@ def list_jobs():
             # This is more reliable than parsing the job ID timestamp, which can
             # differ by 1-2 seconds from the directory name — causing false
             # positives when multiple jobs are submitted within seconds of each other.
-            gcs_output_dir = (
-                pj.get("runtimeConfig", {}).get("gcsOutputDirectory", "")
-            )
+            gcs_output_dir = pj.get("runtimeConfig", {}).get("gcsOutputDirectory", "")
             gcs_ts = None
             m = re.search(r"pipeline_runs/(\d{8})_(\d{6})", gcs_output_dir)
             if m:
@@ -482,10 +491,12 @@ def list_jobs():
                 job["has_analysis"] = ts in complete_ts
                 job["analysis_running"] = ts in running_ts and not job["has_analysis"]
 
-        return jsonify({
-            "jobs": jobs,
-            "next_page_token": data.get("nextPageToken", ""),
-        })
+        return jsonify(
+            {
+                "jobs": jobs,
+                "next_page_token": data.get("nextPageToken", ""),
+            }
+        )
 
     except google.auth.exceptions.DefaultCredentialsError:
         logger.warning("No credentials available for /api/jobs")
@@ -512,11 +523,13 @@ def job_quality(job_id):
         summary = get_analysis_summary(job_id=job_id)
         # quality_metrics is nested under summary["summary"], not at the root
         qm = summary.get("summary", {}).get("quality_metrics", {})
-        return jsonify({
-            "quality_assessment": qm.get("quality_assessment", ""),
-            "best_model_plddt": qm.get("best_model_plddt"),
-            "best_model_pae": qm.get("best_model_pae"),
-        })
+        return jsonify(
+            {
+                "quality_assessment": qm.get("quality_assessment", ""),
+                "best_model_plddt": qm.get("best_model_plddt"),
+                "best_model_pae": qm.get("best_model_pae"),
+            }
+        )
     except Exception:
         return jsonify({"quality_assessment": ""}), 404
 
@@ -551,20 +564,21 @@ def trigger_analysis():
             pj.get("runtimeConfig", {}).get("gcsOutputDirectory", "").rstrip("/") + "/"
         )
         if not gcs_output_dir or gcs_output_dir == "/":
-            return jsonify({"error": "Could not determine gcs_output_directory for job"}), 400
+            return jsonify(
+                {"error": "Could not determine gcs_output_directory for job"}
+            ), 400
 
         analysis_path = f"{gcs_output_dir}analysis/"
 
         # Discover predictions based on model type
         if model_type == "openfold3":
             raw_predictions = _discover_of3_predictions(gcs_output_dir)
-            cr_job_name = os.environ.get("OF3_ANALYSIS_JOB_NAME", "of3-analysis-job")
         elif model_type == "boltz2":
             raw_predictions = _discover_boltz2_predictions(gcs_output_dir)
-            cr_job_name = os.environ.get("BOLTZ2_ANALYSIS_JOB_NAME", "boltz2-analysis-job")
         else:
             raw_predictions = _discover_af2_predictions(gcs_output_dir)
-            cr_job_name = os.environ.get("AF2_ANALYSIS_JOB_NAME", "af2-analysis-job")
+
+        cr_job_name = os.environ.get("ANALYSIS_JOB_NAME", "foldrun-analysis-job")
 
         if not raw_predictions:
             return jsonify({"error": "No prediction outputs found for this job"}), 404
@@ -621,7 +635,9 @@ def trigger_analysis():
         tc_bucket.blob(tc_blob_path).upload_from_string(
             json.dumps(task_config, indent=2), content_type="application/json"
         )
-        tc_bucket.blob(tc_blob_path.replace("task_config.json", "analysis_metadata.json")).upload_from_string(
+        tc_bucket.blob(
+            tc_blob_path.replace("task_config.json", "analysis_metadata.json")
+        ).upload_from_string(
             json.dumps(
                 {
                     "job_id": job_id,
@@ -645,7 +661,12 @@ def trigger_analysis():
                 "taskCount": len(raw_predictions),
                 "timeout": "600s",
                 "containerOverrides": [
-                    {"env": [{"name": "ANALYSIS_PATH", "value": analysis_path}]}
+                    {
+                        "env": [
+                            {"name": "ANALYSIS_PATH", "value": analysis_path},
+                            {"name": "MODEL_TYPE", "value": model_type},
+                        ]
+                    }
                 ],
             }
         }

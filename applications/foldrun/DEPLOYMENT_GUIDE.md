@@ -169,8 +169,7 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups |
 | Artifact Registry | `foldrun-repo` | Container images |
 | Cloud Run Service | `foldrun-viewer` | 3D structure viewer (IAP-secured) |
-| Cloud Run Job | `af2-analysis-job` | AF2 parallel analysis + Gemini |
-| Cloud Run Job | `of3-analysis-job` | OF3 parallel analysis + Gemini |
+| Cloud Run Job | `foldrun-analysis-job` | Parallel prediction analysis (AF2 + OF3 + Boltz-2) |
 | Cloud Run Service | `foldrun-a2a` | A2A protocol proxy (optional) |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent |
 
@@ -187,7 +186,7 @@ Expected output:
 ✅ [Terraform] Infrastructure is initialized
 ✅ [Storage] Bucket created
 ✅ [Cloud Run] foldrun-viewer service is deployed and active
-✅ [Cloud Run] af2-analysis-job is deployed
+✅ [Cloud Run] foldrun-analysis-job is deployed
 ✅ [Agent Platform] FoldRun Agent Runtime is deployed
 ✅ [Data] Genetic database download is COMPLETE (12/12 folders found)
 ```

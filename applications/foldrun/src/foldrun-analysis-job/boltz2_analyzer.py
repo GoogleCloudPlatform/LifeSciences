@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Cloud Run Job for analyzing Boltz-2 predictions in parallel.
+"""Boltz-2 specific prediction analyzer and consolidator."""
 
-Reads confidence_{name}_model_N.json (aggregated confidence scores) and the
-CIF file (per-atom pLDDT from B-factor column) to produce plots and Gemini analysis.
-No separate per-residue confidence JSON — pLDDT is extracted directly from the CIF.
-"""
-
+import io
 import json
 import logging
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 import matplotlib
@@ -36,130 +32,20 @@ matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+from shared_utils import (
+    calculate_plddt_stats,
+    download_image_from_gcs,
+    download_json_from_gcs,
+    download_text_from_gcs,
+    get_quality_assessment,
+    upload_to_gcs,
 )
+
 logger = logging.getLogger(__name__)
-
-# pLDDT confidence bands (same as AF2)
-PLDDT_BANDS = [
-    (0, 50, "very_low_confidence"),
-    (50, 70, "low_confidence"),
-    (70, 90, "high_confidence"),
-    (90, 100, "very_high_confidence"),
-]
-
-
-def download_from_gcs(gcs_uri: str, local_path: str) -> None:
-    """Download file from GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
-
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    blob.reload()
-    blob.download_to_filename(local_path)
-
-    size_mb = blob.size / 1024 / 1024 if blob.size else 0
-    logger.info(f"Downloaded {gcs_uri} ({size_mb:.2f} MB)")
-
-
-def upload_to_gcs(local_path: str, gcs_uri: str) -> None:
-    """Upload file to GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
-
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    blob.upload_from_filename(local_path)
-
-    logger.info(f"Uploaded {local_path} to {gcs_uri}")
-
-
-def download_json_from_gcs(gcs_uri: str) -> dict:
-    """Download and parse JSON file from GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
-
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-
-    content = blob.download_as_string()
-    return json.loads(content)
-
-
-def download_image_from_gcs(gcs_uri: str) -> bytes:
-    """Download image bytes from GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
-
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-
-    return blob.download_as_bytes()
-
-
-def calculate_plddt_stats(plddt_scores: list) -> dict:
-    """Calculate pLDDT statistics from per-residue array."""
-    scores = np.array(plddt_scores)
-
-    stats = {
-        "mean": float(np.mean(scores)),
-        "median": float(np.median(scores)),
-        "min": float(np.min(scores)),
-        "max": float(np.max(scores)),
-        "std": float(np.std(scores)),
-        "per_residue": plddt_scores,
-    }
-
-    # Distribution by confidence band
-    distribution = {}
-    for min_val, max_val, label in PLDDT_BANDS:
-        count = int(np.sum((scores >= min_val) & (scores <= max_val)))
-        distribution[label] = count
-
-    stats["distribution"] = distribution
-    return stats
-
-
-def get_quality_assessment(plddt_mean: float) -> str:
-    """Get quality assessment based on mean pLDDT."""
-    if plddt_mean >= 90:
-        return "very_high_confidence"
-    elif plddt_mean >= 70:
-        return "high_confidence"
-    elif plddt_mean >= 50:
-        return "low_confidence"
-    else:
-        return "very_low_confidence"
 
 
 def _detect_atom_site_columns(cif_text: str) -> dict:
-    """Parse the _atom_site loop header to build a column-name → index map.
-
-    Returns e.g. {'group_PDB': 0, 'id': 1, ..., 'B_iso_or_equiv': 14, ...}
-    """
+    """Parse the _atom_site loop header to build a column-name -> index map."""
     col_names = []
     in_atom_site_loop = False
 
@@ -172,8 +58,10 @@ def _detect_atom_site_columns(cif_text: str) -> dict:
             field = stripped.split(".", 1)[1].split()[0]
             col_names.append(field)
             in_atom_site_loop = True
-        elif in_atom_site_loop and (stripped.startswith("ATOM") or stripped.startswith("HETATM")):
-            break  # data starts — column list is complete
+        elif in_atom_site_loop and (
+            stripped.startswith("ATOM") or stripped.startswith("HETATM")
+        ):
+            break
         elif in_atom_site_loop and stripped and not stripped.startswith("_atom_site."):
             if not stripped.startswith("ATOM") and not stripped.startswith("HETATM"):
                 in_atom_site_loop = False
@@ -182,22 +70,14 @@ def _detect_atom_site_columns(cif_text: str) -> dict:
 
 
 def parse_cif_chains(cif_text: str) -> tuple[list[dict], list[float]]:
-    """Parse CIF atom_site records to extract per-chain info and per-atom pLDDT.
-
-    Returns:
-        chain_info: list of dicts sorted by chain order:
-            [{'chain_id': 'A', 'atom_count': 601, 'residue_count': 76,
-              'comp_ids': ['MET','GLN',...], 'molecule_type': 'protein'}, ...]
-        plddt_scores: per-atom pLDDT from B_iso_or_equiv column (empty if not found)
-    """
-    # Detect column indices from CIF header (handles variable column ordering)
+    """Parse CIF atom_site records to extract per-chain info and per-atom pLDDT."""
     col_map = _detect_atom_site_columns(cif_text)
     chain_col = col_map.get("auth_asym_id", 11)
     comp_col = col_map.get("auth_comp_id", 10)
     seq_col = col_map.get("auth_seq_id", 9)
     bfactor_col = col_map.get("B_iso_or_equiv")
 
-    chains = {}  # chain_id -> {atoms, residues set, comp_ids set}
+    chains = {}
     chain_order = []
     plddt_scores = []
 
@@ -228,7 +108,6 @@ def parse_cif_chains(cif_text: str) -> tuple[list[dict], list[float]]:
     for cid in chain_order:
         info = chains[cid]
         comp_ids = info["comp_ids"]
-        # Classify molecule type from residue names
         standard_aa = {
             "ALA",
             "ARG",
@@ -276,37 +155,17 @@ def parse_cif_chains(cif_text: str) -> tuple[list[dict], list[float]]:
     return result, plddt_scores
 
 
-def download_text_from_gcs(gcs_uri: str) -> str:
-    """Download text file from GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-    parts = gcs_uri[5:].split("/", 1)
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(parts[0])
-    blob = bucket.blob(parts[1] if len(parts) > 1 else "")
-    return blob.download_as_text()
-
-
 def plot_plddt(
     plddt_scores: list,
     sample_name: str,
     output_path: str,
     chain_info: list[dict] = None,
 ) -> None:
-    """Generate pLDDT per-atom plot with chain boundary annotations.
-
-    Args:
-        plddt_scores: Atom-level pLDDT scores
-        sample_name: Name for plot title
-        output_path: Local path to save plot PNG
-        chain_info: Chain info from parse_cif_chains() for boundary lines
-    """
+    """Generate pLDDT per-atom plot with chain boundary annotations."""
     scores = np.array(plddt_scores)
     fig, ax = plt.subplots(figsize=(12, 4))
-
     residues = np.arange(1, len(scores) + 1)
 
-    # If chain info available, color each chain differently
     if chain_info and len(chain_info) > 1:
         chain_colors = [
             "#1f77b4",
@@ -336,18 +195,15 @@ def plot_plddt(
                 label=label,
             )
 
-            # Draw chain boundary line
             if i < len(chain_info) - 1:
                 boundary = offset + n
                 ax.axvline(
                     x=boundary, color="gray", linestyle="--", alpha=0.5, linewidth=1
                 )
-
             offset += n
     else:
         ax.plot(residues, scores, linewidth=1.5, color="#1f77b4")
 
-    # Confidence band backgrounds
     ax.axhspan(90, 100, alpha=0.08, color="green")
     ax.axhspan(70, 90, alpha=0.08, color="yellow")
     ax.axhspan(50, 70, alpha=0.08, color="orange")
@@ -365,37 +221,30 @@ def plot_plddt(
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    logger.info(f"Generated pLDDT plot: {output_path}")
 
 
 def plot_pde(
     pde_matrix: list, sample_name: str, output_path: str, chain_info: list[dict] = None
 ) -> None:
-    """Generate PDE heatmap with chain boundary lines.
-
-    The PDE matrix is token-level (residue/entity level), not atom-level.
-    Chain boundaries are drawn using residue counts.
-    """
+    """Generate PDE heatmap with chain boundary lines."""
     pde = np.array(pde_matrix)
     fig, ax = plt.subplots(figsize=(8, 7))
 
     cmap = plt.cm.Greens_r
     im = ax.imshow(pde, vmin=0, vmax=np.max(pde), cmap=cmap)
 
-    # Draw chain boundary lines on heatmap
     if chain_info and len(chain_info) > 1:
         offset = 0
         for i, ci in enumerate(chain_info):
             n = ci["residue_count"]
             if i < len(chain_info) - 1:
-                boundary = offset + n - 0.5  # center on boundary
+                boundary = offset + n - 0.5
                 ax.axhline(
                     y=boundary, color="white", linestyle="-", linewidth=1.5, alpha=0.8
                 )
                 ax.axvline(
                     x=boundary, color="white", linestyle="-", linewidth=1.5, alpha=0.8
                 )
-                # Label chain
                 mid = offset + n / 2
                 ax.text(
                     -2,
@@ -423,7 +272,7 @@ def plot_pde(
 
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label(
-        "Predicted Distance Error (A)", rotation=270, labelpad=20, fontsize=10
+        "Predicted Distance Error (Å)", rotation=270, labelpad=20, fontsize=10
     )
 
     ax.set_xlabel("Scored Residue", fontsize=10)
@@ -437,19 +286,10 @@ def plot_pde(
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    logger.info(f"Generated PDE plot: {output_path}")
 
 
 def calculate_per_chain_plddt(plddt_scores: list, chain_info: list[dict]) -> dict:
-    """Calculate per-chain pLDDT statistics.
-
-    Args:
-        plddt_scores: Atom-level pLDDT scores
-        chain_info: Chain info from parse_cif_chains()
-
-    Returns:
-        Dict mapping chain_id to stats dict with mean, min, max, molecule_type, comp_ids
-    """
+    """Calculate per-chain pLDDT statistics."""
     scores = np.array(plddt_scores)
     result = {}
     offset = 0
@@ -480,16 +320,7 @@ def plot_iptm_matrix(
     chain_ptm: dict = None,
     chain_info: list = None,
 ) -> None:
-    """Generate chain x chain ipTM heatmap with per-chain pTM on diagonal.
-
-    Args:
-        chain_pair_iptm: Dict like {"(A, B)": 0.72}
-        sample_name: Name for plot title
-        output_path: Local path to save plot PNG
-        chain_ptm: Dict like {"A": 0.87, "B": 0.46} for diagonal values
-        chain_info: Chain info for molecule type labels
-    """
-    # Parse chain pairs and build matrix
+    """Generate chain x chain ipTM heatmap with per-chain pTM on diagonal."""
     chains = set()
     pairs = {}
     for key, value in chain_pair_iptm.items():
@@ -501,26 +332,22 @@ def plot_iptm_matrix(
             chains.add(c2)
             pairs[(c1, c2)] = value
 
-    # Also add chains from chain_ptm (for diagonal)
     if chain_ptm:
         chains.update(chain_ptm.keys())
 
     chains = sorted(chains)
     n = len(chains)
     if n < 2:
-        logger.info("Skipping ipTM matrix — fewer than 2 chains")
         return
 
     matrix = np.zeros((n, n))
     for i, c1 in enumerate(chains):
         for j, c2 in enumerate(chains):
             if i == j and chain_ptm and c1 in chain_ptm:
-                # Diagonal: per-chain pTM
                 matrix[i, j] = chain_ptm[c1]
             else:
                 matrix[i, j] = pairs.get((c1, c2), pairs.get((c2, c1), 0.0))
 
-    # Build labels with molecule type
     chain_labels = []
     ci_map = {c["chain_id"]: c for c in (chain_info or [])}
     for c in chains:
@@ -566,305 +393,6 @@ def plot_iptm_matrix(
     plt.tight_layout(pad=1.5)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    logger.info(f"Generated ipTM matrix plot: {output_path}")
-
-
-def main():
-    """Main entry point for Cloud Run Job task."""
-
-    task_index = int(os.getenv("CLOUD_RUN_TASK_INDEX", "0"))
-    task_count = int(os.getenv("CLOUD_RUN_TASK_COUNT", "1"))
-
-    logger.info(f"Task {task_index}/{task_count}: Starting")
-
-    bucket_name = os.getenv("GCS_BUCKET")
-    analysis_path = os.getenv("ANALYSIS_PATH")
-
-    if not bucket_name:
-        logger.error("GCS_BUCKET environment variable not set")
-        sys.exit(1)
-
-    if not analysis_path:
-        logger.error("ANALYSIS_PATH environment variable not set")
-        sys.exit(1)
-
-    logger.info(f"Bucket: {bucket_name}, Analysis path: {analysis_path}")
-
-    # Load task configuration
-    task_config_uri = f"{analysis_path}task_config.json"
-    logger.info(f"Task {task_index}: Loading configuration from {task_config_uri}")
-
-    try:
-        task_config = download_json_from_gcs(task_config_uri)
-    except Exception as e:
-        logger.error(f"Failed to load task configuration: {e}")
-        sys.exit(1)
-
-    predictions = task_config.get("predictions", [])
-    if task_index >= len(predictions):
-        logger.error(
-            f"Task index {task_index} out of range (total predictions: {len(predictions)})"
-        )
-        sys.exit(1)
-
-    pred = predictions[task_index]
-    job_id = task_config.get("job_id")
-    affinity_uri = task_config.get("affinity_uri")  # None if affinity was not requested
-    query_yaml_uri = task_config.get("query_yaml_uri")  # Resolved by agent at job dispatch time
-
-    sample_name = pred["sample_name"]
-    cif_uri = pred["cif_uri"]
-    confidences_uri = pred["confidences_uri"]
-    aggregated_uri = pred["aggregated_uri"]
-    pde_uri = pred.get("pde_uri", "")
-    output_uri = pred["output_uri"]
-
-    logger.info(f"Starting analysis for sample: {sample_name}")
-    logger.info(f"Job ID: {job_id}")
-
-    try:
-        # Load aggregated confidences (summary scores)
-        logger.info("Loading aggregated confidences...")
-        aggregated = download_json_from_gcs(aggregated_uri)
-
-        # Parse CIF to get chain info and per-atom pLDDT (stored in B-factor column)
-        logger.info("Parsing CIF for chain info and pLDDT scores...")
-        chain_info = []
-        cif_plddt_scores = []
-        try:
-            cif_text = download_text_from_gcs(cif_uri)
-            chain_info, cif_plddt_scores = parse_cif_chains(cif_text)
-            for ci in chain_info:
-                logger.info(
-                    f"  Chain {ci['chain_id']}: {ci['molecule_type']}, "
-                    f"{ci['atom_count']} atoms, {ci['residue_count']} residues, "
-                    f"comps: {ci['comp_ids'][:5]}"
-                )
-            if cif_plddt_scores:
-                logger.info(f"  Extracted {len(cif_plddt_scores)} per-atom pLDDT scores from CIF B-factors")
-        except Exception as e:
-            logger.warning(f"Could not parse CIF for chain info: {e}")
-
-        # Extract metrics from aggregated
-        ranking_score = aggregated.get(
-            "confidence_score", aggregated.get("sample_ranking_score", 0.0)
-        )
-        ptm = aggregated.get("ptm", 0.0)
-        iptm = aggregated.get("iptm", 0.0)
-        avg_plddt = aggregated.get("complex_plddt", 0.0)
-        gpde = aggregated.get("complex_pde", None)
-        has_clash = aggregated.get("has_clash", 0)
-        disorder = aggregated.get("disorder", 0)
-        # Boltz-2 uses integer string indices ("0", "1") for chain keys.
-        # Remap to CIF chain letters (A, B, C...) using chain_info order.
-        raw_chain_ptm = aggregated.get("chains_ptm", {})
-        raw_pair_iptm = aggregated.get("pair_chains_iptm", {})
-
-        # Build index → chain letter map from CIF chain_info
-        idx_to_letter = {str(i): ci["chain_id"] for i, ci in enumerate(chain_info)}
-
-        chain_ptm = {
-            idx_to_letter.get(str(k), str(k)): v for k, v in raw_chain_ptm.items()
-        }
-
-        # Flatten nested pair_chains_iptm {"0": {"0": 0.85, "1": 0.81}, ...}
-        # into flat {"(A, B)": 0.81, ...} format expected by plot_iptm_matrix
-        chain_pair_iptm = {}
-        for c1_idx, row in raw_pair_iptm.items():
-            if isinstance(row, dict):
-                for c2_idx, score in row.items():
-                    c1 = idx_to_letter.get(str(c1_idx), str(c1_idx))
-                    c2 = idx_to_letter.get(str(c2_idx), str(c2_idx))
-                    if c1 != c2:
-                        chain_pair_iptm[f"({c1}, {c2})"] = score
-            else:
-                # Unexpected flat format — pass through
-                c1 = idx_to_letter.get(str(c1_idx), str(c1_idx))
-                chain_pair_iptm[c1] = row
-
-        # Per-atom pLDDT: Boltz-2 stores these in the CIF B-factor column (not a separate JSON).
-        # We extracted them above via parse_cif_chains; fall back to empty if CIF parse failed.
-        plddt_scores = cif_plddt_scores
-
-        # PDE matrix: written as pde_{stem}_model_N.npz when --write_full_pde is passed.
-        pde_matrix = None
-        if pde_uri:
-            try:
-                import io
-                pde_bytes = download_image_from_gcs(pde_uri)  # returns raw bytes
-                pde_data = np.load(io.BytesIO(pde_bytes))
-                pde_matrix = pde_data["pde"].tolist()
-                logger.info(f"Loaded PDE matrix {np.array(pde_matrix).shape} from {pde_uri}")
-            except Exception as e:
-                logger.warning(f"Could not load PDE matrix from {pde_uri}: {e}")
-
-        # Calculate overall pLDDT stats
-        if plddt_scores:
-            plddt_stats = calculate_plddt_stats(plddt_scores)
-        else:
-            plddt_stats = {
-                "mean": avg_plddt,
-                "median": avg_plddt,
-                "min": 0.0,
-                "max": 100.0,
-                "std": 0.0,
-                "per_residue": [],
-                "distribution": {},
-            }
-
-        # Calculate per-chain pLDDT stats (protein vs ligand breakdown)
-        per_chain_plddt = {}
-        if plddt_scores and chain_info:
-            per_chain_plddt = calculate_per_chain_plddt(plddt_scores, chain_info)
-            for cid, stats in per_chain_plddt.items():
-                logger.info(
-                    f"  Chain {cid} ({stats['molecule_type']}): "
-                    f"mean pLDDT={stats['mean']:.1f}"
-                )
-
-        quality = get_quality_assessment(plddt_stats["mean"])
-
-        # Generate plots
-        logger.info("Generating visualizations...")
-        plot_files = {}
-        output_base = output_uri.rsplit("/", 1)[0]
-
-        # pLDDT plot (with chain boundaries and per-chain coloring)
-        if plddt_scores:
-            plddt_plot_path = f"/tmp/plddt_plot_{task_index}.png"
-            plot_plddt(
-                plddt_scores,
-                sample_name,
-                plddt_plot_path,
-                chain_info=chain_info if chain_info else None,
-            )
-            plddt_plot_uri = f"{output_base}/plddt_plot_{task_index}.png"
-            upload_to_gcs(plddt_plot_path, plddt_plot_uri)
-            plot_files["plddt_plot"] = plddt_plot_uri
-            os.remove(plddt_plot_path)
-
-        # PDE heatmap with chain boundary lines
-        if pde_matrix:
-            pde_plot_path = f"/tmp/pde_plot_{task_index}.png"
-            plot_pde(
-                pde_matrix,
-                sample_name,
-                pde_plot_path,
-                chain_info=chain_info if chain_info else None,
-            )
-            pde_plot_uri = f"{output_base}/pde_plot_{task_index}.png"
-            upload_to_gcs(pde_plot_path, pde_plot_uri)
-            plot_files["pde_plot"] = pde_plot_uri
-            os.remove(pde_plot_path)
-
-        # ipTM matrix heatmap (multi-chain: needs at least 2 chains)
-        if chain_pair_iptm and len(chain_info) > 1:
-            iptm_plot_path = f"/tmp/iptm_matrix_{task_index}.png"
-            plot_iptm_matrix(
-                chain_pair_iptm,
-                sample_name,
-                iptm_plot_path,
-                chain_ptm=chain_ptm,
-                chain_info=chain_info,
-            )
-            if os.path.exists(iptm_plot_path):
-                iptm_plot_uri = f"{output_base}/iptm_matrix_{task_index}.png"
-                upload_to_gcs(iptm_plot_path, iptm_plot_uri)
-                plot_files["iptm_matrix_plot"] = iptm_plot_uri
-                os.remove(iptm_plot_path)
-
-        # Build analysis result
-        analysis = {
-            "prediction_index": task_index,
-            "sample_name": sample_name,
-            "rank": task_index + 1,
-            "ranking_score": ranking_score,
-            "ptm": ptm,
-            "iptm": iptm,
-            "avg_plddt": avg_plddt,
-            "gpde": gpde,
-            "has_clash": has_clash,
-            "disorder": disorder,
-            "chain_ptm": chain_ptm,
-            "chain_pair_iptm": chain_pair_iptm,
-            "per_chain_plddt": per_chain_plddt,
-            "chain_info": chain_info,
-            "plddt_mean": plddt_stats["mean"],
-            "plddt_median": plddt_stats["median"],
-            "plddt_min": plddt_stats["min"],
-            "plddt_max": plddt_stats["max"],
-            "plddt_std": plddt_stats["std"],
-            "plddt_distribution": plddt_stats["distribution"],
-            "plddt_scores": plddt_stats["per_residue"],
-            "quality_assessment": quality,
-            "has_pde": pde_matrix is not None,
-            "cif_uri": cif_uri,
-            "aggregated_uri": aggregated_uri,
-            "confidences_uri": confidences_uri,
-            "analyzed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            + "Z",
-            "plots": plot_files,
-        }
-
-        # Write to JSON and upload
-        local_json = f"/tmp/analysis_{task_index}.json"
-        with open(local_json, "w") as f:
-            json.dump(analysis, f, indent=2)
-
-        upload_to_gcs(local_json, output_uri)
-        os.remove(local_json)
-
-        logger.info(f"Completed analysis for sample {sample_name}")
-        logger.info(f"   ranking_score: {ranking_score:.4f}")
-        logger.info(f"   pLDDT mean: {plddt_stats['mean']:.2f}")
-        logger.info(f"   Quality: {quality}")
-
-        # Last task triggers consolidation
-        if task_index == task_count - 1:
-            logger.info(
-                f"Last task ({task_index + 1}/{task_count}), waiting for all tasks..."
-            )
-
-            import time
-
-            max_wait = 120
-            wait_interval = 2
-            waited = 0
-
-            storage_client = storage.Client()
-            bucket_obj = storage_client.bucket(bucket_name)
-            analysis_prefix = analysis_path.replace(f"gs://{bucket_name}/", "")
-
-            while waited < max_wait:
-                blobs = bucket_obj.list_blobs(prefix=analysis_prefix)
-                completed_files = [
-                    b.name
-                    for b in blobs
-                    if "prediction_" in b.name and b.name.endswith("_analysis.json")
-                ]
-
-                if len(completed_files) >= task_count:
-                    logger.info(
-                        f"All {task_count} analysis files found, starting consolidation"
-                    )
-                    break
-
-                logger.info(
-                    f"Waiting... ({len(completed_files)}/{task_count} files found)"
-                )
-                time.sleep(wait_interval)
-                waited += wait_interval
-
-            try:
-                consolidate_results(job_id, analysis_path, affinity_uri=affinity_uri, query_yaml_uri=query_yaml_uri)
-            except Exception as e:
-                logger.error(f"Consolidation failed: {e}", exc_info=True)
-
-        sys.exit(0)
-
-    except Exception as e:
-        logger.error(f"Error analyzing sample {sample_name}: {e}", exc_info=True)
-        sys.exit(1)
 
 
 def generate_gemini_expert_analysis(summary_data: dict) -> dict:
@@ -874,7 +402,6 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
         summary = summary_data["summary"]
         top_preds = summary_data["top_predictions"][:3]
 
-        # Build chain composition description
         chain_desc = ""
         for ci in best.get("chain_info", []):
             if ci["molecule_type"] == "ligand":
@@ -924,7 +451,6 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
 - Disorder: {"Yes" if best.get("disorder") else "No"}
 """
 
-        # Add chain-level metrics
         if best.get("chain_ptm"):
             prompt += "\n**Per-Chain pTM:**\n"
             for chain, score in best["chain_ptm"].items():
@@ -935,7 +461,6 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
             for pair, score in best["chain_pair_iptm"].items():
                 prompt += f"- {pair}: {score:.4f}\n"
 
-        # Add per-chain pLDDT breakdown (protein vs ligand)
         if best.get("per_chain_plddt"):
             prompt += "\n**Per-Chain pLDDT (protein vs ligand breakdown):**\n"
             for cid, stats in best["per_chain_plddt"].items():
@@ -959,7 +484,6 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
             prompt += f"- Low (50-70): {dist.get('low_confidence', 0)} atoms\n"
             prompt += f"- Very Low (<50): {dist.get('very_low_confidence', 0)} atoms\n"
 
-        # Add ranking score statistics across all samples
         all_preds = summary_data.get("all_predictions_summary", [])
         if len(all_preds) > 1:
             all_scores = [p["ranking_score"] for p in all_preds]
@@ -972,7 +496,6 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
             clash_str = " [CLASH]" if pred.get("has_clash") else ""
             prompt += f"{i}. {pred['sample_name']}: ranking_score {pred['ranking_score']:.4f}, pTM {pred['ptm']:.4f}, ipTM {pred['iptm']:.4f}{clash_str}\n"
 
-        # Add affinity results if available
         affinity = summary_data.get("summary", {}).get("affinity")
         if affinity and affinity.get("affinity_pred_value") is not None:
             prompt += "\n**Binding Affinity Prediction (Boltz-2 Affinity Model):**\n"
@@ -982,15 +505,15 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
             prompt += f"- ΔG (estimated): {affinity.get('delta_g_kcal_mol', 0):.2f} kcal/mol\n"
             prompt += f"- Binding probability: {affinity.get('affinity_probability_binary', 0):.3f} ({affinity.get('binding_likelihood', 'N/A')})\n"
             prompt += f"- Binding classification: {affinity.get('binding_classification', 'N/A').replace('_', ' ').title()}\n"
-            prompt += "Note: affinity_pred_value is from the ensemble model; validated primarily for competitive inhibitors.\n"
 
-        # Add input info if available
         if summary["protein_info"].get("fasta_sequence"):
             fasta_seq = summary["protein_info"]["fasta_sequence"]
             fasta_header = summary["protein_info"].get("fasta_header", "Unknown")
             prompt += f"\n**Input Sequence:**\n>{fasta_header}\n{fasta_seq}\n"
 
-        has_affinity = affinity is not None and affinity.get("affinity_pred_value") is not None
+        has_affinity = (
+            affinity is not None and affinity.get("affinity_pred_value") is not None
+        )
         prompt += f"""
 
 **Expert Analysis Request:**
@@ -1013,7 +536,6 @@ IMPORTANT: Begin your response directly with the analysis. Do NOT include any pr
 
         content_parts = [prompt]
 
-        # Include plot images if available
         if best.get("plots", {}).get("plddt_plot"):
             try:
                 img_uri = best["plots"]["plddt_plot"]
@@ -1051,14 +573,10 @@ IMPORTANT: Begin your response directly with the analysis. Do NOT include any pr
             if "preview" in gemini_model
             else os.getenv("REGION", "us-central1")
         )
-        logger.info(
-            f"Initializing Google GenAI (Agent Platform): project={project_id}, location={location}, model={gemini_model}"
-        )
 
         with genai.Client(
             vertexai=True, project=project_id, location=location
         ) as client:
-            # Generate content using Gemini API
             response = client.models.generate_content(
                 model=gemini_model,
                 contents=content_parts,
@@ -1089,11 +607,7 @@ IMPORTANT: Begin your response directly with the analysis. Do NOT include any pr
 
 
 def parse_affinity(affinity_data: dict) -> dict:
-    """Parse Boltz-2 affinity JSON and compute human-readable metrics.
-
-    affinity_pred_value = log10(IC50 in μM)
-    Conversions follow the official Boltz-2 documentation.
-    """
+    """Parse Boltz-2 affinity JSON and compute human-readable metrics."""
     val = affinity_data.get("affinity_pred_value")
     prob = affinity_data.get("affinity_probability_binary")
 
@@ -1101,54 +615,62 @@ def parse_affinity(affinity_data: dict) -> dict:
         "affinity_pred_value": val,
         "affinity_probability_binary": prob,
         "affinity_pred_value1": affinity_data.get("affinity_pred_value1"),
-        "affinity_probability_binary1": affinity_data.get("affinity_probability_binary1"),
+        "affinity_probability_binary1": affinity_data.get(
+            "affinity_probability_binary1"
+        ),
         "affinity_pred_value2": affinity_data.get("affinity_pred_value2"),
-        "affinity_probability_binary2": affinity_data.get("affinity_probability_binary2"),
+        "affinity_probability_binary2": affinity_data.get(
+            "affinity_probability_binary2"
+        ),
     }
 
     if val is not None:
-        ic50_um = 10 ** val
+        ic50_um = 10**val
         ic50_nm = ic50_um * 1000
-        pic50 = 6.0 - val          # pIC50 = -log10(IC50_M) = 6 - log10(IC50_μM)
-        delta_g = pic50 * 1.364    # ΔG ≈ pIC50 × RT·ln(10) at 300 K
+        pic50 = 6.0 - val
+        delta_g = pic50 * 1.364
 
-        result.update({
-            "ic50_um": round(ic50_um, 4),
-            "ic50_nm": round(ic50_nm, 2),
-            "pic50": round(pic50, 3),
-            "delta_g_kcal_mol": round(delta_g, 3),
-            # Classify binding strength by IC50
-            "binding_classification": (
-                "very_strong" if ic50_nm < 10 else
-                "strong"      if ic50_nm < 100 else
-                "moderate"    if ic50_nm < 1000 else
-                "weak"        if ic50_nm < 10000 else
-                "very_weak"
-            ),
-        })
+        result.update(
+            {
+                "ic50_um": round(ic50_um, 4),
+                "ic50_nm": round(ic50_nm, 2),
+                "pic50": round(pic50, 3),
+                "delta_g_kcal_mol": round(delta_g, 3),
+                "binding_classification": (
+                    "very_strong"
+                    if ic50_nm < 10
+                    else "strong"
+                    if ic50_nm < 100
+                    else "moderate"
+                    if ic50_nm < 1000
+                    else "weak"
+                    if ic50_nm < 10000
+                    else "very_weak"
+                ),
+            }
+        )
 
     if prob is not None:
         result["binding_likelihood"] = (
-            "high"     if prob > 0.8 else
-            "moderate" if prob > 0.5 else
-            "low"
+            "high" if prob > 0.8 else "moderate" if prob > 0.5 else "low"
         )
 
     return result
 
 
-def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | None = None, query_yaml_uri: str | None = None):
+def consolidate_results(
+    job_id: str,
+    analysis_path: str,
+    bucket_name: str,
+    task_count: int,
+    affinity_uri: str | None = None,
+    query_yaml_uri: str | None = None,
+):
     """Consolidate per-sample analysis results into summary.json."""
-    import time
-
-    logger.info(f"Consolidating results from {analysis_path}")
+    logger.info(f"Consolidating Boltz2 results from {analysis_path}")
     time.sleep(2)
 
-    if not analysis_path.startswith("gs://"):
-        raise ValueError(f"Invalid analysis_path format: {analysis_path}")
-
     parts = analysis_path[5:].split("/", 1)
-    bucket_name = parts[0]
     prefix = parts[1] if len(parts) > 1 else ""
 
     if prefix and not prefix.endswith("/"):
@@ -1156,7 +678,6 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
     if prefix.startswith("/"):
         prefix = prefix[1:]
 
-    # List all per-sample analysis files
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
 
@@ -1169,7 +690,6 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
 
     logger.info(f"Found {len(completed_files)} analysis files to consolidate")
 
-    # Read all analyses
     all_analyses = []
     for file_path in completed_files:
         try:
@@ -1182,7 +702,6 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
         logger.error("No analyses found to consolidate")
         return
 
-    # Get job metadata from Agent Platform
     all_labels = {}
     job_metadata = {"labels": {}, "parameters": {}}
     try:
@@ -1204,14 +723,10 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
         job = client.get_pipeline_job(request=request)
 
         all_labels = dict(job.labels) if hasattr(job, "labels") and job.labels else {}
-
         pipeline_parameters = {}
         if hasattr(job, "runtime_config") and hasattr(
             job.runtime_config, "parameter_values"
         ):
-            # parameter_values is map<string, google.protobuf.Value> via the raw
-            # aiplatform_v1 client. Values are proto Value messages, not Python
-            # primitives — extract the appropriate field based on value type.
             for k, v in job.runtime_config.parameter_values.items():
                 if hasattr(v, "string_value") and v.string_value:
                     pipeline_parameters[k] = v.string_value
@@ -1250,69 +765,47 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
             job_metadata["duration_formatted"] = (
                 f"{hours}h {minutes}m" if hours > 0 else f"{minutes:.1f}m"
             )
-
     except Exception as e:
         logger.error(f"Could not get job metadata: {e}", exc_info=True)
 
-    # Load and parse affinity results if they were requested
     affinity_results = None
     if affinity_uri:
         try:
             affinity_raw = download_json_from_gcs(affinity_uri)
             affinity_results = parse_affinity(affinity_raw)
-            logger.info(
-                f"Affinity results: IC50={affinity_results.get('ic50_nm', 'N/A'):.1f} nM, "
-                f"binding_prob={affinity_results.get('affinity_probability_binary', 'N/A'):.3f}"
-            )
         except Exception as e:
             logger.warning(f"Could not load affinity results from {affinity_uri}: {e}")
 
-    # Sort by ranking_score (descending — higher is better)
     all_analyses.sort(key=lambda x: x.get("ranking_score", 0), reverse=True)
 
-    # Re-rank
     for i, analysis in enumerate(all_analyses):
         analysis["rank"] = i + 1
 
     best = all_analyses[0]
-
-    # Calculate summary statistics
     ranking_scores = [a["ranking_score"] for a in all_analyses]
     plddt_means = [a["plddt_mean"] for a in all_analyses]
 
-    # Try to get input sequence from the uploaded Boltz-2 YAML query.
-    # Primary: use the URI resolved by the agent at job dispatch time (task_config).
-    # Fallback: reconstruct from the query_name label if primary is absent.
     fasta_sequence = None
     fasta_header = None
     input_query_yaml = None
     try:
         import yaml
 
-        # Primary: query_yaml_uri was resolved by analyze_job.py before launching the
-        # Cloud Run Job.  It is the exact GCS path written by submit_prediction.py.
         query_yaml_path = query_yaml_uri
-
-        # Fallback: derive from query_name label (preserves backward compat for older
-        # task_config files that don't have query_yaml_uri)
         if not query_yaml_path:
             query_name_label = all_labels.get("query_name", "")
             bucket_name_from_analysis = analysis_path[5:].split("/", 1)[0]
             query_yaml_path = (
                 f"gs://{bucket_name_from_analysis}/boltz2_queries/{query_name_label}.yaml"
-                if query_name_label else None
+                if query_name_label
+                else None
             )
-            logger.info(f"Query YAML fallback: label={query_name_label!r} path={query_yaml_path!r} all_labels_keys={list(all_labels.keys())}")
-        else:
-            logger.info(f"Query YAML primary path from task_config: {query_yaml_path!r}")
 
         if query_yaml_path:
             raw_yaml = download_text_from_gcs(query_yaml_path)
             query_data = yaml.safe_load(raw_yaml)
-            input_query_yaml = raw_yaml  # Store raw YAML text so viewer displays it as YAML, not JSON
-            logger.info(f"Loaded input query YAML from {query_yaml_path}")
+            input_query_yaml = raw_yaml
 
-            # Extract protein sequences for display
             seqs = []
             for entry in query_data.get("sequences", []):
                 if "protein" in entry:
@@ -1326,7 +819,6 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
     except Exception as e:
         logger.warning(f"Could not load input sequence: {e}")
 
-    # Build chain composition from best prediction's chain_info
     chain_composition = []
     best_chain_info = best.get("chain_info", [])
     total_residues = 0
@@ -1362,7 +854,7 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
             "best_plddt": best["plddt_mean"],
             "quality_assessment": best["quality_assessment"],
         },
-        "affinity": affinity_results,  # None if affinity was not predicted
+        "affinity": affinity_results,
         "statistics": {
             "total_predictions": len(all_analyses),
             "analyzed_successfully": len(all_analyses),
@@ -1409,19 +901,9 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
         ],
     }
 
-    # Generate Gemini expert analysis
-    logger.info("Generating Gemini expert analysis...")
     expert_analysis = generate_gemini_expert_analysis(summary_data)
     summary_data["expert_analysis"] = expert_analysis
 
-    if expert_analysis["status"] == "success":
-        logger.info("Expert analysis generated successfully")
-    else:
-        logger.error(
-            f"Expert analysis failed: {expert_analysis.get('error', 'Unknown')}"
-        )
-
-    # Write summary to GCS
     summary_uri = f"{analysis_path}summary.json"
     local_summary = "/tmp/summary.json"
 
@@ -1432,11 +914,211 @@ def consolidate_results(job_id: str, analysis_path: str, affinity_uri: str | Non
     os.remove(local_summary)
 
     logger.info(f"Consolidation complete! Summary written to {summary_uri}")
-    logger.info(
-        f"   Best sample: {best['sample_name']} (ranking_score: {best['ranking_score']:.4f})"
-    )
-    logger.info(f"   Labels captured: {list(all_labels.keys())}")
 
 
-if __name__ == "__main__":
-    main()
+def run_task(
+    task_index: int,
+    task_count: int,
+    task_config: dict,
+    bucket_name: str,
+    analysis_path: str,
+):
+    """Execute Boltz2 predictions analysis task."""
+    predictions = task_config.get("predictions", [])
+    if task_index >= len(predictions):
+        logger.error(f"Task index {task_index} out of range")
+        sys.exit(1)
+
+    pred = predictions[task_index]
+    job_id = task_config.get("job_id")
+    affinity_uri = task_config.get("affinity_uri")
+    query_yaml_uri = task_config.get("query_yaml_uri")
+
+    sample_name = pred["sample_name"]
+    cif_uri = pred["cif_uri"]
+    confidences_uri = pred["confidences_uri"]
+    aggregated_uri = pred["aggregated_uri"]
+    pde_uri = pred.get("pde_uri", "")
+    output_uri = pred["output_uri"]
+
+    logger.info(f"Starting Boltz2 analysis for sample: {sample_name}")
+
+    try:
+        aggregated = download_json_from_gcs(aggregated_uri)
+        chain_info = []
+        cif_plddt_scores = []
+        try:
+            cif_text = download_text_from_gcs(cif_uri)
+            chain_info, cif_plddt_scores = parse_cif_chains(cif_text)
+        except Exception as e:
+            logger.warning(f"Could not parse CIF: {e}")
+
+        ranking_score = aggregated.get(
+            "confidence_score", aggregated.get("sample_ranking_score", 0.0)
+        )
+        ptm = aggregated.get("ptm", 0.0)
+        iptm = aggregated.get("iptm", 0.0)
+        avg_plddt = aggregated.get("complex_plddt", 0.0)
+        gpde = aggregated.get("complex_pde", None)
+        has_clash = aggregated.get("has_clash", 0)
+        disorder = aggregated.get("disorder", 0)
+
+        raw_chain_ptm = aggregated.get("chains_ptm", {})
+        raw_pair_iptm = aggregated.get("pair_chains_iptm", {})
+
+        idx_to_letter = {str(i): ci["chain_id"] for i, ci in enumerate(chain_info)}
+        chain_ptm = {
+            idx_to_letter.get(str(k), str(k)): v for k, v in raw_chain_ptm.items()
+        }
+
+        chain_pair_iptm = {}
+        for c1_idx, row in raw_pair_iptm.items():
+            if isinstance(row, dict):
+                for c2_idx, score in row.items():
+                    c1 = idx_to_letter.get(str(c1_idx), str(c1_idx))
+                    c2 = idx_to_letter.get(str(c2_idx), str(c2_idx))
+                    if c1 != c2:
+                        chain_pair_iptm[f"({c1}, {c2})"] = score
+            else:
+                c1 = idx_to_letter.get(str(c1_idx), str(c1_idx))
+                chain_pair_iptm[c1] = row
+
+        plddt_scores = cif_plddt_scores
+        pde_matrix = None
+        if pde_uri:
+            try:
+                pde_bytes = download_image_from_gcs(pde_uri)
+                pde_data = np.load(io.BytesIO(pde_bytes))
+                pde_matrix = pde_data["pde"].tolist()
+            except Exception as e:
+                logger.warning(f"Could not load PDE: {e}")
+
+        if plddt_scores:
+            plddt_stats = calculate_plddt_stats(plddt_scores)
+        else:
+            plddt_stats = {
+                "mean": avg_plddt,
+                "median": avg_plddt,
+                "min": 0.0,
+                "max": 100.0,
+                "std": 0.0,
+                "per_residue": [],
+                "distribution": {},
+            }
+
+        per_chain_plddt = {}
+        if plddt_scores and chain_info:
+            per_chain_plddt = calculate_per_chain_plddt(plddt_scores, chain_info)
+
+        quality = get_quality_assessment(plddt_stats["mean"])
+
+        # Generate plots
+        plot_files = {}
+        output_base = output_uri.rsplit("/", 1)[0]
+
+        if plddt_scores:
+            plddt_plot_path = f"/tmp/plddt_plot_{task_index}.png"
+            plot_plddt(plddt_scores, sample_name, plddt_plot_path, chain_info)
+            plddt_plot_uri = f"{output_base}/plddt_plot_{task_index}.png"
+            upload_to_gcs(plddt_plot_path, plddt_plot_uri)
+            plot_files["plddt_plot"] = plddt_plot_uri
+            os.remove(plddt_plot_path)
+
+        if pde_matrix:
+            pde_plot_path = f"/tmp/pde_plot_{task_index}.png"
+            plot_pde(pde_matrix, sample_name, pde_plot_path, chain_info)
+            pde_plot_uri = f"{output_base}/pde_plot_{task_index}.png"
+            upload_to_gcs(pde_plot_path, pde_plot_uri)
+            plot_files["pde_plot"] = pde_plot_uri
+            os.remove(pde_plot_path)
+
+        if chain_pair_iptm and len(chain_info) > 1:
+            iptm_plot_path = f"/tmp/iptm_matrix_{task_index}.png"
+            plot_iptm_matrix(
+                chain_pair_iptm,
+                sample_name,
+                iptm_plot_path,
+                chain_ptm,
+                chain_info,
+            )
+            if os.path.exists(iptm_plot_path):
+                iptm_plot_uri = f"{output_base}/iptm_matrix_{task_index}.png"
+                upload_to_gcs(iptm_plot_path, iptm_plot_uri)
+                plot_files["iptm_matrix_plot"] = iptm_plot_uri
+                os.remove(iptm_plot_path)
+
+        analysis = {
+            "prediction_index": task_index,
+            "sample_name": sample_name,
+            "rank": task_index + 1,
+            "ranking_score": ranking_score,
+            "ptm": ptm,
+            "iptm": iptm,
+            "avg_plddt": avg_plddt,
+            "gpde": gpde,
+            "has_clash": has_clash,
+            "disorder": disorder,
+            "chain_ptm": chain_ptm,
+            "chain_pair_iptm": chain_pair_iptm,
+            "per_chain_plddt": per_chain_plddt,
+            "chain_info": chain_info,
+            "plddt_mean": plddt_stats["mean"],
+            "plddt_median": plddt_stats["median"],
+            "plddt_min": plddt_stats["min"],
+            "plddt_max": plddt_stats["max"],
+            "plddt_std": plddt_stats["std"],
+            "plddt_distribution": plddt_stats["distribution"],
+            "plddt_scores": plddt_stats["per_residue"],
+            "quality_assessment": quality,
+            "has_pde": pde_matrix is not None,
+            "cif_uri": cif_uri,
+            "aggregated_uri": aggregated_uri,
+            "confidences_uri": confidences_uri,
+            "analyzed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+            + "Z",
+            "plots": plot_files,
+        }
+
+        local_json = f"/tmp/analysis_{task_index}.json"
+        with open(local_json, "w") as f:
+            json.dump(analysis, f, indent=2)
+
+        upload_to_gcs(local_json, output_uri)
+        os.remove(local_json)
+
+        # Consolidation check
+        if task_index == task_count - 1:
+            max_wait = 120
+            wait_interval = 2
+            waited = 0
+            storage_client = storage.Client()
+            bucket_obj = storage_client.bucket(bucket_name)
+            analysis_prefix = analysis_path.replace(f"gs://{bucket_name}/", "")
+
+            while waited < max_wait:
+                blobs = bucket_obj.list_blobs(prefix=analysis_prefix)
+                completed_files = [
+                    b.name
+                    for b in blobs
+                    if "prediction_" in b.name and b.name.endswith("_analysis.json")
+                ]
+
+                if len(completed_files) >= task_count:
+                    logger.info("All task analysis files found, starting consolidation")
+                    break
+
+                time.sleep(wait_interval)
+                waited += wait_interval
+
+            consolidate_results(
+                job_id,
+                analysis_path,
+                bucket_name,
+                task_count,
+                affinity_uri,
+                query_yaml_uri,
+            )
+
+    except Exception as e:
+        logger.error(f"Error running Boltz2 analysis task: {e}", exc_info=True)
+        raise

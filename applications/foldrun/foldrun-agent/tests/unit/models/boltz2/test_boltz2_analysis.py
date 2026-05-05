@@ -41,6 +41,7 @@ def _import_main():
         "google.cloud.aiplatform_v1": MagicMock(),
         "google.genai": MagicMock(),
         "google.genai.types": MagicMock(),
+        "shared_utils": MagicMock(),
     }
     for name, stub in _stubs.items():
         sys.modules.setdefault(name, stub)
@@ -51,11 +52,11 @@ def _import_main():
     main_path = os.path.join(
         os.path.dirname(__file__),
         "..", "..", "..", "..", "..",
-        "src", "boltz2-analysis-job", "main.py",
+        "src", "foldrun-analysis-job", "boltz2_analyzer.py",
     )
     main_path = os.path.abspath(main_path)
     import importlib.util
-    spec = importlib.util.spec_from_file_location("boltz2_analysis_main", main_path)
+    spec = importlib.util.spec_from_file_location("boltz2_analyzer", main_path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# AlphaFold Analysis Job - Cloud Run Job Dockerfile
+# FoldRun Unified Analysis Job - Cloud Run Job Dockerfile
 
 # Stage 1: Build environment
 FROM python:3.13-slim AS builder
@@ -39,7 +39,7 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 
 # Copy application files
-COPY main.py .
+COPY . .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
