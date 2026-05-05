@@ -20,9 +20,6 @@ from unittest.mock import MagicMock
 
 # Stub heavy imports BEFORE loading the module
 _stubs = {
-    "matplotlib": MagicMock(),
-    "matplotlib.pyplot": MagicMock(),
-    "seaborn": MagicMock(),
     "google.cloud.storage": MagicMock(),
     "google.cloud.aiplatform_v1": MagicMock(),
     "google.genai": MagicMock(),
@@ -31,7 +28,7 @@ _stubs = {
 for name, stub in _stubs.items():
     sys.modules.setdefault(name, stub)
 
-from foldrun_analysis import of3_analyzer
+from foldrun_analysis import of3_analyzer  # noqa: E402
 
 
 class TestOF3Analysis:
@@ -47,7 +44,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 2 GLY A
 
     def test_parse_cif_chains_protein(self):
         """Correctly parses protein structures and atom/residue counts from CIF."""
-        chain_info = of3_analyzer.parse_cif_chains(self.SIMPLE_CIF)
+        chain_info, _ = of3_analyzer.parse_cif_chains(self.SIMPLE_CIF)
         assert len(chain_info) == 1
         assert chain_info[0]["chain_id"] == "A"
         assert chain_info[0]["atom_count"] == 3
@@ -57,7 +54,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 2 GLY A
     def test_parse_cif_chains_multiple(self):
         """Correctly parses multi-chain structures and distinct molecule types."""
         cif_with_ligand = self.SIMPLE_CIF + ("HETATM 4 C C HOH B 1 4.0 5.0 1 HOH B\n")
-        chain_info = of3_analyzer.parse_cif_chains(cif_with_ligand)
+        chain_info, _ = of3_analyzer.parse_cif_chains(cif_with_ligand)
         assert len(chain_info) == 2
         assert chain_info[0]["chain_id"] == "A"
         assert chain_info[0]["molecule_type"] == "protein"

@@ -29,7 +29,6 @@ from google.cloud import storage
 from google.genai import types
 
 matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
-import matplotlib.pyplot as plt
 
 from .shared_utils import (
     calculate_plddt_stats,
@@ -37,6 +36,9 @@ from .shared_utils import (
     download_json_from_gcs,
     get_quality_assessment,
     upload_to_gcs,
+    plot_plddt_distribution,
+    plot_error_matrix,
+    wait_for_sibling_tasks,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,60 +70,7 @@ def calculate_pae_stats(raw_prediction: dict) -> dict | None:
     return stats
 
 
-def plot_plddt(plddt_scores: np.ndarray, model_name: str, output_path: str) -> None:
-    """Generate pLDDT per-residue plot."""
-    fig, ax = plt.subplots(figsize=(12, 4))
 
-    residues = np.arange(1, len(plddt_scores) + 1)
-    ax.plot(residues, plddt_scores, linewidth=1.5, color="#1f77b4")
-
-    # Add confidence band backgrounds
-    ax.axhspan(90, 100, alpha=0.1, color="green", label="Very High (≥90)")
-    ax.axhspan(70, 90, alpha=0.1, color="yellow", label="High (70-90)")
-    ax.axhspan(50, 70, alpha=0.1, color="orange", label="Low (50-70)")
-    ax.axhspan(0, 50, alpha=0.1, color="red", label="Very Low (<50)")
-
-    # Formatting
-    ax.set_xlabel("Residue Position", fontsize=10)
-    ax.set_ylabel("pLDDT Score", fontsize=10)
-    ax.set_title(
-        f"Per-Residue Confidence (pLDDT) - {model_name}", fontsize=11, fontweight="bold"
-    )
-    ax.set_ylim(0, 100)
-    ax.grid(True, alpha=0.3, linestyle="--")
-    ax.legend(loc="lower right", fontsize=8)
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    logger.info(f"Generated pLDDT plot: {output_path}")
-
-
-def plot_pae(
-    pae_matrix: np.ndarray, model_name: str, output_path: str, max_pae: float = 31.0
-) -> None:
-    """Generate PAE heatmap plot."""
-    fig, ax = plt.subplots(figsize=(8, 7))
-
-    cmap = plt.cm.Greens_r
-    im = ax.imshow(pae_matrix, vmin=0, vmax=max_pae, cmap=cmap)
-
-    cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label(
-        "Expected Position Error (Å)", rotation=270, labelpad=20, fontsize=10
-    )
-
-    # Formatting
-    ax.set_xlabel("Scored Residue", fontsize=10)
-    ax.set_ylabel("Aligned Residue", fontsize=10)
-    ax.set_title(
-        f"Predicted Aligned Error (PAE) - {model_name}", fontsize=11, fontweight="bold"
-    )
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    logger.info(f"Generated PAE plot: {output_path}")
 
 
 def generate_gemini_expert_analysis(summary_data: dict) -> dict:
@@ -534,7 +483,7 @@ def run_task(
         output_base = output_uri.rsplit("/", 1)[0]
 
         plddt_plot_path = f"/tmp/plddt_plot_{prediction_index}.png"
-        plot_plddt(raw_prediction["plddt"], model_name, plddt_plot_path)
+        plot_plddt_distribution(raw_prediction["plddt"], model_name, plddt_plot_path)
 
         plddt_plot_uri = f"{output_base}/plddt_plot_{prediction_index}.png"
         upload_to_gcs(plddt_plot_path, plddt_plot_uri)
@@ -544,11 +493,12 @@ def run_task(
         if pae_stats is not None:
             pae_plot_path = f"/tmp/pae_plot_{prediction_index}.png"
             max_pae = raw_prediction.get("max_predicted_aligned_error", 31.0)
-            plot_pae(
+            plot_error_matrix(
                 raw_prediction["predicted_aligned_error"],
                 model_name,
+                "Expected Position Error (Å)",
                 pae_plot_path,
-                max_pae,
+                max_value=max_pae,
             )
 
             pae_plot_uri = f"{output_base}/pae_plot_{prediction_index}.png"
@@ -592,28 +542,7 @@ def run_task(
 
         # Consolidation check
         if task_index == task_count - 1:
-            max_wait = 120
-            wait_interval = 2
-            waited = 0
-            storage_client = storage.Client()
-            bucket_obj = storage_client.bucket(bucket_name)
-            analysis_prefix = analysis_path.replace(f"gs://{bucket_name}/", "")
-
-            while waited < max_wait:
-                blobs = bucket_obj.list_blobs(prefix=analysis_prefix)
-                completed_files = [
-                    b.name
-                    for b in blobs
-                    if "prediction_" in b.name and b.name.endswith("_analysis.json")
-                ]
-
-                if len(completed_files) >= task_count:
-                    logger.info("All task analysis files found, starting consolidation")
-                    break
-
-                time.sleep(wait_interval)
-                waited += wait_interval
-
+            wait_for_sibling_tasks(bucket_name, analysis_path, task_count)
             consolidate_results(job_id, analysis_path, bucket_name, task_count)
 
     except Exception as e:

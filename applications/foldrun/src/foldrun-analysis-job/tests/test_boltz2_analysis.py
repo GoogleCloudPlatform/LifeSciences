@@ -20,10 +20,6 @@ from unittest.mock import MagicMock
 
 # Stub heavy imports BEFORE loading the module
 _stubs = {
-    "matplotlib": MagicMock(),
-    "matplotlib.pyplot": MagicMock(),
-    "matplotlib.cm": MagicMock(),
-    "seaborn": MagicMock(),
     "google.cloud.storage": MagicMock(),
     "google.cloud.aiplatform_v1": MagicMock(),
     "google.genai": MagicMock(),
@@ -32,7 +28,8 @@ _stubs = {
 for name, stub in _stubs.items():
     sys.modules.setdefault(name, stub)
 
-from foldrun_analysis import boltz2_analyzer
+from foldrun_analysis import boltz2_analyzer  # noqa: E402
+from foldrun_analysis import shared_utils  # noqa: E402
 
 
 class TestParseAffinity:
@@ -146,7 +143,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
 
     def test_column_detection(self):
         """_detect_atom_site_columns correctly maps field names to indices."""
-        cols = boltz2_analyzer._detect_atom_site_columns(self.SIMPLE_CIF)
+        cols = shared_utils._detect_atom_site_columns(self.SIMPLE_CIF)
         assert cols["B_iso_or_equiv"] == 11
         assert cols["auth_asym_id"] == 14
         assert cols["auth_comp_id"] == 13
@@ -163,7 +160,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
 
     def test_extracts_plddt_from_bfactors(self):
         """pLDDT scores are read from B_iso_or_equiv column."""
-        _, plddt_scores = boltz2_analyzer.parse_cif_chains(self.SIMPLE_CIF)
+        _, plddt_scores = boltz2_analyzer.parse_cif_chains(self.SIMPLE_CIF, extract_plddt=True)
         assert len(plddt_scores) == 3
         assert plddt_scores[0] == pytest.approx(82.5)
         assert plddt_scores[1] == pytest.approx(85.0)
@@ -191,7 +188,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
         two_chain_cif = self.SIMPLE_CIF + (
             "ATOM 4 N N ALA B 1 4.0 5.0 6.0 1.0 75.0 1 ALA B N\n"
         )
-        chain_info, plddt_scores = boltz2_analyzer.parse_cif_chains(two_chain_cif)
+        chain_info, plddt_scores = boltz2_analyzer.parse_cif_chains(two_chain_cif, extract_plddt=True)
         assert len(chain_info) == 2
         assert chain_info[0]["chain_id"] == "A"
         assert chain_info[1]["chain_id"] == "B"

@@ -19,8 +19,6 @@ from unittest.mock import MagicMock
 
 # Stub heavy imports BEFORE loading the module
 _stubs = {
-    "matplotlib": MagicMock(),
-    "matplotlib.pyplot": MagicMock(),
     "google.cloud.storage": MagicMock(),
     "google.cloud.aiplatform_v1": MagicMock(),
     "google.genai": MagicMock(),
@@ -29,7 +27,7 @@ _stubs = {
 for name, stub in _stubs.items():
     sys.modules.setdefault(name, stub)
 
-from foldrun_analysis import af2_analyzer
+from foldrun_analysis import af2_analyzer  # noqa: E402
 
 
 class TestAF2Analysis:
