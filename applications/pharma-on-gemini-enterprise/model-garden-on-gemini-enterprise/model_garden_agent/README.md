@@ -23,19 +23,19 @@ Before using Claude models, you need to enable them in your Google Cloud project
 
 **Step 1.** In the Google Cloud Console, search for **Model Garden**.
 
-![Search for Model Garden in the Cloud Console](model_garden_agent/docs/images/01-search-model-garden.png)
+![Search for Model Garden in the Cloud Console](docs/images/01-search-model-garden.png)
 
 **Step 2.** In Model Garden, search for **Claude** to find the available Anthropic models.
 
-![Search for Claude models in Model Garden](model_garden_agent/docs/images/02-model-garden-search-claude.png)
+![Search for Claude models in Model Garden](docs/images/02-model-garden-search-claude.png)
 
 **Step 3.** Select a Claude model and fill out the enablement form with your business details.
 
-![Claude model enablement form](model_garden_agent/docs/images/03-claude-enablement-form.png)
+![Claude model enablement form](docs/images/03-claude-enablement-form.png)
 
 **Step 4.** Review the pricing and accept the terms and agreements, then click **Agree**.
 
-![Review pricing and accept agreements](model_garden_agent/docs/images/04-claude-pricing-agreement.png)
+![Review pricing and accept agreements](docs/images/04-claude-pricing-agreement.png)
 
 ## Setup
 
@@ -137,11 +137,11 @@ AgentEngine created. Resource name: projects/123456789/locations/us-central1/rea
 
 **Step 1.** In the Cloud Console, search for **Agent Engine**.
 
-![Search for Agent Engine in the Cloud Console](model_garden_agent/docs/images/05-search-agent-engine.png)
+![Search for Agent Engine in the Cloud Console](docs/images/05-search-agent-engine.png)
 
 **Step 2.** You should see your deployed **Model Garden Agent** in the Agent Engine console.
 
-![Agent Engine console showing the deployed agent](model_garden_agent/docs/images/06-agent-engine-deployed.png)
+![Agent Engine console showing the deployed agent](docs/images/06-agent-engine-deployed.png)
 
 ## Query the Deployed Agent
 
@@ -182,24 +182,112 @@ Once your agent is deployed to Agent Engine, you can make it available to users 
 
 **Step 1.** Open the [Gemini Enterprise admin console](https://admin.google.com), navigate to **Apps > Gemini Enterprise > Agents**, and click **+ Add agent**.
 
-![Gemini Enterprise admin console - Agents list](model_garden_agent/docs/images/07-gemini-enterprise-agents-admin.png)
+![Gemini Enterprise admin console - Agents list](docs/images/07-gemini-enterprise-agents-admin.png)
 
 **Step 2.** In the "Add an agent" dialog, select **Custom agent via Agent Engine** to connect your deployed Agent Engine agent.
 
-![Choose agent type dialog](model_garden_agent/docs/images/08-add-agent-type.png)
+![Choose agent type dialog](docs/images/08-add-agent-type.png)
 
 **Step 3.** Configure agent authorization. You can add OAuth or service account authorizations if your agent needs to access protected resources, or click **Skip** to proceed without authorization.
 
-![Agent authorization configuration](model_garden_agent/docs/images/09-agent-authorization.png)
+![Agent authorization configuration](docs/images/09-agent-authorization.png)
 
 **Step 4.** Once created, the agent appears in the Gemini Enterprise agents gallery under **From your organization**, alongside Google-made agents.
 
-![Agents gallery showing custom agents from your organization](model_garden_agent/docs/images/10-gemini-enterprise-agents-gallery.png)
+![Agents gallery showing custom agents from your organization](docs/images/10-gemini-enterprise-agents-gallery.png)
 
 **Step 5.** Users in your organization can now select the agent from the sidebar and chat with it directly in Gemini Enterprise.
 
-![Chatting with the Anthropic Sonnet agent in Gemini Enterprise](model_garden_agent/docs/images/11-chat-with-agent.png)
+![Chatting with the Anthropic Sonnet agent in Gemini Enterprise](docs/images/11-chat-with-agent.png)
 
 ## Monitor
 
 View deployed agents in the [Agent Engine Console](https://console.cloud.google.com/vertex-ai/agents/agent-engines).
+
+## Optional: Code Execution
+
+The agent ships with a stateful Python sandbox integration ([Agent Runtime Code Execution](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/code-execution/overview)) that's **commented out** by default. Enable it to let Claude write and run code (pandas, numpy, matplotlib, scikit-learn, openpyxl, PyPDF2, etc. preinstalled) for analyzing CSV / Excel / JSON / Parquet attachments alongside the PDFs and images Claude already reads natively.
+
+The screenshots below are from a single GE turn where the user attached a research paper PDF and an `.xlsx` and asked for a brief summary plus a dashboard:
+
+![GE composer with PDF and Excel attached](docs/images/12-code-execution-prompt.png)
+![Patent summary text](docs/images/13-code-execution-summary.png)
+![Generated dashboard with charts](docs/images/14-code-execution-dashboard.png)
+
+### What enabling it gives you
+- Claude writes Python in fenced ```python blocks; the sandbox runs them and the output is fed back as `tool_output`. Multi-step analysis works because variables, imports, and loaded DataFrames persist across blocks within a session.
+- Attached `.csv`, `.xlsx`, `.xls`, `.json`, `.parquet`, `.tsv` files are pushed into the sandbox's working directory by the agent's `before_model_callback` (ADK only auto-mounts CSV out of the box, so the agent extends that itself).
+
+### Step 1 — create the sandbox (one-time)
+
+Replace `PROJECT_ID`, `PROJECT_NUMBER`, and `ENGINE_ID` with your values. The sandbox is a child resource of your already-deployed Agent Engine:
+
+```bash
+PROJECT_ID="YOUR_PROJECT_ID"
+PROJECT_NUMBER="YOUR_PROJECT_NUMBER"
+ENGINE_ID="YOUR_REASONING_ENGINE_ID"
+
+# Find PROJECT_NUMBER if you don't know it:
+# gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)'
+# Find ENGINE_ID by listing your engines (look for "Model Garden Agent"):
+# gcloud ai reasoning-engines list --region=us-central1 --project="$PROJECT_ID"
+
+curl -sS -X POST \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "displayName": "model-garden-claude-sandbox",
+        "spec": {"codeExecutionEnvironment": {}},
+        "ttl": "31536000s"
+      }' \
+  "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/$PROJECT_ID/locations/us-central1/reasoningEngines/$ENGINE_ID/sandboxEnvironments"
+```
+
+The response contains the new sandbox's full resource name. Copy it into `.env`:
+
+```
+SANDBOX_RESOURCE_NAME=projects/PROJECT_NUMBER/locations/us-central1/reasoningEngines/ENGINE_ID/sandboxEnvironments/SANDBOX_ID
+```
+
+(For production, omit `SANDBOX_RESOURCE_NAME` and set `AGENT_ENGINE_RESOURCE_NAME=projects/.../reasoningEngines/ENGINE_ID` instead so each session gets its own sandbox.)
+
+### Step 2 — grant the sandbox-execute IAM role
+
+The Agent Engine service identity needs `roles/aiplatform.user` to call `sandboxEnvironments.execute`:
+
+```bash
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
+  --role="roles/aiplatform.user"
+```
+
+(Skip if the project already grants this. Takes ~1 min to propagate.)
+
+### Step 3 — uncomment the code execution blocks in `agent.py`
+
+Search for the marker `=== OPTIONAL: Code execution` in [`agent.py`](agent.py). There are five contiguous blocks to uncomment (they're labeled in order): the imports, the helpers + `_PatchedSandboxExecutor` class, the sandbox-routing pass inside the callback, the instruction addendum, and the `code_executor=` argument on `root_agent`.
+
+> **Why patched?** ADK 1.32's `AgentEngineSandboxCodeExecutor` has two bugs in its input-file passthrough — wrong dict key (`contents` vs `content`) and base64-encoding bytes that the SDK forwards verbatim — so attached files arrive empty. The subclass fixes both.
+>
+> **Why `optimize_data_file=False`?** When `True`, ADK emits a synthetic `Processing input file: NAME` event before Claude responds. Gemini Enterprise renders that placeholder as the final answer and drops every subsequent event in the turn (including Claude's actual response). Routing data files through our own callback avoids the synthetic event entirely.
+
+### Step 4 — test
+
+Local:
+
+```bash
+adk web .
+```
+
+Then redeploy:
+
+```bash
+adk deploy agent_engine \
+    --project=$PROJECT_ID \
+    --region=us-central1 \
+    --agent_engine_id=$ENGINE_ID \
+    --display_name="Model Garden Agent" \
+    model_garden_agent
+```
+
+Attach any CSV/Excel/JSON/Parquet file in the local UI or in Gemini Enterprise and ask for an analysis ("what sheets are in this file?", "plot revenue per month", "build a dashboard").
