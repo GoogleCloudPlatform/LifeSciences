@@ -449,6 +449,18 @@ def list_jobs():
             labels = pj.get("labels", {})
             resource_name = pj.get("name", "")
             job_id = resource_name.split("/")[-1]
+            # Extract exact GCS timestamp from gcsOutputDirectory (e.g.
+            # "gs://bucket/pipeline_runs/20260504_224020" → "20260504224020").
+            # This is more reliable than parsing the job ID timestamp, which can
+            # differ by 1-2 seconds from the directory name — causing false
+            # positives when multiple jobs are submitted within seconds of each other.
+            gcs_output_dir = (
+                pj.get("runtimeConfig", {}).get("gcsOutputDirectory", "")
+            )
+            gcs_ts = None
+            m = re.search(r"pipeline_runs/(\d{8})_(\d{6})", gcs_output_dir)
+            if m:
+                gcs_ts = m.group(1) + m.group(2)
             jobs.append(
                 {
                     "job_id": job_id,
@@ -458,17 +470,17 @@ def list_jobs():
                     "create_time": pj.get("createTime", ""),
                     "has_analysis": False,
                     "analysis_running": False,
+                    "_gcs_ts": gcs_ts,
                 }
             )
 
         # Single GCS scan to determine analysis state per job
         complete_ts, running_ts = _scan_analysis_state()
         for job in jobs:
-            m = re.search(r"(\d{14})$", job["job_id"])
-            if m:
-                ts = m.group(1)
+            ts = job.pop("_gcs_ts", None)
+            if ts:
                 job["has_analysis"] = ts in complete_ts
-                job["analysis_running"] = ts in running_ts
+                job["analysis_running"] = ts in running_ts and not job["has_analysis"]
 
         return jsonify({
             "jobs": jobs,
