@@ -20,9 +20,23 @@ from google.adk.agents.llm_agent import Agent
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
 
-# === OPTIONAL: Code execution — uncomment block (1) imports, (2) helpers, and
-# (3) the `code_executor=` line on root_agent below to enable Python sandbox
-# execution. See README "Optional: Code Execution" for setup steps. ===
+# === OPTIONAL: Web Grounding for Enterprise — uncomment block (1) imports
+# below, (2) the helper + tool function further down, and (3) the
+# `tools=[enterprise_web_search]` line on root_agent. See README "Optional:
+# Web Search" for details. ===
+#
+# from google import genai
+# from google.genai.types import (
+#     EnterpriseWebSearch,
+#     GenerateContentConfig,
+#     HttpOptions,
+#     Tool,
+# )
+
+# === OPTIONAL: Code execution — uncomment block (1) imports below, (2)
+# helpers/class further down, (3) the sandbox-routing pass inside the
+# callback, (4) the instruction addendum, and (5) the `code_executor=` line
+# on root_agent. See README "Optional: Code Execution" for setup steps. ===
 #
 # import base64
 # import json
@@ -58,6 +72,67 @@ def _is_claude_inline(mime: str | None) -> bool:
   if not mime:
     return False
   return any(mime.startswith(prefix) for prefix in _CLAUDE_INLINE_MIMES)
+
+
+# === OPTIONAL: Web search — uncomment to enable. ===
+#
+# _SEARCH_MODEL = os.getenv('SEARCH_MODEL_NAME', 'gemini-3-flash-preview')
+#
+# def enterprise_web_search(query: str) -> dict:
+#   """Search the curated enterprise web index for a grounded answer.
+#
+#   Use this for questions about current events, regulations, recent
+#   publications, market data, clinical trial updates, or any factual
+#   lookup the assistant can't answer reliably from training data alone.
+#   The index is updated on a 6–24 hour cadence and is the compliance-
+#   controlled variant of Google web search (no customer data logging,
+#   VPC-SC compatible) — appropriate for healthcare, finance, and
+#   public-sector use cases.
+#
+#   Args:
+#     query: A natural-language search query (e.g. "2026 FDA guidance on
+#       AI/ML-enabled medical devices"). Be specific; ambiguous queries
+#       return weaker grounding.
+#
+#   Returns:
+#     A dict. On success: `answer` (str), `citations` (list of
+#     {title, uri}), `suggested_queries` (list of str).
+#     On failure: `error` (str).
+#   """
+#   try:
+#     client = genai.Client(http_options=HttpOptions(api_version='v1'))
+#     response = client.models.generate_content(
+#         model=_SEARCH_MODEL,
+#         contents=query,
+#         config=GenerateContentConfig(
+#             tools=[Tool(enterprise_web_search=EnterpriseWebSearch())],
+#         ),
+#     )
+#   except Exception as e:  # pylint: disable=broad-except
+#     return {'error': f'enterprise web search failed: {e}'}
+#
+#   citations: list[dict] = []
+#   suggested_queries: list[str] = []
+#   candidates = getattr(response, 'candidates', None) or []
+#   if candidates:
+#     grounding = getattr(candidates[0], 'grounding_metadata', None)
+#     if grounding:
+#       for chunk in getattr(grounding, 'grounding_chunks', None) or []:
+#         web = getattr(chunk, 'web', None)
+#         if web and getattr(web, 'uri', None):
+#           citations.append({
+#               'title': getattr(web, 'title', '') or web.uri,
+#               'uri': web.uri,
+#           })
+#       suggested_queries = list(
+#           getattr(grounding, 'web_search_queries', None) or []
+#       )
+#
+#   return {
+#       'answer': response.text or '',
+#       'citations': citations,
+#       'suggested_queries': suggested_queries,
+#   }
 
 
 # === OPTIONAL: Code execution helpers — uncomment to enable. ===
@@ -230,6 +305,16 @@ _INSTRUCTION = (
     'reference their contents in your answer.'
 )
 
+# === OPTIONAL: Web search instruction — uncomment when enabling. ===
+# _INSTRUCTION += (
+#     '\n\nFor questions about current events, recent publications,'
+#     ' regulations, or anything outside your training data, call the'
+#     ' `enterprise_web_search` tool. Inline citations from its `citations`'
+#     ' list as numbered references (e.g. `[1]`, `[2]`) and end your reply'
+#     ' with a "Sources:" list and a "Suggested searches:" line containing'
+#     ' the queries it returned.'
+# )
+
 # === OPTIONAL: Code execution instruction — uncomment when enabling. ===
 # _INSTRUCTION += (
 #     '\n\nYou also have a stateful Python sandbox. When the user asks for'
@@ -243,11 +328,13 @@ _INSTRUCTION = (
 # )
 
 root_agent = Agent(
-    model=os.getenv('MODEL_NAME', 'claude-sonnet-4-6'),
+    model=os.getenv('MODEL_NAME', 'claude-opus-4-7'),
     name='root_agent',
     description='A helpful assistant for user questions.',
     instruction=_INSTRUCTION,
     before_model_callback=_inject_uploaded_artifacts,
+    # === OPTIONAL: Web search — uncomment to enable. ===
+    # tools=[enterprise_web_search],
     # === OPTIONAL: Code execution — uncomment to enable. ===
     # code_executor=_PatchedSandboxExecutor(
     #     sandbox_resource_name=os.getenv('SANDBOX_RESOURCE_NAME') or None,

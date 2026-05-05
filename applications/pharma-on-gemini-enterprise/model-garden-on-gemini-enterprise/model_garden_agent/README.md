@@ -68,7 +68,7 @@ from google.adk.agents.llm_agent import Agent
 os.environ['GOOGLE_CLOUD_LOCATION'] = os.getenv('MODEL_LOCATION', 'us-east5')
 
 root_agent = Agent(
-    model=os.getenv('MODEL_NAME', 'claude-sonnet-4-6'),
+    model=os.getenv('MODEL_NAME', 'claude-opus-4-7'),
     name='root_agent',
     description='A helpful assistant for user questions.',
     instruction='Answer user questions to the best of your knowledge',
@@ -106,7 +106,7 @@ model_garden_agent/
 GOOGLE_GENAI_USE_VERTEXAI=1
 GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID
 GOOGLE_CLOUD_LOCATION=us-central1
-MODEL_NAME=claude-sonnet-4-6
+MODEL_NAME=claude-opus-4-7
 MODEL_LOCATION=us-east5
 ```
 
@@ -199,6 +199,53 @@ Once your agent is deployed to Agent Engine, you can make it available to users 
 **Step 5.** Users in your organization can now select the agent from the sidebar and chat with it directly in Gemini Enterprise.
 
 ![Chatting with the Anthropic Sonnet agent in Gemini Enterprise](docs/images/11-chat-with-agent.png)
+
+## Optional: Web Search
+
+The agent ships with a [Web Grounding for Enterprise](https://cloud.google.com/vertex-ai/generative-ai/docs/grounding/web-grounding-enterprise) tool that's **commented out** by default. Enable it to give the agent access to a curated, compliance-controlled web index (no customer-data logging, VPC-SC compatible, 6–24 hour freshness) — appropriate for healthcare, finance, and public-sector workloads.
+
+### What enabling it gives you
+
+The tool is a regular Python `FunctionTool` whose implementation makes a Gemini call (`gemini-3-flash-preview` by default; override with `SEARCH_MODEL_NAME` in `.env`) with `tools=[Tool(enterprise_web_search=EnterpriseWebSearch())]` and returns:
+
+```python
+{
+    "answer": "...",                        # synthesized grounded text
+    "citations": [{"title": "...", "uri": "..."}, ...],
+    "suggested_queries": ["...", "..."],   # surface as "Suggested searches:"
+}
+```
+
+Wrapping the grounding flag inside a Python function lets it work with **any planner model** and dispatches deterministically through ADK's normal function-call path — unlike the built-in `google_search` grounding tool, which is Gemini-only and bypasses function-call dispatch entirely (so wrapping it in an AgentTool sub-agent is flaky in practice).
+
+The instruction addendum asks the model to inline citations as numbered references and to display `suggested_queries` under a "Suggested searches:" line, which satisfies the spirit of the [Google Search suggestions display requirement](https://cloud.google.com/vertex-ai/generative-ai/docs/grounding/web-grounding-enterprise#use-google-search-suggestions). (Note: GE's chat UI does not render the styled HTML chips from `searchEntryPoint.renderedContent`, so the queries are presented as plain text — this is best-effort given current GE rendering constraints.)
+
+### Step 1 — uncomment the web search blocks in `agent.py`
+
+Search for `=== OPTIONAL: Web search` / `=== OPTIONAL: Web Grounding for Enterprise` in [`agent.py`](agent.py). There are four contiguous blocks to uncomment (labeled in order): the imports, the `enterprise_web_search` function, the instruction addendum, and the `tools=[enterprise_web_search]` argument on `root_agent`.
+
+### Step 2 — test
+
+Local:
+
+```bash
+adk web .
+```
+
+Then redeploy:
+
+```bash
+adk deploy agent_engine \
+    --project=$PROJECT_ID \
+    --region=us-central1 \
+    --agent_engine_id=$ENGINE_ID \
+    --display_name="Model Garden Agent" \
+    model_garden_agent
+```
+
+Ask a current-events / regulatory question ("what's the latest 2026 FDA guidance on AI/ML medical devices?") and the agent should reply with cited text plus a Suggested searches line.
+
+> **No new IAM required** — the existing Agent Engine service identity already has the permissions needed to call the grounding API.
 
 ## Monitor
 
