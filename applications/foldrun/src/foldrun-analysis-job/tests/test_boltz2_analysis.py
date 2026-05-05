@@ -15,87 +15,51 @@
 """Tests for Boltz-2 analysis utilities: parse_affinity, parse_cif_chains."""
 
 import sys
-import os
 import pytest
+from unittest.mock import MagicMock
 
+# Stub heavy imports BEFORE loading the module
+_stubs = {
+    "matplotlib": MagicMock(),
+    "matplotlib.pyplot": MagicMock(),
+    "matplotlib.cm": MagicMock(),
+    "seaborn": MagicMock(),
+    "google.cloud.storage": MagicMock(),
+    "google.cloud.aiplatform_v1": MagicMock(),
+    "google.genai": MagicMock(),
+    "google.genai.types": MagicMock(),
+}
+for name, stub in _stubs.items():
+    sys.modules.setdefault(name, stub)
 
-# ---------------------------------------------------------------------------
-# Helpers to import from the Cloud Run analysis job (not a package)
-# ---------------------------------------------------------------------------
+from foldrun_analysis import boltz2_analyzer
 
-def _import_main():
-    """Import the boltz2-analysis-job main.py as a module.
-
-    Stubs all heavy external dependencies (matplotlib, seaborn, GCP clients)
-    so the pure-Python utility functions can be tested without GPU/cloud setup.
-    """
-    from unittest.mock import MagicMock
-
-    # Stub heavy imports BEFORE loading the module
-    _stubs = {
-        "matplotlib": MagicMock(),
-        "matplotlib.pyplot": MagicMock(),
-        "matplotlib.cm": MagicMock(),
-        "seaborn": MagicMock(),
-        "google.cloud.storage": MagicMock(),
-        "google.cloud.aiplatform_v1": MagicMock(),
-        "google.genai": MagicMock(),
-        "google.genai.types": MagicMock(),
-        "shared_utils": MagicMock(),
-    }
-    for name, stub in _stubs.items():
-        sys.modules.setdefault(name, stub)
-
-    # numpy must be real (parse_cif_chains uses it)
-    import numpy  # noqa: F401
-
-    main_path = os.path.join(
-        os.path.dirname(__file__),
-        "..", "..", "..", "..", "..",
-        "src", "foldrun-analysis-job", "boltz2_analyzer.py",
-    )
-    main_path = os.path.abspath(main_path)
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("boltz2_analyzer", main_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# ---------------------------------------------------------------------------
-# parse_affinity
-# ---------------------------------------------------------------------------
 
 class TestParseAffinity:
     """Tests for parse_affinity() — converts raw Boltz-2 affinity JSON to metrics."""
 
-    @pytest.fixture(autouse=True)
-    def _load(self):
-        mod = _import_main()
-        self.parse_affinity = mod.parse_affinity
-
     def test_very_strong_binder(self):
         """Very strong binder: IC50 < 10 nM, high probability."""
         raw = {
-            "affinity_pred_value": -3.0,       # log10(0.001 μM) = log10(1 nM)
+            "affinity_pred_value": -3.0,  # log10(0.001 μM) = log10(1 nM)
             "affinity_probability_binary": 0.95,
         }
-        result = self.parse_affinity(raw)
+        result = boltz2_analyzer.parse_affinity(raw)
 
         assert result["affinity_pred_value"] == -3.0
         assert abs(result["ic50_um"] - 0.001) < 1e-6
         assert abs(result["ic50_nm"] - 1.0) < 1e-3
-        assert abs(result["pic50"] - 9.0) < 1e-6   # 6 - (-3) = 9
+        assert abs(result["pic50"] - 9.0) < 1e-6  # 6 - (-3) = 9
         assert result["binding_classification"] == "very_strong"
         assert result["binding_likelihood"] == "high"
 
     def test_strong_binder(self):
         """Strong binder: 10 ≤ IC50 < 100 nM."""
         raw = {
-            "affinity_pred_value": -1.5,       # log10(0.0316 μM) ≈ 31.6 nM
+            "affinity_pred_value": -1.5,  # log10(0.0316 μM) ≈ 31.6 nM
             "affinity_probability_binary": 0.88,
         }
-        result = self.parse_affinity(raw)
+        result = boltz2_analyzer.parse_affinity(raw)
 
         assert result["binding_classification"] == "strong"
         assert result["binding_likelihood"] == "high"
@@ -103,10 +67,10 @@ class TestParseAffinity:
     def test_moderate_binder(self):
         """Moderate binder: IC50 ~500 nM."""
         raw = {
-            "affinity_pred_value": -0.3,   # log10(0.5 μM) ≈ -0.301
+            "affinity_pred_value": -0.3,  # log10(0.5 μM) ≈ -0.301
             "affinity_probability_binary": 0.65,
         }
-        result = self.parse_affinity(raw)
+        result = boltz2_analyzer.parse_affinity(raw)
 
         assert result["binding_classification"] == "moderate"
         assert result["binding_likelihood"] == "moderate"
@@ -114,10 +78,10 @@ class TestParseAffinity:
     def test_weak_binder(self):
         """Weak binder: IC50 ~ 5 μM."""
         raw = {
-            "affinity_pred_value": 0.699,   # log10(5 μM) ≈ 0.699
+            "affinity_pred_value": 0.699,  # log10(5 μM) ≈ 0.699
             "affinity_probability_binary": 0.35,
         }
-        result = self.parse_affinity(raw)
+        result = boltz2_analyzer.parse_affinity(raw)
 
         assert result["binding_classification"] == "weak"
         assert result["binding_likelihood"] == "low"
@@ -125,14 +89,13 @@ class TestParseAffinity:
     def test_delta_g_formula(self):
         """ΔG = pIC50 × 1.364 kcal/mol (from official Boltz-2 docs)."""
         raw = {"affinity_pred_value": 0.0, "affinity_probability_binary": 0.5}
-        result = self.parse_affinity(raw)
-        # val=0 → pIC50 = 6 - 0 = 6, ΔG = 6 * 1.364 = 8.184
+        result = boltz2_analyzer.parse_affinity(raw)
         assert abs(result["delta_g_kcal_mol"] - 8.184) < 0.01
 
     def test_missing_affinity_value(self):
         """Gracefully handles missing affinity_pred_value."""
         raw = {"affinity_probability_binary": 0.7}
-        result = self.parse_affinity(raw)
+        result = boltz2_analyzer.parse_affinity(raw)
 
         assert result["affinity_pred_value"] is None
         assert "ic50_nm" not in result
@@ -148,24 +111,14 @@ class TestParseAffinity:
             "affinity_pred_value2": -1.1,
             "affinity_probability_binary2": 0.82,
         }
-        result = self.parse_affinity(raw)
+        result = boltz2_analyzer.parse_affinity(raw)
 
         assert result["affinity_pred_value1"] == -0.9
         assert result["affinity_probability_binary2"] == 0.82
 
 
-# ---------------------------------------------------------------------------
-# parse_cif_chains / _detect_atom_site_columns
-# ---------------------------------------------------------------------------
-
 class TestParseCifChains:
     """Tests for updated parse_cif_chains() that returns (chain_info, plddt_scores)."""
-
-    @pytest.fixture(autouse=True)
-    def _load(self):
-        mod = _import_main()
-        self.parse_cif_chains = mod.parse_cif_chains
-        self.detect_cols = mod._detect_atom_site_columns
 
     # Minimal synthetic CIF with B_iso_or_equiv column
     SIMPLE_CIF = """\
@@ -193,7 +146,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
 
     def test_column_detection(self):
         """_detect_atom_site_columns correctly maps field names to indices."""
-        cols = self.detect_cols(self.SIMPLE_CIF)
+        cols = boltz2_analyzer._detect_atom_site_columns(self.SIMPLE_CIF)
         assert cols["B_iso_or_equiv"] == 11
         assert cols["auth_asym_id"] == 14
         assert cols["auth_comp_id"] == 13
@@ -201,7 +154,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
 
     def test_returns_tuple(self):
         """parse_cif_chains returns (chain_info_list, plddt_scores_list)."""
-        result = self.parse_cif_chains(self.SIMPLE_CIF)
+        result = boltz2_analyzer.parse_cif_chains(self.SIMPLE_CIF)
         assert isinstance(result, tuple)
         assert len(result) == 2
         chain_info, plddt_scores = result
@@ -210,7 +163,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
 
     def test_extracts_plddt_from_bfactors(self):
         """pLDDT scores are read from B_iso_or_equiv column."""
-        _, plddt_scores = self.parse_cif_chains(self.SIMPLE_CIF)
+        _, plddt_scores = boltz2_analyzer.parse_cif_chains(self.SIMPLE_CIF)
         assert len(plddt_scores) == 3
         assert plddt_scores[0] == pytest.approx(82.5)
         assert plddt_scores[1] == pytest.approx(85.0)
@@ -218,7 +171,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
 
     def test_chain_info_correct(self):
         """Chain info is correctly extracted."""
-        chain_info, _ = self.parse_cif_chains(self.SIMPLE_CIF)
+        chain_info, _ = boltz2_analyzer.parse_cif_chains(self.SIMPLE_CIF)
         assert len(chain_info) == 1
         assert chain_info[0]["chain_id"] == "A"
         assert chain_info[0]["atom_count"] == 3
@@ -227,7 +180,9 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
 
     def test_empty_cif_returns_empty(self):
         """CIF with no ATOM records returns empty lists."""
-        chain_info, plddt_scores = self.parse_cif_chains("loop_\n_atom_site.group_PDB\n")
+        chain_info, plddt_scores = boltz2_analyzer.parse_cif_chains(
+            "loop_\n_atom_site.group_PDB\n"
+        )
         assert chain_info == []
         assert plddt_scores == []
 
@@ -236,7 +191,7 @@ ATOM 3 N N GLY A 2 3.0 4.0 5.0 1.0 90.0 2 GLY A N
         two_chain_cif = self.SIMPLE_CIF + (
             "ATOM 4 N N ALA B 1 4.0 5.0 6.0 1.0 75.0 1 ALA B N\n"
         )
-        chain_info, plddt_scores = self.parse_cif_chains(two_chain_cif)
+        chain_info, plddt_scores = boltz2_analyzer.parse_cif_chains(two_chain_cif)
         assert len(chain_info) == 2
         assert chain_info[0]["chain_id"] == "A"
         assert chain_info[1]["chain_id"] == "B"

@@ -18,10 +18,10 @@ import logging
 import os
 import sys
 
-import af2_analyzer
-import boltz2_analyzer
-import of3_analyzer
-from shared_utils import download_json_from_gcs
+from . import af2_analyzer
+from . import boltz2_analyzer
+from . import of3_analyzer
+from .shared_utils import download_json_from_gcs
 
 # Configure logging
 logging.basicConfig(

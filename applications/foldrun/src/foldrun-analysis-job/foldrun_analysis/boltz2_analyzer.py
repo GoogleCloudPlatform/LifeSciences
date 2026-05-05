@@ -32,7 +32,7 @@ matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from shared_utils import (
+from .shared_utils import (
     calculate_plddt_stats,
     download_image_from_gcs,
     download_json_from_gcs,

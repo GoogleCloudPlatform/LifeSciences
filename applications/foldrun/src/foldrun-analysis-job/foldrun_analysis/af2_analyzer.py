@@ -31,7 +31,7 @@ from google.genai import types
 matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
 import matplotlib.pyplot as plt
 
-from shared_utils import (
+from .shared_utils import (
     calculate_plddt_stats,
     download_from_gcs,
     download_json_from_gcs,
