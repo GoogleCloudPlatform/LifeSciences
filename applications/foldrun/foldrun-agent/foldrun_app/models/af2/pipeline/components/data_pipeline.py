@@ -36,15 +36,19 @@ def data_pipeline(
                     (GPU-accelerated, requires use_small_bfd=True).
     """
 
+    import hashlib
+    import json
     import logging
     import os
+    import shutil
     import time
+    import uuid
 
     from alphafold_utils import run_data_pipeline, run_mmseqs2_data_pipeline
 
+    preset = "multimer" if run_multimer_system else "monomer"
     logging.info(
-        f"Starting {'multimer' if run_multimer_system else 'monomer'} "
-        f"AlphaFold data pipeline (msa_method={msa_method})"
+        f"Starting {preset} AlphaFold data pipeline (msa_method={msa_method})"
     )
     t0 = time.time()
 
@@ -60,6 +64,43 @@ def data_pipeline(
     seqres_database_path = os.path.join(mount_path, ref_databases.metadata["pdb_seqres"])
     mmcif_path = os.path.join(mount_path, ref_databases.metadata["pdb_mmcif"])
     os.makedirs(msas.path, exist_ok=True)
+
+    # --- NFS feature cache ---
+    # Cache key covers all inputs that affect the features.pkl content.
+    with open(sequence.path) as _f:
+        fasta_content = _f.read().strip()
+    cache_key_data = json.dumps({
+        "sequence": fasta_content,
+        "max_template_date": max_template_date,
+        "preset": preset,
+        "use_small_bfd": use_small_bfd,
+        "msa_method": msa_method,
+    }, sort_keys=True)
+    seq_hash = hashlib.sha256(cache_key_data.encode()).hexdigest()
+    cache_key = f"{preset}_{seq_hash}"
+
+    nfs_cache_base = os.path.join(mount_path, "af2_features_cache")
+    nfs_tmp_base = os.path.join(mount_path, "af2_features_tmp")
+    os.makedirs(nfs_cache_base, exist_ok=True)
+    os.makedirs(nfs_tmp_base, exist_ok=True)
+
+    seq_cache_dir = os.path.join(nfs_cache_base, cache_key)
+    cached_features_path = os.path.join(seq_cache_dir, "features.pkl")
+    cached_metadata_path = os.path.join(seq_cache_dir, "metadata.json")
+
+    if os.path.exists(cached_features_path) and os.path.exists(cached_metadata_path):
+        logging.info(f"AF2 feature cache hit for {cache_key}. Skipping MSA search.")
+        shutil.copy(cached_features_path, features.path)
+        with open(cached_metadata_path) as _f:
+            cached_meta = json.load(_f)
+        for k, v in cached_meta.get("features_metadata", {}).items():
+            features.metadata[k] = v
+        msas.metadata = cached_meta.get("msas_metadata", {})
+        t1 = time.time()
+        logging.info(f"Data pipeline (cache hit) completed. Elapsed time: {t1 - t0:.1f}s")
+        return
+
+    logging.info(f"AF2 feature cache miss for {cache_key}. Running full data pipeline.")
 
     if msa_method == "mmseqs2":
         # GPU-accelerated MMseqs2 pipeline (requires use_small_bfd=True)
@@ -116,5 +157,22 @@ def data_pipeline(
         )
     msas.metadata = msas_metadata
 
+    # --- Cache promotion (atomic rename) ---
+    run_id = str(uuid.uuid4())[:12]
+    tmp_dir = os.path.join(nfs_tmp_base, f"{cache_key}_{run_id}")
+    os.makedirs(tmp_dir, exist_ok=True)
+    shutil.copy(features.path, os.path.join(tmp_dir, "features.pkl"))
+    with open(os.path.join(tmp_dir, "metadata.json"), "w") as _f:
+        json.dump({
+            "features_metadata": dict(features.metadata),
+            "msas_metadata": msas.metadata,
+        }, _f)
+    try:
+        os.rename(tmp_dir, seq_cache_dir)
+        logging.info(f"Cached AF2 features for {cache_key}")
+    except (FileExistsError, OSError):
+        logging.info(f"Cache already populated for {cache_key} by concurrent run.")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
     t1 = time.time()
-    logging.info(f"Data pipeline completed. Elapsed time: {t1 - t0}")
+    logging.info(f"Data pipeline completed. Elapsed time: {t1 - t0:.1f}s")

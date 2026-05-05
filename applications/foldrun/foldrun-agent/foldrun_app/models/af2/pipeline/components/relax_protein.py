@@ -37,6 +37,7 @@ def relax(
 
     import logging
     import os
+    import shutil
     import time
 
     from alphafold_utils import relax_protein
@@ -48,18 +49,38 @@ def relax(
     logging.info("Starting model relaxation ...")
 
     relaxed_protein.uri = f"{relaxed_protein.uri}.pdb"
-    relaxed_protein_pdb = relax_protein(
-        unrelaxed_protein_path=unrelaxed_protein.path,
-        relaxed_protein_path=relaxed_protein.path,
-        max_iterations=max_iterations,
-        tolerance=tolerance,
-        stiffness=stiffness,
-        exclude_residues=exclude_residues,
-        max_outer_iterations=max_outer_iterations,
-        use_gpu=use_gpu,
-    )
-
     relaxed_protein.metadata["category"] = "relaxed_protein"
+    relaxed_protein.metadata["relax_failed"] = False
 
-    t1 = time.time()
-    logging.info(f"Model relaxation completed. Elapsed time: {t1 - t0}")
+    try:
+        relax_protein(
+            unrelaxed_protein_path=unrelaxed_protein.path,
+            relaxed_protein_path=relaxed_protein.path,
+            max_iterations=max_iterations,
+            tolerance=tolerance,
+            stiffness=stiffness,
+            exclude_residues=exclude_residues,
+            max_outer_iterations=max_outer_iterations,
+            use_gpu=use_gpu,
+        )
+        t1 = time.time()
+        logging.info(f"Model relaxation completed. Elapsed time: {t1 - t0}")
+
+    except (ValueError, RuntimeError) as e:
+        # AMBER minimization can fail on highly disordered structures (ValueError:
+        # Minimization failed after 100 attempts) or with OpenMM platform errors
+        # (RuntimeError). Fall back to the unrelaxed structure so the pipeline
+        # completes — unrelaxed PDB is still scientifically valid, pLDDT/PAE
+        # unaffected. Exiting 0 here prevents KFP from retrying a deterministic
+        # structural failure.
+        t1 = time.time()
+        warning = (
+            f"AMBER relaxation failed after {t1 - t0:.1f}s "
+            f"({type(e).__name__}: {e}). "
+            "Falling back to unrelaxed structure. "
+            "pLDDT and PAE scores are unaffected."
+        )
+        logging.warning(f"RELAX_FALLBACK: {warning}")
+        shutil.copy(unrelaxed_protein.path, relaxed_protein.path)
+        relaxed_protein.metadata["relax_failed"] = True
+        relaxed_protein.metadata["relax_warning"] = warning
