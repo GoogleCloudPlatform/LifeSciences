@@ -20,4 +20,5 @@ Each folder in this directory contains a different sample application.
 | Application | Description |
 | --- | --- |
 | [FoldRun](foldrun) | An agentic interface for protein structure prediction. |
+| [Pharma on Gemini Enterprise](pharma-on-gemini-enterprise) | Custom Gemini Enterprise agents for pharma/healthcare/life-sciences workflows, including a Claude (via Vertex AI Model Garden) example with file analysis and grounded web search. |
 | [Sentinel](sentinel) | Evaluate whether documents and videos are compliant with medical regulations. |

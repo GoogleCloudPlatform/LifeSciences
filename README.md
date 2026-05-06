@@ -20,6 +20,7 @@ For general prerequisites and setup instructions common to all applications, you
 | Application | Description |
 | --- | --- |
 | [FoldRun](applications/foldrun) | An agentic interface for protein structure prediction. |
+| [Pharma on Gemini Enterprise](applications/pharma-on-gemini-enterprise) | Custom Gemini Enterprise agents for pharma/healthcare/life-sciences workflows, including a Claude (via Vertex AI Model Garden) example with file analysis and grounded web search. |
 | [Sentinel](applications/sentinel) | Evaluate whether documents and videos are compliant with medical regulations. |
 
 
