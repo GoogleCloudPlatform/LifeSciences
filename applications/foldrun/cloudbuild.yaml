@@ -82,6 +82,45 @@ steps:
     waitFor: ['build-push-viewer']
 
   # ============================================================================
+  # 1b. Analysis Job Trigger (Cloud Run Service)
+  # ============================================================================
+  - id: 'build-push-analysis-trigger'
+    name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        _t=",${_BUILD_TARGET},"
+        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",analysis-trigger,"* ]]; then
+          docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/analysis-job-trigger:latest || true
+          docker build \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/analysis-job-trigger:latest \
+            --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/analysis-job-trigger:latest \
+            src/analysis-job-trigger/
+          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/analysis-job-trigger:latest
+        else
+          echo "Skipping analysis-trigger build (BUILD_TARGET=${_BUILD_TARGET})"
+        fi
+    waitFor: ['-']
+
+  - id: 'deploy-analysis-trigger'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        _t=",${_BUILD_TARGET},"
+        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",analysis-trigger,"* ]]; then
+          gcloud run deploy analysis-job-trigger \
+            --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/analysis-job-trigger:latest \
+            --region ${_REGION} \
+            --set-env-vars PROJECT_ID=$PROJECT_ID,REGION=${_REGION}
+        else
+          echo "Skipping analysis-trigger deploy (BUILD_TARGET=${_BUILD_TARGET})"
+        fi
+    waitFor: ['build-push-analysis-trigger']
+
+  # ============================================================================
   # 2. AF2 Analysis Job (Cloud Run Job)
   # ============================================================================
   - id: 'build-push-af2-analysis'

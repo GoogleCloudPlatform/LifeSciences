@@ -35,11 +35,14 @@ You do **not** need to configure these manually — `deploy-all.sh` handles ever
 | Service Account | ID | Purpose | Key Roles |
 |---|---|---|---|
 | **Agent SA** | `foldrun-agent-sa` | Agent Runtime identity | `aiplatform.user`, `batch.jobsEditor`, `run.developer`, `storage.bucketViewer`, `compute.viewer` |
-| **Pipelines SA** | `pipelines-sa` | Agent Platform Pipeline jobs | `aiplatform.user`, `artifactregistry.reader` |
+| **Pipelines SA** | `pipelines-sa` | Agent Platform Pipeline jobs | `aiplatform.user`, `artifactregistry.reader`, `pubsub.publisher` |
 | **Batch Compute SA** | `batch-compute-sa` | Cloud Batch download/convert jobs | `batch.agentReporter`, `logging.logWriter`, `storage.bucketViewer` |
 | **Build SA** | `foldrun-build-sa` | Cloud Build CI/CD | `aiplatform.user`, `artifactregistry.writer`, `run.developer`, `compute.viewer` |
 | **Viewer SA** | `foldrun-viewer-sa` | Cloud Run viewer service | `storage.objectViewer` (bucket-scoped) |
 | **Analysis SA** | `foldrun-analysis-sa` | Cloud Run analysis jobs | `aiplatform.user`, `storage.objectAdmin` (bucket-scoped) |
+| **Eventarc Trigger SA** | `eventarc-trigger-sa` | Eventarc trigger delivery | `run.invoker` (service-scoped) |
+| **Analysis Trigger SA** | `analysis-job-trigger-sa`| Cloud Run trigger service | `run.jobsExecutorWithOverrides`, `storage.objectUser` |
+
 
 Additionally, Terraform grants:
 - **Agent Platform Custom Code SA** (`gcp-sa-aiplatform-cc`): `artifactregistry.reader` on the container repo
@@ -171,6 +174,7 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 | Cloud Run Service | `foldrun-viewer` | 3D structure viewer (IAP-secured) |
 | Cloud Run Job | `af2-analysis-job` | AF2 parallel analysis + Gemini |
 | Cloud Run Job | `of3-analysis-job` | OF3 parallel analysis + Gemini |
+| Cloud Run Service | `analysis-job-trigger` | Auto-triggers analysis on pipeline completion |
 | Cloud Run Service | `foldrun-a2a` | A2A protocol proxy (optional) |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent |
 

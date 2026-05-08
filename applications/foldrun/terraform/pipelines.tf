@@ -61,3 +61,15 @@ resource "google_artifact_registry_repository_iam_member" "pipelines_sa" {
   role       = "roles/artifactregistry.reader"
   member     = "serviceAccount:${google_service_account.pipelines.email}"
 }
+
+resource "google_pubsub_topic" "pipeline_status" {
+  project = var.project_id
+  name    = "foldrun-pipeline-status"
+}
+
+resource "google_pubsub_topic_iam_member" "pipelines_pubsub_publisher" {
+  project = var.project_id
+  topic   = google_pubsub_topic.pipeline_status.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.pipelines.email}"
+}

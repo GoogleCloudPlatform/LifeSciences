@@ -11,21 +11,50 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""KFP component that generates seed configs for OF3 ParallelFor.
 
-Lightweight CPU component — generates seed values matching OF3's internal
-seed generation logic (random.seed(base_seed), then N random ints).
-"""
+"""Shared Kubeflow Pipeline components across models."""
 
 from typing import NamedTuple
-
 from kfp import dsl
 
-
 @dsl.component(
-    base_image="python:3.12-slim",
+    base_image="python:3.14-slim",
+    packages_to_install=["google-cloud-pubsub"]
 )
-def configure_seeds_of3(
+def publish_completion_message(
+    project: str,
+    topic_id: str,
+    model_name: str,
+    job_id: str,
+    input_path: str,
+    gcs_output_dir: str,
+    status: dsl.PipelineTaskFinalStatus,
+):
+    from google.cloud import pubsub_v1
+    import json
+    
+    publisher = pubsub_v1.PublisherClient()
+    topic_path = publisher.topic_path(project, topic_id)
+    
+    message_dict = {
+        "model_name": model_name,
+        "job_id": job_id,
+        "input_path": input_path,
+        "gcs_output_dir": gcs_output_dir,
+        "state": status.state,
+        "error_code": getattr(status, "error_code", None),
+        "error_message": getattr(status, "error_message", None),
+    }
+    
+    data = json.dumps(message_dict).encode("utf-8")
+    future = publisher.publish(topic_path, data)
+    future.result()
+    print(f"Published message to {topic_path}: {message_dict}")
+
+
+
+@dsl.component(base_image="python:3.14-slim")
+def configure_seeds(
     num_model_seeds: int,
     base_seed: int,
 ) -> NamedTuple(
@@ -36,13 +65,11 @@ def configure_seeds_of3(
 ):
     """Generate seed configs for ParallelFor.
 
-    Matches OF3's internal seed generation: random.seed(base_seed), then
-    N random ints from [0, 2^32).
+    Uses random.seed(base_seed), then N random ints from [0, 2^32).
     """
     import random
     from collections import namedtuple
 
-    # Match OF3's seed generation logic from experiment_runner.py
     random.seed(base_seed)
     seeds = [random.randint(0, 2**32 - 1) for _ in range(num_model_seeds)]
 
