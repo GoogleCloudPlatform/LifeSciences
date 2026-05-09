@@ -7,6 +7,7 @@ A collection of [Gemini Enterprise](https://cloud.google.com/products/gemini/ent
 | Agent | Description |
 | --- | --- |
 | [Model Garden Agent](model-garden-on-gemini-enterprise) | Deploy third-party models from Vertex AI Model Garden (Anthropic Claude) to Gemini Enterprise. Bundles a GE file-attachment shim plus optional [Web Grounding for Enterprise](https://cloud.google.com/vertex-ai/generative-ai/docs/grounding/web-grounding-enterprise) search and an [Agent Runtime Code Execution](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/code-execution/overview) sandbox for analyzing CSV / Excel / JSON / Parquet attachments. |
+| [PaperBanana Agent](paperbanana-on-gemini-enterprise) | Lite ADK port of [PaperBanana](https://github.com/dwzhu-pku/PaperBanana) (Apache-2.0). Attach a research paper PDF and chat about what figure you want — the agent runs an ADK `SequentialAgent` + `LoopAgent` plan / stylize / render / critique / refine pipeline using Gemini 3 + Nano Banana Pro at 4K. Follow-up turns iterate on the result in edit mode. |
 
 ## Getting started
 
