@@ -1,18 +1,18 @@
 # PaperBanana on Gemini Enterprise (lite)
 
-A small Google ADK agent that brings a *lite* version of [PaperBanana](https://github.com/dwzhu-pku/PaperBanana) — the reference-driven multi-agent framework for automated academic illustration — to [Gemini Enterprise](https://cloud.google.com/products/gemini/enterprise) via [Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview).
+A small Google ADK agent that brings a *lite* version of [PaperVizAgent](https://github.com/google-research/papervizagent) — Google Research's reference-driven multi-agent framework for automated academic illustration (originally published as **PaperBanana**, the name we kept in the display label) — to [Gemini Enterprise](https://cloud.google.com/products/gemini/enterprise) via [Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview).
 
 A user attaches a paper PDF in the GE composer and chats about what figure they want; the pipeline plans → stylizes → renders → critiques → refines a publication-style diagram. Follow-up turns ("use a softer palette", "make the encoder boxes bigger") iterate on the result *in edit mode* — the visualizer feeds the prior render back in, so refinements are local rather than re-renders.
 
 ![PaperBanana on Gemini Enterprise generating a methodology figure](docs/images/01-paperbanana-in-ge.png)
 
-> **This is a lite demo, not the full system.** Please refer back to the [upstream PaperBanana repo](https://github.com/dwzhu-pku/PaperBanana) for the complete framework — Retriever (few-shot retrieval over PaperBananaBench), statistical-plot mode (matplotlib code-execution), the multi-candidate parallel pipeline, and the high-resolution Polish stage. **If you find the technique useful, please cite the PaperBanana paper (BibTeX below) and contribute to the upstream project.**
+> **This is a lite demo, not the full system.** Please refer back to the [upstream PaperVizAgent repo](https://github.com/google-research/papervizagent) for the complete framework — Retriever (few-shot retrieval over PaperBananaBench), statistical-plot mode (matplotlib code-execution), the multi-candidate parallel pipeline, and the high-resolution Polish stage. **If you find the technique useful, please cite the PaperBanana paper (BibTeX below) and contribute to the upstream project.**
 
 ## Attribution & credits
 
-This agent is a derivative work of [PaperBanana](https://github.com/dwzhu-pku/PaperBanana) (Apache-2.0), which itself derives from Google Research's [PaperVizAgent](https://github.com/google-research/papervizagent). All four system prompts in [`prompts.py`](prompts.py) are adapted verbatim from the corresponding PaperBanana files (with attribution headers in-file calling out the modifications), and [`style_guide.md`](style_guide.md) is a verbatim copy of PaperBanana's `neurips2025_diagram_style_guide.md`. See [`NOTICE`](NOTICE) for the full Apache-2.0 attribution.
+This agent is a derivative work of Google Research's [PaperVizAgent](https://github.com/google-research/papervizagent) (Apache-2.0). All four system prompts in [`prompts.py`](prompts.py) are adapted verbatim from the corresponding PaperVizAgent files (with attribution headers in-file calling out the modifications), and [`style_guide.md`](style_guide.md) is a verbatim copy of PaperVizAgent's `neurips2025_diagram_style_guide.md`. See [`NOTICE`](NOTICE) for the full Apache-2.0 attribution.
 
-**PaperBanana authors:** Dawei Zhu, Rui Meng, Yale Song, Xiyu Wei, Sujian Li, Tomas Pfister, Jinsung Yoon.
+**Authors of the PaperBanana paper / PaperVizAgent framework:** Dawei Zhu, Rui Meng, Yale Song, Xiyu Wei, Sujian Li, Tomas Pfister, Jinsung Yoon.
 
 ```bibtex
 @article{zhu2026paperbanana,
@@ -24,11 +24,7 @@ This agent is a derivative work of [PaperBanana](https://github.com/dwzhu-pku/Pa
 }
 ```
 
-**Patent / commercial-use notice (reproduced from upstream):**
-
-> Our goal is simply to benefit the community, so currently we have no plans to use it for commercial purposes. The core methodology was developed during my internship at Google, and patents have been filed for these specific workflows by Google. While this doesn't impact open-source research efforts, it restricts third-party commercial applications using similar logic.
-
-This Gemini Enterprise port inherits the same intent: **open-source research only, not for third-party commercial deployment.** This is not an officially supported Google product.
+This is not an officially supported Google product. This project is intended for demonstration purposes only — not for use in a production environment.
 
 ## How it works
 
@@ -53,14 +49,14 @@ root_agent (Gemini 3, conversational)
           `── Finalize         emits a summary referencing the saved figure
 ```
 
-Mapping to PaperBanana:
+Mapping to PaperVizAgent:
 
-| PaperBanana agent | This port | Notes |
+| PaperVizAgent agent | This port | Notes |
 | --- | --- | --- |
 | Retriever | _skipped_ | No PaperBananaBench shipped; few-shot examples → upgrade hook in §"Extending" |
 | Planner | `PaperBananaPlanner` | `DIAGRAM_PLANNER_AGENT_SYSTEM_PROMPT` ported verbatim |
 | Stylist | `PaperBananaStylist` | `DIAGRAM_STYLIST_AGENT_SYSTEM_PROMPT` + `neurips2025_diagram_style_guide.md` ported verbatim |
-| Visualizer | `PaperBananaVisualizer` | Uses `gemini-3-pro-image-preview` natively — feeds the prior round's image back in for true edit-mode refinement (PaperBanana's text-only re-render works here too but loses continuity) |
+| Visualizer | `PaperBananaVisualizer` | Uses `gemini-3-pro-image-preview` natively — feeds the prior round's image back in for true edit-mode refinement (PaperVizAgent's text-only re-render works here too but loses continuity) |
 | Critic | `PaperBananaCritic` + `PaperBananaCriticDecision` | `DIAGRAM_CRITIC_AGENT_SYSTEM_PROMPT` ported; same JSON schema |
 | Polish (2K/4K upscale) | **native, on by default** | Nano Banana Pro generates at 4K natively (`ImageConfig(image_size="4K")`); set `IMAGE_SIZE=2K` or `1K` in `.env` for faster iteration |
 
@@ -109,8 +105,8 @@ MAX_CRITIC_ROUNDS=3
 paperbanana_agent/
 ├── __init__.py        # from . import agent  (ADK convention)
 ├── agent.py           # root LlmAgent + Sequential / LoopAgent pipeline
-├── prompts.py         # planner / stylist / critic / visualizer system prompts (ported from PaperBanana)
-├── style_guide.md     # NeurIPS-style guide (verbatim copy from PaperBanana)
+├── prompts.py         # planner / stylist / critic / visualizer system prompts (ported from PaperVizAgent)
+├── style_guide.md     # NeurIPS-style guide (verbatim copy from PaperVizAgent)
 ├── requirements.txt   # google-adk, google-genai
 ├── NOTICE             # Apache-2.0 attribution
 ├── .env.example       # env vars template; .env itself is gitignored
@@ -209,7 +205,7 @@ curl -sS -X POST \
   "https://global-discoveryengine.googleapis.com/v1alpha/projects/$PROJECT_ID/locations/global/collections/default_collection/engines/$APP_ID/assistants/default_assistant/agents" \
   -d "{
     \"displayName\": \"PaperBanana on Gemini Enterprise\",
-    \"description\": \"Generate publication-style figures from an attached research paper. Lite ADK port of PaperBanana.\",
+    \"description\": \"Generate publication-style figures from an attached research paper. Lite ADK port of Google Research PaperVizAgent.\",
     \"adkAgentDefinition\": {
       \"provisionedReasoningEngine\": {
         \"reasoningEngine\": \"$ENGINE_RESOURCE\"
@@ -254,11 +250,11 @@ Open Gemini Enterprise, pick **PaperBanana on Gemini Enterprise** from the sideb
 
 A few principled next steps if you want to push this beyond a lite demo:
 
-- **Re-add the Retriever.** Download [PaperBananaBench](https://huggingface.co/datasets/dwzhu/PaperBananaBench) (or curate your own reference figure pool), index it with embeddings, and add a `retrieve_examples` `FunctionTool` invoked before the Planner. PaperBanana's [`agents/retriever_agent.py`](https://github.com/dwzhu-pku/PaperBanana/blob/main/agents/retriever_agent.py) is the reference implementation.
-- **Add statistical-plot mode.** PaperBanana's plot path generates matplotlib code instead of an image; mount the optional code-execution sandbox from the [model_garden_agent](../../model-garden-on-gemini-enterprise/model_garden_agent/README.md#optional-code-execution) to run that code inside the Vertex AI sandbox.
+- **Re-add the Retriever.** Download [PaperBananaBench](https://huggingface.co/datasets/dwzhu/PaperBananaBench) (or curate your own reference figure pool), index it with embeddings, and add a `retrieve_examples` `FunctionTool` invoked before the Planner. PaperVizAgent's [`agents/retriever_agent.py`](https://github.com/google-research/papervizagent/blob/main/agents/retriever_agent.py) is the reference implementation.
+- **Add statistical-plot mode.** PaperVizAgent's plot path generates matplotlib code instead of an image; mount the optional code-execution sandbox from the [model_garden_agent](../../model-garden-on-gemini-enterprise/model_garden_agent/README.md#optional-code-execution) to run that code inside the Vertex AI sandbox.
 - **Tweak the resolution / aspect ratio.** Visualizer renders at 4K by default (`IMAGE_SIZE=4K`); pass `2K` or `1K` for faster iteration. To pin an aspect ratio, add `aspect_ratio="16:9"` (or `"4:3"`, `"1:1"`, etc.) to the `ImageConfig` in `_build_visualizer_request` — Nano Banana Pro will respect it.
-- **Parallel candidates.** PaperBanana fans out 5–20 candidates per query and lets the user pick. Wrap `paperbanana_pipeline` in a `ParallelAgent` and emit a gallery in the Finalize step.
+- **Parallel candidates.** PaperVizAgent fans out 5–20 candidates per query and lets the user pick. Wrap `paperbanana_pipeline` in a `ParallelAgent` and emit a gallery in the Finalize step.
 
 ## Disclaimer
 
-This is not an officially supported Google product. See [NOTICE](NOTICE) for the full attribution stack and the patent / non-commercial intent reproduced from upstream PaperBanana. Use for research and demo purposes only.
+This is not an officially supported Google product. See [NOTICE](NOTICE) for the full Apache-2.0 attribution stack. Use for research and demo purposes only — not for production deployment.

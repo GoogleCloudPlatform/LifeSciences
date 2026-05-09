@@ -15,12 +15,13 @@
 """System prompts for the PaperBanana-on-GE diagram pipeline.
 
 The four system prompts in this file (PLANNER, STYLIST, VISUALIZER, CRITIC)
-are adapted from PaperBanana (https://github.com/dwzhu-pku/PaperBanana),
-licensed under the Apache License, Version 2.0. The diagram-task variants
-were taken verbatim and lightly adapted to read the source paper from
-conversation context (a PDF attached in the Gemini Enterprise composer)
-rather than from a tabular `data` dict, and to read inputs from ADK session
-state rather than a function argument.
+are adapted from Google Research's PaperVizAgent
+(https://github.com/google-research/papervizagent), licensed under the
+Apache License, Version 2.0. The diagram-task variants were taken verbatim
+and lightly adapted to read the source paper from conversation context (a
+PDF attached in the Gemini Enterprise composer) rather than from a tabular
+`data` dict, and to read inputs from ADK session state rather than a
+function argument.
 
 Original sources:
   - DIAGRAM_PLANNER_AGENT_SYSTEM_PROMPT: agents/planner_agent.py
@@ -29,11 +30,11 @@ Original sources:
   - DIAGRAM_CRITIC_AGENT_SYSTEM_PROMPT: agents/critic_agent.py
 
 PLOT-task variants and the multi-candidate retrieval-driven prompts are not
-ported here — see upstream PaperBanana for those.
+ported here — see upstream PaperVizAgent for those.
 """
 
 # ----------------------------------------------------------------------------
-# Adapted from PaperBanana DIAGRAM_PLANNER_AGENT_SYSTEM_PROMPT (Apache-2.0).
+# Adapted from PaperVizAgent DIAGRAM_PLANNER_AGENT_SYSTEM_PROMPT (Apache-2.0).
 # Modifications: input is now the PDF attached to this conversation plus the
 # user's stated visual intent, rather than a "Methodology Section" string and
 # few-shot examples retrieved from PaperBananaBench.
@@ -51,7 +52,7 @@ Output ONLY the detailed description. Do not preface it with conversational fill
 
 
 # ----------------------------------------------------------------------------
-# Adapted from PaperBanana DIAGRAM_STYLIST_AGENT_SYSTEM_PROMPT (Apache-2.0).
+# Adapted from PaperVizAgent DIAGRAM_STYLIST_AGENT_SYSTEM_PROMPT (Apache-2.0).
 # Modifications: the "Methodology Section" and "Diagram Caption" inputs are
 # now drawn from session state set by the Planner step rather than from a
 # tabular data dict; the style guide is loaded from `style_guide.md`.
@@ -88,11 +89,11 @@ Output ONLY the final polished Detailed Description. Do not include any conversa
 
 
 # ----------------------------------------------------------------------------
-# Adapted from PaperBanana DIAGRAM_VISUALIZER_AGENT_SYSTEM_PROMPT (Apache-2.0).
+# Adapted from PaperVizAgent DIAGRAM_VISUALIZER_AGENT_SYSTEM_PROMPT (Apache-2.0).
 # Modifications: refinement-round instruction added so that on rounds > 0 the
 # model is asked to *edit* the prior image attached as input rather than draw
 # from scratch (Gemini-3 image generation natively supports this; the
-# original PaperBanana visualizer re-rendered each round from text only).
+# original PaperVizAgent visualizer re-rendered each round from text only).
 # ----------------------------------------------------------------------------
 VISUALIZER_SYSTEM_PROMPT = """\
 You are an expert scientific diagram illustrator. Generate high-quality scientific diagrams based on the user's detailed description.
@@ -102,7 +103,7 @@ When a previous version of the diagram is attached as input, treat the user's de
 
 
 # ----------------------------------------------------------------------------
-# Adapted from PaperBanana DIAGRAM_CRITIC_AGENT_SYSTEM_PROMPT (Apache-2.0).
+# Adapted from PaperVizAgent DIAGRAM_CRITIC_AGENT_SYSTEM_PROMPT (Apache-2.0).
 # Modifications: "Methodology Section" and "Figure Caption" inputs are now
 # the source paper PDF + the user's intent string; the JSON output schema is
 # preserved exactly so a downstream parser can reuse PaperBanana's contract.

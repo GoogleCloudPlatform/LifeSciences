@@ -1,14 +1,15 @@
 PaperBanana on Gemini Enterprise
 Copyright 2026 Google LLC
 
-This product includes software adapted from PaperBanana
-(https://github.com/dwzhu-pku/PaperBanana), Copyright (c) the PaperBanana
-contributors, licensed under the Apache License, Version 2.0. PaperBanana
-is itself derived from Google Research's PaperVizAgent
-(https://github.com/google-research/papervizagent).
+This product includes software adapted from PaperVizAgent
+(https://github.com/google-research/papervizagent), Copyright (c) Google LLC
+and the PaperVizAgent contributors, licensed under the Apache License,
+Version 2.0. PaperVizAgent was originally published as PaperBanana — this
+agent keeps the original "PaperBanana" name in its display label as a
+shorthand reference to the technique.
 
 The system prompts in `prompts.py` and the style guide in `style_guide.md`
-are derivative works of the corresponding files in PaperBanana, used and
+are derivative works of the corresponding files in PaperVizAgent, used and
 modified under the terms of the Apache-2.0 license. Modifications are noted
 inline in each file.
 

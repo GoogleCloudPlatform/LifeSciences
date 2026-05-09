@@ -1,8 +1,8 @@
 <!--
-This file is adapted verbatim from PaperBanana
-(https://github.com/dwzhu-pku/PaperBanana), file
+This file is adapted verbatim from Google Research's PaperVizAgent
+(https://github.com/google-research/papervizagent), file
 `style_guides/neurips2025_diagram_style_guide.md`,
-Copyright (c) the PaperBanana contributors, Apache-2.0.
+Copyright (c) Google LLC and the PaperVizAgent contributors, Apache-2.0.
 No content has been modified.
 -->
 
