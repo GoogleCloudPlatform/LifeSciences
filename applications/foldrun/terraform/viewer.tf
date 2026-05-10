@@ -57,20 +57,6 @@ resource "google_service_account_iam_member" "foldrun_viewer_actas_analysis" {
   member             = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
-# Allow the viewer to trigger the Cloud Run analysis jobs from the UI
-resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_analysis" {
-  for_each = toset([
-    google_cloud_run_v2_job.af2_analysis_job.name,
-    google_cloud_run_v2_job.of3_analysis_job.name,
-    google_cloud_run_v2_job.boltz2_analysis_job.name
-  ])
-  project  = var.project_id
-  location = var.region
-  name     = each.value
-  role     = "roles/run.jobsExecutorWithOverrides"
-  member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
-}
-
 resource "google_cloud_run_v2_service" "foldrun_viewer" {
   name        = "foldrun-viewer"
   project     = var.project_id

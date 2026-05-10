@@ -13,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Deploy AF2 Prediction Analyzer as Cloud Run Job
+# Deploy Unified Prediction Analyzer as Cloud Run Job
 
 set -e
 
 # Configuration
 PROJECT_ID=${PROJECT_ID:-$(gcloud config get-value project)}
 REGION=${REGION:-us-central1}
-JOB_NAME=${JOB_NAME:-af2-analysis-job}
+JOB_NAME=${JOB_NAME:-foldrun-analysis-job}
 ARTIFACT_REGISTRY_REPO=${ARTIFACT_REGISTRY_REPO:-foldrun-repo}
 VPC_NAME=${VPC_NAME:-foldrun-network}
 SUBNET_NAME=${SUBNET_NAME:-${VPC_NAME}-subnet}
@@ -29,7 +29,7 @@ SUBNET_NAME=${SUBNET_NAME:-${VPC_NAME}-subnet}
 IMAGE_PATH="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}/${JOB_NAME}"
 
 echo "================================================"
-echo "Deploying AF2 Analysis Job to Cloud Run"
+echo "Deploying Unified Analysis Job to Cloud Run"
 echo "================================================"
 echo "Project: $PROJECT_ID"
 echo "Region: $REGION"
@@ -49,7 +49,7 @@ if [ -z "$PROJECT_ID" ]; then
     exit 1
 fi
 
-# Navigate to current directory (we're already in af2-analysis-job)
+# Navigate to current directory
 cd "$(dirname "$0")"
 
 echo "Step 1: Building container image..."
@@ -65,8 +65,6 @@ echo "Step 2: Creating/Updating Cloud Run Job..."
 
 # Get bucket name from environment or use default
 BUCKET_NAME=${GCS_BUCKET:-${PROJECT_ID}-foldrun-data}
-
-echo "Gemini expert analysis will use Agent Platform with Application Default Credentials"
 
 # Create or update the job
 gcloud run jobs deploy $JOB_NAME \
@@ -91,7 +89,4 @@ echo "Deployment Complete!"
 echo "================================================"
 echo "Job Name: $JOB_NAME"
 echo "Region: $REGION"
-echo ""
-echo "To execute the job, use the MCP tool:"
-echo "  analyze_job_async_parallel(job_id='your-job-id')"
 echo "================================================"

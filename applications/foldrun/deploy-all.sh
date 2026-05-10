@@ -41,9 +41,7 @@ usage() {
     echo "                           boltz2         - boltz2-components + agent"
     echo "                           viewer         - foldrun-viewer + agent"
     echo "                           agent          - agent only (no container rebuilds)"
-    echo "                           of3-analysis   - of3-analysis-job Cloud Run Job"
-    echo "                           af2-analysis   - af2-analysis-job Cloud Run Job"
-    echo "                           boltz2-analysis- boltz2-analysis-job Cloud Run Job"
+    echo "                           analysis       - foldrun-analysis-job Cloud Run Job"
     echo "                         Combine with commas: --build-target of3,viewer"
     echo "  --db DATABASE          With --steps data or convert: target a single database."
     echo "                   data options: bfd, small_bfd, mgnify, pdb70, pdb_mmcif,"
@@ -83,7 +81,7 @@ usage() {
     echo "  $0 --steps build --build-target of3                 # Rebuild only OF3 container + agent"
     echo "  $0 --steps build --build-target agent               # Redeploy agent only (fast)"
     echo "  $0 --steps build --build-target of3,viewer          # Rebuild OF3 + viewer + agent"
-    echo "  $0 --steps build --build-target of3-analysis        # Rebuild only OF3 analysis job"
+    echo "  $0 --steps build --build-target analysis            # Rebuild only the analysis job"
     echo "  DOWNLOAD_MODE=full $0                               # Full deploy with all databases"
     exit 1
 }
