@@ -1,0 +1,62 @@
+cff-version: 1.2.0
+title: "Agentic TX: Multi-Agent Therapeutic Discovery System"
+message: >-
+  If you use this software, please cite both this repository
+  and the underlying TxGemma and Therapeutics Data Commons works.
+type: software
+license: Apache-2.0
+repository-code: "https://github.com/GoogleCloudPlatform/LifeSciences"
+
+references:
+  - type: article
+    title: "TxGemma: Efficient and Agentic LLMs for Therapeutics"
+    authors:
+      - family-names: Wang
+        given-names: Eric
+      - family-names: Schmidgall
+        given-names: Samuel
+      - family-names: Jaeger
+        given-names: "Paul F."
+      - family-names: Zhang
+        given-names: Fan
+      - family-names: Pilgrim
+        given-names: Rory
+      - family-names: Matias
+        given-names: Yossi
+      - family-names: Barral
+        given-names: Joelle
+      - family-names: Fleet
+        given-names: David
+      - family-names: Azizi
+        given-names: Shekoofeh
+    year: 2025
+    url: "https://developers.google.com/health-ai-developer-foundations/txgemma"
+
+  - type: article
+    title: >-
+      Therapeutics Data Commons: Machine Learning Datasets and Tasks
+      for Drug Discovery and Development
+    authors:
+      - family-names: Huang
+        given-names: Kexin
+      - family-names: Fu
+        given-names: Tianfan
+      - family-names: Gao
+        given-names: Wenhao
+      - family-names: Zhao
+        given-names: Yue
+      - family-names: Roohani
+        given-names: Yusuf
+      - family-names: Leskovec
+        given-names: Jure
+      - family-names: Coley
+        given-names: "Connor W."
+      - family-names: Xiao
+        given-names: Cao
+      - family-names: Sun
+        given-names: Jimeng
+      - family-names: Zitnik
+        given-names: Marinka
+    journal: "Proceedings of Neural Information Processing Systems, NeurIPS Datasets and Benchmarks"
+    year: 2021
+    url: "https://tdcommons.ai/"

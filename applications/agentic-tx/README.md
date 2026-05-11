@@ -90,6 +90,44 @@ agents_shared/        # Shared libraries
 deploy/               # Deployment CLI tooling
 ```
 
+## Citations
+
+This project builds on [TxGemma](https://developers.google.com/health-ai-developer-foundations/txgemma),
+a family of large language models fine-tuned for therapeutics developed by Google DeepMind and Google
+Health AI Developer Foundations. The 703 prediction tasks and task metadata are derived from the
+[Therapeutics Data Commons (TDC)](https://tdcommons.ai/).
+
+If you use this work, please cite the TxGemma paper and TDC:
+
+```bibtex
+@article{wang2025txgemma,
+    title={TxGemma: Efficient and Agentic LLMs for Therapeutics},
+    author={Wang, Eric and Schmidgall, Samuel and Jaeger, Paul F. and Zhang, Fan
+            and Pilgrim, Rory and Matias, Yossi and Barral, Joelle and Fleet, David
+            and Azizi, Shekoofeh},
+    year={2025},
+}
+```
+
+```bibtex
+@article{huang2021therapeutics,
+    title={Therapeutics Data Commons: Machine Learning Datasets and Tasks for Drug
+           Discovery and Development},
+    author={Huang, Kexin and Fu, Tianfan and Gao, Wenhao and Zhao, Yue and
+            Roohani, Yusuf and Leskovec, Jure and Coley, Connor W. and Xiao, Cao
+            and Sun, Jimeng and Zitnik, Marinka},
+    journal={Proceedings of Neural Information Processing Systems, NeurIPS Datasets
+             and Benchmarks},
+    year={2021},
+}
+```
+
+This project also uses:
+- [BioPython](https://biopython.org/) for NCBI Entrez and BLAST API access
+- [RDKit](https://www.rdkit.org/) for molecular property calculation and visualization
+- [PubChem](https://pubchem.ncbi.nlm.nih.gov/) and [ChEMBL](https://www.ebi.ac.uk/chembl/) for compound data
+- [Google ADK](https://google.github.io/adk-docs/) (Agent Development Kit) for agent orchestration
+
 ## License
 
 Apache 2.0 - See [LICENSE](../../LICENSE)
