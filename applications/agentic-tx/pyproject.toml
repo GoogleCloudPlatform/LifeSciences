@@ -1,0 +1,32 @@
+[project]
+name = "agentic-tx"
+version = "0.1.0"
+description = "Agentic TX - AI agents for therapeutic discovery"
+readme = "README.md"
+authors = [
+    { name = "Google LLC" }
+]
+requires-python = ">=3.12"
+license = {text = "Apache-2.0"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "aiohttp",
+    "google-adk",
+    "biopython",
+    "google-cloud-aiplatform[adk,agent_engines]",
+    "cloudpickle",
+    "opentelemetry-instrumentation-google-genai",
+    "pydantic",
+    "pydantic-settings[gcp-secret-manager]",
+    "rdkit",
+    "pubchempy",
+    "agents-shared"
+]
+
+[build-system]
+requires = ["uv_build>=0.8.6,<0.9.0"]
+build-backend = "uv_build"
