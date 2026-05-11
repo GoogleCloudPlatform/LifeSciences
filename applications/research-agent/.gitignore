@@ -1,0 +1,44 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+venv/
+env/
+
+# Virtual environments
+.claude
+.claude/
+
+# Environment files
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+*.pdf
+requirements.txt  # Use pyproject.toml instead
+llms-full.txt     # Large ADK documentation file
+
+# Logs (anywhere in the project)
+*.log
+**/logs/
+logs/
+
+# Backups
+*_backup_*.zip

@@ -1,0 +1,31 @@
+[project]
+name = "research_agent"
+version = "0.1.0"
+description = "AI agent combining BigQuery data retrieval with web research for patent and article analysis"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "google-genai>=1.49.0",
+    "google-cloud-aiplatform[agent_engines,adk]>=1.126.0",
+    "google-cloud-bigquery>=3.0.0",
+    "pydantic>=2.12.4",
+    "cloudpickle>=3.1.2",
+    "python-dotenv>=1.0.0",
+    "aiohttp>=3.13.2",
+    "google-adk==1.18.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["research_agent"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "absolufy-imports>=0.3.0",
+]
