@@ -1,0 +1,90 @@
+{
+  "criteria": {
+    "rubric_based_final_response_quality_v1": {
+      "threshold": 0.7,
+      "judge_model_options": {
+        "judge_model": "gemini-3-flash-preview",
+        "num_samples": 3
+      },
+      "rubrics": [
+        {
+          "rubric_id": "citation_grounding",
+          "rubric_content": {
+            "text_property": "Every PMID, PMCID, and NCT identifier mentioned in the response is supported by the agent's actual tool calls (i.e. appears in real tool output, not fabricated). The response does not invent citations to look more authoritative."
+          }
+        },
+        {
+          "rubric_id": "takes_position_when_asked",
+          "rubric_content": {
+            "text_property": "When the user explicitly asks for the agent's opinion, asks it to push back, asks it to reconcile contradicting evidence, or otherwise invites a stance, the agent TAKES a clear position with reasoning — rather than equivocating with 'on one hand / on the other hand' framing or pure summarization."
+          }
+        },
+        {
+          "rubric_id": "flags_methodologic_limits",
+          "rubric_content": {
+            "text_property": "When discussing clinical trials or studies, the response proactively flags relevant methodologic limitations — open-label design, surrogate endpoints, post-hoc subgroup analyses, weak/inappropriate comparators, short follow-up, small sample size, conflicts of interest — where they meaningfully qualify the conclusions. Does not silently treat trial headlines as settled fact."
+          }
+        },
+        {
+          "rubric_id": "skill_workflow_compliance",
+          "rubric_content": {
+            "text_property": "ONLY APPLICABLE when the user EXPLICITLY invokes a workflow by an explicit imperative such as 'run a target dossier on...', 'do a PRISMA review of...', 'run a competitive landscape scan on...', 'do a safety signal scan on...', 'use the PICO search strategy skill...'. Incidental use of workflow keywords (e.g. 'render a mechanism-of-action diagram' is just a figure request, NOT an invocation of the mechanism-of-action explainer skill; 'find papers on cardiovascular outcomes' is NOT a PRISMA review request) does NOT count and the rubric is N/A. When applicable: the response follows the section structure and content checklist that workflow prescribes — including required sections like aliases (target dossier), search-executed-on date (PRISMA), or PICO decomposition (search strategy)."
+          }
+        },
+        {
+          "rubric_id": "exact_canonical_forms",
+          "rubric_content": {
+            "text_property": "Drug names, gene symbols (case-sensitive — e.g. KRAS not kras), trial NCT identifiers, and PubMed PMIDs are rendered in their exact canonical form throughout the response."
+          }
+        },
+        {
+          "rubric_id": "scoped_redirection",
+          "rubric_content": {
+            "text_property": "Requests outside biomedical literature research (general programming, unrelated chitchat, non-life-sciences topics) are politely redirected back to the agent's scope rather than answered."
+          }
+        }
+      ]
+    },
+    "rubric_based_tool_use_quality_v1": {
+      "threshold": 0.7,
+      "judge_model_options": {
+        "judge_model": "gemini-3-flash-preview",
+        "num_samples": 3
+      },
+      "rubrics": [
+        {
+          "rubric_id": "deep_questions_use_pipeline",
+          "rubric_content": {
+            "text_property": "Questions that benefit from multi-source synthesis (evidence briefs, target landscape scans, competitive analyses, conflicting-literature reconciliation, methodologic critiques anchored to specific examples) invoke the DeepResearchPipeline AgentTool — not just literature_search_agent alone. Single-PMID lookups and simple keyword searches correctly stay with literature_search_agent."
+          }
+        },
+        {
+          "rubric_id": "skills_trigger_when_named",
+          "rubric_content": {
+            "text_property": "ONLY APPLICABLE when the user invokes a workflow with an explicit imperative ('run a target dossier on X', 'do a PRISMA review of Y'). Incidental keyword overlap does not count (e.g. 'render a mechanism-of-action diagram' is just a visualize_concept request, not an MoA-explainer skill invocation). When applicable: the corresponding SKILL.md is loaded via the SkillToolset (list_skills / get_skill_details / load_skill_resource calls) before the agent composes its response."
+          }
+        },
+        {
+          "rubric_id": "visualization_for_figure_requests",
+          "rubric_content": {
+            "text_property": "When the user asks for a diagram, figure, schematic, infographic, or visual rendering, the agent calls the visualize_concept tool. The tool call's `description` argument contains a multi-sentence enriched figure spec (entities, relationships, layout, labels) — not just a one-line repeat of the user's request."
+          }
+        },
+        {
+          "rubric_id": "entity_questions_use_pubtator",
+          "rubric_content": {
+            "text_property": "Questions about gene-disease, drug-target, or chemical-treatment relationships use the PubTator3 tools (lookup_entity_id then find_related_entities / annotate_articles) — not just keyword search via search_pubmed."
+          }
+        }
+      ]
+    },
+    "hallucinations_v1": {
+      "threshold": 0.7,
+      "judge_model_options": {
+        "judge_model": "gemini-3-flash-preview",
+        "num_samples": 3
+      },
+      "evaluate_intermediate_nl_responses": true
+    }
+  }
+}
