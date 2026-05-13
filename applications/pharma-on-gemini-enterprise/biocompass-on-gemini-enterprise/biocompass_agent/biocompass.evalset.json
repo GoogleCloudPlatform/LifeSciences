@@ -1,0 +1,238 @@
+{
+  "eval_set_id": "biocompass_core",
+  "name": "BioCompass core lanes + critical voice",
+  "description": "Evals across all coordinator lanes (light lookup, entity, deep research, skill, visualization, refusal) plus dedicated critical-voice / push-back / citation-faithfulness cases. Scored with rubric_based_final_response_quality_v1 and hallucinations_v1 (see tests/test_config.json). Run with: adk eval . biocompass_agent/biocompass.evalset.json --config_file_path biocompass_agent/tests/test_config.json --print_detailed_results",
+  "eval_cases": [
+    {
+      "eval_id": "light_pubmed_lookup",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "light_pubmed_lookup_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Find 3 recent randomized controlled trials on tirzepatide for obesity, 2023-2025."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Three recent randomized controlled trials on tirzepatide for obesity, with title, first author, journal, year, PMID, and a brief takeaway. Retrieved via PubMed E-utilities with date and publication-type filters."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "fetch_specific_pmid",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "fetch_specific_pmid_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Fetch PMID 28375731 and summarize it in 3 bullets."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "PMID 28375731 — title, authors, journal, year, then a 3-bullet summary of question, methods, and key result. Includes PubMed URL."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "entity_relationship_query",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "entity_relationship_query_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "What chemicals are reported to inhibit KRAS? Use PubTator3."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Resolves KRAS to its canonical PubTator3 gene ID, then queries the relations endpoint for chemicals with an inhibit relationship. Returns a list of inhibitors with their PubTator3 IDs and supporting PMIDs."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "deep_research_brief_kras",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "deep_research_brief_kras_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Build me an evidence brief on KRAS G12C inhibitors in NSCLC — pipeline, recent readouts, resistance mechanisms."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Multi-source evidence brief covering KRAS G12C inhibitors in NSCLC. Headline answer, key findings cited to PMIDs, trial pipeline cited to NCT IDs (sotorasib, adagrasib, divarasib and others), preprint signal, critical assessment, gaps and caveats. The DeepResearchPipeline tool was invoked."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "pushback_lecanemab",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "pushback_lecanemab_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "What's your honest read on the aducanumab and lecanemab story — is the cognitive benefit clinically meaningful, or is the field rationalizing a small effect on a surrogate? Take a position."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Takes a clear position on whether the CDR-SB delta seen in CLARITY-AD and the aducanumab program represents a clinically meaningful effect, with reasoning. Distinguishes amyloid-clearance surrogate from cognitive endpoints, flags ARIA risk, and names the methodologic concerns. Cites specific PMIDs and trial NCTs."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "pushback_select_trial",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "pushback_select_trial_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Critique the SELECT trial (semaglutide for cardiovascular outcomes) — what do the headline 20% MACE reduction numbers oversell? Trial design limits matter."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Names specific design limits of the SELECT trial that qualify the headline 20% MACE reduction — placebo comparator (no active control), event-driven follow-up duration, weight-loss as a confounder for the cardiovascular signal, applicability to non-obese populations, and the modest absolute risk reduction relative to the relative risk reduction. Cites SELECT publication and registration."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "conflict_pcsk9_dementia",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "conflict_pcsk9_dementia_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Two recent meta-analyses on PCSK9 inhibitors and dementia risk reach opposite conclusions — give me your reasoned position on which is more credible."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Surfaces the conflicting meta-analyses with citations, then takes a position on which is more credible based on study quality (study selection, included trial designs, follow-up duration, pre-registration status, sponsor independence, statistical methods). Does not just present both sides."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "methodologic_critique_orr",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "methodologic_critique_orr_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Critique the way solid-tumor immunotherapy trials report objective response rate as evidence of efficacy. Where is the standard reporting misleading? Anchor with a recent example."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Substantive methodologic critique of ORR as a primary or supportive endpoint in solid-tumor immunotherapy trials — surrogate endpoint validity, RECIST limitations, single-arm Phase 2 inflation, accelerated approval reliance, lack of correlation with overall survival in many tumor types. Anchored with a specific recent trial cited by NCT or PMID."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "skill_target_dossier_keap1",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "skill_target_dossier_keap1_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Run a target evidence dossier on KEAP1 — and at the end, give me your own view on whether this is a tractable target or whether the field's enthusiasm is outpacing the evidence."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Follows the target-evidence-dossier skill structure — Snapshot, Aliases, Biology, Disease association, Existing programs, Translatability + safety, Open questions, References. Concludes with the agent's own opinion on tractability vs. field enthusiasm with reasoning."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "visualize_moa_diagram",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "visualize_moa_diagram_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Render a mechanism-of-action diagram for sotorasib showing covalent binding to KRAS G12C and downstream MAPK suppression."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Calls visualize_concept with figure_type='diagram' and an enriched description naming sotorasib, KRAS G12C, the covalent binding interaction, and the downstream RAF-MEK-ERK cascade. Returns the rendered figure inline via the GE file marker, followed by a one-line caption."}]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "off_topic_refusal",
+      "session_input": {
+        "app_name": "biocompass_agent",
+        "user_id": "eval_user",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "off_topic_refusal_t1",
+          "user_content": {
+            "role": "user",
+            "parts": [{"text": "Write me a Python function to compute Fibonacci numbers."}]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [{"text": "Politely redirects: focused on biomedical literature research, not general programming. Suggests asking a different assistant for the Fibonacci function."}]
+          }
+        }
+      ]
+    }
+  ]
+}
