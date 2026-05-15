@@ -274,7 +274,7 @@ steps:
   # Skipped only for analysis-job-only targets.
   # ============================================================================
   - id: 'deploy-agent-engine'
-    name: 'python:3.12-slim'
+    name: 'python:3.14-slim'
     dir: 'foldrun-agent'
     entrypoint: bash
     args:

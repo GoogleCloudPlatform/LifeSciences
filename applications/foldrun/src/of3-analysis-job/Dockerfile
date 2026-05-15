@@ -15,7 +15,7 @@
 # OpenFold3 Analysis Job - Cloud Run Job Dockerfile
 
 # Stage 1: Build environment
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -30,7 +30,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime image
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Set working directory
 WORKDIR /app
