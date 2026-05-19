@@ -1,21 +1,21 @@
-# Deploy Third-Party & Open Models to Gemini Enterprise via Agent Engine
+# Deploy Third-Party & Open Models for use in the Gemini Enterprise app
 
-Deploy AI agents powered by third-party models (Anthropic Claude) and open-source models (Google Gemma 4) to [Gemini Enterprise](https://cloud.google.com/products/gemini/enterprise) using [Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview) and the [Agent Development Kit (ADK)](https://github.com/google/adk-python).
+Deploy AI agents powered by third-party models (Anthropic Claude) and open-source models (Google Gemma 4) for use in the [Gemini Enterprise app](https://cloud.google.com/products/gemini/enterprise) using [Agent Runtime](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale) and the [Agent Development Kit (ADK)](https://github.com/google/adk-python).
 
 This guide walks through the end-to-end flow:
-1. [Enable third-party models](#enable-claude-models-in-model-garden) in Vertex AI Model Garden
-2. [Build and deploy](#deploy-to-agent-engine) an agent to Agent Engine using ADK
+1. [Enable third-party models](#enable-claude-models-in-model-garden) in Model Garden
+2. [Build and deploy](#deploy-to-agent-engine) an agent to Agent Runtime using ADK
 3. [Add the agent to Gemini Enterprise](#add-the-agent-to-gemini-enterprise) so users in your organization can interact with it
 
 ## Prerequisites
 
 1. A Google Cloud project with billing enabled
 2. A [Gemini Enterprise](https://cloud.google.com/products/gemini/enterprise) subscription for your Google Workspace organization
-3. [Vertex AI API](https://console.cloud.google.com/apis/library/aiplatform.googleapis.com) enabled
+3. [Agent Platform API](https://console.cloud.google.com/apis/library/aiplatform.googleapis.com) enabled
 4. [Cloud Resource Manager API](https://console.developers.google.com/apis/api/cloudresourcemanager.googleapis.com/overview) enabled
-5. For Claude: enable Anthropic models in [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/model-garden) (see [Enable Claude Models in Model Garden](#enable-claude-models-in-model-garden) below)
+5. For Claude: enable Anthropic models in [Model Garden](https://console.cloud.google.com/agent-platform/model-garden) (see [Enable Claude Models in Model Garden](#enable-claude-models-in-model-garden) below)
 6. [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed
-7. Python 3.9+
+7. Python 3.13+
 
 ## Enable Claude Models in Model Garden
 
@@ -41,8 +41,10 @@ Before using Claude models, you need to enable them in your Google Cloud project
 
 ### Install dependencies
 
+Dependencies are automatically managed by `uv` when you use `uv run`. If you need to synchronize dependencies in your local environment manually, you can run:
+
 ```bash
-pip install google-adk anthropic[vertex]
+uv sync
 ```
 
 ### Authenticate with Google Cloud
@@ -53,11 +55,21 @@ gcloud auth application-default login
 gcloud config set project YOUR_PROJECT_ID
 ```
 
+### Configure environment variables
+
+Copy `.env.example` to `.env` and update `GOOGLE_CLOUD_PROJECT` with your Google Cloud Project ID:
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and replace `YOUR_PROJECT_ID` with your actual Google Cloud project ID.
+
 ## Agent Examples
 
-### Claude (Anthropic via Vertex AI Model Garden)
+### Claude (Anthropic via Agent Platform Model Garden)
 
-Anthropic models are available in specific regions (e.g. `us-east5`). Since Agent Engine doesn't support all of those regions, we deploy Agent Engine to `us-central1` and override `GOOGLE_CLOUD_LOCATION` in `agent.py` to route model calls to the correct region.
+Anthropic models are available in specific locations (e.g. `us-east5` or `global`). Since Agent Runtime doesn't support all of those locations, we deploy Agent Runtime to `us-central1` and override `GOOGLE_CLOUD_LOCATION` in `agent.py` to route model calls to the correct location.
 
 See [`model_garden_agent/`](model_garden_agent/) for a working example.
 
@@ -65,7 +77,7 @@ See [`model_garden_agent/`](model_garden_agent/) for a working example.
 import os
 from google.adk.agents.llm_agent import Agent
 
-os.environ['GOOGLE_CLOUD_LOCATION'] = os.getenv('MODEL_LOCATION', 'us-east5')
+os.environ['GOOGLE_CLOUD_LOCATION'] = os.getenv('MODEL_LOCATION', 'global')
 
 root_agent = Agent(
     model=os.getenv('MODEL_NAME', 'claude-opus-4-7'),
@@ -94,34 +106,28 @@ root_agent = LlmAgent(
 ## Project Structure
 
 ```
-model_garden_agent/
-├── __init__.py        # from . import agent
-├── agent.py           # defines root_agent
-├── requirements.txt   # google-adk, anthropic[vertex]
-└── .env               # GOOGLE_GENAI_USE_VERTEXAI=1, project, location
-```
-
-`.env`:
-```
-GOOGLE_GENAI_USE_VERTEXAI=1
-GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID
-GOOGLE_CLOUD_LOCATION=us-central1
-MODEL_NAME=claude-opus-4-7
-MODEL_LOCATION=us-east5
+model-garden-on-gemini-enterprise/
+├── pyproject.toml     # build configuration & dependencies
+├── README.md          # setup & deployment guide
+├── .env               # environment variables (project, location, etc.)
+├── docs/              # documentation images
+└── model_garden_agent/
+    ├── __init__.py    # registers the agent
+    └── agent.py       # agent logic & callbacks
 ```
 
 ## Test Locally
 
 ```bash
-adk web model_garden_agent
+uv run adk web
 ```
 
-## Deploy to Agent Engine
+## Deploy to Agent Runtime
 
 From the **parent directory** containing `model_garden_agent/`:
 
 ```bash
-adk deploy agent_engine \
+uv run adk deploy agent_engine \
     --project=YOUR_PROJECT_ID \
     --region=us-central1 \
     --display_name="Model Garden Agent" \
@@ -130,18 +136,18 @@ adk deploy agent_engine \
 
 On success:
 ```
-AgentEngine created. Resource name: projects/123456789/locations/us-central1/reasoningEngines/RESOURCE_ID
+✅ Created agent engine: projects/123456789/locations/us-central1/reasoningEngines/RESOURCE_ID
 ```
 
 ### Verify in the Console
 
-**Step 1.** In the Cloud Console, search for **Agent Engine**.
+**Step 1.** In the Cloud Console, search for **Agent Runtime**.
 
-![Search for Agent Engine in the Cloud Console](docs/images/05-search-agent-engine.png)
+![Search for Agent Runtime in the Cloud Console](docs/images/05-search-agent-runtime.png)
 
-**Step 2.** You should see your deployed **Model Garden Agent** in the Agent Engine console.
+**Step 2.** You should see your deployed **Model Garden Agent** in the Agent Runtime console.
 
-![Agent Engine console showing the deployed agent](docs/images/06-agent-engine-deployed.png)
+![Agent Runtime console showing the deployed agent](docs/images/06-agent-runtime-deployed.png)
 
 ## Query the Deployed Agent
 
@@ -171,7 +177,7 @@ POST https://us-central1-aiplatform.googleapis.com/v1/projects/YOUR_PROJECT_ID/l
 
 ## Add the Agent to Gemini Enterprise
 
-Once your agent is deployed to Agent Engine, you can make it available to users in your organization through [Gemini Enterprise](https://cloud.google.com/products/gemini/enterprise). This lets users interact with your custom agent alongside Google-made agents like Deep Research and Idea Generation.
+Once your agent is deployed to Agent Runtime, you can make it available to users in your organization through the [Gemini Enterprise app](https://cloud.google.com/products/gemini/enterprise). This lets users interact with your custom agent alongside Google-made agents like Deep Research.
 
 ### Prerequisites
 
@@ -180,11 +186,11 @@ Once your agent is deployed to Agent Engine, you can make it available to users 
 
 ### Steps
 
-**Step 1.** Open the [Gemini Enterprise admin console](https://admin.google.com), navigate to **Apps > Gemini Enterprise > Agents**, and click **+ Add agent**.
+**Step 1.** In the Google Cloud console, go to the [Gemini Enterprise page](https://console.cloud.google.com/gemini-enterprise/), then navigate to **Apps > Gemini Enterprise > Agents**, and click **+ Add agent**.
 
-![Gemini Enterprise admin console - Agents list](docs/images/07-gemini-enterprise-agents-admin.png)
+![Gemini Enterprise console - Agents list](docs/images/07-gemini-enterprise-agents-admin.png)
 
-**Step 2.** In the "Add an agent" dialog, select **Custom agent via Agent Engine** to connect your deployed Agent Engine agent.
+**Step 2.** In the "Add an agent" dialog, select **Custom agent via Agent Runtime** to connect your deployed agent.
 
 ![Choose agent type dialog](docs/images/08-add-agent-type.png)
 
@@ -202,11 +208,11 @@ Once your agent is deployed to Agent Engine, you can make it available to users 
 
 ## Optional: Web Search
 
-The agent ships with a [Web Grounding for Enterprise](https://cloud.google.com/vertex-ai/generative-ai/docs/grounding/web-grounding-enterprise) tool that's **commented out** by default. Enable it to give the agent access to a curated, compliance-controlled web index (no customer-data logging, VPC-SC compatible, 6–24 hour freshness) — appropriate for healthcare, finance, and public-sector workloads.
+The agent ships with a [Web Grounding for Enterprise](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/grounding/web-grounding-enterprise) tool that's **commented out** by default. Enable it to give the agent access to a curated, compliance-controlled web index (no customer-data logging, VPC-SC compatible, 6–24 hour freshness) — appropriate for healthcare, finance, and public-sector workloads.
 
 ### What enabling it gives you
 
-The tool is a regular Python `FunctionTool` whose implementation makes a Gemini call (`gemini-3-flash-preview` by default; override with `SEARCH_MODEL_NAME` in `.env`) with `tools=[Tool(enterprise_web_search=EnterpriseWebSearch())]` and returns:
+The tool is a regular Python `FunctionTool` whose implementation makes a Gemini call (`gemini-3.5-flash` by default; override with `SEARCH_MODEL_NAME` in `.env`) with `tools=[Tool(enterprise_web_search=EnterpriseWebSearch())]` and returns:
 
 ```python
 {
@@ -218,7 +224,7 @@ The tool is a regular Python `FunctionTool` whose implementation makes a Gemini 
 
 Wrapping the grounding flag inside a Python function lets it work with **any planner model** and dispatches deterministically through ADK's normal function-call path — unlike the built-in `google_search` grounding tool, which is Gemini-only and bypasses function-call dispatch entirely (so wrapping it in an AgentTool sub-agent is flaky in practice).
 
-The instruction addendum asks the model to inline citations as numbered references and to display `suggested_queries` under a "Suggested searches:" line, which satisfies the spirit of the [Google Search suggestions display requirement](https://cloud.google.com/vertex-ai/generative-ai/docs/grounding/web-grounding-enterprise#use-google-search-suggestions). (Note: GE's chat UI does not render the styled HTML chips from `searchEntryPoint.renderedContent`, so the queries are presented as plain text — this is best-effort given current GE rendering constraints.)
+The instruction addendum asks the model to inline citations as numbered references and to display `suggested_queries` under a "Suggested searches:" line, which satisfies the spirit of the [Google Search suggestions display requirement](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/grounding/web-grounding-enterprise#use-google-search-suggestions). (Note: GE's chat UI does not render the styled HTML chips from `searchEntryPoint.renderedContent`, so the queries are presented as plain text — this is best-effort given current GE rendering constraints.)
 
 ### Step 1 — uncomment the web search blocks in `agent.py`
 
@@ -229,13 +235,13 @@ Search for `=== OPTIONAL: Web search` / `=== OPTIONAL: Web Grounding for Enterpr
 Local:
 
 ```bash
-adk web .
+uv run adk web
 ```
 
 Then redeploy:
 
 ```bash
-adk deploy agent_engine \
+uv run adk deploy agent_engine \
     --project=$PROJECT_ID \
     --region=us-central1 \
     --agent_engine_id=$ENGINE_ID \
@@ -249,11 +255,11 @@ Ask a current-events / regulatory question ("what's the latest 2026 FDA guidance
 
 ## Monitor
 
-View deployed agents in the [Agent Engine Console](https://console.cloud.google.com/vertex-ai/agents/agent-engines).
+View deployed agents in the [Agent Runtime Console](https://console.cloud.google.com/agent-platform/runtimes).
 
 ## Optional: Code Execution
 
-The agent ships with a stateful Python sandbox integration ([Agent Runtime Code Execution](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/code-execution/overview)) that's **commented out** by default. Enable it to let Claude write and run code (pandas, numpy, matplotlib, scikit-learn, openpyxl, PyPDF2, etc. preinstalled) for analyzing CSV / Excel / JSON / Parquet attachments alongside the PDFs and images Claude already reads natively.
+The agent ships with a stateful Python sandbox integration ([Code Execution](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/sandbox/code-execution-overview)) that's **commented out** by default. Enable it to let Claude write and run code (pandas, numpy, matplotlib, scikit-learn, openpyxl, PyPDF2, etc. preinstalled) for analyzing CSV / Excel / JSON / Parquet attachments alongside the PDFs and images Claude already reads natively.
 
 The screenshots below are from a single GE turn where the user attached a research paper PDF and an `.xlsx` and asked for a brief summary plus a dashboard:
 
@@ -323,13 +329,13 @@ Search for the marker `=== OPTIONAL: Code execution` in [`agent.py`](agent.py). 
 Local:
 
 ```bash
-adk web .
+uv run adk web
 ```
 
 Then redeploy:
 
 ```bash
-adk deploy agent_engine \
+uv run adk deploy agent_engine \
     --project=$PROJECT_ID \
     --region=us-central1 \
     --agent_engine_id=$ENGINE_ID \

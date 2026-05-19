@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "model-garden-agent"
+version = "0.1.0"
+description = "ADK agent using models from Model Garden"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "google-cloud-aiplatform[agent_engines,adk]",
+    "anthropic[vertex]",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["model_garden_agent"]

@@ -53,30 +53,28 @@ from google.genai import types
 # )
 # from google.adk.code_executors.code_executor_context import CodeExecutorContext
 
-os.environ['GOOGLE_CLOUD_LOCATION'] = os.getenv('MODEL_LOCATION', 'global')
+os.environ["GOOGLE_CLOUD_LOCATION"] = os.getenv("MODEL_LOCATION", "global")
 
 # Gemini Enterprise forwards user attachments to custom Agent Engine agents as
 # filename-only text markers and stashes the bytes in the ArtifactService.
 # Resolve those markers back to inline_data Parts so the model sees the file.
-_FILE_MARKER_RE = re.compile(
-    r'<start_of_user_uploaded_file:\s*(?P<name>[^>]+?)\s*>'
-)
+_FILE_MARKER_RE = re.compile(r"<start_of_user_uploaded_file:\s*(?P<name>[^>]+?)\s*>")
 
 # Mime types Claude can read directly via inline_data (image/* and PDF). Other
 # types are either silently dropped or routed to the sandbox if code execution
 # is enabled below.
-_CLAUDE_INLINE_MIMES = ('image/', 'application/pdf')
+_CLAUDE_INLINE_MIMES = ("image/", "application/pdf")
 
 
 def _is_claude_inline(mime: str | None) -> bool:
-  if not mime:
-    return False
-  return any(mime.startswith(prefix) for prefix in _CLAUDE_INLINE_MIMES)
+    if not mime:
+        return False
+    return any(mime.startswith(prefix) for prefix in _CLAUDE_INLINE_MIMES)
 
 
 # === OPTIONAL: Web search — uncomment to enable. ===
 #
-# _SEARCH_MODEL = os.getenv('SEARCH_MODEL_NAME', 'gemini-3-flash-preview')
+# _SEARCH_MODEL = os.getenv('SEARCH_MODEL_NAME', 'gemini-3.5-flash')
 #
 # def enterprise_web_search(query: str) -> dict:
 #   """Search the curated enterprise web index for a grounded answer.
@@ -247,62 +245,62 @@ def _is_claude_inline(mime: str | None) -> bool:
 async def _inject_uploaded_artifacts(
     callback_context: CallbackContext, llm_request: LlmRequest
 ):
-  """Resolve GE filename markers to inline_data Parts (and route data files
-  to the sandbox if code execution is enabled below).
-  """
-  if not llm_request.contents:
+    """Resolve GE filename markers to inline_data Parts (and route data files
+    to the sandbox if code execution is enabled below).
+    """
+    if not llm_request.contents:
+        return None
+    artifact_keys = set(await callback_context.list_artifacts())
+
+    for content in llm_request.contents:
+        if getattr(content, "role", None) != "user" or not content.parts:
+            continue
+
+        # Resolve GE filename markers into inline_data Parts loaded from artifacts.
+        injected: set[str] = set()
+        name_by_part_id: dict[int, str] = {}
+        for part in list(content.parts):
+            if not part.text:
+                continue
+            for match in _FILE_MARKER_RE.finditer(part.text):
+                name = match.group("name").strip()
+                if name in injected or name not in artifact_keys:
+                    continue
+                artifact_part = await callback_context.load_artifact(name)
+                if artifact_part is None or artifact_part.inline_data is None:
+                    continue
+                new_part = types.Part(
+                    inline_data=types.Blob(
+                        mime_type=artifact_part.inline_data.mime_type,
+                        data=artifact_part.inline_data.data,
+                    )
+                )
+                content.parts.append(new_part)
+                name_by_part_id[id(new_part)] = name
+                injected.add(name)
+
+        # === OPTIONAL: Code execution routing — uncomment to enable. ===
+        # Routes binary data files (xlsx, parquet, etc.) the model can't read
+        # directly into the sandbox's input-files context, replacing the inline
+        # bytes with a text marker so the model knows the filename.
+        #
+        # rebuilt = []
+        # for part in content.parts:
+        #   if part.inline_data and _is_sandbox_only(part.inline_data.mime_type):
+        #     name = name_by_part_id.get(id(part)) or _generate_file_name(part.inline_data)
+        #     _push_to_sandbox(callback_context, name, part.inline_data)
+        #     rebuilt.append(types.Part(text=f'\nAvailable file: `{name}`\n'))
+        #   else:
+        #     rebuilt.append(part)
+        # content.parts[:] = rebuilt
+
     return None
-  artifact_keys = set(await callback_context.list_artifacts())
-
-  for content in llm_request.contents:
-    if getattr(content, 'role', None) != 'user' or not content.parts:
-      continue
-
-    # Resolve GE filename markers into inline_data Parts loaded from artifacts.
-    injected: set[str] = set()
-    name_by_part_id: dict[int, str] = {}
-    for part in list(content.parts):
-      if not part.text:
-        continue
-      for match in _FILE_MARKER_RE.finditer(part.text):
-        name = match.group('name').strip()
-        if name in injected or name not in artifact_keys:
-          continue
-        artifact_part = await callback_context.load_artifact(name)
-        if artifact_part is None or artifact_part.inline_data is None:
-          continue
-        new_part = types.Part(
-            inline_data=types.Blob(
-                mime_type=artifact_part.inline_data.mime_type,
-                data=artifact_part.inline_data.data,
-            )
-        )
-        content.parts.append(new_part)
-        name_by_part_id[id(new_part)] = name
-        injected.add(name)
-
-    # === OPTIONAL: Code execution routing — uncomment to enable. ===
-    # Routes binary data files (xlsx, parquet, etc.) the model can't read
-    # directly into the sandbox's input-files context, replacing the inline
-    # bytes with a text marker so the model knows the filename.
-    #
-    # rebuilt = []
-    # for part in content.parts:
-    #   if part.inline_data and _is_sandbox_only(part.inline_data.mime_type):
-    #     name = name_by_part_id.get(id(part)) or _generate_file_name(part.inline_data)
-    #     _push_to_sandbox(callback_context, name, part.inline_data)
-    #     rebuilt.append(types.Part(text=f'\nAvailable file: `{name}`\n'))
-    #   else:
-    #     rebuilt.append(part)
-    # content.parts[:] = rebuilt
-
-  return None
 
 
 _INSTRUCTION = (
-    'Answer user questions to the best of your knowledge. '
-    'When the user attaches images or PDFs, analyze them directly and '
-    'reference their contents in your answer.'
+    "Answer user questions to the best of your knowledge. "
+    "When the user attaches images or PDFs, analyze them directly and "
+    "reference their contents in your answer."
 )
 
 # === OPTIONAL: Web search instruction — uncomment when enabling. ===
@@ -328,9 +326,9 @@ _INSTRUCTION = (
 # )
 
 root_agent = Agent(
-    model=os.getenv('MODEL_NAME', 'claude-opus-4-7'),
-    name='root_agent',
-    description='A helpful assistant for user questions.',
+    model=os.getenv("MODEL_NAME", "claude-opus-4-7"),
+    name="root_agent",
+    description="A helpful assistant for user questions.",
     instruction=_INSTRUCTION,
     before_model_callback=_inject_uploaded_artifacts,
     # === OPTIONAL: Web search — uncomment to enable. ===
