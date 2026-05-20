@@ -5,4 +5,5 @@ __pycache__/
 *.pyc
 .env
 .adk/
+model_garden_agent/requirements.txt
 .venv

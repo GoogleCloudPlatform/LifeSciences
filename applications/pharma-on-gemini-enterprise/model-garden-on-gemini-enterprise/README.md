@@ -124,13 +124,20 @@ uv run adk web
 
 ## Deploy to Agent Runtime
 
-From the **parent directory** containing `model_garden_agent/`:
+Before deploying, compile the dependencies from `pyproject.toml` into a `requirements.txt` inside the agent directory:
+
+```bash
+uv pip compile pyproject.toml -o model_garden_agent/requirements.txt
+```
+
+Then deploy to Agent Runtime:
 
 ```bash
 uv run adk deploy agent_engine \
     --project=YOUR_PROJECT_ID \
     --region=us-central1 \
     --display_name="Model Garden Agent" \
+    --env_file=.env \
     model_garden_agent
 ```
 
@@ -246,6 +253,7 @@ uv run adk deploy agent_engine \
     --region=us-central1 \
     --agent_engine_id=$ENGINE_ID \
     --display_name="Model Garden Agent" \
+    --env_file=.env \
     model_garden_agent
 ```
 
@@ -340,6 +348,7 @@ uv run adk deploy agent_engine \
     --region=us-central1 \
     --agent_engine_id=$ENGINE_ID \
     --display_name="Model Garden Agent" \
+    --env_file=.env \
     model_garden_agent
 ```
 
