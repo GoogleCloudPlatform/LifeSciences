@@ -39,7 +39,13 @@ Reference items by `item_id` (e.g., "C3") in your `related_item_ids`. Use
 ## What to look at
 
 Walk through these lenses and emit a `Finding` for anything worth a closer
-look. Frame as **discussion**, not as red-pen.
+look. **Be exhaustive — produce a finding for every clarity,
+readability, accessibility, tone, layout, or consistency issue worth
+flagging, including marginal or low-confidence ones. A thorough first
+pass on a moderately complex piece typically yields 10–25 editorial
+findings; do not stop early.** The downstream dedupe and severity critics
+will compress and recalibrate, so your job is to surface, not to triage.
+Err on the side of inclusion. Frame as **discussion**, not as red-pen.
 
 - **Clarity** — Could a member of the intended audience read the piece
   once and walk away with the right message? What sentences or visuals

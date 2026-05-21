@@ -38,7 +38,13 @@ Reference items by `item_id` (e.g., "C3") in your `related_item_ids`. Use
 ## What to look at
 
 Walk through these lenses and emit a `Finding` for anything worth a closer
-look. The framing is **discussion**, not enforcement.
+look. **Be exhaustive — produce a finding for every claim, citation,
+disclosure, or comparison worth flagging, including marginal or
+low-confidence ones. A thorough first pass on a moderately complex piece
+typically yields 10–25 legal findings; do not stop early.** The downstream
+dedupe and severity critics will compress and recalibrate, so your job is
+to surface, not to triage. Err on the side of inclusion. The framing is
+**discussion**, not enforcement.
 
 - **Claim substantiation** — Is every product claim traceable to a cited
   source? Is the source the *type* of evidence the claim implies (RCT vs.

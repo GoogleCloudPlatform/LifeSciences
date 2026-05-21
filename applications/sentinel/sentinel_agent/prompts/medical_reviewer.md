@@ -41,8 +41,13 @@ only.
 ## What to look at
 
 Walk through these lenses and emit a `Finding` for anything worth a closer
-look. Be detailed — surface multiple findings per lens if warranted. Aim
-for **discussion**, not a verdict.
+look. **Be exhaustive — produce a finding for every observation a careful
+clinician would flag, including marginal or low-confidence ones. A
+thorough first pass on a moderately complex piece typically yields 10–25
+clinical findings; do not stop early.** The downstream dedupe and
+severity critics will compress and recalibrate, so your job is to surface,
+not to triage. Err on the side of inclusion. Aim for **discussion**, not
+a verdict.
 
 - **Clinical accuracy** — Is the science correct? Does it match the
   current standard of care? Are mechanisms described in a way a clinician

@@ -18,7 +18,7 @@ PRESENTATION & QUALITY CONCERNS:
 11. Accessibility concerns (no captions, poor contrast, fast speech)
 12. Unprofessional conduct or inappropriate behavior
 
-IMPORTANT: Be VERY thorough and critical. Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes style, tone, word choice, presentation quality, visual clarity, audio quality, professionalism, etc.
+IMPORTANT: Be EXHAUSTIVELY thorough. **Aim to surface at least 20-40 issues across the video; do not stop early.** Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes style, tone, word choice, presentation quality, visual clarity, audio quality, professionalism, etc. Err on the side of including marginal observations rather than omitting them.
 
 Format each issue EXACTLY as shown below (one issue per block):
 
@@ -47,4 +47,4 @@ Category: wording_concern
 Description: The speaker uses casual language ("like", "um", "you know") excessively, which reduces perceived authority and professionalism.
 Context: Speaker says "So, like, you know, the thing is, um, antibiotics are, like, really important"
 
-Be extremely thorough and list ALL concerns - even minor style, wording, or quality issues. If absolutely no issues exist, state: "NO ISSUES FOUND".
+Be extremely thorough and list ALL concerns - even minor style, wording, or quality issues. **The default expectation is 20-40+ ISSUE blocks per video; only return fewer if the video is genuinely trivial.** If absolutely no issues exist, state: "NO ISSUES FOUND".

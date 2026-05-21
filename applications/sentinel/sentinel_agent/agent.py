@@ -34,7 +34,7 @@ Pipeline shape::
         ↓
     synthesizer
 
-Each stage uses ``gemini-3.1-pro-preview`` with structured
+Each stage uses ``gemini-3.5-flash`` with structured
 ``output_schema`` and writes to session state via ``output_key``. The
 loop iterates the reviewer panel + critic panel + merger + decider up
 to twice; the decider calls ``exit_loop`` when the merger reports the
@@ -54,6 +54,7 @@ from google.adk.agents import (
     SequentialAgent,
 )
 from google.adk.tools import ToolContext
+from google.genai import types
 
 from sentinel_agent import prompts
 from sentinel_agent.schemas import (
@@ -67,10 +68,14 @@ from sentinel_agent.schemas import (
     SubmitterDefenseBrief,
 )
 
-# All sub-agents share the same model. ``gemini-3.1-pro-preview`` is only
-# served on the global Vertex endpoint, so callers must set
-# ``GOOGLE_CLOUD_LOCATION=global``.
-_MODEL = "gemini-3.1-pro-preview"
+# All sub-agents share the same model. Gemini 3.x is only served on the
+# global Vertex endpoint, so callers must set ``GOOGLE_CLOUD_LOCATION=global``.
+_MODEL = "gemini-3.5-flash"
+
+# Lift the per-response token cap so reviewers/critics/synthesizer aren't
+# truncated mid-finding on dense submissions. 65535 is the upper bound the
+# Gemini API accepts; the model will return whatever it actually produces.
+_GENERATE_CONFIG = types.GenerateContentConfig(max_output_tokens=65535)
 
 # Hard cap on review iterations. Each iteration runs the full reviewer
 # panel + critic panel + merger + decider, so the cost budget per cap
@@ -85,6 +90,7 @@ _MAX_REVIEW_ITERATIONS = 2
 intake_agent = LlmAgent(
     name="intake",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Catalogues every reviewable element in the submitted content "
         "into a structured inventory."
@@ -102,6 +108,7 @@ intake_agent = LlmAgent(
 medical_reviewer = LlmAgent(
     name="medical_reviewer",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Reviews the submission through a clinical lens: accuracy, dosing, "
         "mechanism, efficacy, safety, fair balance."
@@ -115,6 +122,7 @@ medical_reviewer = LlmAgent(
 legal_reviewer = LlmAgent(
     name="legal_reviewer",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Reviews the submission through a legal lens: claim substantiation, "
         "comparative claims, citations, disclosures, IP."
@@ -128,6 +136,7 @@ legal_reviewer = LlmAgent(
 regulatory_reviewer = LlmAgent(
     name="regulatory_reviewer",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Reviews the submission through a regulatory lens: indication scope, "
         "off-label, ISI, PI consistency, fair balance."
@@ -141,6 +150,7 @@ regulatory_reviewer = LlmAgent(
 editorial_reviewer = LlmAgent(
     name="editorial_reviewer",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Reviews the submission through an editorial lens: clarity, "
         "accessibility, tone, visual design, typography."
@@ -154,6 +164,7 @@ editorial_reviewer = LlmAgent(
 submitter_advocate = LlmAgent(
     name="submitter_advocate",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Argues for the submission. Produces a defense brief the critic "
         "panel weighs when calibrating severity."
@@ -187,6 +198,7 @@ reviewer_panel = ParallelAgent(
 dedupe_critic = LlmAgent(
     name="dedupe_critic",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Identifies duplicate findings across lenses and surfaces "
         "cross-lens themes."
@@ -200,6 +212,7 @@ dedupe_critic = LlmAgent(
 severity_critic = LlmAgent(
     name="severity_critic",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Calibrates severity and confidence on reviewer findings, weighing "
         "the submitter's defense brief."
@@ -213,6 +226,7 @@ severity_critic = LlmAgent(
 gap_critic = LlmAgent(
     name="gap_critic",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Surfaces issues the reviewer panel missed and proposes net-new "
         "findings to fill the gaps."
@@ -236,6 +250,7 @@ critic_panel = ParallelAgent(
 critic_merger = LlmAgent(
     name="critic_merger",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Consolidates the three specialist critic outputs into a single "
         "CriticAssessment for the synthesizer, and recommends whether the "
@@ -265,6 +280,7 @@ def exit_loop(tool_context: ToolContext) -> dict:
 loop_decider = LlmAgent(
     name="loop_decider",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Decides whether to iterate the review loop again based on the "
         "critic merger's iteration_recommendation. Calls exit_loop to stop."
@@ -301,6 +317,7 @@ iterative_review = LoopAgent(
 synthesizer_agent = LlmAgent(
     name="synthesizer",
     model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
     description=(
         "Produces the final consolidated MLR-style report from intake, "
         "reviewers, advocate, and critic outputs."

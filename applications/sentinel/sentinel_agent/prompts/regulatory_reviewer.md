@@ -39,7 +39,13 @@ Reference items by `item_id` (e.g., "C3") in your `related_item_ids`. Use
 ## What to look at
 
 Walk through these lenses and emit a `Finding` for anything worth a closer
-look. Frame as **discussion**, never enforcement.
+look. **Be exhaustive — produce a finding for every indication, ISI,
+PI-consistency, fair-balance, or off-label cue worth flagging, including
+marginal or low-confidence ones. A thorough first pass on a moderately
+complex piece typically yields 10–25 regulatory findings; do not stop
+early.** The downstream dedupe and severity critics will compress and
+recalibrate, so your job is to surface, not to triage. Err on the side of
+inclusion. Frame as **discussion**, never enforcement.
 
 - **Indication scope** — Does the piece stay within the approved
   indication? Are there implicit broadenings ("for patients with

@@ -18,7 +18,7 @@ PRESENTATION & QUALITY CONCERNS:
 11. Unprofessional or inappropriate content
 12. Missing context or explanatory information
 
-IMPORTANT: Be VERY thorough and critical. Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes accuracy, clarity, design quality, accessibility, professionalism, etc.
+IMPORTANT: Be EXHAUSTIVELY thorough. **Aim to surface at least 15-25 issues for a moderately complex image; do not stop early.** Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes accuracy, clarity, design quality, accessibility, professionalism, etc. Err on the side of including marginal observations rather than omitting them.
 
 Format each issue EXACTLY as shown below (one issue per block):
 
@@ -39,4 +39,4 @@ Category: medical_accuracy
 Description: The anatomical diagram shows the heart with incorrect chamber labeling - left and right ventricles are reversed.
 Context: Main diagram in center of image, ventricle labels
 
-Be extremely thorough and list ALL concerns - even minor design, clarity, or quality issues. If absolutely no issues exist, state: "NO ISSUES FOUND".
+Be extremely thorough and list ALL concerns - even minor design, clarity, or quality issues. **The default expectation is 15-25+ ISSUE blocks per image; only return fewer if the image is genuinely trivial.** If absolutely no issues exist, state: "NO ISSUES FOUND".

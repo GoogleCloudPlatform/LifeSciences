@@ -142,6 +142,7 @@ class GeminiClient:
                 temperature=1.0,  # Lower temperature for more focused medical analysis
                 response_mime_type="application/json" if response_schema else None,
                 response_schema=response_schema,
+                max_output_tokens=65535,
             )
 
             # Generate content using Gemini API (Async)
@@ -389,6 +390,7 @@ class GeminiClient:
                 temperature=1.0,  # Lower temperature for more focused medical analysis
                 response_mime_type="application/json" if response_schema else None,
                 response_schema=response_schema,
+                max_output_tokens=65535,
             )
 
             # Generate content using Gemini API (Async)

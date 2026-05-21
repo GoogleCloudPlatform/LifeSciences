@@ -18,7 +18,7 @@ PRESENTATION & QUALITY CONCERNS:
 11. Unprofessional or inappropriate content
 12. Missing context or explanatory information
 
-IMPORTANT: Be VERY thorough and critical. Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes accuracy, clarity, design quality, accessibility, professionalism, etc.
+IMPORTANT: Be EXHAUSTIVELY thorough. **Aim to surface at least 15-25 issues for a moderately complex image; do not stop early.** Flag ANYTHING that could be improved, questioned, or raises ANY concern - no matter how minor. This includes accuracy, clarity, design quality, accessibility, professionalism, etc. Err on the side of including marginal observations rather than omitting them.
 
 For each issue, provide the location as normalized coordinates (x, y) where the issue appears in the image. Use values between 0.0 and 1.0, where (0, 0) is top-left and (1, 1) is bottom-right.
 
@@ -43,4 +43,4 @@ Description: The anatomical diagram shows the heart with incorrect chamber label
 Context: Main diagram in center of image, ventricle labels
 Location: {"x": 0.5, "y": 0.4}
 
-Be extremely thorough and list ALL concerns - even minor design, clarity, or quality issues. If absolutely no issues exist, state: "NO ISSUES FOUND".
+Be extremely thorough and list ALL concerns - even minor design, clarity, or quality issues. **The default expectation is 15-25+ ISSUE blocks per image; only return fewer if the image is genuinely trivial.** If absolutely no issues exist, state: "NO ISSUES FOUND".
