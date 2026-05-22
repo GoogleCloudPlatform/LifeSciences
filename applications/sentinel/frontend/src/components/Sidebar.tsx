@@ -34,6 +34,7 @@ import {
   YouTube as YouTubeIcon,
   Cloud as CloudIcon,
   Delete as DeleteIcon,
+  RuleFolder as RuleFolderIcon,
 } from '@mui/icons-material';
 import { AnalyzePayload, StorageItem } from '../types';
 import CloudStoragePicker from './CloudStoragePicker';
@@ -82,6 +83,28 @@ const Sidebar: React.FC<SidebarProps> = ({ onAnalyze, isLoading, error }) => {
   const [speed, setSpeed] = useState<'fast' | 'powerful'>('fast');
   const [frameRate, setFrameRate] = useState<string>('1.0');
 
+  // Optional custom-rules file (free-form text). When present, contents
+  // are sent as `custom_rules` on the analyze payload and the backend
+  // checks the submission against the rules in addition to the standard
+  // medical / editorial / etc. categories.
+  const [customRules, setCustomRules] = useState<string>('');
+  const [rulesFileName, setRulesFileName] = useState<string>('');
+
+  const handleRulesFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    setCustomRules(text);
+    setRulesFileName(file.name);
+  };
+
+  const clearRulesFile = () => {
+    setCustomRules('');
+    setRulesFileName('');
+  };
+
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setSourceType(newValue);
   };
@@ -114,6 +137,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onAnalyze, isLoading, error }) => {
         // Use Proxy URL for frontend display
         payload.display_url = selectedStorageItem.url;
       }
+    }
+
+    if (customRules.trim()) {
+      payload.custom_rules = customRules;
     }
 
     onAnalyze(payload);
@@ -255,6 +282,49 @@ const Sidebar: React.FC<SidebarProps> = ({ onAnalyze, isLoading, error }) => {
         </CustomTabPanel>
 
         <Box sx={{ mt: 'auto', pt: 4 }}>
+          {/* Optional custom-rules upload. Free-form .txt / .md file
+              containing brand voice / SOP / market rules — the backend
+              checks the submission against these in addition to the
+              standard categories. */}
+          <Box sx={{ mb: 2 }}>
+            <Button
+              component="label"
+              variant="outlined"
+              fullWidth
+              startIcon={<RuleFolderIcon />}
+              sx={{ textTransform: 'none', justifyContent: 'flex-start' }}
+            >
+              {rulesFileName || 'Upload rules file (optional)'}
+              <input
+                type="file"
+                accept=".txt,.md,text/plain,text/markdown"
+                hidden
+                onChange={handleRulesFileChange}
+              />
+            </Button>
+            {rulesFileName && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mt: 0.5,
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {customRules.length.toLocaleString()} chars loaded
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={clearRulesFile}
+                  aria-label="Remove rules file"
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            )}
+          </Box>
+
           <TextField
             select
             fullWidth
@@ -263,13 +333,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onAnalyze, isLoading, error }) => {
             onChange={(e) => setSpeed(e.target.value as 'fast' | 'powerful')}
             helperText={
               speed === 'powerful'
-                ? 'Gemini 3.1 Pro: Deep reasoning for complex medical cases.'
-                : 'Gemini Flash: Rapid screening and identification.'
+                ? 'Powerful tier: deeper reasoning for complex submissions.'
+                : 'Fast tier: rapid screening and identification.'
             }
             sx={{ mb: 3 }}
           >
-            <MenuItem value="fast">Fast (Gemini Flash)</MenuItem>
-            <MenuItem value="powerful">Powerful (Gemini 3.1 Pro)</MenuItem>
+            <MenuItem value="fast">Fast</MenuItem>
+            <MenuItem value="powerful">Powerful</MenuItem>
           </TextField>
 
           {error && (

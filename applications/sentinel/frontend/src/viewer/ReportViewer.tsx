@@ -50,6 +50,7 @@ const LENS_ORDER: ReviewLens[] = [
   'legal',
   'regulatory',
   'editorial',
+  'custom',
 ];
 
 const SEVERITY_COLOR: Record<Severity, string> = {
@@ -65,6 +66,7 @@ const LENS_COLOR: Record<ReviewLens, string> = {
   legal: '#8ab4f8',
   regulatory: '#c58af9',
   editorial: '#78d9ec',
+  custom: '#f8c473', // Google Orange 200 — visually distinct from the four MLR lenses
 };
 
 const LENS_LABEL: Record<ReviewLens, string> = {
@@ -72,6 +74,7 @@ const LENS_LABEL: Record<ReviewLens, string> = {
   legal: 'Legal',
   regulatory: 'Regulatory',
   editorial: 'Editorial',
+  custom: 'Custom rules',
 };
 
 function prettyCategory(c: string): string {
@@ -394,6 +397,7 @@ function ReportDisplay({
       legal: [],
       regulatory: [],
       editorial: [],
+      custom: [],
     };
     for (const f of report.findings) {
       grouped[f.review_lens]?.push(f);

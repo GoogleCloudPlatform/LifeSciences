@@ -42,6 +42,11 @@ export interface AnalyzePayload {
   display_url?: string; // For frontend display when image_url is a gs:// URI
   speed: 'fast' | 'powerful';
   frame_rate?: number;
+  // Optional free-text rules file contents (brand voice, internal SOPs,
+  // market-specific restrictions, etc.). Checked alongside standard
+  // categories. See applications/sentinel/examples/rules/example_rules.txt
+  // for the format.
+  custom_rules?: string;
 }
 
 export interface StorageItem {

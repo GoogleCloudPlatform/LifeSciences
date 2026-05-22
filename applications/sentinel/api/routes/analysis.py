@@ -120,6 +120,7 @@ async def analyze(
             image_url=str(request.image_url) if request.image_url else None,
             frame_rate=request.frame_rate,
             model_name=model_name,
+            custom_rules=request.custom_rules,
         )
 
         logger.info("Analysis complete")
@@ -154,6 +155,14 @@ async def analyze_upload(
         default=1.0, description="Frame rate (unused for images)"
     ),
     speed: str = Form(default="fast", description="Analysis speed (fast/powerful)"),
+    rules_file: Optional[UploadFile] = File(
+        default=None,
+        description=(
+            "Optional plain-text rules file (brand voice, internal SOPs, "
+            "market-specific restrictions, etc.). Checked alongside the "
+            "standard analysis. See examples/rules/example_rules.txt."
+        ),
+    ),
     analyzer: AnalyzerService = Depends(get_analyzer_service),
 ) -> AnalyzeResponse:
     """
@@ -188,6 +197,17 @@ async def analyze_upload(
         # Read file content
         file_content = await file.read()
 
+        # Read optional rules file (plain text) if supplied
+        custom_rules: Optional[str] = None
+        if rules_file is not None:
+            rules_bytes = await rules_file.read()
+            if rules_bytes:
+                custom_rules = rules_bytes.decode("utf-8", errors="replace")
+                logger.info(
+                    f"Custom rules file received: {rules_file.filename} "
+                    f"({len(custom_rules)} chars)"
+                )
+
         # Determine model based on speed
         model_name = settings.gemini_model_fast
         if speed == "powerful":
@@ -201,6 +221,7 @@ async def analyze_upload(
             image_data=file_content,
             frame_rate=frame_rate,
             model_name=model_name,
+            custom_rules=custom_rules,
         )
 
         logger.info(f"Upload analysis complete for: {file.filename}")

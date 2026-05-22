@@ -42,6 +42,7 @@ LEGAL_REVIEWER = load("legal_reviewer")
 REGULATORY_REVIEWER = load("regulatory_reviewer")
 EDITORIAL_REVIEWER = load("editorial_reviewer")
 SUBMITTER_ADVOCATE = load("submitter_advocate")
+RULES_REVIEWER = load("rules_reviewer")
 
 # Critic panel (parallel) + merger + loop decider
 DEDUPE_CRITIC = load("dedupe_critic")

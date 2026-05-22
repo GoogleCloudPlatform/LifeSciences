@@ -89,6 +89,29 @@ class GeminiClient:
             logger.info("Closing Gemini API client session")
             await self.client.aclose()
 
+    @staticmethod
+    def _append_custom_rules(prompt: str, custom_rules: Optional[str]) -> str:
+        """Append a user-supplied rules file to an analyzer prompt.
+
+        Rules are added as a clearly delimited section so the model treats
+        them as additional, equally-weighted criteria rather than an aside.
+        Returns the prompt unchanged when ``custom_rules`` is None / empty.
+        """
+        if not custom_rules or not custom_rules.strip():
+            return prompt
+        return (
+            prompt
+            + "\n\n## Additional review rules (user-supplied)\n\n"
+            + "The following rules were supplied by the submitter and apply "
+            + "in addition to the categories above. Treat each rule as a "
+            + "first-class compliance check and flag any violation, partial "
+            + "follow, or ambiguity as an ISSUE using the same format. Use "
+            + "the `other` category when no standard category fits.\n\n"
+            + "```\n"
+            + custom_rules.strip()
+            + "\n```\n"
+        )
+
     async def analyze_video(
         self,
         video_url: str,
@@ -96,6 +119,7 @@ class GeminiClient:
         mime_type: str = "video/mp4",
         model_name: Optional[str] = None,
         response_schema: Optional[type] = None,
+        custom_rules: Optional[str] = None,
     ) -> str:
         """
         Analyze a video (YouTube or GCS) for medical accuracy and potential issues.
@@ -133,7 +157,11 @@ class GeminiClient:
                             file_uri=video_url, mime_type=mime_type
                         )
                     ),
-                    types.Part(text=VIDEO_ANALYSIS_PROMPT),
+                    types.Part(
+                        text=self._append_custom_rules(
+                            VIDEO_ANALYSIS_PROMPT, custom_rules
+                        )
+                    ),
                 ],
             )
 
@@ -169,6 +197,7 @@ class GeminiClient:
         image_data: bytes = None,
         model_name: Optional[str] = None,
         response_schema: Optional[type] = None,
+        custom_rules: Optional[str] = None,
     ) -> str:
         """
         Analyze an image for medical accuracy without providing location coordinates.
@@ -193,6 +222,7 @@ class GeminiClient:
             IMAGE_ANALYSIS_WITHOUT_LOCATION_PROMPT,
             model_name=model_name,
             response_schema=response_schema,
+            custom_rules=custom_rules,
         )
 
     async def find_issue_location(
@@ -242,6 +272,7 @@ class GeminiClient:
         image_data: bytes = None,
         model_name: Optional[str] = None,
         response_schema: Optional[type] = None,
+        custom_rules: Optional[str] = None,
     ) -> str:
         """
         Analyze an image for medical accuracy and potential issues (with locations).
@@ -266,6 +297,7 @@ class GeminiClient:
             IMAGE_ANALYSIS_SINGLE_STEP_PROMPT,
             model_name=model_name,
             response_schema=response_schema,
+            custom_rules=custom_rules,
         )
 
     async def _upload_to_gcs(
@@ -295,6 +327,7 @@ class GeminiClient:
         prompt: str = "",
         model_name: Optional[str] = None,
         response_schema: Optional[type] = None,
+        custom_rules: Optional[str] = None,
     ) -> str:
         """
         Helper method to analyze an image with a custom prompt.
@@ -314,6 +347,7 @@ class GeminiClient:
         """
         try:
             mime_type = "image/jpeg"
+            prompt = self._append_custom_rules(prompt, custom_rules)
 
             # Handle Agent Platform with GCS
             if settings.google_genai_use_vertexai:

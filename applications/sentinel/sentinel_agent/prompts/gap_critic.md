@@ -11,6 +11,7 @@ You have the original submission attached, plus:
 - Legal findings: `{legal_findings}`
 - Regulatory findings: `{regulatory_findings}`
 - Editorial findings: `{editorial_findings}`
+- Custom-rules findings: `{rules_findings?}`
 - Submitter defense: `{submitter_defense}`
 
 ## What to look for

@@ -53,6 +53,7 @@ from google.adk.agents import (
     ParallelAgent,
     SequentialAgent,
 )
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.tools import ToolContext
 from google.genai import types
 
@@ -79,8 +80,32 @@ _GENERATE_CONFIG = types.GenerateContentConfig(max_output_tokens=65535)
 
 # Hard cap on review iterations. Each iteration runs the full reviewer
 # panel + critic panel + merger + decider, so the cost budget per cap
-# is ~iterations × (5 reviewers + 3 critics + merger + decider).
+# is ~iterations × (6 reviewers + 3 critics + merger + decider).
 _MAX_REVIEW_ITERATIONS = 2
+
+
+async def _load_custom_rules(callback_context: CallbackContext) -> None:
+  """Pull a user-uploaded rules artifact into ``state['custom_rules']``.
+
+  Looks for any artifact whose filename contains ``rules`` and ends in
+  ``.txt`` or ``.md``; first match wins. If none is found, leaves state
+  unset — the ``rules_reviewer`` prompt's ``{custom_rules?}`` template
+  handles the empty case explicitly (no-rules-file branch).
+
+  Runs once at the start of every Sentinel pipeline invocation via the
+  root agent's ``before_agent_callback``.
+  """
+  artifact_keys = await callback_context.list_artifacts()
+  for key in artifact_keys:
+    lower = key.lower()
+    if 'rules' in lower and (lower.endswith('.txt') or lower.endswith('.md')):
+      part = await callback_context.load_artifact(key)
+      blob = getattr(part, 'inline_data', None) if part else None
+      if blob and blob.data:
+        callback_context.state['custom_rules'] = blob.data.decode(
+            'utf-8', errors='replace'
+        )
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -175,11 +200,28 @@ submitter_advocate = LlmAgent(
 )
 
 
+rules_reviewer = LlmAgent(
+    name="rules_reviewer",
+    model=_MODEL,
+    generate_content_config=_GENERATE_CONFIG,
+    description=(
+        "Reviews the submission against a user-supplied rules file (brand "
+        "voice, internal SOPs, market-specific restrictions, etc.). Emits "
+        "findings with lens='custom' that flow into the same dedupe / "
+        "severity / synthesizer pipeline as the standard MLR reviewers."
+    ),
+    instruction=prompts.RULES_REVIEWER,
+    output_schema=ReviewerOutput,
+    output_key="rules_findings",
+)
+
+
 reviewer_panel = ParallelAgent(
     name="reviewer_panel",
     description=(
         "Runs the four MLR review lenses (medical, legal, regulatory, "
-        "editorial) plus a submitter's-advocate defense brief in parallel."
+        "editorial), a submitter's-advocate defense brief, and a "
+        "user-rules reviewer in parallel."
     ),
     sub_agents=[
         medical_reviewer,
@@ -187,6 +229,7 @@ reviewer_panel = ParallelAgent(
         regulatory_reviewer,
         editorial_reviewer,
         submitter_advocate,
+        rules_reviewer,
     ],
 )
 
@@ -337,10 +380,11 @@ root_agent = SequentialAgent(
     description=(
         "Sentinel: agentic MLR-style review of promotional pharmaceutical "
         "content. Catalogues the submission, runs an iterative review loop "
-        "(four critical lenses + a submitter advocate, with a three-way "
-        "critic panel) and synthesises a discussion-oriented report aimed "
-        "at the brand team."
+        "(four critical lenses + a submitter advocate + a custom-rules "
+        "reviewer, with a three-way critic panel) and synthesises a "
+        "discussion-oriented report aimed at the brand team."
     ),
+    before_agent_callback=_load_custom_rules,
     sub_agents=[
         intake_agent,
         iterative_review,

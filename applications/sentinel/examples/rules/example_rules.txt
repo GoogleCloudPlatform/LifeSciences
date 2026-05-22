@@ -1,0 +1,58 @@
+# Sentinel custom-rules file — example
+#
+# Format: free-form text. Each distinct directive is one rule. Optional
+# `### Section` headers group rules by topic — the rules_reviewer uses
+# those headers as context when explaining a finding (the section name
+# ends up in `mlr_principle`).
+#
+# Lines beginning with `#` are comments and are ignored by the reviewer.
+# Blank lines are fine; they help readability.
+#
+# Treat this file as a *starting point* and a *format example*, not a
+# complete or authoritative ruleset. Fork it for your own brand,
+# therapeutic area, market, or internal SOP.
+
+
+### Brand voice
+
+- Never use the word "cure". Use "treatment" or "therapy".
+- Avoid superlatives ("best-in-class", "leading", "revolutionary", "groundbreaking"). State the comparative claim explicitly with a citation instead.
+- The brand name must always appear in title case, never all-caps or all-lowercase. Generic names follow USAN conventions (lowercase, e.g. "ibuprofen").
+- Use second-person ("you", "your") only when speaking to patients, never when speaking to healthcare professionals.
+
+
+### Claim substantiation
+
+- Every efficacy claim must cite a Phase 3 RCT and include the comparator arm, population, and timepoint inline (not in a footnote).
+- Relative-risk reductions must be accompanied by the absolute-risk reduction and the number-needed-to-treat for the same endpoint.
+- Subgroup claims require an interaction p-value or an explicit note that the analysis was pre-specified.
+- Real-world-evidence statements must name the data source, the cohort definition, and the time window.
+
+
+### Safety and fair balance
+
+- Important Safety Information must occupy at least one-third of the visual area of any printed or digital surface.
+- The most common adverse events (any with incidence >= 5% in the pivotal trial) must be listed by name on the same surface as the headline efficacy claim.
+- Boxed warnings, where applicable, must appear before the first efficacy claim, not after.
+- Contraindications and dosing adjustments for renal/hepatic impairment must be linked from any surface that recommends initiation.
+
+
+### Therapeutic-area conventions (oncology example)
+
+- Survival endpoints must specify whether they are overall survival (OS), progression-free survival (PFS), or event-free survival (EFS). Do not abbreviate on first use.
+- Response rates must distinguish complete response (CR) from partial response (PR) and overall response rate (ORR = CR + PR).
+- Median follow-up time must accompany any survival endpoint.
+
+
+### Market and channel restrictions
+
+- Materials intended for patient audiences may not include head-to-head comparative claims against competitors.
+- Materials intended for non-US markets must not reference US PI sections; cross-reference the local product label instead.
+- Digital surfaces (email, paid social) must include the date of last medical/legal review in the footer.
+
+
+### Editorial conventions
+
+- Footnotes use superscript numbers, not symbols (*, †, ‡).
+- Trial names follow the convention "TRIAL-NAME (NCT########)" on first use; abbreviation acceptable thereafter.
+- Units of measure follow the SI system; US customary units may appear in parentheses.

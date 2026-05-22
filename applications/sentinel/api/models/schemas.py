@@ -164,6 +164,16 @@ class AnalyzeRequest(BaseModel):
         default=AnalysisSpeed.FAST,
         description="Analysis speed/model selection. 'fast' uses Gemini Flash, 'powerful' uses Gemini Pro.",
     )
+    custom_rules: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional free-text rules file (brand voice, internal SOPs, "
+            "market-specific restrictions, etc.). When provided, the analyzer "
+            "checks the submission against these rules in addition to the "
+            "standard medical / editorial categories. See "
+            "applications/sentinel/examples/rules/example_rules.txt for format."
+        ),
+    )
 
 
 class AnalysisResponseSchema(BaseModel):

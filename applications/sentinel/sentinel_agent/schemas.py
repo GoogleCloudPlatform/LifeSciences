@@ -36,6 +36,11 @@ class ReviewLens(str, Enum):
     LEGAL = "legal"
     REGULATORY = "regulatory"
     EDITORIAL = "editorial"
+    # `custom` is for findings produced by the rules_reviewer — i.e. the
+    # user-uploaded rules file (brand voice, internal SOPs, market-specific
+    # restrictions, etc.). Distinct from the four canonical MLR lenses
+    # because the rule semantics are user-defined per submission.
+    CUSTOM = "custom"
 
 
 class Severity(str, Enum):

@@ -16,6 +16,7 @@ You have the original submission attached plus all upstream output:
 - Legal: `{legal_findings}`
 - Regulatory: `{regulatory_findings}`
 - Editorial: `{editorial_findings}`
+- Custom rules: `{rules_findings?}`
 - Submitter defense: `{submitter_defense}`
 - Critic: `{critic_review}`
 
@@ -48,9 +49,10 @@ Then produce a `FinalReport`:
   informational), then by review_lens.
 - **Renumber `finding_id`s sequentially per lens after dedupe** so the
   IDs are gap-free and predictable. Use `F-<LENS>-<n>` where `<LENS>`
-  is one of `MED`, `LEG`, `REG`, `ED` and `<n>` starts at 1 within
-  each lens. Critic-added findings get folded into the appropriate
-  lens's sequence (drop any `F-CRIT-` prefix).
+  is one of `MED`, `LEG`, `REG`, `ED`, `CUSTOM` and `<n>` starts at 1
+  within each lens. Critic-added findings get folded into the
+  appropriate lens's sequence (drop any `F-CRIT-` prefix). Custom-rules
+  findings keep `review_lens="custom"` and use the `F-CUSTOM-n` prefix.
 - `open_questions_for_reviewers`: questions worth raising with the
   submitter.
 - `recommended_discussion_topics`: topics worth airing in the MLR
@@ -67,7 +69,8 @@ Then produce a `FinalReport`:
     "medical": 4,
     "legal": 2,
     "regulatory": 5,
-    "editorial": 3
+    "editorial": 3,
+    "custom": 2
   },
   "counts_by_severity": {
     "critical": 2,

@@ -10,7 +10,12 @@
  * Mirrors sentinel_agent/schemas.py FinalReport.
  */
 
-export type ReviewLens = 'medical' | 'legal' | 'regulatory' | 'editorial';
+export type ReviewLens =
+  | 'medical'
+  | 'legal'
+  | 'regulatory'
+  | 'editorial'
+  | 'custom';
 
 export type Severity =
   | 'critical'

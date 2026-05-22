@@ -56,6 +56,7 @@ class AnalyzerService:
         image_data: Optional[bytes] = None,
         frame_rate: float = 1.0,
         model_name: Optional[str] = None,
+        custom_rules: Optional[str] = None,
     ) -> AnalyzeResponse:
         """
         Analyze a YouTube video or image and return structured results.
@@ -103,6 +104,7 @@ class AnalyzerService:
                 mime_type=mime_type,
                 model_name=model_name,
                 response_schema=AnalysisResponseSchema,
+                custom_rules=custom_rules,
             )
             content_id = self.gemini_client.extract_video_id(video_url)
             content_url = str(video_url)
@@ -112,6 +114,7 @@ class AnalyzerService:
                 image_url=image_url,
                 model_name=model_name,
                 response_schema=AnalysisResponseSchema,
+                custom_rules=custom_rules,
             )
             # Extract filename or use full URL as ID for images
             content_id = (
@@ -126,6 +129,7 @@ class AnalyzerService:
                 image_data=image_data,
                 model_name=model_name,
                 response_schema=AnalysisResponseSchema,
+                custom_rules=custom_rules,
             )
             content_id = "uploaded_image"
             content_url = "uploaded_image"
