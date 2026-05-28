@@ -36,8 +36,8 @@ resource "google_project_iam_member" "foldrun_analysis_aiplatform_user" {
   member  = "serviceAccount:${google_service_account.foldrun_analysis.email}"
 }
 
-resource "google_cloud_run_v2_job" "af2_analysis_job" {
-  name     = "af2-analysis-job"
+resource "google_cloud_run_v2_job" "foldrun_analysis_job" {
+  name     = "foldrun-analysis-job"
   project  = var.project_id
   location = var.region
 
@@ -53,7 +53,6 @@ resource "google_cloud_run_v2_job" "af2_analysis_job" {
         network_interfaces {
           network    = local.network_id
           subnetwork = local.subnet_id
-
         }
         egress = "ALL_TRAFFIC"
       }
@@ -95,119 +94,11 @@ resource "google_cloud_run_v2_job" "af2_analysis_job" {
   depends_on = [google_project_service.apis]
 }
 
-resource "google_cloud_run_v2_job" "of3_analysis_job" {
-  name     = "of3-analysis-job"
+# Allow the viewer to trigger the Cloud Run analysis job from the UI
+resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_analysis" {
   project  = var.project_id
   location = var.region
-
-  template {
-    parallelism = 25
-    task_count  = 25
-
-    template {
-      max_retries     = 0
-      timeout         = "600s"
-      service_account = google_service_account.foldrun_analysis.email
-      vpc_access {
-        network_interfaces {
-          network    = local.network_id
-          subnetwork = local.subnet_id
-
-        }
-        egress = "ALL_TRAFFIC"
-      }
-      containers {
-        image = "us-docker.pkg.dev/cloudrun/container/hello"
-
-        env {
-          name  = "GCS_BUCKET"
-          value = google_storage_bucket.foldrun_bucket.name
-        }
-        env {
-          name  = "PROJECT_ID"
-          value = var.project_id
-        }
-        env {
-          name  = "REGION"
-          value = var.region
-        }
-
-        resources {
-          limits = {
-            cpu    = "2"
-            memory = "8Gi"
-          }
-        }
-      }
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [
-      template[0].template[0].containers[0].image,
-      template[0].task_count,
-      client,
-      client_version
-    ]
-  }
-
-  depends_on = [google_project_service.apis]
-}
-
-resource "google_cloud_run_v2_job" "boltz2_analysis_job" {
-  name     = "boltz2-analysis-job"
-  project  = var.project_id
-  location = var.region
-
-  template {
-    parallelism = 25
-    task_count  = 25
-
-    template {
-      max_retries     = 0
-      timeout         = "600s"
-      service_account = google_service_account.foldrun_analysis.email
-      vpc_access {
-        network_interfaces {
-          network    = local.network_id
-          subnetwork = local.subnet_id
-        }
-        egress = "ALL_TRAFFIC"
-      }
-      containers {
-        image = "us-docker.pkg.dev/cloudrun/container/hello"
-
-        env {
-          name  = "GCS_BUCKET"
-          value = google_storage_bucket.foldrun_bucket.name
-        }
-        env {
-          name  = "PROJECT_ID"
-          value = var.project_id
-        }
-        env {
-          name  = "REGION"
-          value = var.region
-        }
-
-        resources {
-          limits = {
-            cpu    = "2"
-            memory = "8Gi"
-          }
-        }
-      }
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [
-      template[0].template[0].containers[0].image,
-      template[0].task_count,
-      client,
-      client_version
-    ]
-  }
-
-  depends_on = [google_project_service.apis]
+  name     = google_cloud_run_v2_job.foldrun_analysis_job.name
+  role     = "roles/run.jobsExecutorWithOverrides"
+  member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }

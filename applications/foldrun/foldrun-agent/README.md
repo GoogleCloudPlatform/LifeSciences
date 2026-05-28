@@ -177,20 +177,19 @@ Skill count depends on which models are configured:
 | Variable | Description |
 |----------|-------------|
 | `OPENFOLD3_COMPONENTS_IMAGE` | OF3 pipeline container image (enables OF3 tools) |
-| `OF3_ANALYSIS_JOB_NAME` | Cloud Run Job name (default: `of3-analysis-job`) |
 
 ### Boltz-2
 
 | Variable | Description |
 |----------|-------------|
 | `BOLTZ2_COMPONENTS_IMAGE` | Boltz-2 pipeline container image (enables Boltz-2 tools) |
-| `BOLTZ2_ANALYSIS_JOB_NAME` | Cloud Run Job name (default: `boltz2-analysis-job`) |
 | `BOLTZ2_CACHE_PATH` | NFS-relative path to Boltz-2 cache dir containing `boltz2_conf.ckpt` and `mols/` (default: `boltz2/cache`) |
 
 ### Optional — Viewer & Analysis
 
 | Variable | Description |
 |----------|-------------|
+| `ANALYSIS_JOB_NAME` | Cloud Run Job name (default: `foldrun-analysis-job`) |
 | `AF2_VIEWER_URL` | FoldRun viewer Cloud Run URL (shared by all models) |
 | `GEMINI_ANALYSIS_MODEL` | Gemini model for expert analysis (default: `gemini-3.1-pro-preview`) |
 | `PIPELINES_SA_EMAIL` | Service account email for Agent Platform Pipeline submissions |

@@ -207,8 +207,8 @@ DOWNLOAD_MODE=full ./deploy-all.sh YOUR_PROJECT_ID  # Full BFD database (~272GB)
 # Redeploy agent only — no container rebuilds (~3 min, e.g. after agent code change)
 ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target agent
 
-# Rebuild a single analysis job
-./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target of3-analysis
+# Rebuild the analysis job
+./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target analysis
 
 # Rebuild multiple targets (comma-separated)
 ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target of3,viewer
@@ -224,9 +224,7 @@ Available `--build-target` values:
 | `boltz2` | boltz2-components container + agent |
 | `viewer` | foldrun-viewer Cloud Run service + agent |
 | `agent` | Agent Runtime only (no container rebuilds) |
-| `of3-analysis` | of3-analysis-job Cloud Run Job only |
-| `af2-analysis` | af2-analysis-job Cloud Run Job only |
-| `boltz2-analysis` | boltz2-analysis-job Cloud Run Job only |
+| `analysis` | foldrun-analysis-job Cloud Run Job only |
 
 The agent is automatically redeployed whenever any non-analysis target is included.
 
@@ -255,9 +253,7 @@ Expected output:
 ```
 ✅ [Terraform] Infrastructure provisioned
 ✅ [Cloud Run] foldrun-viewer service is deployed and active
-✅ [Cloud Run] af2-analysis-job is deployed
-✅ [Cloud Run] of3-analysis-job is deployed
-✅ [Cloud Run] boltz2-analysis-job is deployed
+✅ [Cloud Run] foldrun-analysis-job is deployed
 ✅ [Agent Platform] FoldRun Agent Runtime is deployed
 ✅ [Data] Databases present (12 folders)
    ✅ AF2 core databases (uniref90 etc.)
@@ -319,9 +315,7 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups |
 | Artifact Registry | `foldrun-repo` | Container images |
 | Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + OF3 + Boltz-2) |
-| Cloud Run Job | `af2-analysis-job` | AF2 parallel analysis |
-| Cloud Run Job | `of3-analysis-job` | OF3 parallel analysis |
-| Cloud Run Job | `boltz2-analysis-job` | Boltz-2 parallel analysis |
+| Cloud Run Job | `foldrun-analysis-job` | Parallel prediction analysis (AF2 + OF3 + Boltz-2) |
 | Cloud Run Service | `foldrun-a2a` | A2A protocol proxy for agent interop |
 | Service Account | `foldrun-agent-sa` | Agent's GCP identity |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
@@ -405,9 +399,7 @@ foldrun/
 │   ├── boltz2-components/       # Boltz-2 pipeline container
 │   ├── foldrun-viewer/          # Cloud Run web app (AF2 + OF3 + Boltz-2 3D viewer)
 │   ├── foldrun-a2a/             # Cloud Run A2A protocol proxy
-│   ├── af2-analysis-job/        # Cloud Run Job (AF2 analysis)
-│   ├── of3-analysis-job/        # Cloud Run Job (OF3 analysis)
-│   └── boltz2-analysis-job/     # Cloud Run Job (Boltz-2 analysis)
+│   └── foldrun-analysis-job/    # Cloud Run Job (Unified prediction analysis)
 ├── terraform/                   # Infrastructure as code
 ├── cloudbuild.yaml              # CI/CD pipeline
 ├── deploy-all.sh                # One-command deployment

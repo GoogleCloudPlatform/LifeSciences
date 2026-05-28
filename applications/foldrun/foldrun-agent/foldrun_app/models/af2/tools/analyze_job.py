@@ -33,7 +33,7 @@ class AF2JobAnalysisTool(AF2Tool):
 
     def __init__(self, tool_config: Dict[str, Any], config: Any):
         super().__init__(tool_config, config)
-        self.job_name = os.getenv("CLOUD_RUN_JOB_NAME", "af2-analysis-job")
+        self.job_name = os.getenv("ANALYSIS_JOB_NAME", "foldrun-analysis-job")
 
     def _get_analysis_path(self, job: Any) -> str:
         """
@@ -226,6 +226,7 @@ class AF2JobAnalysisTool(AF2Tool):
                         run_v2.RunJobRequest.Overrides.ContainerOverride(
                             env=[
                                 run_v2.EnvVar(name="ANALYSIS_PATH", value=analysis_path),
+                                run_v2.EnvVar(name="MODEL_TYPE", value="alphafold2"),
                                 run_v2.EnvVar(
                                     name="GEMINI_MODEL",
                                     value=os.getenv(

@@ -62,23 +62,11 @@ else
     echo "⚠️  [Cloud Run] foldrun-a2a A2A proxy is not deployed (optional — deploy with src/foldrun-a2a/deploy.sh)"
 fi
 
-# 3. Check Cloud Run Analysis Jobs
-if gcloud run jobs describe af2-analysis-job --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
-    echo "✅ [Cloud Run] af2-analysis-job is deployed"
+# 3. Check Cloud Run Analysis Job
+if gcloud run jobs describe foldrun-analysis-job --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "✅ [Cloud Run] foldrun-analysis-job is deployed"
 else
-    echo "❌ [Cloud Run] af2-analysis-job is missing"
-fi
-
-if gcloud run jobs describe of3-analysis-job --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
-    echo "✅ [Cloud Run] of3-analysis-job is deployed"
-else
-    echo "❌ [Cloud Run] of3-analysis-job is missing"
-fi
-
-if gcloud run jobs describe boltz2-analysis-job --region="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
-    echo "✅ [Cloud Run] boltz2-analysis-job is deployed"
-else
-    echo "❌ [Cloud Run] boltz2-analysis-job is missing"
+    echo "❌ [Cloud Run] foldrun-analysis-job is missing"
 fi
 
 # 4. Check Agent Runtime (via REST API since gcloud subcommand is not available)
