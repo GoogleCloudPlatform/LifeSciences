@@ -15,10 +15,40 @@
 import os
 import re
 
+from anthropic import types as _anthropic_types
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import Agent
+from google.adk.models import anthropic_llm as _anthropic_llm
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
+
+
+# Gemini Enterprise pre-extracts some uploads (notably .docx, .txt) and ships
+# the result inline as `Blob(mime_type='text/plain', data=...)`. ADK's
+# Anthropic adapter has no branch for text/* inline_data and raises
+# `NotImplementedError`, which GE renders as a silent "no response." Wrap the
+# adapter's per-part translator to map any text/* Blob to a TextBlockParam.
+# The function is named `part_to_message_block` in ADK ≤1.32 and
+# `_part_to_message_block` in ADK ≥1.33 — wrap whichever is present.
+for _attr in ('part_to_message_block', '_part_to_message_block'):
+  _orig = getattr(_anthropic_llm, _attr, None)
+  if _orig is None:
+    continue
+
+  def _make_wrapper(orig):
+    def _wrapper(part, *args, **kwargs):
+      blob = getattr(part, 'inline_data', None)
+      mime = getattr(blob, 'mime_type', None) if blob else None
+      if mime and mime.startswith('text/'):
+        return _anthropic_types.TextBlockParam(
+            type='text',
+            text=blob.data.decode('utf-8', errors='replace'),
+        )
+      return orig(part, *args, **kwargs)
+    return _wrapper
+
+  setattr(_anthropic_llm, _attr, _make_wrapper(_orig))
+
 
 # === OPTIONAL: Web Grounding for Enterprise — uncomment block (1) imports
 # below, (2) the helper + tool function further down, and (3) the
@@ -70,6 +100,25 @@ def _is_claude_inline(mime: str | None) -> bool:
     if not mime:
         return False
     return any(mime.startswith(prefix) for prefix in _CLAUDE_INLINE_MIMES)
+
+
+async def _resolve_marker(
+    callback_context: CallbackContext,
+    name: str,
+    artifact_keys: set[str],
+):
+  """Load the artifact a GE filename marker refers to.
+
+  Falls back to the empty-string key — GE has been observed to store some
+  binary uploads under '' instead of the filename. Only useful for the
+  single-file case; if multiple uploads collide on '' there's nothing we
+  can do downstream.
+  """
+  if name in artifact_keys:
+    return await callback_context.load_artifact(name)
+  if '' in artifact_keys:
+    return await callback_context.load_artifact('')
+  return None
 
 
 # === OPTIONAL: Web search — uncomment to enable. ===
@@ -264,9 +313,11 @@ async def _inject_uploaded_artifacts(
                 continue
             for match in _FILE_MARKER_RE.finditer(part.text):
                 name = match.group("name").strip()
-                if name in injected or name not in artifact_keys:
+                if name in injected:
                     continue
-                artifact_part = await callback_context.load_artifact(name)
+                artifact_part = await _resolve_marker(
+                    callback_context, name, artifact_keys
+                )
                 if artifact_part is None or artifact_part.inline_data is None:
                     continue
                 new_part = types.Part(
