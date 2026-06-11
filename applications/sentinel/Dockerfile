@@ -35,8 +35,9 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 RUN uv sync --no-install-project
 
-# Copy API source code
+# Copy API and agent source code
 COPY api ./api
+COPY sentinel_agent ./sentinel_agent
 RUN uv sync
 
 # Stage 3: Final image without uv
