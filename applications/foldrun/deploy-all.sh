@@ -54,6 +54,7 @@ usage() {
     echo "  DOWNLOAD_MODE      Database download mode: reduced (default) or full"
     echo "  AF2_VERSION        AlphaFold2 git commit to build (default: pinned commit)"
     echo "  FOLDRUN_VIEWER_URL Custom Viewer URL (defaults to Terraform output if available)"
+    echo "  ENABLE_VIEWER_IAP  Enable IAP for the viewer: true (default) or false"
     echo "  OF3_VERSION        OpenFold3 Docker image tag to use (default: 0.4.0)"
     echo "  BOLTZ_VERSION      Boltz-2 pip package version to install (default: 2.2.1)"
     echo ""
@@ -170,6 +171,7 @@ DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
 AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
 OF3_VERSION=${OF3_VERSION:-"0.4.0"}
 BOLTZ_VERSION=${BOLTZ_VERSION:-"2.2.1"}
+ENABLE_VIEWER_IAP=${ENABLE_VIEWER_IAP:-"true"}
 IAP_ACCESS_DOMAIN=${IAP_ACCESS_DOMAIN:-$(gcloud config get-value account | awk -F '@' '{print $2}')}
 TERRAFORM_DIR="terraform"
 BUCKET_NAME="${PROJECT_ID}-foldrun-data"
@@ -203,6 +205,7 @@ echo "FoldRun Ecosystem Deployment"
 echo "================================================================================"
 echo "Project:       $PROJECT_ID"
 echo "Region:        $REGION"
+echo "Viewer IAP:    $ENABLE_VIEWER_IAP"
 echo "IAP Domain:    $IAP_ACCESS_DOMAIN"
 echo "Download Mode: $DOWNLOAD_MODE"
 echo "Steps:         $STEPS"
@@ -330,7 +333,8 @@ EOF
         -var="project_id=${PROJECT_ID}" \
         -var="region=${REGION}" \
         -var="bucket_name=${BUCKET_NAME}" \
-        -var="iap_access_domain=${IAP_ACCESS_DOMAIN}"
+        -var="iap_access_domain=${IAP_ACCESS_DOMAIN}" \
+        -var="enable_viewer_iap=${ENABLE_VIEWER_IAP}"
     cd ..
 fi
 

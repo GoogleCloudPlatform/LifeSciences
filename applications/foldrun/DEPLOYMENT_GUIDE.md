@@ -259,6 +259,17 @@ Access requires authentication through your organization's IAP configuration.
 The `iap_access_domain` Terraform variable controls which domain's users can
 access the viewer.
 
+> [!TIP]
+> **Disabling IAP (e.g., for Custom Load Balancers):**
+> If you plan to use a custom Load Balancer with its own access control in front of the Viewer, you can disable the built-in IAP.
+> Set the `ENABLE_VIEWER_IAP` environment variable to `false` before running the deployment:
+> ```bash
+> export ENABLE_VIEWER_IAP=false
+> ./deploy-all.sh
+> ```
+> Alternatively, if running Terraform directly, set `enable_viewer_iap = false` in your variables.
+
+
 > [!NOTE]
 > If you are using a custom domain in front of the Viewer service (instead of the default Cloud Run `run.app` URL), you can override the URL provided to the agent by setting the `FOLDRUN_VIEWER_URL` environment variable before running the deployment:
 > ```bash

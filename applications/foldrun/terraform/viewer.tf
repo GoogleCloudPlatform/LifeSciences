@@ -62,7 +62,7 @@ resource "google_cloud_run_v2_service" "foldrun_viewer" {
   project     = var.project_id
   location    = var.region
   ingress     = "INGRESS_TRAFFIC_ALL"
-  iap_enabled = true
+  iap_enabled = var.enable_viewer_iap
 
   template {
     containers {
@@ -117,6 +117,7 @@ resource "google_cloud_run_v2_service" "foldrun_viewer" {
 
 # Grant the IAP service agent permission to invoke the Cloud Run service
 resource "google_cloud_run_v2_service_iam_member" "foldrun_viewer_iap_invoker" {
+  count    = var.enable_viewer_iap ? 1 : 0
   provider = google-beta
   project  = google_cloud_run_v2_service.foldrun_viewer.project
   location = google_cloud_run_v2_service.foldrun_viewer.location
@@ -129,6 +130,7 @@ resource "google_cloud_run_v2_service_iam_member" "foldrun_viewer_iap_invoker" {
 
 # Grant domain users access through IAP
 resource "google_iap_web_cloud_run_service_iam_member" "member" {
+  count                  = var.enable_viewer_iap ? 1 : 0
   project                = google_cloud_run_v2_service.foldrun_viewer.project
   location               = google_cloud_run_v2_service.foldrun_viewer.location
   cloud_run_service_name = google_cloud_run_v2_service.foldrun_viewer.name

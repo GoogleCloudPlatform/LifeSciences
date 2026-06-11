@@ -117,4 +117,13 @@ variable "artifact_repo_name" {
 variable "iap_access_domain" {
   description = "Domain to grant IAP access to the viewer (e.g., your-company.com)"
   type        = string
+  default     = ""
 }
+
+variable "enable_viewer_iap" {
+  description = "Enable Identity-Aware Proxy (IAP) for the viewer"
+  type        = bool
+  default     = true
+}
+
+
