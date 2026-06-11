@@ -40,8 +40,8 @@ run-query:
 # Deploy the agent remotely
 deploy:
 	# Export dependencies to requirements file using uv export.
-	(uv export --no-hashes --no-header --no-dev --no-emit-project --no-annotate > foldrun_app/app_utils/.requirements.txt 2>/dev/null || \
-	uv export --no-hashes --no-header --no-dev --no-emit-project > foldrun_app/app_utils/.requirements.txt) && \
+	(uv export --frozen --no-hashes --no-header --no-dev --no-emit-project --no-annotate > foldrun_app/app_utils/.requirements.txt 2>/dev/null || \
+	uv export --frozen --no-hashes --no-header --no-dev --no-emit-project > foldrun_app/app_utils/.requirements.txt) && \
 	uv run -m foldrun_app.app_utils.deploy \
 		--source-packages=./foldrun_app \
 		--entrypoint-module=foldrun_app.agent_engine_app \

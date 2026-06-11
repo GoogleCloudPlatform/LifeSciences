@@ -205,10 +205,10 @@ steps:
         apt-get update && apt-get install -y curl
         curl -LsSf https://astral.sh/uv/install.sh | sh
         export PATH="$$HOME/.local/bin:$$PATH"
-        uv sync
+        uv sync --frozen
 
-        (uv export --no-hashes --no-header --no-dev --no-emit-project --no-annotate > foldrun_app/app_utils/.requirements.txt 2>/dev/null || \
-         uv export --no-hashes --no-header --no-dev --no-emit-project > foldrun_app/app_utils/.requirements.txt)
+        (uv export --frozen --no-hashes --no-header --no-dev --no-emit-project --no-annotate > foldrun_app/app_utils/.requirements.txt 2>/dev/null || \
+         uv export --frozen --no-hashes --no-header --no-dev --no-emit-project > foldrun_app/app_utils/.requirements.txt)
 
         export GCP_PROJECT_ID=$PROJECT_ID
         export GCP_REGION=${_REGION}
