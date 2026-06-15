@@ -24,7 +24,7 @@ Sentinel code is a content analysis starter code and is for administrative and o
 > **A Note for Developers and Administrators:**
 > By default, Agent Platform may collect data to improve service quality. Data collection and logging are **only disabled** if the user explicitly disables **Agent Platform data caching** within the Google Cloud project settings. 
 
-For technical details on how to configure these settings, please refer to the official [Gemini Enterprise Agent Platform and zero data retention documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/vertex-ai-zero-data-retention).
+For technical details on how to configure these settings, please refer to the official [Gemini Enterprise Agent Platform and zero data retention documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/zero-data-retention).
 
 
 ## Local Development
@@ -66,7 +66,7 @@ For technical details on how to configure these settings, please refer to the of
    Copy `.env.example` to `.env`.
 
    * **Agent Platform (Recommended)**:
-      * Set `GOOGLE_GENAI_USE_VERTEXAI=true`.
+      * Set `GOOGLE_GENAI_USE_ENTERPRISE=true`.
       * Set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`.
       * Set `GCS_BUCKET_NAME` for image features.
       * Authenticate: `gcloud auth application-default login`.
@@ -236,7 +236,7 @@ Follow these steps to build and deploy the Sentinel application using Cloud Run 
      --no-allow-unauthenticated \
      --iap \
      --service-account $SA_EMAIL \
-     --set-env-vars="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GCS_BUCKET_NAME=$BUCKET_NAME"
+     --set-env-vars="GOOGLE_GENAI_USE_ENTERPRISE=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GCS_BUCKET_NAME=$BUCKET_NAME"
    ```
 
 10. **Configure IAP Access**:

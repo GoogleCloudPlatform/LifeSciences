@@ -21,22 +21,22 @@ from pydantic import ValidationError
 from api.config import Settings
 
 
-def test_config_vertex_ai_false_valid():
+def test_config_enterprise_false_valid():
     """Test configuration when using AI Studio (Agent Platform False) with API key."""
     with mock.patch.dict(
         os.environ,
-        {"GOOGLE_GENAI_USE_VERTEXAI": "false", "GEMINI_API_KEY": "test-key"},
+        {"GOOGLE_GENAI_USE_ENTERPRISE": "false", "GEMINI_API_KEY": "test-key"},
         clear=True,
     ):
         settings = Settings()
-        assert settings.google_genai_use_vertexai is False
+        assert settings.google_genai_use_enterprise is False
         assert settings.gemini_api_key == "test-key"
 
 
-def test_config_vertex_ai_false_missing_api_key():
+def test_config_enterprise_false_missing_api_key():
     """Test failure when using AI Studio without API key."""
     with mock.patch.dict(
-        os.environ, {"GOOGLE_GENAI_USE_VERTEXAI": "false"}, clear=True
+        os.environ, {"GOOGLE_GENAI_USE_ENTERPRISE": "false"}, clear=True
     ):
         os.environ["GEMINI_API_KEY"] = ""
 
@@ -45,28 +45,28 @@ def test_config_vertex_ai_false_missing_api_key():
         assert "GEMINI_API_KEY is required" in str(exc.value)
 
 
-def test_config_vertex_ai_true_valid():
+def test_config_enterprise_true_valid():
     """Test configuration when using Agent Platform with required fields."""
     with mock.patch.dict(
         os.environ,
         {
-            "GOOGLE_GENAI_USE_VERTEXAI": "true",
+            "GOOGLE_GENAI_USE_ENTERPRISE": "true",
             "GOOGLE_CLOUD_PROJECT": "test-project",
             "GOOGLE_CLOUD_LOCATION": "us-central1",
         },
         clear=True,
     ):
         settings = Settings()
-        assert settings.google_genai_use_vertexai is True
+        assert settings.google_genai_use_enterprise is True
         assert settings.google_cloud_project == "test-project"
         assert settings.google_cloud_location == "us-central1"
 
 
-def test_config_vertex_ai_true_missing_project():
+def test_config_enterprise_true_missing_project():
     """Test failure when using Agent Platform without project."""
     with mock.patch.dict(
         os.environ,
-        {"GOOGLE_GENAI_USE_VERTEXAI": "true", "GOOGLE_CLOUD_LOCATION": "us-central1"},
+        {"GOOGLE_GENAI_USE_ENTERPRISE": "true", "GOOGLE_CLOUD_LOCATION": "us-central1"},
         clear=True,
     ):
         os.environ["GOOGLE_CLOUD_PROJECT"] = ""
@@ -76,12 +76,12 @@ def test_config_vertex_ai_true_missing_project():
         assert "GOOGLE_CLOUD_PROJECT is required" in str(exc.value)
 
 
-def test_config_vertex_ai_true_missing_location():
+def test_config_enterprise_true_missing_location():
     """Test failure when using Agent Platform without location."""
     with mock.patch.dict(
         os.environ,
         {
-            "GOOGLE_GENAI_USE_VERTEXAI": "true",
+            "GOOGLE_GENAI_USE_ENTERPRISE": "true",
             "GOOGLE_CLOUD_PROJECT": "test-project",
             "GOOGLE_CLOUD_LOCATION": "",
         },

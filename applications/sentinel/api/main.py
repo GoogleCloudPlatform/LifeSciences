@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize shared Storage Client
     app.state.storage_client = None
-    if settings.google_genai_use_vertexai:
+    if settings.google_genai_use_enterprise:
         try:
             app.state.storage_client = storage.Client(
                 project=settings.google_cloud_project

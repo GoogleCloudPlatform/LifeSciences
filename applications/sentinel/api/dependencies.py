@@ -36,7 +36,7 @@ def get_storage_client(request: Request) -> storage.Client:
     client = getattr(request.app.state, "storage_client", None)
     if client is None:
         raise RuntimeError(
-            "GCS Client not initialized. This feature requires GOOGLE_GENAI_USE_VERTEXAI=True."
+            "GCS Client not initialized. This feature requires GOOGLE_GENAI_USE_ENTERPRISE=True."
         )
     return client
 

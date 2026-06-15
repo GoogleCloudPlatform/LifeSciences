@@ -68,12 +68,12 @@ class GeminiClient:
         self.project = project or settings.google_cloud_project
         self.location = location or settings.google_cloud_location
 
-        if settings.google_genai_use_vertexai:
+        if settings.google_genai_use_enterprise:
             logger.info(
                 f"Initializing Gemini Client with Agent Platform (Project: {self.project}, Location: {self.location})"
             )
             self.client = genai.Client(
-                vertexai=True, project=self.project, location=self.location
+                enterprise=True, project=self.project, location=self.location
             ).aio
             self.storage_client = storage_client or storage.Client(project=self.project)
         else:
@@ -350,7 +350,7 @@ class GeminiClient:
             prompt = self._append_custom_rules(prompt, custom_rules)
 
             # Handle Agent Platform with GCS
-            if settings.google_genai_use_vertexai:
+            if settings.google_genai_use_enterprise:
                 if image_data:
                     file_uri = await self._upload_to_gcs(image_data, mime_type)
                 elif image_url:

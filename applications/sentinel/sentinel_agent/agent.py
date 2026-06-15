@@ -69,8 +69,7 @@ from sentinel_agent.schemas import (
     SubmitterDefenseBrief,
 )
 
-# All sub-agents share the same model. Gemini 3.x is only served on the
-# global Vertex endpoint, so callers must set ``GOOGLE_CLOUD_LOCATION=global``.
+# All sub-agents share the same model.
 _MODEL = "gemini-3.5-flash"
 
 # Lift the per-response token cap so reviewers/critics/synthesizer aren't

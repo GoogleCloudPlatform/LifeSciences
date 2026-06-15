@@ -34,7 +34,7 @@ class Settings(BaseSettings):
         gemini_api_key: Google Gemini API key for video analysis (optional if using Agent Platform)
         gemini_model_fast: Model name for fast processing (default: gemini-3.5-flash)
         gemini_model_powerful: Model name for complex processing (default: gemini-3.5-flash)
-        google_genai_use_vertexai: Whether to explicitly use Agent Platform (default: False)
+        google_genai_use_enterprise: Whether to explicitly use Agent Platform (default: False)
         api_host: Host address for the API server
         api_port: Port number for the API server
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     gemini_api_key: Optional[str] = None
     gemini_model_fast: str = "gemini-3.5-flash"
     gemini_model_powerful: str = "gemini-3.5-flash"
-    google_genai_use_vertexai: bool = False
+    google_genai_use_enterprise: bool = False
     gcs_bucket_name: Optional[str] = None
     gcs_media_folder: str = "dev"
     api_host: str = "0.0.0.0"
@@ -62,19 +62,19 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_genai_config(self):
-        if self.google_genai_use_vertexai:
+        if self.google_genai_use_enterprise:
             if not self.google_cloud_project:
                 raise ValueError(
-                    "GOOGLE_CLOUD_PROJECT is required when GOOGLE_GENAI_USE_VERTEXAI is True"
+                    "GOOGLE_CLOUD_PROJECT is required when GOOGLE_GENAI_USE_ENTERPRISE is True"
                 )
             if not self.google_cloud_location:
                 raise ValueError(
-                    "GOOGLE_CLOUD_LOCATION is required when GOOGLE_GENAI_USE_VERTEXAI is True"
+                    "GOOGLE_CLOUD_LOCATION is required when GOOGLE_GENAI_USE_ENTERPRISE is True"
                 )
         else:
             if not self.gemini_api_key:
                 raise ValueError(
-                    "GEMINI_API_KEY is required when GOOGLE_GENAI_USE_VERTEXAI is False"
+                    "GEMINI_API_KEY is required when GOOGLE_GENAI_USE_ENTERPRISE is False"
                 )
         return self
 
