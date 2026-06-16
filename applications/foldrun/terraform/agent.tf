@@ -58,15 +58,28 @@ resource "google_storage_bucket_iam_member" "foldrun_agent_databases_bucket_acce
   member = "serviceAccount:${google_service_account.agent_sa.email}"
 }
 
-# ==============================================================================
-# Agent Runtime Deployment
-# ==============================================================================
-# Agent Runtime is deployed via Cloud Build (cloudbuild.yaml step 4) using the
-# real FoldRun agent code, not via Terraform. Terraform only provisions the
-# infrastructure (VPC, Filestore, buckets, IAM) that the agent depends on.
-#
-# To deploy the agent after terraform apply:
-#   cd foldrun-agent && make deploy
-# Or via Cloud Build:
-#   ./deploy-all.sh PROJECT_ID --steps build
-# ==============================================================================
+resource "google_vertex_ai_reasoning_engine" "agent_runtime" {
+  project      = var.project_id
+  region       = var.region
+  display_name = "FoldRun_Agent"
+  description  = "Expert AI assistant for FoldRun protein structure prediction, job management, and results analysis"
+
+  spec {
+    # Specify the service account on the engine so it has the right permissions pre-provisioned.
+    service_account = google_service_account.agent_sa.email
+  }
+
+  lifecycle {
+    ignore_changes = [
+      spec,
+    ]
+  }
+
+  depends_on = [
+    google_project_iam_member.agent_roles,
+    google_service_account_iam_member.build_sa_actas_agent,
+    google_storage_bucket_iam_member.foldrun_agent_bucket_access,
+    google_storage_bucket_iam_member.foldrun_agent_databases_bucket_access,
+  ]
+}
+

@@ -119,7 +119,7 @@ def print_deployment_success(
 )
 @click.option(
     "--description",
-    default="Expert AI assistant for FoldRun (AlphaFold2) protein structure prediction, job management, and results analysis",
+    default="Expert AI assistant for FoldRun protein structure prediction, job management, and results analysis",
     help="Description of the agent",
 )
 @click.option(
