@@ -17,13 +17,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "model-garden-agent"
+name = "paperbanana-agent"
 version = "0.1.0"
-description = "ADK agent using models from Model Garden"
+description = "ADK agent for Paperbanana"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "anthropic[vertex]",
     "fsspec[gcs]==2025.10.0",
     "google-adk[otel-gcp]>=2.2.0",
     "google-cloud-aiplatform[agent_engines]",

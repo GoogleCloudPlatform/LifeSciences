@@ -18,6 +18,7 @@ import re
 from anthropic import types as _anthropic_types
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import Agent
+from google.adk.apps import App
 from google.adk.models import anthropic_llm as _anthropic_llm
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
@@ -396,4 +397,9 @@ root_agent = Agent(
     #     # route data files into the sandbox ourselves via the callback.
     #     optimize_data_file=False,
     # ),
+)
+
+app = App(
+    root_agent=root_agent,
+    name="app"
 )

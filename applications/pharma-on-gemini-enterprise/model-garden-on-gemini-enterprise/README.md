@@ -16,6 +16,7 @@ This guide walks through the end-to-end flow:
 5. For Claude: enable Anthropic models in [Model Garden](https://console.cloud.google.com/agent-platform/model-garden) (see [Enable Claude Models in Model Garden](#enable-claude-models-in-model-garden) below)
 6. [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed
 7. Python 3.13+
+8. `google-agents-cli` installed (via `uv tool install google-agents-cli`)
 
 ## Enable Claude Models in Model Garden
 
@@ -71,7 +72,7 @@ Open `.env` and replace `YOUR_PROJECT_ID` with your actual Google Cloud project 
 
 Anthropic models are available in specific locations (e.g. `us-east5` or `global`). Since Agent Runtime doesn't support all of those locations, we deploy Agent Runtime to `us-central1` and override `GOOGLE_CLOUD_LOCATION` in `agent.py` to route model calls to the correct location.
 
-See [`model_garden_agent/`](model_garden_agent/) for a working example.
+See [`app/`](app/) for a working example.
 
 ```python
 import os
@@ -115,13 +116,8 @@ model-garden-on-gemini-enterprise/
 │   ├── main.tf
 │   ├── variables.tf
 │   ├── outputs.tf
-│   ├── README.md
-│   └── modules/
-│       └── model_garden_agent/
-│           ├── main.tf
-│           ├── variables.tf
-│           └── outputs.tf
-└── model_garden_agent/
+│   └── README.md
+└── app/
     ├── __init__.py    # registers the agent
     └── agent.py       # agent logic & callbacks
 ```
@@ -134,45 +130,75 @@ uv run adk web
 
 ## Deploy to Agent Runtime
 
-Before deploying, compile the dependencies from `pyproject.toml` into a `requirements.txt` inside the agent directory:
+You can deploy the agent directly using `agents-cli deploy`. The CLI will automatically package the agent code in the `app` directory and generate the necessary requirements from `pyproject.toml` and `uv.lock`.
 
 ```bash
-uv pip compile pyproject.toml -o model_garden_agent/requirements.txt
-```
-
-Then deploy to Agent Runtime:
-
-```bash
-uv run adk deploy agent_engine \
+uv run agents-cli deploy \
     --project=YOUR_PROJECT_ID \
     --region=us-central1 \
-    --display_name="Model Garden Agent" \
-    --env_file=.env \
-    model_garden_agent
+    --service-name="Model Garden Agent" \
+    --deployment-target=agent_runtime
 ```
 
 On success:
 ```
-✅ Created agent engine: projects/123456789/locations/us-central1/reasoningEngines/RESOURCE_ID
+✅ Deployment successful!
+Agent Runtime ID: projects/123456789/locations/us-central1/reasoningEngines/RESOURCE_ID
 ```
 
-## Deploy with Terraform (Alternative)
+## Deploy with Terraform & Cloud Build (Recommended for Production)
 
-For production, CI/CD pipelines, or when custom dependencies require custom container runtimes, you can deploy the agent using **Terraform** and a **Dockerfile**. This packages your agent logic, `Dockerfile` environments, OpenTelemetry endpoints, and IAM permissions in a single declarative deployment.
+For production and CI/CD pipelines, you can provision the Reasoning Engine infrastructure using **Terraform** and deploy the agent using **Cloud Build**. This split model ensures Terraform manages the lifecycle of the infrastructure (including Agent Identity and IAM roles) while Cloud Build handles packaging and deploying the agent code.
 
-See the dedicated [Terraform Deployment README](terraform/README.md) for detailed instructions on variables, configuring standard service account fallbacks, and executing the flow.
+See the dedicated [Terraform Deployment README](terraform/README.md) for detailed instructions on Terraform variables and configuring standard service account fallbacks.
 
-### Quick Start
-Ensure your project credentials are authenticated (`gcloud auth application-default login`), then run:
+### Quick Start with Cloud Build
+
+You can trigger the deployment using Cloud Build, which will apply the Terraform configuration and then deploy the agent.
+
+> **Prerequisite:** You must pre-create a Google Cloud Storage bucket to store the Terraform remote state (e.g. `my-project-tfstate`). This ensures that the Reasoning Engine instance ID is preserved across builds.
+
+#### Deploy only (Default):
 ```bash
-cd terraform
-terraform init
-terraform validate
-terraform apply -var="project_id=YOUR_PROJECT_ID"
+# Run from the parent pharma-on-gemini-enterprise directory:
+# applications/pharma-on-gemini-enterprise/
+
+gcloud builds submit --config=shared/cloudbuild.yaml \
+    --substitutions=_AGENT_DIR="model-garden-on-gemini-enterprise",_TF_STATE_BUCKET="YOUR_STATE_BUCKET_NAME",_ENV_VARS="GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=false;MODEL_NAME=claude-opus-4-7" \
+    --project=YOUR_PROJECT_ID
 ```
 
-On success, copy the returned `reasoning_engine_id` outputs to query or register your agent.
+#### Deploy and Register with Gemini Enterprise:
+To automatically register the agent with Gemini Enterprise, provide your `_GEMINI_ENTERPRISE_APP_ID` (the Gemini Enterprise App ID must be pre-created in the console):
+```bash
+# Run from the parent pharma-on-gemini-enterprise directory:
+# applications/pharma-on-gemini-enterprise/
 
+gcloud builds submit --config=shared/cloudbuild.yaml \
+    --substitutions=_AGENT_DIR="model-garden-on-gemini-enterprise",_TF_STATE_BUCKET="YOUR_STATE_BUCKET_NAME",_GEMINI_ENTERPRISE_APP_ID="projects/YOUR_PROJECT_ID/locations/global/collections/default_collection/engines/YOUR_APP_ID",_ENV_VARS="GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=false;MODEL_NAME=claude-opus-4-7" \
+    --project=YOUR_PROJECT_ID
+```
+
+This command will:
+1. Run Terraform (using the remote GCS state) to create the empty Reasoning Engine instance and configure IAM roles.
+2. Build and package the agent code.
+3. Deploy the agent to the Reasoning Engine instance created by Terraform.
+4. (Optional) Register the deployed agent with your Gemini Enterprise App.
+
+#### Configuration Substitutions
+
+You can customize the deployment by passing these substitutions to `gcloud builds submit` using `--substitutions`:
+
+| Substitution | Description | Default |
+| :--- | :--- | :--- |
+| **`_AGENT_DIR`** | The directory of the agent relative to the repository root. | `.` |
+| **`_TF_STATE_BUCKET`** | **(Required)** GCS bucket name to store Terraform remote state. | *None* |
+| **`_REGION`** | The GCP region to deploy the Reasoning Engine. | `us-central1` |
+| **`_LOGS_BUCKET_NAME`**| GCS bucket name to store logs data (optional, BYOB). | *None* |
+| **`_LOGS_PATH_PREFIX`**| GCS path prefix to store logs data (defaults to extracted Agent ID). | *None* |
+| **`_ENABLE_TELEMETRY`**| Enable Cloud Observability tracing and auto-logging (`true`/`false`). | `false` |
+| **`_GEMINI_ENTERPRISE_APP_ID`**| Gemini Enterprise app resource name (optional, triggers registration if set).| *None* |
+| **`_ENV_VARS`** | Additional environment variables to set (semicolon-separated). | *None* |
 
 ### Verify in the Console
 

@@ -27,7 +27,7 @@ Pipeline (ADK workflow agents):
       |- Planner              LlmAgent -> state["description"]
       |- Stylist              LlmAgent -> state["styled_description"]
       |- LoopAgent(max=N)
-      |    |- Visualizer      LlmAgent (gemini-3-pro-image-preview)
+      |    |- Visualizer      LlmAgent (gemini-3-pro-image)
       |    |                   saves figure_{turn_id}_v{round}.png as artifact
       |    |- Critic          LlmAgent -> state["critic_verdict_raw"] (JSON)
       |    `-_CriticDecision escalates loop on "no changes" OR rolls
@@ -55,6 +55,7 @@ from google.adk.agents.llm_agent import Agent, LlmAgent
 from google.adk.agents.loop_agent import LoopAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.agents.sequential_agent import SequentialAgent
+from google.adk.apps import App
 from google.adk.events import Event, EventActions
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
@@ -78,9 +79,9 @@ from .prompts import (
 os.environ['GOOGLE_CLOUD_LOCATION'] = os.getenv('MODEL_LOCATION', 'global')
 
 _PLANNER_MODEL = os.getenv('PLANNER_MODEL_NAME', 'gemini-3.1-pro-preview')
-_IMAGE_MODEL = os.getenv('IMAGE_MODEL_NAME', 'gemini-3-pro-image-preview')
+_IMAGE_MODEL = os.getenv('IMAGE_MODEL_NAME', 'gemini-3-pro-image')
 _MAX_CRITIC_ROUNDS = int(os.getenv('MAX_CRITIC_ROUNDS', '3'))
-# Nano Banana Pro (gemini-3-pro-image-preview) supports 1K, 2K, 4K.
+# Nano Banana Pro (gemini-3-pro-image) supports 1K, 2K, 4K.
 # Default to 4K for publication-quality output; drop to 2K/1K for faster turns.
 _IMAGE_SIZE = os.getenv('IMAGE_SIZE', '4K')
 
@@ -594,3 +595,9 @@ root_agent = Agent(
     before_model_callback=_inject_uploaded_artifacts,
     tools=[generate_figure_tool],
 )
+
+app = App(
+    root_agent=root_agent,
+    name="app"
+)
+

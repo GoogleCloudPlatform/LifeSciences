@@ -5,6 +5,3 @@
 *.tfstate*
 *.tfvars
 *.tfplan
-
-# Generated source archives
-modules/model_garden_agent/model_garden_agent.tar.gz

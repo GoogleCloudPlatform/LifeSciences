@@ -23,6 +23,21 @@ variable "region" {
   default     = "us-central1"
 }
 
+variable "agent_id" {
+  type        = string
+  description = "Unique identifier for the agent (used in resource naming)"
+}
+
+variable "display_name" {
+  type        = string
+  description = "Display name of the Agent Runtime"
+}
+
+variable "description" {
+  type        = string
+  description = "Description of the Agent Runtime"
+}
+
 variable "logs_bucket_name" {
   type        = string
   description = "Existing GCS bucket to use for logs. If not provided, a new one will be created."

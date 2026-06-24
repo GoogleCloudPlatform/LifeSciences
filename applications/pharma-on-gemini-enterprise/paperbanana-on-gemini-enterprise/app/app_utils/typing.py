@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,19 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-variable "project_id" {
-  type        = string
-  description = "The GCP Project ID"
-}
+import uuid
+from typing import (
+    Literal,
+)
 
-variable "region" {
-  type        = string
-  description = "The region to deploy the Agent Runtime"
-  default     = "us-central1"
-}
+from pydantic import (
+    BaseModel,
+    Field,
+)
 
-variable "logs_bucket_name" {
-  type        = string
-  description = "Existing GCS bucket to use for logs. If not provided, a new one will be created."
-  default     = null
-}
+
+class Feedback(BaseModel):
+    """Represents feedback for a conversation."""
+
+    score: int | float
+    text: str | None = ""
+    log_type: Literal["feedback"] = "feedback"
+    service_name: Literal["my-agent"] = "my-agent"
+    user_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))

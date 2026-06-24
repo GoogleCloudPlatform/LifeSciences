@@ -13,31 +13,31 @@
 # limitations under the License.
 
 output "reasoning_engine_id" {
-  value       = module.agent_infra.reasoning_engine_id
+  value       = google_vertex_ai_reasoning_engine.agent.id
   description = "The full resource name of the deployed Reasoning Engine"
 }
 
 output "reasoning_engine_name" {
-  value       = module.agent_infra.reasoning_engine_name
+  value       = google_vertex_ai_reasoning_engine.agent.name
   description = "The generated ID of the Reasoning Engine"
 }
 
 output "agent_identity" {
-  value       = module.agent_infra.agent_identity
+  value       = google_vertex_ai_reasoning_engine.agent.spec[0].effective_identity
   description = "The effective identity principal used at runtime"
 }
 
 output "agent_display_name" {
-  value       = module.agent_infra.agent_display_name
+  value       = google_vertex_ai_reasoning_engine.agent.display_name
   description = "The display name of the Agent Runtime"
 }
 
 output "agent_description" {
-  value       = module.agent_infra.agent_description
+  value       = google_vertex_ai_reasoning_engine.agent.description
   description = "The description of the Agent Runtime"
 }
 
 output "logs_data_bucket" {
-  value       = module.agent_infra.logs_data_bucket
+  value       = local.bucket_name
   description = "The bucket name used for storing logs data"
 }

@@ -1,0 +1,167 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+  # 0. Get Agent ID from pyproject.toml
+  - id: 'get-agent-id'
+    name: 'python:3.13-slim'
+    dir: '${_AGENT_DIR}'
+    entrypoint: 'python3'
+    args:
+      - '-c'
+      - |
+        import tomllib
+        with open("pyproject.toml", "rb") as f:
+            data = tomllib.load(f)
+        with open("/workspace/agent_id.txt", "w") as out:
+            out.write(data["project"]["name"])
+
+  # 1. Terraform Init
+  - id: 'tf-init'
+    name: 'hashicorp/terraform:1.15.6'
+    dir: '${_AGENT_DIR}/terraform'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        set -e
+        if [ -z "${_TF_STATE_BUCKET}" ]; then
+          echo "Error: _TF_STATE_BUCKET substitution must be set for remote state."
+          exit 1
+        fi
+        AGENT_ID=$(cat /workspace/agent_id.txt)
+        terraform init -backend-config="bucket=${_TF_STATE_BUCKET}" -backend-config="prefix=terraform/$$AGENT_ID"
+
+  # 2. Terraform Apply
+  - id: 'tf-apply'
+    name: 'hashicorp/terraform:1.15.6'
+    dir: '${_AGENT_DIR}/terraform'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        set -e
+        TF_VARS="-var=project_id=$PROJECT_ID -var=region=${_REGION}"
+        if [ ! -z "${_LOGS_BUCKET_NAME}" ]; then
+          TF_VARS="$$TF_VARS -var=logs_bucket_name=${_LOGS_BUCKET_NAME}"
+        fi
+        terraform apply -auto-approve $$TF_VARS
+        terraform output -raw reasoning_engine_id > /workspace/reasoning_engine_id.txt
+        terraform output -raw logs_data_bucket > /workspace/logs_data_bucket.txt
+        terraform output -raw agent_display_name > /workspace/agent_display_name.txt
+        terraform output -raw agent_description > /workspace/agent_description.txt
+
+  # 3. Deploy Agent
+  - id: 'deploy-agent'
+    name: 'python:3.13-slim'
+    dir: '${_AGENT_DIR}'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        apt-get update && apt-get install -y curl git
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$$HOME/.local/bin:$$PATH"
+
+        # Read the reasoning engine ID from the previous step
+        ENGINE_ID=$(cat /workspace/reasoning_engine_id.txt)
+        LOGS_BUCKET=$(cat /workspace/logs_data_bucket.txt)
+        AGENT_DISPLAY_NAME=$(cat /workspace/agent_display_name.txt)
+
+        # Create deployment_metadata.json to target the existing engine
+        echo "{\"remote_agent_runtime_id\": \"$$ENGINE_ID\", \"deployment_target\": \"agent_runtime\"}" > deployment_metadata.json
+
+        # Default logs path prefix to agent_id if not specified
+        LOGS_PREFIX="${_LOGS_PATH_PREFIX}"
+        if [ -z "$$LOGS_PREFIX" ]; then
+          AGENT_ID=$(cat /workspace/agent_id.txt)
+          LOGS_PREFIX="$$AGENT_ID"
+        fi
+
+        # Base env vars
+        ENV_VARS_ARR=(
+          "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=${_ENABLE_TELEMETRY}"
+          "OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK=upload"
+          "OTEL_INSTRUMENTATION_GENAI_UPLOAD_BASE_PATH=gs://$$LOGS_BUCKET/$$LOGS_PREFIX"
+          "OTEL_INSTRUMENTATION_GENAI_UPLOAD_FORMAT=jsonl"
+          "OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental"
+          "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT"
+          "LOGS_BUCKET_NAME=$$LOGS_BUCKET"
+          "GENAI_TELEMETRY_PATH=$$LOGS_PREFIX"
+        )
+
+        # Append additional dynamic env vars if provided
+        if [ ! -z "${_ENV_VARS}" ]; then
+          IFS=';' read -r -a ADDR <<< "${_ENV_VARS}"
+          for i in "$${ADDR[@]}"; do
+            ENV_VARS_ARR+=("$$i")
+          done
+        fi
+        ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
+
+        # Deploy the agent using agents-cli
+        uvx google-agents-cli deploy \
+            --project=$PROJECT_ID \
+            --region=${_REGION} \
+            --deployment-target=agent_runtime \
+            --agent-identity \
+            --service-name="$$AGENT_DISPLAY_NAME" \
+            --update-env-vars="$$ENV_VARS" \
+            --no-confirm-project
+
+  # 4. [Optional] Register Agent with Gemini Enterprise
+  - id: 'register-agent'
+    name: 'python:3.13-slim'
+    dir: '${_AGENT_DIR}'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        if [ -z "${_GEMINI_ENTERPRISE_APP_ID}" ]; then
+          echo "Skipping Gemini Enterprise registration (APP_ID not provided)."
+          exit 0
+        fi
+
+        apt-get update && apt-get install -y curl
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$$HOME/.local/bin:$$PATH"
+
+        ENGINE_ID=$(cat /workspace/reasoning_engine_id.txt)
+        AGENT_DISPLAY_NAME=$(cat /workspace/agent_display_name.txt)
+        AGENT_DESCRIPTION=$(cat /workspace/agent_description.txt)
+
+        # Run publish command
+        export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
+        uvx google-agents-cli publish gemini-enterprise \
+          --agent-runtime-id="$$ENGINE_ID" \
+          --gemini-enterprise-app-id="${_GEMINI_ENTERPRISE_APP_ID}" \
+          --display-name="$$AGENT_DISPLAY_NAME" \
+          --description="$$AGENT_DESCRIPTION" \
+          --registration-type=adk \
+          --project-id=$PROJECT_ID
+
+substitutions:
+  _AGENT_DIR: "." # e.g. applications/pharma-on-gemini-enterprise/model-garden-on-gemini-enterprise
+  _ENABLE_TELEMETRY: "false"
+  _GEMINI_ENTERPRISE_APP_ID: ""
+  _REGION: us-central1  
+  _TF_STATE_BUCKET: ""
+  _LOGS_BUCKET_NAME: "" # Optional: Bring your own bucket
+  _LOGS_PATH_PREFIX: "" # Optional: Customize path prefix in bucket (defaults to AGENT_ID)
+  _ENV_VARS: "" # Optional: Extra env vars (semicolon-separated, e.g. "MODEL_NAME=gemini-3.5-flash;MODEL_LOCATION=global")
+
+options:
+  logging: CLOUD_LOGGING_ONLY

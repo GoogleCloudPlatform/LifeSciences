@@ -33,8 +33,8 @@ module "agent_infra" {
 
   project_id       = var.project_id
   region           = var.region
-  agent_id         = "model-garden-agent"
-  display_name     = "Model Garden Agent"
-  description      = "Custom Gemini Enterprise agent demonstrating third-party Model Garden models (Claude on Agent Platform) as the planner with code execution and Gemini-grounded web search wired in via ADK."
+  agent_id         = "paperbanana-agent"
+  display_name     = "PaperBanana on Gemini Enterprise"
+  description      = "Academic figure generation agent: turns paper sections / data / sketches into publication-style figures via Nano Banana Pro, with planner-driven figure-spec authoring."
   logs_bucket_name = var.logs_bucket_name
 }

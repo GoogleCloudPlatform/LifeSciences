@@ -12,17 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-output "engine_id" {
-  value       = google_vertex_ai_reasoning_engine.engine.id
-  description = "The full resource name of the Reasoning Engine"
-}
+from .agent import app
 
-output "engine_name" {
-  value       = google_vertex_ai_reasoning_engine.engine.name
-  description = "The generated ID of the Reasoning Engine"
-}
-
-output "agent_identity" {
-  value       = google_vertex_ai_reasoning_engine.engine.spec[0].effective_identity
-  description = "The effective service account or principal URL that the reasoning engine actually runs as at runtime."
-}
+__all__ = ["app"]

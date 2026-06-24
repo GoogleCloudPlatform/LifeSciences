@@ -1,13 +1,11 @@
 # Deploy Model Garden Agent with Terraform
 
-This folder contains the declarative Terraform configuration to package the `model-garden-on-gemini-enterprise` agent into a secure, non-root custom Docker container and deploy it to Agent Platform (Agent Runtime).
+This folder contains the declarative Terraform configuration to provision the infrastructure for the `model-garden-on-gemini-enterprise` agent, including the empty Reasoning Engine instance and required IAM roles. The actual agent code build and deployment is managed via Cloud Build.
 
 ## Features
-* **Custom Container Build (`image_spec`):** Builds a non-root Docker container automatically from the source code archive using the `Dockerfile` inside your project.
 * **Agent Identity Integration:** Assigns the unique, least-privilege Agent Identity principal (`principal://agents...`) for accessing Agent Platform and Telemetry services by default.
-* **Standard Service Account Fallback:** Gracefully supports deploying the container under a standard custom Service Account if your GCP project is a standalone sandbox (not part of a Google Workspace or Cloud Identity organization).
-* **Cost Optimized Scaling:** Defaults `min_instances` to `0` to allow the container to scale to zero when idle.
-* **Observability & Telemetry:** Wires up OpenTelemetry variables directly to Google Cloud Observability (metrics, logs, and traces) using `roles/telemetry.writer`.
+* **Standard Service Account Fallback:** Gracefully supports deploying under a standard custom Service Account if your GCP project is a standalone sandbox (not part of a Google Workspace or Cloud Identity organization).
+* **Observability IAM:** Grants `roles/telemetry.writer` to the agent identity for Google Cloud Observability.
 
 ---
 
@@ -32,50 +30,33 @@ Configure these variables in a `terraform.tfvars` file or pass them via the comm
 | Variable | Type | Description | Default |
 | :--- | :--- | :--- | :--- |
 | **`project_id`** | `string` | **(Required)** The Google Cloud Project ID. | *None* |
-| **`region`** | `string` | The GCP region to deploy the Reasoning Engine to. | `us-central1` |
-| **`display_name`** | `string` | User-facing name of the Reasoning Engine. | `Model Garden Agent` |
-| **`model_name`** | `string` | Default LLM name (e.g. Claude). | `claude-opus-4-7` |
-| **`model_location`** | `string` | Region where the Model Garden endpoint resides. | `global` |
-| **`log_level`** | `string` | Container logging level (`DEBUG`, `INFO`, `WARN`). | `INFO` |
-| **`enable_telemetry`** | `bool` | Enable Cloud Observability tracing and auto-logging. | `true` |
-| **`capture_message_content`**| `string` | Capture LLM inputs/outputs (`EVENT_ONLY`, `true`, `false`).| `EVENT_ONLY` |
-| **`min_instances`** | `number` | Min container instances (set to `0` for scale-to-zero). | `0` |
-| **`max_instances`** | `number` | Max instances during heavy scaling. | `5` |
-| **`use_agent_identity`** | `bool` | True to use secure Agent Identity (requires project in an org).| `true` |
-| **`custom_service_account`**| `string` | Fallback SA email if `use_agent_identity = false`. | `null` |
+| **`region`** | `string` | The GCP region to deploy the Agent Runtime to. | `us-central1` |
+| **`logs_bucket_name`** | `string` | Existing GCS bucket to use for logs. If not provided, a new one will be created. | `null` |
 
 ---
 
 ## Deployment Guide
 
-### 1. Initialize Terraform
-Navigate to this directory and run initialization to download providers and set up modules:
-```bash
-terraform init
-```
+Do **not** apply this Terraform configuration manually. The provisioning of this infrastructure is fully automated by the shared Cloud Build pipeline (`shared/cloudbuild.yaml`).
 
-### 2. Validate syntax
-Ensure the files are syntactically correct and compliant:
-```bash
-terraform validate
-```
+To deploy the agent (which automatically runs this Terraform configuration first):
+Refer to the deployment instructions in the [Pharma on Gemini Enterprise Root README](../../README.md#cicd-deployment-service-account).
 
-### 3. Plan
-Perform a dry-run to review the changes Terraform will make to your GCP project:
-```bash
-terraform plan -var="project_id=YOUR_PROJECT_ID" -var="region=us-central1"
-```
+### Local Development / Validation (Optional)
 
-### 4. Deploy (Apply)
-Apply the changes to package, build, and deploy the agent:
-```bash
-terraform apply -var="project_id=YOUR_PROJECT_ID" -var="region=us-central1"
-```
+If you want to validate the Terraform configuration locally before deploying:
 
-On success, the output will display the generated Reasoning Engine Resource ID and the actual runtime effective identity principal.
+1.  **Initialize** (requires a GCS bucket for remote state):
+    ```bash
+    terraform init -backend-config="bucket=YOUR_TF_STATE_BUCKET" -backend-config="prefix=terraform/model-garden-agent"
+    ```
+2.  **Validate**:
+    ```bash
+    terraform validate
+    ```
+3.  **Plan**:
+    ```bash
+    terraform plan -var="project_id=YOUR_PROJECT_ID" -var="region=us-central1"
+    ```
 
----
 
-## Org-dependency and Fallback (Agent Identity vs Service Account)
-* **If your project is inside a Cloud Identity / Workspace Organization:** Leave `use_agent_identity = true` (default). Terraform retrieves the exact federated identity dynamically using the resource's `effective_identity` output attribute, and grants the required `roles/aiplatform.user` and `roles/telemetry.writer` permissions directly to that principal, maximizing security and eliminating manual construction errors.
-* **If your project is standalone:** Set `use_agent_identity = false` and provide a pre-created Service Account email via `custom_service_account`. The Reasoning Engine container will run under that Service Account, and Terraform will grant permissions to it instead.
