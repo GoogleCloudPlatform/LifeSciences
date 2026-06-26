@@ -1,7 +1,7 @@
 {
   "eval_set_id": "biocompass_core",
   "name": "BioCompass core lanes + critical voice",
-  "description": "Evals across all coordinator lanes (light lookup, entity, deep research, skill, visualization, refusal) plus dedicated critical-voice / push-back / citation-faithfulness cases. Scored with rubric_based_final_response_quality_v1 and hallucinations_v1 (see tests/test_config.json). Run with: adk eval . biocompass_agent/biocompass.evalset.json --config_file_path biocompass_agent/tests/test_config.json --print_detailed_results",
+  "description": "Evals across all coordinator lanes (light lookup, entity, deep research, skill, visualization, refusal) plus dedicated critical-voice / push-back / citation-faithfulness cases. Scored with rubric_based_final_response_quality_v1 and hallucinations_v1 (see tests/test_config.json). Run with: adk eval app biocompass.evalset.json --config_file_path tests/test_config.json --print_detailed_results",
   "eval_cases": [
     {
       "eval_id": "light_pubmed_lookup",

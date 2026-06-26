@@ -12,26 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+from .agent import app
 
-[project]
-name = "paperbanana-agent"
-version = "0.1.0"
-description = "ADK agent for Paperbanana"
-readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "fsspec[gcs]==2025.10.0",
-    "google-adk[otel-gcp]>=2.2.0",
-    "google-cloud-aiplatform[agent_engines]",
-    "pyopenssl<26",
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["app"]
-
-[[tool.uv.index]]
-url = "https://pypi.org/simple"
-default = true
+__all__ = ["app"]

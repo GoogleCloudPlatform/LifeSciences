@@ -112,7 +112,7 @@ steps:
         ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
 
         # Deploy the agent using agents-cli
-        uvx google-agents-cli deploy \
+        uvx google-agents-cli@0.5.1 deploy \
             --project=$PROJECT_ID \
             --region=${_REGION} \
             --deployment-target=agent_runtime \
@@ -145,7 +145,7 @@ steps:
 
         # Run publish command
         export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
-        uvx google-agents-cli publish gemini-enterprise \
+        uvx google-agents-cli@0.5.1 publish gemini-enterprise \
           --agent-runtime-id="$$ENGINE_ID" \
           --gemini-enterprise-app-id="${_GEMINI_ENTERPRISE_APP_ID}" \
           --display-name="$$AGENT_DISPLAY_NAME" \

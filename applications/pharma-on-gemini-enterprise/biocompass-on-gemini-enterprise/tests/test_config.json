@@ -3,7 +3,7 @@
     "rubric_based_final_response_quality_v1": {
       "threshold": 0.7,
       "judge_model_options": {
-        "judge_model": "gemini-3-flash-preview",
+        "judge_model": "gemini-3.5-flash",
         "num_samples": 3
       },
       "rubrics": [
@@ -48,7 +48,7 @@
     "rubric_based_tool_use_quality_v1": {
       "threshold": 0.7,
       "judge_model_options": {
-        "judge_model": "gemini-3-flash-preview",
+        "judge_model": "gemini-3.5-flash",
         "num_samples": 3
       },
       "rubrics": [
@@ -81,7 +81,7 @@
     "hallucinations_v1": {
       "threshold": 0.7,
       "judge_model_options": {
-        "judge_model": "gemini-3-flash-preview",
+        "judge_model": "gemini-3.5-flash",
         "num_samples": 3
       },
       "evaluate_intermediate_nl_responses": true

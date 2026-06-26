@@ -17,6 +17,17 @@ locals {
   bucket_name   = var.logs_bucket_name == null ? "${var.project_id}-${var.agent_id}-logs" : var.logs_bucket_name
 }
 
+resource "google_project_service" "services" {
+  for_each = toset([
+    "aiplatform.googleapis.com",
+    "storage.googleapis.com"
+  ])
+
+  project            = var.project_id
+  service            = each.key
+  disable_on_destroy = false
+}
+
 resource "google_storage_bucket" "logs_data_bucket" {
   count                       = local.create_bucket
   project                     = var.project_id
@@ -24,6 +35,8 @@ resource "google_storage_bucket" "logs_data_bucket" {
   location                    = var.region
   uniform_bucket_level_access = true
   force_destroy               = true
+
+  depends_on = [google_project_service.services]
 }
 
 resource "google_vertex_ai_reasoning_engine" "agent" {
@@ -41,6 +54,8 @@ resource "google_vertex_ai_reasoning_engine" "agent" {
       spec,
     ]
   }
+
+  depends_on = [google_project_service.services]
 }
 
 resource "google_project_iam_member" "agent_identity" {

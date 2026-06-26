@@ -17,20 +17,30 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "paperbanana-agent"
+name = "biocompass-agent"
 version = "0.1.0"
-description = "ADK agent for Paperbanana"
+description = "ADK agent for Biocompass"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fsspec[gcs]==2025.10.0",
-    "google-adk[otel-gcp]>=2.2.0",
+    "google-adk[eval,otel-gcp]>=2.2.0",
     "google-cloud-aiplatform[agent_engines]",
     "pyopenssl<26",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [[tool.uv.index]]
 url = "https://pypi.org/simple"

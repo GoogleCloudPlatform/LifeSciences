@@ -15,8 +15,8 @@
 """BioCompass on Gemini Enterprise.
 
 A biomedical literature research agent for pharma R&D, medical affairs, and
-clinical/HEOR teams. Built on Google ADK and deployed to Vertex AI Agent
-Engine, registered with Gemini Enterprise as a custom agent.
+clinical/HEOR teams. Built on Google ADK and deployed to Agent
+Runtime, registered with Gemini Enterprise as a custom agent.
 
 Architecture:
 
@@ -68,6 +68,7 @@ import re
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import Agent
+from google.adk.apps import App
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.skills import load_skill_from_dir
@@ -325,3 +326,9 @@ root_agent = Agent(
     ],
     before_model_callback=_inject_uploaded_artifacts,
 )
+
+app = App(
+    root_agent=root_agent,
+    name="app"
+)
+

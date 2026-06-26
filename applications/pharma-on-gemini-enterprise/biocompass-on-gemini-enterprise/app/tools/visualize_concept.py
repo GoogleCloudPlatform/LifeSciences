@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Concept visualizer powered by Nano Banana Pro (gemini-3-pro-image-preview).
+"""Concept visualizer powered by Nano Banana Pro (gemini-3-pro-image).
 
 Renders publication-style biomedical figures (mechanism-of-action diagrams,
 pathway schematics, study designs, PRISMA flow diagrams) from a textual
@@ -29,7 +29,7 @@ from google import genai
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 
-_IMAGE_MODEL = os.getenv('IMAGE_MODEL_NAME', 'gemini-3-pro-image-preview')
+_IMAGE_MODEL = os.getenv('IMAGE_MODEL_NAME', 'gemini-3-pro-image')
 _IMAGE_SIZE = os.getenv('IMAGE_SIZE', '2K')
 
 # A condensed style guide tuned for biomedical / pharma figures. The Nano

@@ -27,6 +27,7 @@ dependencies = [
     "fsspec[gcs]==2025.10.0",
     "google-adk[otel-gcp]>=2.2.0",
     "google-cloud-aiplatform[agent_engines]",
+    "pyopenssl<26",
 ]
 
 [tool.hatch.build.targets.wheel]

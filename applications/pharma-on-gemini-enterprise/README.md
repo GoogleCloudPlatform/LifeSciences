@@ -18,13 +18,15 @@ Pick an agent above and follow the `README.md` inside its directory. Each one ha
 
 When deploying using the shared Cloud Build pipeline (`shared/cloudbuild.yaml`), the build should be executed using a custom service account. This service account must be granted the following minimal predefined IAM roles in the target Google Cloud project:
 
-1.  **Vertex AI Admin (`roles/aiplatform.admin`)**: Required to create and update the Agent Runtime instance.
+1.  **Agent Platform Admin (`roles/aiplatform.admin`)**: Required to create and update the Agent Runtime instance.
 2.  **Storage Object Admin (`roles/storage.objectAdmin`)**: Required on the GCS bucket used for the Terraform state (`_TF_STATE_BUCKET`) and any staging buckets used by ADK during deployment.
 3.  **Storage Admin (`roles/storage.admin`)**: Required to create and manage the GCS bucket used for logs data.
 4.  **Project IAM Admin (`roles/resourcemanager.projectIamAdmin`)**: Required to allow Terraform to dynamically bind roles (`aiplatform.expressUser`, `telemetry.writer`, etc.) to the Agent Identity principal.
     *   *Security Option:* If your organization's security policy restricts the `projectIamAdmin` role, you can remove the IAM resource block from the Terraform configuration and pre-provision these roles manually for the agent identity.
 5.  **Gemini Enterprise Admin (`roles/discoveryengine.agentspaceAdmin`)**: (Optional) Only required if you provide `_GEMINI_ENTERPRISE_APP_ID` to register the agent with your Gemini Enterprise App.
-6.  **Cloud Build Logging**: `roles/logging.logWriter` (to write build logs).
+6.  **Cloud Logging Writer (`roles/logging.logWriter`)**: (Required) to write build logs.
+7.  **BigQuery Admin (`roles/bigquery.admin`)**: (Biocompass Only) Required to create and manage BigQuery resources, including remote models.
+8.  **Service Usage Admin (`roles/serviceusage.serviceUsageAdmin`)**: Required to enable required APIs (Agent Platform, Cloud Storage).
 
 ### Setup Script
 
@@ -41,7 +43,7 @@ gcloud iam service-accounts create "${SA_NAME}" \
     --display-name="Gemini Enterprise Agent Deployer" \
     --project="${PROJECT_ID}"
 
-# 2. Grant Vertex AI Admin
+# 2. Grant Agent Platform Admin
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="roles/aiplatform.admin"
@@ -70,16 +72,26 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="roles/logging.logWriter"
+
+# 8. [Optional] Grant BigQuery Admin (Only needed for Biocompass)
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/bigquery.admin"
+
+# 9. Grant Service Usage Admin
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/serviceusage.serviceUsageAdmin"
 ```
 
 
 ### Example deployment command:
 
-Run this from the parent `applications/pharma-on-gemini-enterprise/` directory:
+Run this from the directory of the agent you want to deploy (e.g., `biocompass-on-gemini-enterprise/`):
 
 ```bash
-gcloud builds submit --config=shared/cloudbuild.yaml \
-    --substitutions=_AGENT_DIR="biocompass-on-gemini-enterprise",_TF_STATE_BUCKET="YOUR_STATE_BUCKET_NAME" \
+gcloud builds submit --config=../shared/cloudbuild.yaml \
+    --substitutions=_TF_STATE_BUCKET="YOUR_STATE_BUCKET_NAME" \
     --service-account="projects/YOUR_PROJECT_ID/serviceAccounts/ge-agent-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
     --project=YOUR_PROJECT_ID
 ```

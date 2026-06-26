@@ -29,7 +29,7 @@ provider "google" {
 }
 
 module "agent_infra" {
-  source = "../../shared/terraform/agent-infrastructure"
+  source = "git::https://github.com/GoogleCloudPlatform/LifeSciences.git//applications/pharma-on-gemini-enterprise/shared/terraform/agent-infrastructure?ref=main"
 
   project_id       = var.project_id
   region           = var.region

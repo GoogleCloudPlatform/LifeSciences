@@ -160,22 +160,22 @@ You can trigger the deployment using Cloud Build, which will apply the Terraform
 
 #### Deploy only (Default):
 ```bash
-# Run from the parent pharma-on-gemini-enterprise directory:
-# applications/pharma-on-gemini-enterprise/
+# Run from this directory:
+# applications/pharma-on-gemini-enterprise/model-garden-on-gemini-enterprise/
 
-gcloud builds submit --config=shared/cloudbuild.yaml \
-    --substitutions=_AGENT_DIR="model-garden-on-gemini-enterprise",_TF_STATE_BUCKET="YOUR_STATE_BUCKET_NAME",_ENV_VARS="GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=false;MODEL_NAME=claude-opus-4-7" \
+gcloud builds submit --config=../shared/cloudbuild.yaml \
+    --substitutions=_TF_STATE_BUCKET="YOUR_STATE_BUCKET_NAME",_ENV_VARS="GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=false;MODEL_NAME=claude-opus-4-7" \
     --project=YOUR_PROJECT_ID
 ```
 
 #### Deploy and Register with Gemini Enterprise:
 To automatically register the agent with Gemini Enterprise, provide your `_GEMINI_ENTERPRISE_APP_ID` (the Gemini Enterprise App ID must be pre-created in the console):
 ```bash
-# Run from the parent pharma-on-gemini-enterprise directory:
-# applications/pharma-on-gemini-enterprise/
+# Run from this directory:
+# applications/pharma-on-gemini-enterprise/model-garden-on-gemini-enterprise/
 
-gcloud builds submit --config=shared/cloudbuild.yaml \
-    --substitutions=_AGENT_DIR="model-garden-on-gemini-enterprise",_TF_STATE_BUCKET="YOUR_STATE_BUCKET_NAME",_GEMINI_ENTERPRISE_APP_ID="projects/YOUR_PROJECT_ID/locations/global/collections/default_collection/engines/YOUR_APP_ID",_ENV_VARS="GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=false;MODEL_NAME=claude-opus-4-7" \
+gcloud builds submit --config=../shared/cloudbuild.yaml \
+    --substitutions=_TF_STATE_BUCKET="YOUR_STATE_BUCKET_NAME",_GEMINI_ENTERPRISE_APP_ID="projects/YOUR_PROJECT_ID/locations/global/collections/default_collection/engines/YOUR_APP_ID",_ENV_VARS="GOOGLE_API_PREVENT_AGENT_TOKEN_SHARING_FOR_GCP_SERVICES=false;MODEL_NAME=claude-opus-4-7" \
     --project=YOUR_PROJECT_ID
 ```
 

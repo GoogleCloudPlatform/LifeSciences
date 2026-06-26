@@ -19,39 +19,45 @@ ClinicalTrials.gov) end-to-end and asserts each returns a sensible payload.
 Useful as a CI-style check that the network paths, retry decorator, shared
 client, and HTML/JSON parsers all still work after a refactor.
 
-Run from the agent project root with the venv active:
+Run from the agent project root via pytest:
 
-    .venv/bin/python -m biocompass_agent.tests.test_smoke
-
-Exit code 0 = all pass. Non-zero = at least one tool failed; the failures
-are printed.
+    uv run pytest tests/test_smoke.py -v
 """
 
 from __future__ import annotations
 
-import asyncio
-import sys
-import traceback
 from typing import Any, Awaitable, Callable
 
-from ..tools.clinicaltrials import (
+import pytest
+
+from app.tools.clinicaltrials import (
     get_clinical_trial,
     search_clinical_trials,
 )
-from ..tools.eutils import (
+from app.tools.eutils import (
     advanced_search,
     get_article,
     get_citing_articles,
     search_by_author,
     search_pubmed,
 )
-from ..tools.europe_pmc import search_europe_pmc
-from ..tools.biorxiv import search_preprints
-from ..tools.pubtator import (
+from app.tools.europe_pmc import search_europe_pmc
+from app.tools.biorxiv import search_preprints
+from app.tools.pubtator import (
     annotate_articles,
     find_related_entities,
     lookup_entity_id,
 )
+
+
+@pytest.fixture(autouse=True)
+async def _cleanup_http_client():
+  import app.tools._http
+  yield
+  if app.tools._http._client is not None:
+    await app.tools._http._client.aclose()
+    app.tools._http._client = None
+
 
 
 def _ok_articles(payload: dict[str, Any]) -> bool:
@@ -122,34 +128,22 @@ CASES: list[tuple[str, Callable[[], Awaitable[Any]], Callable[[Any], bool]]] = [
 ]
 
 
-async def _run() -> int:
-  print(f'Running {len(CASES)} smoke checks...\n')
-  failures: list[str] = []
-  for label, call, check in CASES:
-    try:
-      result = await call()
-      ok = check(result)
-      status = 'PASS' if ok else 'FAIL'
-      print(f'  [{status}] {label}')
-      if not ok:
-        failures.append(f'{label}\n    -> {str(result)[:300]}')
-    except Exception as exc:  # noqa: BLE001
-      failures.append(f'{label}\n    -> raised: {exc}')
-      print(f'  [FAIL] {label} (raised {type(exc).__name__})')
-      traceback.print_exc()
-  print()
-  if failures:
-    print(f'{len(failures)} failure(s):')
-    for f in failures:
-      print(f'  - {f}')
-    return 1
-  print(f'All {len(CASES)} checks passed.')
-  return 0
-
-
-def main() -> None:
-  sys.exit(asyncio.run(_run()))
-
-
-if __name__ == '__main__':
-  main()
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'call, check, label',
+    [
+        pytest.param(call, check, label, id=label)
+        for label, call, check in CASES
+    ],
+)
+async def test_smoke(
+    call: Callable[[], Awaitable[Any]],
+    check: Callable[[Any], bool],
+    label: str,
+) -> None:
+  """Run the public API smoke checks via pytest."""
+  try:
+    result = await call()
+  except Exception as exc:
+    raise AssertionError(f"Check '{label}' failed because it raised: {exc}") from exc
+  assert check(result), f"Check '{label}' failed. Result payload: {result}"

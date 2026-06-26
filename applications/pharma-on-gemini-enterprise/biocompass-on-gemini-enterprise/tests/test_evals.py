@@ -16,8 +16,8 @@
 
 Equivalent to running:
 
-    adk eval . biocompass_agent/biocompass.evalset.json \\
-        --config_file_path biocompass_agent/tests/test_config.json \\
+    adk eval app biocompass.evalset.json \\
+        --config_file_path tests/test_config.json \\
         --print_detailed_results
 
 Use this for CI integration. For ad-hoc runs, prefer the CLI command above.
@@ -27,8 +27,8 @@ to the rubric judge model AND `num_samples` to the hallucinations judge,
 PER invocation. Deep-research cases also trigger the agent itself which
 fans out 4 retrievers + synth + critic loop. Run a subset for fast feedback:
 
-    adk eval . biocompass_agent/biocompass.evalset.json:pushback_lecanemab,off_topic_refusal \\
-        --config_file_path biocompass_agent/tests/test_config.json
+    adk eval app biocompass.evalset.json:pushback_lecanemab,off_topic_refusal \\
+        --config_file_path tests/test_config.json
 """
 
 from __future__ import annotations
@@ -52,16 +52,16 @@ if _ENV_PATH.exists():
 from google.adk.evaluation.agent_evaluator import AgentEvaluator  # noqa: E402
 
 
-_AGENT_PROJECT = Path(__file__).resolve().parent.parent.parent
-_EVALSET = _AGENT_PROJECT / 'biocompass_agent' / 'biocompass.evalset.json'
-_CONFIG = _AGENT_PROJECT / 'biocompass_agent' / 'tests' / 'test_config.json'
+_AGENT_PROJECT = Path(__file__).resolve().parent.parent
+_EVALSET = _AGENT_PROJECT / 'biocompass.evalset.json'
+_CONFIG = _AGENT_PROJECT / 'tests' / 'test_config.json'
 
 
 @pytest.mark.asyncio
 async def test_biocompass_evalset() -> None:
   """Run the full BioCompass evalset against the rubric + hallucinations judges."""
   await AgentEvaluator.evaluate(
-      agent_module='biocompass_agent',
+      agent_module='app',
       eval_dataset_file_path_or_dir=str(_EVALSET),
       config_file_path=str(_CONFIG),
       num_runs=1,

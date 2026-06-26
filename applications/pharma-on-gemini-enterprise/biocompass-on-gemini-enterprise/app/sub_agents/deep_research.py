@@ -71,7 +71,7 @@ from ..tools.europe_pmc import (
 )
 
 _COORDINATOR_MODEL = os.getenv('COORDINATOR_MODEL_NAME', 'gemini-3.1-pro-preview')
-_WORKER_MODEL = os.getenv('WORKER_MODEL_NAME', 'gemini-3-flash-preview')
+_WORKER_MODEL = os.getenv('WORKER_MODEL_NAME', 'gemini-3.5-flash')
 _MAX_CRITIC_ROUNDS = int(os.getenv('MAX_CRITIC_ROUNDS', '2'))
 
 # Session-state keys.
