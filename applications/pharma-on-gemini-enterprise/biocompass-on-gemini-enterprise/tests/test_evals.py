@@ -40,29 +40,27 @@ import pytest
 
 # Load the agent .env BEFORE the AgentEvaluator imports anything that builds
 # a Gen AI client (the eval framework does, for the judge models).
-_ENV_PATH = Path(__file__).resolve().parent.parent / '.env'
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 if _ENV_PATH.exists():
-  for _line in _ENV_PATH.read_text().splitlines():
-    _line = _line.strip()
-    if not _line or _line.startswith('#') or '=' not in _line:
-      continue
-    _k, _v = _line.split('=', 1)
-    os.environ.setdefault(_k.strip(), _v.strip())
+    for _line in _ENV_PATH.read_text().splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _k, _v = _line.split("=", 1)
+        os.environ.setdefault(_k.strip(), _v.strip())
 
 from google.adk.evaluation.agent_evaluator import AgentEvaluator  # noqa: E402
 
-
 _AGENT_PROJECT = Path(__file__).resolve().parent.parent
-_EVALSET = _AGENT_PROJECT / 'biocompass.evalset.json'
-_CONFIG = _AGENT_PROJECT / 'tests' / 'test_config.json'
+_EVALSET = _AGENT_PROJECT / "tests" / "biocompass.evalset.json"
+_CONFIG = _AGENT_PROJECT / "tests" / "test_config.json"
 
 
 @pytest.mark.asyncio
 async def test_biocompass_evalset() -> None:
-  """Run the full BioCompass evalset against the rubric + hallucinations judges."""
-  await AgentEvaluator.evaluate(
-      agent_module='app',
-      eval_dataset_file_path_or_dir=str(_EVALSET),
-      config_file_path=str(_CONFIG),
-      num_runs=1,
-  )
+    """Run the full BioCompass evalset against the rubric + hallucinations judges."""
+    await AgentEvaluator.evaluate(
+        agent_module="app",
+        eval_dataset_file_path_or_dir=str(_EVALSET),
+        num_runs=1,
+    )

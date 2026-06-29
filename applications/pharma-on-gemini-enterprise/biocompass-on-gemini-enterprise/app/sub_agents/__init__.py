@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .literature_search import literature_search_agent
-from .entity_analysis import entity_analysis_agent
 from .deep_research import deep_research_pipeline
+from .entity_analysis import entity_analysis_agent
+from .literature_search import literature_search_agent
 
 __all__ = [
-    'literature_search_agent',
-    'entity_analysis_agent',
-    'deep_research_pipeline',
+    "deep_research_pipeline",
+    "entity_analysis_agent",
+    "literature_search_agent",
 ]

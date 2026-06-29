@@ -28,30 +28,32 @@ from .europe_pmc import search_europe_pmc
 
 async def search_preprints(
     query: str,
-    server: str = 'all',
+    server: str = "all",
     max_results: int = 25,
 ) -> dict[str, Any]:
-  """Search bioRxiv / medRxiv preprints via the Europe PMC preprint index (FREE).
+    """Search bioRxiv / medRxiv preprints via the Europe PMC preprint index (FREE).
 
-  Use when you need the very latest results — preprints often beat the
-  peer-reviewed literature by 6-18 months for fast-moving fields.
+    Use when you need the very latest results — preprints often beat the
+    peer-reviewed literature by 6-18 months for fast-moving fields.
 
-  Args:
-    query: Free-text or Europe PMC field-tag query, e.g. "GLP-1 AND obesity"
-      or "TITLE:CRISPR".
-    server: "biorxiv", "medrxiv", or "all" (default).
-    max_results: 1-100 (default 25).
+    Args:
+      query: Free-text or Europe PMC field-tag query, e.g. "GLP-1 AND obesity"
+        or "TITLE:CRISPR".
+      server: "biorxiv", "medrxiv", or "all" (default).
+      max_results: 1-100 (default 25).
 
-  Returns:
-    `{query, hit_count, articles: [...]}` (same shape as `search_europe_pmc`,
-    `source` field will be "PPR").
-  """
-  src_filter = {
-      'biorxiv': 'AND PUBLISHER:"bioRxiv"',
-      'medrxiv': 'AND PUBLISHER:"medRxiv"',
-      'all': '',
-  }.get(server.lower(), '')
-  preprint_query = f'({query}) AND SRC:PPR {src_filter}'.strip()
-  return await search_europe_pmc(
-      preprint_query, max_results=max_results, include_preprints=True,
-  )
+    Returns:
+      `{query, hit_count, articles: [...]}` (same shape as `search_europe_pmc`,
+      `source` field will be "PPR").
+    """
+    src_filter = {
+        "biorxiv": 'AND PUBLISHER:"bioRxiv"',
+        "medrxiv": 'AND PUBLISHER:"medRxiv"',
+        "all": "",
+    }.get(server.lower(), "")
+    preprint_query = f"({query}) AND SRC:PPR {src_filter}".strip()
+    return await search_europe_pmc(
+        preprint_query,
+        max_results=max_results,
+        include_preprints=True,
+    )

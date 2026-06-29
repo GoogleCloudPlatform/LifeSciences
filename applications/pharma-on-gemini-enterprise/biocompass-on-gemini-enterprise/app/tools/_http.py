@@ -43,36 +43,36 @@ _client: httpx.AsyncClient | None = None
 
 
 _USER_AGENT = (
-    'BioCompass/1.0 (Google ADK biomedical research agent; '
-    'https://github.com/cloud-sean/LifeSciences) httpx'
+    "BioCompass/1.0 (Google ADK biomedical research agent; "
+    "https://github.com/cloud-sean/LifeSciences) httpx"
 )
 
 
 def client() -> httpx.AsyncClient:
-  """Lazy-init the shared async client (one per process).
+    """Lazy-init the shared async client (one per process).
 
-  Sets an identifying User-Agent — ClinicalTrials.gov returns 403 to the
-  default httpx UA and NCBI politely asks callers to identify themselves
-  in the E-utilities terms of use.
-  """
-  global _client
-  if _client is None:
-    _client = httpx.AsyncClient(
-        timeout=30.0,
-        headers={'User-Agent': _USER_AGENT},
-    )
-  return _client
+    Sets an identifying User-Agent — ClinicalTrials.gov returns 403 to the
+    default httpx UA and NCBI politely asks callers to identify themselves
+    in the E-utilities terms of use.
+    """
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(
+            timeout=30.0,
+            headers={"User-Agent": _USER_AGENT},
+        )
+    return _client
 
 
 def _is_retryable(exc: BaseException) -> bool:
-  # Retry on connection / timeout / read errors (transient), and on 5xx
-  # responses. Do NOT retry on 4xx — those are caller errors that won't be
-  # fixed by waiting (bad query, missing param, auth failure, 404).
-  if isinstance(exc, (httpx.TransportError, httpx.TimeoutException)):
-    return True
-  if isinstance(exc, httpx.HTTPStatusError):
-    return 500 <= exc.response.status_code < 600
-  return False
+    # Retry on connection / timeout / read errors (transient), and on 5xx
+    # responses. Do NOT retry on 4xx — those are caller errors that won't be
+    # fixed by waiting (bad query, missing param, auth failure, 404).
+    if isinstance(exc, (httpx.TransportError, httpx.TimeoutException)):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 500 <= exc.response.status_code < 600
+    return False
 
 
 # Decorator applied to every tool's HTTP call. 3 attempts, exponential
@@ -86,34 +86,37 @@ retryable = retry(
 
 
 @retryable
-async def get_json(url: str, params: dict[str, Any] | None = None,
-                   timeout: float | None = None) -> Any:
-  """GET + raise_for_status + .json(), with retry on transient errors."""
-  resp = await client().get(url, params=params, timeout=timeout)
-  resp.raise_for_status()
-  return resp.json()
+async def get_json(
+    url: str, params: dict[str, Any] | None = None, timeout: float | None = None
+) -> Any:
+    """GET + raise_for_status + .json(), with retry on transient errors."""
+    resp = await client().get(url, params=params, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
 
 
 @retryable
-async def get_text(url: str, params: dict[str, Any] | None = None,
-                   timeout: float | None = None) -> str:
-  """GET + raise_for_status + .text, with retry on transient errors."""
-  resp = await client().get(url, params=params, timeout=timeout)
-  resp.raise_for_status()
-  return resp.text
+async def get_text(
+    url: str, params: dict[str, Any] | None = None, timeout: float | None = None
+) -> str:
+    """GET + raise_for_status + .text, with retry on transient errors."""
+    resp = await client().get(url, params=params, timeout=timeout)
+    resp.raise_for_status()
+    return resp.text
 
 
 @retryable
-async def get_response(url: str, params: dict[str, Any] | None = None,
-                       timeout: float | None = None) -> httpx.Response:
-  """GET + retry. Caller is responsible for status handling — useful when
-  some non-2xx codes (e.g. 404) carry meaningful semantics that should not
-  trigger a retry but should be inspected rather than raise.
-  """
-  resp = await client().get(url, params=params, timeout=timeout)
-  if 500 <= resp.status_code < 600:
-    resp.raise_for_status()  # let the decorator retry it
-  return resp
+async def get_response(
+    url: str, params: dict[str, Any] | None = None, timeout: float | None = None
+) -> httpx.Response:
+    """GET + retry. Caller is responsible for status handling — useful when
+    some non-2xx codes (e.g. 404) carry meaningful semantics that should not
+    trigger a retry but should be inspected rather than raise.
+    """
+    resp = await client().get(url, params=params, timeout=timeout)
+    if 500 <= resp.status_code < 600:
+        resp.raise_for_status()  # let the decorator retry it
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -125,22 +128,23 @@ async def get_response(url: str, params: dict[str, Any] | None = None,
 # Wrapped in `asyncio.to_thread` so calls don't block the event loop.
 # ---------------------------------------------------------------------------
 
-class UrllibStatusError(Exception):
-  """Raised on non-2xx responses from `get_json_urllib`."""
 
-  def __init__(self, status: int, body: str, url: str):
-    super().__init__(f'{status} from {url}')
-    self.status = status
-    self.body = body
-    self.url = url
+class UrllibStatusError(Exception):
+    """Raised on non-2xx responses from `get_json_urllib`."""
+
+    def __init__(self, status: int, body: str, url: str):
+        super().__init__(f"{status} from {url}")
+        self.status = status
+        self.body = body
+        self.url = url
 
 
 def _is_retryable_urllib(exc: BaseException) -> bool:
-  if isinstance(exc, urllib.error.URLError):
-    return True
-  if isinstance(exc, UrllibStatusError):
-    return 500 <= exc.status < 600
-  return False
+    if isinstance(exc, urllib.error.URLError):
+        return True
+    if isinstance(exc, UrllibStatusError):
+        return 500 <= exc.status < 600
+    return False
 
 
 _retryable_urllib = retry(
@@ -152,33 +156,37 @@ _retryable_urllib = retry(
 
 
 def _build_query(params: dict[str, Any] | None) -> str:
-  if not params:
-    return ''
-  from urllib.parse import urlencode
-  return '?' + urlencode(params)
+    if not params:
+        return ""
+    from urllib.parse import urlencode
+
+    return "?" + urlencode(params)
 
 
-def _urllib_get(url: str, params: dict[str, Any] | None,
-                timeout: float) -> tuple[int, str]:
-  full_url = url + _build_query(params)
-  req = urllib.request.Request(
-      full_url, headers={'User-Agent': _USER_AGENT, 'Accept': 'application/json'},
-  )
-  try:
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-      return resp.status, resp.read().decode('utf-8')
-  except urllib.error.HTTPError as e:
-    body = e.read().decode('utf-8', errors='replace') if e.fp else ''
-    return e.code, body
+def _urllib_get(
+    url: str, params: dict[str, Any] | None, timeout: float
+) -> tuple[int, str]:
+    full_url = url + _build_query(params)
+    req = urllib.request.Request(
+        full_url,
+        headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace") if e.fp else ""
+        return e.code, body
 
 
 @_retryable_urllib
-async def get_json_urllib(url: str, params: dict[str, Any] | None = None,
-                          timeout: float = 30.0) -> Any:
-  """GET via stdlib urllib (in a worker thread). Use for hosts that block
-  httpx by TLS fingerprint. Returns parsed JSON or raises UrllibStatusError.
-  """
-  status, body = await asyncio.to_thread(_urllib_get, url, params, timeout)
-  if status >= 400:
-    raise UrllibStatusError(status, body, url)
-  return json.loads(body)
+async def get_json_urllib(
+    url: str, params: dict[str, Any] | None = None, timeout: float = 30.0
+) -> Any:
+    """GET via stdlib urllib (in a worker thread). Use for hosts that block
+    httpx by TLS fingerprint. Returns parsed JSON or raises UrllibStatusError.
+    """
+    status, body = await asyncio.to_thread(_urllib_get, url, params, timeout)
+    if status >= 400:
+        raise UrllibStatusError(status, body, url)
+    return json.loads(body)

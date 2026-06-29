@@ -85,10 +85,9 @@ from .tools.visualize_concept import visualize_concept
 
 # Gemini 3.x is only served from the `global` endpoint; Agent Engine itself
 # still deploys regionally (GOOGLE_CLOUD_LOCATION env var).
-os.environ['GOOGLE_CLOUD_LOCATION'] = os.getenv('MODEL_LOCATION', 'global')
+os.environ["GOOGLE_CLOUD_LOCATION"] = os.getenv("MODEL_LOCATION", "global")
 
-_COORDINATOR_MODEL = os.getenv('COORDINATOR_MODEL_NAME',
-                               'gemini-3.1-pro-preview')
+_COORDINATOR_MODEL = os.getenv("COORDINATOR_MODEL_NAME", "gemini-3.1-pro-preview")
 
 # ---------------------------------------------------------------------------
 # Skills — load all SKILL.md directories from skills/ and expose them as a
@@ -97,11 +96,11 @@ _COORDINATOR_MODEL = os.getenv('COORDINATOR_MODEL_NAME',
 # coordinator decides to trigger the skill.
 # ---------------------------------------------------------------------------
 
-_SKILLS_DIR = pathlib.Path(__file__).parent / 'skills'
+_SKILLS_DIR = pathlib.Path(__file__).parent / "skills"
 _loaded_skills = [
     load_skill_from_dir(p)
     for p in sorted(_SKILLS_DIR.iterdir())
-    if p.is_dir() and (p / 'SKILL.md').exists()
+    if p.is_dir() and (p / "SKILL.md").exists()
 ]
 
 # ---------------------------------------------------------------------------
@@ -115,42 +114,48 @@ _loaded_skills = [
 # model_garden_agent and paperbanana_agent.
 # ---------------------------------------------------------------------------
 
-_FILE_MARKER_RE = re.compile(
-    r'<start_of_user_uploaded_file:\s*(?P<name>[^>]+?)\s*>'
-)
-_GEMINI_INLINE_MIMES = ('image/', 'application/pdf')
+_FILE_MARKER_RE = re.compile(r"<start_of_user_uploaded_file:\s*(?P<name>[^>]+?)\s*>")
+_GEMINI_INLINE_MIMES = ("image/", "application/pdf")
 
 
 def _is_inlineable(mime: str | None) -> bool:
-  return bool(mime) and any(mime.startswith(p) for p in _GEMINI_INLINE_MIMES)
+    return bool(mime) and any(mime.startswith(p) for p in _GEMINI_INLINE_MIMES)
 
 
 async def _inject_uploaded_artifacts(
-    callback_context: CallbackContext, llm_request: LlmRequest,
+    callback_context: CallbackContext,
+    llm_request: LlmRequest,
 ) -> LlmResponse | None:
-  if not llm_request.contents:
+    if not llm_request.contents:
+        return None
+    artifact_keys = set(await callback_context.list_artifacts())
+    for content in llm_request.contents:
+        if getattr(content, "role", None) != "user" or not content.parts:
+            continue
+        injected: set[str] = set()
+        for part in content.parts:
+            text = part.text
+            if not text:
+                continue
+            for match in _FILE_MARKER_RE.finditer(text):
+                name = match.group("name").strip()
+                if name in injected or name not in artifact_keys:
+                    continue
+                artifact = await callback_context.load_artifact(name)
+                if artifact is None or artifact.inline_data is None:
+                    continue
+                if not _is_inlineable(artifact.inline_data.mime_type):
+                    continue
+                content.parts.append(
+                    types.Part(
+                        inline_data=types.Blob(
+                            mime_type=artifact.inline_data.mime_type,
+                            data=artifact.inline_data.data,
+                        )
+                    )
+                )
+                injected.add(name)
     return None
-  artifact_keys = set(await callback_context.list_artifacts())
-  for content in llm_request.contents:
-    if getattr(content, 'role', None) != 'user' or not content.parts:
-      continue
-    injected: set[str] = set()
-    for part in [p for p in content.parts if p.text]:
-      for match in _FILE_MARKER_RE.finditer(part.text):
-        name = match.group('name').strip()
-        if name in injected or name not in artifact_keys:
-          continue
-        artifact = await callback_context.load_artifact(name)
-        if artifact is None or artifact.inline_data is None:
-          continue
-        if not _is_inlineable(artifact.inline_data.mime_type):
-          continue
-        content.parts.append(types.Part(inline_data=types.Blob(
-            mime_type=artifact.inline_data.mime_type,
-            data=artifact.inline_data.data,
-        )))
-        injected.add(name)
-  return None
 
 
 # ---------------------------------------------------------------------------
@@ -307,15 +312,15 @@ in that lane."
 
 root_agent = Agent(
     model=_COORDINATOR_MODEL,
-    name='root_agent',
+    name="root_agent",
     description=(
-        'Biomedical literature research assistant for pharma R&D, medical '
-        'affairs, and clinical / HEOR teams. Searches PubMed + Europe PMC + '
-        'preprints + ClinicalTrials.gov, extracts biomedical entities + '
-        'relationships via PubTator3, renders publication-style figures '
-        'with Nano Banana Pro, and orchestrates methodology skills (PICO, '
-        'PRISMA, target dossiers, MoA briefs, competitive scans, PV '
-        'triage).'
+        "Biomedical literature research assistant for pharma R&D, medical "
+        "affairs, and clinical / HEOR teams. Searches PubMed + Europe PMC + "
+        "preprints + ClinicalTrials.gov, extracts biomedical entities + "
+        "relationships via PubTator3, renders publication-style figures "
+        "with Nano Banana Pro, and orchestrates methodology skills (PICO, "
+        "PRISMA, target dossiers, MoA briefs, competitive scans, PV "
+        "triage)."
     ),
     instruction=_ROOT_INSTRUCTION,
     sub_agents=[literature_search_agent, entity_analysis_agent],
@@ -327,8 +332,4 @@ root_agent = Agent(
     before_model_callback=_inject_uploaded_artifacts,
 )
 
-app = App(
-    root_agent=root_agent,
-    name="app"
-)
-
+app = App(root_agent=root_agent, name="app")

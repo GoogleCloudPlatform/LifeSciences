@@ -23,7 +23,6 @@ from google.adk.models import anthropic_llm as _anthropic_llm
 from google.adk.models.llm_request import LlmRequest
 from google.genai import types
 
-
 # Gemini Enterprise pre-extracts some uploads (notably .docx, .txt) and ships
 # the result inline as `Blob(mime_type='text/plain', data=...)`. ADK's
 # Anthropic adapter has no branch for text/* inline_data and raises
@@ -31,24 +30,25 @@ from google.genai import types
 # adapter's per-part translator to map any text/* Blob to a TextBlockParam.
 # The function is named `part_to_message_block` in ADK ≤1.32 and
 # `_part_to_message_block` in ADK ≥1.33 — wrap whichever is present.
-for _attr in ('part_to_message_block', '_part_to_message_block'):
-  _orig = getattr(_anthropic_llm, _attr, None)
-  if _orig is None:
-    continue
+for _attr in ("part_to_message_block", "_part_to_message_block"):
+    _orig = getattr(_anthropic_llm, _attr, None)
+    if _orig is None:
+        continue
 
-  def _make_wrapper(orig):
-    def _wrapper(part, *args, **kwargs):
-      blob = getattr(part, 'inline_data', None)
-      mime = getattr(blob, 'mime_type', None) if blob else None
-      if mime and mime.startswith('text/'):
-        return _anthropic_types.TextBlockParam(
-            type='text',
-            text=blob.data.decode('utf-8', errors='replace'),
-        )
-      return orig(part, *args, **kwargs)
-    return _wrapper
+    def _make_wrapper(orig):
+        def _wrapper(part, *args, **kwargs):
+            blob = getattr(part, "inline_data", None)
+            mime = getattr(blob, "mime_type", None) if blob else None
+            if mime and mime.startswith("text/"):
+                return _anthropic_types.TextBlockParam(
+                    type="text",
+                    text=blob.data.decode("utf-8", errors="replace"),
+                )
+            return orig(part, *args, **kwargs)
 
-  setattr(_anthropic_llm, _attr, _make_wrapper(_orig))
+        return _wrapper
+
+    setattr(_anthropic_llm, _attr, _make_wrapper(_orig))
 
 
 # === OPTIONAL: Web Grounding for Enterprise — uncomment block (1) imports
@@ -108,18 +108,18 @@ async def _resolve_marker(
     name: str,
     artifact_keys: set[str],
 ):
-  """Load the artifact a GE filename marker refers to.
+    """Load the artifact a GE filename marker refers to.
 
-  Falls back to the empty-string key — GE has been observed to store some
-  binary uploads under '' instead of the filename. Only useful for the
-  single-file case; if multiple uploads collide on '' there's nothing we
-  can do downstream.
-  """
-  if name in artifact_keys:
-    return await callback_context.load_artifact(name)
-  if '' in artifact_keys:
-    return await callback_context.load_artifact('')
-  return None
+    Falls back to the empty-string key — GE has been observed to store some
+    binary uploads under '' instead of the filename. Only useful for the
+    single-file case; if multiple uploads collide on '' there's nothing we
+    can do downstream.
+    """
+    if name in artifact_keys:
+        return await callback_context.load_artifact(name)
+    if "" in artifact_keys:
+        return await callback_context.load_artifact("")
+    return None
 
 
 # === OPTIONAL: Web search — uncomment to enable. ===
@@ -132,7 +132,7 @@ async def _resolve_marker(
 #   Use this for questions about current events, regulations, recent
 #   publications, market data, clinical trial updates, or any factual
 #   lookup the assistant can't answer reliably from training data alone.
-#   The index is updated on a 6–24 hour cadence and is the compliance-
+#   The index is updated on a 6-24 hour cadence and is the compliance-
 #   controlled variant of Google web search (no customer data logging,
 #   VPC-SC compatible) — appropriate for healthcare, finance, and
 #   public-sector use cases.
@@ -399,7 +399,4 @@ root_agent = Agent(
     # ),
 )
 
-app = App(
-    root_agent=root_agent,
-    name="app"
-)
+app = App(root_agent=root_agent, name="app")
