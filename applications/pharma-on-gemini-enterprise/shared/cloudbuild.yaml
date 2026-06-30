@@ -83,23 +83,15 @@ steps:
         # Create deployment_metadata.json to target the existing engine
         echo "{\"remote_agent_runtime_id\": \"$$ENGINE_ID\", \"deployment_target\": \"agent_runtime\"}" > deployment_metadata.json
 
-        # Default logs path prefix to agent_id if not specified
-        LOGS_PREFIX="${_LOGS_PATH_PREFIX}"
-        if [ -z "$$LOGS_PREFIX" ]; then
-          AGENT_ID=$(cat /workspace/agent_id.txt)
-          LOGS_PREFIX="$$AGENT_ID"
-        fi
-
         # Base env vars
         ENV_VARS_ARR=(
           "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=${_ENABLE_TELEMETRY}"
           "OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK=upload"
-          "OTEL_INSTRUMENTATION_GENAI_UPLOAD_BASE_PATH=gs://$$LOGS_BUCKET/$$LOGS_PREFIX"
+          "OTEL_INSTRUMENTATION_GENAI_UPLOAD_BASE_PATH=gs://$$LOGS_BUCKET/$_GENAI_TELEMETRY_PATH"
           "OTEL_INSTRUMENTATION_GENAI_UPLOAD_FORMAT=jsonl"
           "OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental"
           "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT"
           "LOGS_BUCKET_NAME=$$LOGS_BUCKET"
-          "GENAI_TELEMETRY_PATH=$$LOGS_PREFIX"
         )
 
         # Append additional dynamic env vars if provided
@@ -112,7 +104,7 @@ steps:
         ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
 
         # Deploy the agent using agents-cli
-        uvx google-agents-cli@0.5.1 deploy \
+        uvx google-agents-cli@0.6.1 deploy \
             --project=$PROJECT_ID \
             --region=${_REGION} \
             --deployment-target=agent_runtime \
@@ -145,7 +137,7 @@ steps:
 
         # Run publish command
         export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
-        uvx google-agents-cli@0.5.1 publish gemini-enterprise \
+        uvx google-agents-cli@0.6.1 publish gemini-enterprise \
           --agent-runtime-id="$$ENGINE_ID" \
           --gemini-enterprise-app-id="${_GEMINI_ENTERPRISE_APP_ID}" \
           --display-name="$$AGENT_DISPLAY_NAME" \
@@ -155,12 +147,12 @@ steps:
 
 substitutions:
   _AGENT_DIR: "." # e.g. applications/pharma-on-gemini-enterprise/model-garden-on-gemini-enterprise
-  _ENABLE_TELEMETRY: "false"
+  _ENABLE_TELEMETRY: "true"
   _GEMINI_ENTERPRISE_APP_ID: ""
   _REGION: us-central1  
   _TF_STATE_BUCKET: ""
   _LOGS_BUCKET_NAME: "" # Optional: Bring your own bucket
-  _LOGS_PATH_PREFIX: "" # Optional: Customize path prefix in bucket (defaults to AGENT_ID)
+  _GENAI_TELEMETRY_PATH: "completions"
   _ENV_VARS: "" # Optional: Extra env vars (semicolon-separated, e.g. "MODEL_NAME=gemini-3.5-flash;MODEL_LOCATION=global")
 
 options:

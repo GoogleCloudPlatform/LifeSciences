@@ -1,2 +1,5 @@
 name: model-garden-agent
+acli_version: 0.6.1
 agent_directory: app
+create_params:
+  deployment_target: agent_runtime

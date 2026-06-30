@@ -21,7 +21,7 @@ client, and HTML/JSON parsers all still work after a refactor.
 
 Run from the agent project root via pytest:
 
-    uv run pytest tests/test_smoke.py -v
+    uv run pytest tests/integration/test_smoke.py -v
 """
 
 from __future__ import annotations
