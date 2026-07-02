@@ -15,9 +15,9 @@
 # FoldRun Unified Analysis Job - Cloud Run Job Dockerfile
 
 # Stage 1: Build environment
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:0.8.15 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -34,7 +34,7 @@ COPY foldrun_analysis/ ./foldrun_analysis/
 RUN uv sync --frozen --no-dev --no-editable
 
 # Stage 2: Runtime image
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 

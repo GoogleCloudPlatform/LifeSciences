@@ -15,7 +15,7 @@
 steps:
   # 0. Get Agent ID from pyproject.toml
   - id: 'get-agent-id'
-    name: 'python:3.13-slim'
+    name: 'python:3.14-slim'
     dir: '${_AGENT_DIR}'
     entrypoint: 'python3'
     args:
@@ -29,7 +29,7 @@ steps:
 
   # 1. Terraform Init
   - id: 'tf-init'
-    name: 'hashicorp/terraform:1.15.6'
+    name: 'hashicorp/terraform:1.15.7'
     dir: '${_AGENT_DIR}/terraform'
     entrypoint: 'sh'
     args:
@@ -45,7 +45,7 @@ steps:
 
   # 2. Terraform Apply
   - id: 'tf-apply'
-    name: 'hashicorp/terraform:1.15.6'
+    name: 'hashicorp/terraform:1.15.7'
     dir: '${_AGENT_DIR}/terraform'
     entrypoint: 'sh'
     args:
@@ -64,7 +64,7 @@ steps:
 
   # 3. Deploy Agent
   - id: 'deploy-agent'
-    name: 'python:3.13-slim'
+    name: 'python:3.14-slim'
     dir: '${_AGENT_DIR}'
     entrypoint: 'bash'
     args:
@@ -115,7 +115,7 @@ steps:
 
   # 4. [Optional] Register Agent with Gemini Enterprise
   - id: 'register-agent'
-    name: 'python:3.13-slim'
+    name: 'python:3.14-slim'
     dir: '${_AGENT_DIR}'
     entrypoint: 'bash'
     args:
