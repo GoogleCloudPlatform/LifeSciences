@@ -12,7 +12,7 @@ dependencies = [
     "matplotlib>=3.10.0",
     "seaborn>=0.13.2",
     "pyyaml>=6.0",
-    "jax[cpu]==0.4.38",
+    "jax[cpu]==0.10.2",
     "dm-tree>=0.1.9",
 ]
 
