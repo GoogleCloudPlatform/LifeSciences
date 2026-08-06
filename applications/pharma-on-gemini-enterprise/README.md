@@ -8,6 +8,7 @@ A collection of [Gemini Enterprise](https://cloud.google.com/products/gemini/ent
 | --- | --- |
 | [Model Garden Agent](model-garden-on-gemini-enterprise) | Deploy third-party models from Agent Platform Model Garden (Anthropic Claude) to Gemini Enterprise. Bundles a GE file-attachment shim plus optional [Web Grounding for Enterprise](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/grounding/web-grounding-enterprise) search and an [Agent Runtime Code Execution](https://docs.cloud.google.com/gemini-enterprise-agent-platform/scale/sandbox/code-execution-overview) sandbox for analyzing CSV / Excel / JSON / Parquet attachments. |
 | [PaperBanana Agent](paperbanana-on-gemini-enterprise) | Lite ADK port of Google Research's [PaperVizAgent](https://github.com/google-research/papervizagent) (Apache-2.0; originally published as PaperBanana). Attach a research paper PDF and chat about what figure you want — the agent runs an ADK `SequentialAgent` + `LoopAgent` plan / stylize / render / critique / refine pipeline using Gemini 3 + Nano Banana Pro at 4K. Follow-up turns iterate on the result in edit mode. |
+| [Argus Agent](argus-on-gemini-enterprise) | Life-sciences M&A due-diligence agent. Supports quick questions via specialist sub-agents (regulatory/scientific, clinical, financial, market), target screening from an acquirer thesis, and a deep-diligence pipeline running 6 concurrent analysts (scientific PoS, competitive, clinical/regulatory, commercial, financial/deal, IP/exclusivity). Synthesizes findings into investment-grade whitepaper PDFs with code-generated matplotlib charts and conceptual infographics, plus 16:9 executive overview slides. |
 | [BioCompass Agent](biocompass-on-gemini-enterprise) | Biomedical literature research agent for pharma R&D, medical affairs, and clinical / HEOR. Light PubMed lookups + PubTator3 entity analysis + a deep-research `SequentialAgent[ParallelAgent → Synth → Critic loop]` over PubMed + Europe PMC + bioRxiv/medRxiv + ClinicalTrials.gov, plus Nano Banana Pro for concept visualization and a `SkillToolset` shipping six pharma methodology skills (PICO, PRISMA, MoA, target dossier, competitive scan, PV signal scan). |
 
 ## Getting started
@@ -26,7 +27,8 @@ When deploying using the shared Cloud Build pipeline (`shared/cloudbuild.yaml`),
 5.  **Gemini Enterprise Admin (`roles/discoveryengine.agentspaceAdmin`)**: (Optional) Only required if you provide `_GEMINI_ENTERPRISE_APP_ID` to register the agent with your Gemini Enterprise App.
 6.  **Cloud Logging Writer (`roles/logging.logWriter`)**: (Required) to write build logs.
 7.  **BigQuery Admin (`roles/bigquery.admin`)**: (Biocompass Only) Required to create and manage BigQuery resources, including remote models.
-8.  **Service Usage Admin (`roles/serviceusage.serviceUsageAdmin`)**: Required to enable required APIs (Agent Platform, Cloud Storage).
+8.  **Secret Manager Admin (`roles/secretmanager.admin`)**: Required to create and manage Secret Manager secrets and configure IAM policies on them .
+9.  **Service Usage Admin (`roles/serviceusage.serviceUsageAdmin`)**: Required to enable required APIs (Agent Platform, Cloud Storage, Secret Manager).
 
 ### Setup Script
 
@@ -53,7 +55,7 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="roles/storage.objectAdmin"
 
-# 4 Grant Storage Admin on the bucket used for logs data.
+# 4. Grant Storage Admin on the bucket used for logs data.
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="roles/storage.admin"
@@ -78,7 +80,12 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="roles/bigquery.admin"
 
-# 9. Grant Service Usage Admin
+# 9. [Optional] Grant Secret Manager Admin
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${SA_EMAIL}" \
+    --role="roles/secretmanager.admin"
+
+# 10. Grant Service Usage Admin
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="roles/serviceusage.serviceUsageAdmin"

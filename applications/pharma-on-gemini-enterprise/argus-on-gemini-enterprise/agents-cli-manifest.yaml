@@ -1,0 +1,5 @@
+name: argus-agent
+acli_version: 1.2.1
+agent_directory: app
+create_params:
+  deployment_target: agent_runtime

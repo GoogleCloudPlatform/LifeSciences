@@ -1,0 +1,193 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "quick_financial_insmed_cash_runway",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "What's Insmed's latest reported cash position and roughly how many months of runway does it have?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The response must evaluate Insmed's financial position using SEC EDGAR filings.\n\nKey Requirements:\n1. Agent Routing & Tool Selection:\n   - Handled directly by the coordinator or delegated to the financial_analyst specialist sub-agent using SEC EDGAR tools (edgar_find_company, edgar_key_financials, edgar_recent_filings).\n2. Liquidity & Financial Figures:\n   - Identify Insmed Inc. (Ticker: INSM, CIK: 0001104506) and report total liquidity: cash and cash equivalents plus marketable securities / short-term investments from the latest Form 10-Q or Form 10-K filing.\n3. Cash-Runway Calculation:\n   - Compute and explicitly show the cash-runway calculation formula and arithmetic:\n     * Total Liquidity = Cash & Cash Equivalents + Marketable Securities\n     * Quarterly Operating Burn = |Operating Cash Flow| (or quarterly operating burn from cash-flow statement)\n     * Estimated Runway (Months) = Total Liquidity / (Quarterly Burn / 3)\n4. Risk & Leverage Assessment:\n   - Evaluate whether the estimated runway exceeds or falls below the 18-month threshold, assessing financing risk and negotiating leverage for an acquirer.\n5. Sourcing & Citations:\n   - Include inline citations to the primary SEC filing (Form 10-Q/10-K, reporting period, SEC accession URL or CIK).\n   - Conclude with a dedicated Sources section listing all primary filings retrieved."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "quick_scientific_brensocatib_moa_fda",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "What is brensocatib's mechanism of action, bioactivity, and what did the FDA highlight in its review? Cite primary sources."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The response must provide a sourced scientific and regulatory summary of brensocatib (INS1007).\n\nKey Requirements:\n1. Agent Routing & Skills:\n   - Handled by the coordinator or delegated to the regulatory_scientific_analyst sub-agent using Google Cloud Agent Registry science skills (private-openfda-database, private-chembl-database, private-opentargets-database, private-uniprot-database) and web_search.\n2. Mechanism of Action (MoA) & Target Biology:\n   - Explain that brensocatib is an oral, reversible, selective inhibitor of dipeptidyl peptidase 1 (DPP1 / Cathepsin C / CTSC).\n   - Detail that DPP1 activates neutrophil serine proteases (NSPs: neutrophil elastase, proteinase 3, cathepsin G) in the bone marrow during neutrophil maturation; inhibiting DPP1 reduces active NSP levels in circulation, suppressing neutrophil-driven inflammatory tissue destruction in non-cystic fibrosis bronchiectasis (NCFB) and related indications.\n   - Cite bioactivity or target binding data (e.g. nanomolar IC50/Ki against DPP1 from ChEMBL or primary literature).\n3. FDA Regulatory Review & Clinical Highlights:\n   - Highlight pivotal clinical data from the Phase 3 ASPEN trial and Phase 2 WILLOW trial (statistically significant reduction in annualized rate of pulmonary exacerbations and prolonged time to first exacerbation vs. placebo).\n   - State FDA regulatory designations (Breakthrough Therapy Designation, Fast Track, Orphan Drug Designation) and safety/tolerability observations (e.g. periodontal conditions, hyperkeratosis).\n4. Sourcing & Citations:\n   - Include primary source citations to scientific/regulatory database identifiers (ChEMBL IDs, UniProt IDs, openFDA review documents/labels, PubMed PMIDs, or ClinicalTrials.gov identifiers like NCT04594369).\n   - Conclude with a dedicated Sources section."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "quick_clinical_summit_ivonescimab_trials",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "What are the key ongoing Phase 3 clinical trials for Summit Therapeutics' ivonescimab, including trial identifiers and comparator arms?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The response must provide a sourced clinical pipeline summary of Summit Therapeutics' ivonescimab (SMT112 / AK112).\n\nKey Requirements:\n1. Agent Routing & Tool Selection:\n   - Handled by the coordinator or delegated to the clinical_analyst specialist sub-agent using science skills (private-clinical-trials-database, private-openfda-database, private-pubmed-database) and web_search.\n2. Key Phase 3 Clinical Trials:\n   - Identify lead asset ivonescimab as a first-in-class PD-1/VEGF bispecific antibody.\n   - Detail pivotal Phase 3 trials from ClinicalTrials.gov with condition, phase, comparator arm, and endpoints:\n     * HARMONI (NCT05184712) in EGFR-mutated locally advanced/metastatic non-squamous NSCLC progressing after EGFR-TKI (ivonescimab + chemotherapy vs. placebo + chemotherapy).\n     * HARMONI-2 (NCT05499390) in first-line advanced NSCLC with PD-L1 positive tumors (head-to-head ivonescimab monotherapy vs. pembrolizumab / Keytruda monotherapy, demonstrating statistically significant progression-free survival benefit).\n     * HARMONI-3 (NCT05899608) in first-line metastatic squamous NSCLC (ivonescimab + chemotherapy vs. tislelizumab/pembrolizumab + chemotherapy).\n     * HARMONI-7 (NCT06716073) in first-line high PD-L1 expressing metastatic NSCLC.\n3. Formatting & Sourcing:\n   - Present clinical trials in a clear structured markdown pipeline table with NCT identifiers, trial phase, indication, and comparator.\n   - Provide inline citations to ClinicalTrials.gov NCT IDs and conclude with a dedicated Sources section."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "quick_financial_summit_burn_profitability",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Is Summit Therapeutics profitable, and what's its quarterly burn?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The response must answer the financial health question for Summit Therapeutics Inc. (SMMT) from SEC filings.\n\nKey Requirements:\n1. Agent Routing & Tool Selection:\n   - Handled by the coordinator or delegated to the financial_analyst specialist sub-agent using SEC EDGAR tools (edgar_find_company, edgar_key_financials, edgar_recent_filings).\n2. Profitability Assessment:\n   - State unequivocally that Summit Therapeutics (CIK: 0001599298) is a clinical-stage biopharmaceutical company that is not profitable and operates at an ongoing net loss.\n3. Financial Figures & Quarterly Burn:\n   - Report the latest net loss and quarterly operating cash burn (|operating cash flow|) from the latest Form 10-Q or Form 10-K filing.\n   - Report total liquidity (cash, cash equivalents, short-term investments / marketable securities) and compute/discuss the implied cash runway.\n   - Highlight primary expenditure drivers (R&D clinical trial programs for ivonescimab vs G&A).\n4. Sourcing & Citations:\n   - Cite primary SEC filings (Form 10-Q/10-K, reporting period, SEC accession URL or CIK).\n   - Conclude with a dedicated Sources section."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "screening_merck_keytruda_oncology",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Merck faces the Keytruda patent cliff in 2028. Recommend 5 acquisition targets under $15B in oncology/immunology, Phase 3 or commercial stage, that could offset the revenue loss. Give strategic fit and the biggest risk for each."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The response must provide a structured, ranked shortlist of 5 acquisition targets for Merck & Co. tailored to the Keytruda (pembrolizumab) loss of exclusivity (LOE) thesis.\n\nKey Requirements:\n1. Agent Routing & Methodology:\n   - Handled by the coordinator agent in target screening mode, loading the target-screening skill via load_skill, and using web_search, edgar_full_text_search, and specialist sub-agents.\n2. Target Screening Criteria:\n   - Therapeutic area: Oncology / Immunology\n   - Stage: Phase 3 clinical development or commercial stage\n   - Valuation: Under $15B enterprise value / market capitalization\n   - Strategic goal: Offset Keytruda revenue cliff via complementary immuno-oncology (IO) mechanisms, bispecific antibodies, cell therapies, ADCs, or late-stage oncology assets.\n3. Recommended Candidates (5 relevant biotech companies):\n   - Recommends 5 credible targets such as Summit Therapeutics (ivonescimab, PD-1/VEGF bispecific, Phase 3 HARMONI trials), Legend Biotech (Carvykti / BCMA CAR-T, commercial), Arcellx (anito-cel / BCMA CAR-T, Phase 2/3), Insmed (brensocatib / Arikayce, Phase 3 / commercial), Ideaya Biosciences (darovasertib / PRMT5), Syndax Pharmaceuticals (revumenib / axatilimab), SpringWorks Therapeutics (Ogsiveo / nirogacestat), or comparable oncology/immunology biopharma.\n4. Content per Candidate:\n   - Candidate company name and ticker/valuation\n   - Lead asset and mechanism of action\n   - Development/commercial stage\n   - Strategic fit rationale (how the asset addresses Keytruda LOE)\n   - Single biggest risk (clinical, regulatory, competition, or IP/licensing terms)\n5. Structure & Sourcing:\n   - Present candidates in a ranked comparison table including a Source column.\n   - Include an explicit Sources section citing SEC filings, clinical trial registries, or industry data.\n   - Proactively offer to produce a full investment-grade whitepaper on any of the shortlisted candidates."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "screening_adc_targets_under_2b",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Recommend 5 ADC-focused acquisition targets under $2B for a large-cap oncology buyer."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The response must provide a structured screening shortlist of 5 antibody-drug conjugate (ADC) biotech acquisition targets valued under $2B for a large-cap pharma buyer.\n\nKey Requirements:\n1. Agent Routing & Methodology:\n   - Handled by the coordinator agent in target screening mode, loading the target-screening skill via load_skill, and utilizing web_search, edgar_full_text_search, and specialist sub-agents.\n2. Target Screening Criteria:\n   - Modality: Antibody-Drug Conjugates (ADCs) and ADC platform technologies\n   - Valuation: Under $2B market cap / enterprise value\n   - Acquirer perspective: Large-cap biopharma seeking proprietary payloads, novel target antigens, or site-specific linker/conjugation platforms.\n3. Recommended Candidates (5 distinct ADC biotechs):\n   - Recommends 5 credible ADC players such as Mersana Therapeutics (Dolasynthen / Immunosynthen platforms), Sutro Biopharma (XpressCF cell-free platform, luveltamab tazevibulin), Pyxis Oncology (PYX-201, flexible ADC platform), Heidelberg Pharma (ATAC amatoxin platform), ADC Therapeutics (Zynlonta), Elevation Oncology (EO-3021 / Claudin 18.2), Tubulis, or comparable ADC specialists under $2B.\n4. Content per Candidate:\n   - Company name and ticker/market cap\n   - ADC platform, linker/payload class (e.g. topoisomerase I inhibitors, auristatins), and lead target antigens\n   - Pipeline development stage\n   - Strategic fit rationale and competitive differentiation\n   - Key risk (e.g. clinical safety/toxicity, therapeutic index, cash runway)\n5. Formatting & Sourcing:\n   - Formatted as a structured comparison table with a Source column.\n   - Conclude with a dedicated Sources section and offer deeper diligence / whitepaper generation."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "whitepaper_summit_therapeutics_merck",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Produce a full acquisition-assessment whitepaper on Summit Therapeutics (SMMT) for Merck. Frame it around Merck's Keytruda patent-cliff problem: assess whether acquiring ivonescimab — the PD-1/VEGF bispecific that beat Keytruda head-to-head in HARMONI-2 — is a credible way to defend its oncology franchise. Cover scientific probability of success, competitive landscape, clinical and regulatory status, commercial/peak-sales potential, financials with a cash-runway read and comparable-deal valuation, and IP/exclusivity. Give a recommendation with conviction level and generate the PDF."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The agent must invoke the deep diligence workflow pipeline via `launch_deep_diligence` to conduct comprehensive acquisition diligence across all six specialized pillars, generate data charts and infographic, produce the whitepaper PDF, and return an executive summary.\n\nKey Requirements:\n1. ADK v2 Workflow DAG Orchestration:\n   - The coordinator calls launch_deep_diligence with target_company='Summit Therapeutics' and acquirer_thesis='Merck Keytruda patent cliff defense', setting tool_context.actions.route = 'deep_report'.\n   - Root workflow transitions to deep_report_pipeline:\n     * START -> parallel_analysts: six specialist analysts execute concurrently in parallel (scientific_pos_analyst, competitive_analyst, clinical_regulatory_analyst, commercial_analyst, financial_deal_analyst, ip_fto_analyst), each writing findings to session state via output_key.\n     * parallel_analysts -> join_analyst_findings: JoinNode barrier synchronizes completion of all 6 branches.\n     * join_analyst_findings -> report_synthesizer: synthesizer loads whitepaper-template skill, builds visuals, writes report, and calls generate_whitepaper_pdf.\n2. Six Diligence Pillars Coverage:\n   - Scientific PoS: Assess dual PD-1/VEGF bispecific mechanism (ivonescimab / SMT112 / AK112), cooperative binding biology, HARMONI-2 head-to-head clinical efficacy data vs. pembrolizumab (Keytruda) in first-line NSCLC, and provide an explicit qualitative PoS rating (High/Medium).\n   - Competitive Landscape: Evaluate positioning against standard-of-care Keytruda, competing PD-1/VEGF and bispecific programs, and Akeso partnership dynamics.\n   - Clinical & Regulatory: Detail global trial program (HARMONI, HARMONI-2, HARMONI-3, HARMONI-7), FDA designations (Breakthrough/Fast Track), global regulatory pathway, and VEGF-related safety profile.\n   - Commercial & Peak-Sales: Estimate addressable NSCLC and broader oncology patient population, pricing outlook, and peak sales potential.\n   - Financials & Deal Comps: Balance sheet liquidity from SEC EDGAR, quarterly operating cash burn, cash runway calculation, and comparable immuno-oncology M&A transactions.\n   - IP & Exclusivity: Akeso licensing agreement terms (US, Europe, Japan, Latin America), royalty/milestone obligations, patent expiration runway, and freedom-to-operate.\n3. Visuals & Artifacts:\n   - Generate code-based data charts with bar_chart, line_chart, or horizontal_bar_chart (burn trajectory, cash trend, peak sales/trial comparisons) and conceptual infographic via make_infographic.\n   - Author structured markdown with inline footnote citations ([^key]) tied to a ## References section.\n   - Generate downloadable PDF using generate_whitepaper_pdf.\n4. Executive Summary:\n   - Provide a clear M&A recommendation (Pursue / Pursue with conditions / Pass / Monitor) with an explicit conviction level (High / Medium / Low), top value driver, biggest risk, and notice that the PDF is available in the Artifacts tab."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "whitepaper_insmed_respiratory_rare_disease",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Give me a full acquisition whitepaper on Insmed (INSM) for a large-cap respiratory/rare-disease acquirer."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The agent must invoke the deep diligence workflow pipeline via `launch_deep_diligence` to conduct full acquisition diligence on Insmed Inc. (INSM) for a large-cap respiratory/rare-disease buyer, generate visuals and the downloadable PDF, and return an executive summary.\n\nKey Requirements:\n1. ADK v2 Workflow DAG Orchestration:\n   - The coordinator invokes launch_deep_diligence with target_company='Insmed' and acquirer_thesis='respiratory/rare-disease acquirer', setting route='deep_report'.\n   - Transitions to deep_report_pipeline running 6 parallel analysts (scientific_pos_analyst, competitive_analyst, clinical_regulatory_analyst, commercial_analyst, financial_deal_analyst, ip_fto_analyst), synchronized by JoinNode (join_analyst_findings), and synthesized by report_synthesizer.\n2. Multi-Pillar Diligence Coverage:\n   - Scientific PoS: Assess brensocatib (oral DPP1 inhibitor for non-CF bronchiectasis / NCFB), Arikayce (liposomal amikacin for refractory MAC lung disease), and TPIP (inhaled treprostinil palmitil for PH-ILD/PAH).\n   - Competitive Landscape: Analyze first-in-class moat of brensocatib in NCFB vs. standard of care (mucolytics, chronic macrolides) and competitive pipeline.\n   - Clinical & Regulatory: Review pivotal Phase 3 ASPEN trial results for brensocatib, regulatory submissions (NDA/MAA), FDA designations, and TPIP Phase 2 progress.\n   - Commercial & Market: Model epidemiology and high unmet need in bronchiectasis (>500k diagnosed US/EU patients), Arikayce commercial revenue trajectory, and brensocatib multi-billion dollar peak sales potential.\n   - Financials & Valuation: Extract balance sheet data from SEC EDGAR (cash, marketable securities, convertible debt), quarterly cash burn, cash runway, and comparable rare-disease M&A comps.\n   - IP & Exclusivity: Patent exclusivity runway for brensocatib and Arikayce, orphan drug market exclusivities, and freedom-to-operate.\n3. Visuals & Artifact Generation:\n   - Create code-generated matplotlib data charts (cash/burn trend, market sizing) and conceptual infographic via make_infographic.\n   - Render and save the full whitepaper with inline footnote citations ([^key]) and ## References as a downloadable PDF via generate_whitepaper_pdf.\n4. Executive Summary:\n   - Deliver an executive summary with headline M&A recommendation, conviction level, key value drivers, primary risks, and artifact download notice."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "overview_slide_summit_merck",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Create a 16:9 executive overview slide summarizing the key findings, recommendation, and value drivers for Summit Therapeutics."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The agent must generate a 16:9 executive presentation slide artifact summarizing the acquisition diligence for Summit Therapeutics.\n\nKey Requirements:\n1. Tool Invocation:\n   - The coordinator agent calls generate_slide with a concise title, subtitle, and structured on-slide summary body.\n2. Slide Content & Structure:\n   - Clear headline recommendation (e.g. Pursue / Pursue with conditions) with conviction level.\n   - Core investment thesis highlighting ivonescimab (PD-1/VEGF bispecific) and HARMONI-2 head-to-head clinical efficacy vs. Keytruda.\n   - Key value drivers (first-line NSCLC market potential, multi-indication oncology expansion).\n   - Primary deal risks (Akeso licensing dependency, VEGF-related adverse events, clinical trial execution).\n3. Artifact Delivery:\n   - The tool generates a 16:9 PNG presentation slide artifact saved to the session artifacts.\n   - The agent responds confirming the slide creation and instructs the user that the slide artifact is ready for download in the Artifacts tab."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

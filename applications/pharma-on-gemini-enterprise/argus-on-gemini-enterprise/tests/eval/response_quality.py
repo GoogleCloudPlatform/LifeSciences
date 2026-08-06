@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
- 
+
 """Local LLM-as-judge for `custom_response_quality` (see eval_config.yaml)."""
 
 from google import genai
@@ -46,7 +46,7 @@ def evaluate(instance):
 
     client = genai.Client()  # AI Studio (GEMINI_API_KEY) or Agent Platform (ADC)
     response = client.models.generate_content(
-        model="gemini-3.6-flash",
+        model="gemini-3.7-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0,  # deterministic grading

@@ -96,6 +96,18 @@ steps:
         # Exclude non-runtime assets from Agent Runtime upload to stay under 8MB limit
         printf ".git\n.gitignore\n.venv\n__pycache__\n*.pyc\ndocs\nterraform\ndeployment\ntests\n\n.env" > .gcloudignore
 
+        # Optional deploy arguments (e.g. secrets)
+        DEPLOY_ARGS=()
+        if [ ! -z "${_SECRETS}" ]; then
+          SECRETS_ARR=()
+          IFS=';' read -r -a SECRETS_ADDR <<< "${_SECRETS}"
+          for s in "$${SECRETS_ADDR[@]}"; do
+            SECRETS_ARR+=("$$s")
+          done
+          SECRETS_STR=$(IFS=,; echo "$${SECRETS_ARR[*]}")
+          DEPLOY_ARGS+=(--secrets="$$SECRETS_STR")
+        fi
+
         # Deploy the agent using agents-cli
         uvx google-agents-cli@1.2.1 deploy \
             --project=$PROJECT_ID \
@@ -104,6 +116,7 @@ steps:
             --agent-identity \
             --service-name="$$AGENT_DISPLAY_NAME" \
             --update-env-vars="$$ENV_VARS" \
+            "$${DEPLOY_ARGS[@]}" \
             --no-confirm-project
 
   # 4. [Optional] Register Agent with Gemini Enterprise
@@ -145,6 +158,8 @@ substitutions:
   _TF_STATE_BUCKET: ""
   _LOGS_BUCKET_NAME: "" # Optional: Bring your own bucket
   _ENV_VARS: "" # Optional: Extra env vars (semicolon-separated, e.g. "MODEL_NAME=gemini-3.6-flash;MODEL_LOCATION=global")
+  _SECRETS: "" # Optional: Secrets to inject (semicolon-separated, e.g. "SOME_API_KEY=some-api-key")
 
 options:
   logging: CLOUD_LOGGING_ONLY
+

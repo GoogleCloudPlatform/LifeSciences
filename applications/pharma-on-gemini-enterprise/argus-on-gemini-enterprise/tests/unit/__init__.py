@@ -11,21 +11,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-variable "project_id" {
-  type        = string
-  description = "The GCP Project ID"
-}
-
-variable "region" {
-  type        = string
-  description = "The region to deploy the Agent Runtime"
-  default     = "us-central1"
-}
-
-variable "logs_bucket_name" {
-  type        = string
-  description = "Existing GCS bucket to use for logs. If not provided, a new one will be created."
-  default     = null
-}
-

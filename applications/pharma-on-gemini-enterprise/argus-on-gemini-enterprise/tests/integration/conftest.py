@@ -12,20 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-variable "project_id" {
-  type        = string
-  description = "The GCP Project ID"
-}
+import os
 
-variable "region" {
-  type        = string
-  description = "The region to deploy the Agent Runtime"
-  default     = "us-central1"
-}
+from dotenv import load_dotenv
 
-variable "logs_bucket_name" {
-  type        = string
-  description = "Existing GCS bucket to use for logs. If not provided, a new one will be created."
-  default     = null
-}
-
+load_dotenv()
+os.environ.setdefault("EDGAR_USER_AGENT", "ArgusTest/1.0 test@example.com")

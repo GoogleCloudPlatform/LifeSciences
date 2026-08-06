@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-variable "project_id" {
-  type        = string
-  description = "The GCP Project ID"
-}
+FROM python:3.13-slim
 
-variable "region" {
-  type        = string
-  description = "The region to deploy the Agent Runtime"
-  default     = "us-central1"
-}
+COPY --from=ghcr.io/astral-sh/uv:0.8.13 /uv /uvx /bin/
 
-variable "logs_bucket_name" {
-  type        = string
-  description = "Existing GCS bucket to use for logs. If not provided, a new one will be created."
-  default     = null
-}
+WORKDIR /code
 
+COPY ./pyproject.toml ./README.md ./uv.lock* ./
+
+COPY ./app ./app
+
+RUN uv sync --frozen
+
+ARG AGENT_VERSION=0.0.0
+ENV AGENT_VERSION=${AGENT_VERSION}
+
+EXPOSE 8080
+
+CMD ["uv", "run", "uvicorn", "app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]

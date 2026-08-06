@@ -145,3 +145,4 @@ resource "google_storage_bucket_iam_member" "logs_agent_identity" {
   role   = "roles/storage.objectUser"
   member = "principal://${google_vertex_ai_reasoning_engine.agent.spec[0].effective_identity}"
 }
+

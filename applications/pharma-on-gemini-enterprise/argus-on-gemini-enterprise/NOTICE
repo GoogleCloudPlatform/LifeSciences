@@ -1,0 +1,9 @@
+Third-party services / data providers this agent calls at runtime (not redistributed here):
+
+  * Google DeepMind Science Skills (https://github.com/google-deepmind/science-skills)
+    — open scientific and clinical databases (openFDA, ClinicalTrials.gov, ChEMBL,
+    Open Targets, UniProt, PubMed).
+  * SEC EDGAR (https://www.sec.gov/edgar) — public company filings. Subject to
+    the SEC's fair-access policy, which requires a declared User-Agent; see
+    EDGAR_USER_AGENT in .env.example.
+
