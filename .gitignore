@@ -7,3 +7,6 @@ GEMINI.md
 CLAUDE.md
 llms-full.txt
 llms.txt
+
+.agents
+skills-lock.json

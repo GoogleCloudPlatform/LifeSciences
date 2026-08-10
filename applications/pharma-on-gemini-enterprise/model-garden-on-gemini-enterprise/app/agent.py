@@ -124,7 +124,7 @@ async def _resolve_marker(
 
 # === OPTIONAL: Web search — uncomment to enable. ===
 #
-# _SEARCH_MODEL = os.getenv('SEARCH_MODEL_NAME', 'gemini-3.5-flash')
+# _SEARCH_MODEL = os.getenv('SEARCH_MODEL_NAME', 'gemini-3.6-flash')
 #
 # def enterprise_web_search(query: str) -> dict:
 #   """Search the curated enterprise web index for a grounded answer.

@@ -52,7 +52,7 @@ root_agent (LlmAgent, Gemini 3 Pro, conversational)
 1. A Google Cloud project with billing enabled
 2. A [Gemini Enterprise](https://cloud.google.com/products/gemini/enterprise) subscription (only needed for GE registration; local testing works without)
 3. [Agent Platform API](https://console.cloud.google.com/apis/library/aiplatform.googleapis.com) enabled
-4. Access to `gemini-3.1-pro-preview`, `gemini-3.5-flash`, and `gemini-3-pro-image` (all served from the `global` endpoint)
+4. Access to `gemini-3.1-pro-preview`, `gemini-3.6-flash`, and `gemini-3-pro-image` (all served from the `global` endpoint)
 5. [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed
 6. Python 3.11+
 
@@ -78,7 +78,7 @@ GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID
 GOOGLE_CLOUD_LOCATION=us-central1
 MODEL_LOCATION=global
 COORDINATOR_MODEL_NAME=gemini-3.1-pro-preview
-WORKER_MODEL_NAME=gemini-3.5-flash
+WORKER_MODEL_NAME=gemini-3.6-flash
 IMAGE_MODEL_NAME=gemini-3-pro-image
 IMAGE_SIZE=2K            # 1K, 2K, or 4K
 MAX_CRITIC_ROUNDS=2

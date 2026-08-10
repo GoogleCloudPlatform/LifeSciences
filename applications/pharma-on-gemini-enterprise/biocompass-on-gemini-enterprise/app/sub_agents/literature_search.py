@@ -26,7 +26,7 @@ from ..tools.eutils import (
     search_pubmed,
 )
 
-_MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.5-flash")
+_MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.6-flash")
 
 literature_search_agent = Agent(
     model=_MODEL,

@@ -273,7 +273,7 @@ The agent ships with a [Web Grounding for Enterprise](https://docs.cloud.google.
 
 ### What enabling it gives you
 
-The tool is a regular Python `FunctionTool` whose implementation makes a Gemini call (`gemini-3.5-flash` by default; override with `SEARCH_MODEL_NAME` in `.env`) with `tools=[Tool(enterprise_web_search=EnterpriseWebSearch())]` and returns:
+The tool is a regular Python `FunctionTool` whose implementation makes a Gemini call (`gemini-3.6-flash` by default; override with `SEARCH_MODEL_NAME` in `.env`) with `tools=[Tool(enterprise_web_search=EnterpriseWebSearch())]` and returns:
 
 ```python
 {

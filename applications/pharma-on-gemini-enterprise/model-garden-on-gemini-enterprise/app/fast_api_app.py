@@ -29,16 +29,12 @@ from app.app_utils.a2a import attach_a2a_routes
 from app.app_utils.reasoning_engine_adapter import (
     attach_reasoning_engine_routes,
 )
-from app.app_utils.telemetry import (
-    setup_agent_engine_telemetry,
-    setup_telemetry,
-)
 from app.app_utils.typing import Feedback
 
 load_dotenv()
-setup_telemetry()
-# Must run before get_fast_api_app to set the tracer provider resource.
-setup_agent_engine_telemetry()
+otel_to_cloud = os.environ.get(
+    "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", ""
+).lower() in ("true", "1")
 _, project_id = google.auth.default()
 logging_client = google_cloud_logging.Client()
 logger = logging_client.logger(__name__)
@@ -82,7 +78,7 @@ app: FastAPI = get_fast_api_app(
     artifact_service_uri=services.ARTIFACT_SERVICE_URI,
     allow_origins=allow_origins,
     session_service_uri=services.SESSION_SERVICE_URI,
-    otel_to_cloud=False,
+    otel_to_cloud=otel_to_cloud,
     lifespan=lifespan,
 )
 app.title = "model-garden-agent"

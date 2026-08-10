@@ -103,8 +103,11 @@ steps:
         fi
         ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
 
+        # Exclude non-runtime assets from Agent Runtime upload to stay under 8MB limit
+        printf ".git\n.gitignore\n.venv\n__pycache__\n*.pyc\ndocs\nterraform\ndeployment\ntests\n" > .gcloudignore
+
         # Deploy the agent using agents-cli
-        uvx google-agents-cli@0.6.1 deploy \
+        uvx google-agents-cli@1.2.1 deploy \
             --project=$PROJECT_ID \
             --region=${_REGION} \
             --deployment-target=agent_runtime \
@@ -137,7 +140,7 @@ steps:
 
         # Run publish command
         export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
-        uvx google-agents-cli@0.6.1 publish gemini-enterprise \
+        uvx google-agents-cli@1.2.1 publish gemini-enterprise \
           --agent-runtime-id="$$ENGINE_ID" \
           --gemini-enterprise-app-id="${_GEMINI_ENTERPRISE_APP_ID}" \
           --display-name="$$AGENT_DISPLAY_NAME" \
@@ -153,7 +156,7 @@ substitutions:
   _TF_STATE_BUCKET: ""
   _LOGS_BUCKET_NAME: "" # Optional: Bring your own bucket
   _GENAI_TELEMETRY_PATH: "completions"
-  _ENV_VARS: "" # Optional: Extra env vars (semicolon-separated, e.g. "MODEL_NAME=gemini-3.5-flash;MODEL_LOCATION=global")
+  _ENV_VARS: "" # Optional: Extra env vars (semicolon-separated, e.g. "MODEL_NAME=gemini-3.6-flash;MODEL_LOCATION=global")
 
 options:
   logging: CLOUD_LOGGING_ONLY

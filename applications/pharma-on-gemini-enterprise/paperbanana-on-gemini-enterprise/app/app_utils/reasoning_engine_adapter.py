@@ -31,6 +31,11 @@ from vertexai.agent_engines.templates.adk import AdkApp
 from app.app_utils import services
 
 
+def _no_op_instrumentor_builder(project_id: str) -> None:
+    """No-op so set_up() keeps the startup instrumentor and generate_content spans."""
+    return None
+
+
 def attach_reasoning_engine_routes(app: FastAPI) -> None:
     """Register reasoning_engine routes that dispatch to an AdkApp."""
     runtime: AdkApp | None = None
@@ -48,6 +53,7 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
                 app=adk_app,
                 session_service_builder=services.get_session_service,
                 artifact_service_builder=services.get_artifact_service,
+                instrumentor_builder=_no_op_instrumentor_builder,
             )
             runtime.set_up()
             operations = runtime.register_operations()
