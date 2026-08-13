@@ -23,7 +23,7 @@
 ## Tech Stack
 
 - **Agent**: Google ADK with up to 30 native Skills (AF2 + OF3 + Boltz-2), deployed to Agent Runtime
-- **A2A**: Agent-to-Agent protocol proxy (Cloud Run) for agent interoperability
+- **A2A**: Native Agent-to-Agent protocol integration for agent interoperability
 - **AI**: Gemini (via Agent Platform)
 - **Compute**: Agent Platform Pipelines, Cloud Run, Cloud Batch
 - **Storage**: GCS (artifacts/results), Filestore (genetic databases)
@@ -197,6 +197,9 @@ Now run the deployment script regularly to build containers and deploy the appli
 ./deploy-all.sh YOUR_PROJECT_ID --steps build    # Only Cloud Build (all containers)
 ./deploy-all.sh YOUR_PROJECT_ID --steps data     # Only database downloads
 DOWNLOAD_MODE=full ./deploy-all.sh YOUR_PROJECT_ID  # Full BFD database (~272GB)
+
+# Deploy and register the agent with a Gemini Enterprise app
+./deploy-all.sh YOUR_PROJECT_ID --gemini-enterprise-app-id YOUR_GEMINI_ENTERPRISE_APP_ID
 ```
 
 **Targeted rebuilds** — rebuild only what changed (much faster than full build):
@@ -278,13 +281,13 @@ The engine ID is printed at the end of `deploy-all.sh` and saved in `foldrun-age
 
 **Use via Gemini CLI (A2A):**
 
-The deploy prints the A2A proxy URL. Create `~/.gemini/agents/foldrun.md`:
+The deploy prints the native A2A endpoint URL. Create `~/.gemini/agents/foldrun.md`:
 ```markdown
 ---
 kind: remote
 name: FoldRun
 description: Protein structure prediction agent
-agent_card_url: https://YOUR_A2A_URL/.well-known/agent.json
+agent_card_url: https://YOUR_REGION-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_ID/locations/YOUR_REGION/reasoningEngines/YOUR_AGENT_RUNTIME_ID/api/a2a/foldrun_app/.well-known/agent-card.json
 auth:
   type: google-credentials
 ---
@@ -316,7 +319,6 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | Artifact Registry | `foldrun-repo` | Container images |
 | Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + OF3 + Boltz-2) |
 | Cloud Run Job | `foldrun-analysis-job` | Parallel prediction analysis (AF2 + OF3 + Boltz-2) |
-| Cloud Run Service | `foldrun-a2a` | A2A protocol proxy for agent interop |
 | Service Account | `foldrun-agent-sa` | Agent's GCP identity |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
 
@@ -398,7 +400,6 @@ foldrun/
 │   ├── openfold3-components/    # OF3 pipeline container
 │   ├── boltz2-components/       # Boltz-2 pipeline container
 │   ├── foldrun-viewer/          # Cloud Run web app (AF2 + OF3 + Boltz-2 3D viewer)
-│   ├── foldrun-a2a/             # Cloud Run A2A protocol proxy
 │   └── foldrun-analysis-job/    # Cloud Run Job (Unified prediction analysis)
 ├── terraform/                   # Infrastructure as code
 ├── cloudbuild.yaml              # CI/CD pipeline
@@ -409,16 +410,11 @@ foldrun/
 ## Architecture
 
 ```
-                     ┌──────────────────┐
-  A2A clients ──→    │  foldrun-a2a     │ ← A2A protocol proxy (Cloud Run)
-                     │  (Cloud Run)     │
-                     └───────┬──────────┘
-                             │ Forwards to
-┌──────────────────┐         │
-│  foldrun-agent   │ ←───────┘  Conversational AI (Gemini Flash + up to 30 Skills)
-│  (Agent Runtime)  │
-└───────┬──────────┘
-        │ Native tool calls
+                      ┌──────────────────┐
+   A2A clients ──→    │  foldrun-agent   │ ← Exposes native A2A endpoints (/api/a2a/foldrun_app)
+                      │  (Agent Runtime)  │   Conversational AI (Gemini Flash + up to 30 Skills)
+                      └───────┬──────────┘
+                              │ Native tool calls
         ├──→ Agent Platform Pipelines  ← AF2 + OF3 + Boltz-2 structure prediction
         ├──→ Cloud Batch          ← Genetic database downloads
         ├──→ Cloud Run Jobs       ← Parallel analysis (AF2 + OF3 + Boltz-2) + Gemini Pro expert analysis

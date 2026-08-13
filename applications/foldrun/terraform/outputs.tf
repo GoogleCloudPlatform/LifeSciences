@@ -82,4 +82,7 @@ output "model_endpoint_location" {
   value       = var.model_endpoint_location
 }
 
-
+output "agent_runtime_id" {
+  description = "The Agent Runtime ID"
+  value       = google_vertex_ai_reasoning_engine.agent_runtime.id
+}

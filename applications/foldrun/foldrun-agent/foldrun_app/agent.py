@@ -22,6 +22,7 @@ import os
 
 from dotenv import load_dotenv
 from google.adk.agents import Agent
+from google.adk.apps import App
 from google.adk.tools import FunctionTool
 
 # Load environment variables from agent's .env
@@ -910,11 +911,9 @@ def create_alphafold_agent(model: str = None) -> Agent:
 
     # Get configuration info from environment
     # Support both VERTEX_* and GCP_* variable names for compatibility
-    project_id = os.getenv("VERTEX_PROJECT_ID") or os.getenv("GCP_PROJECT_ID", "Not configured")
-    region = os.getenv("VERTEX_LOCATION") or os.getenv("GCP_REGION", "us-central1")
-    gcs_bucket = os.getenv("VERTEX_STAGING_BUCKET") or os.getenv(
-        "GCS_BUCKET_NAME", "Not configured"
-    )
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "Not configured")
+    region = os.getenv("GCP_REGION", "us-central1")
+    gcs_bucket = os.getenv("GCS_BUCKET_NAME", "Not configured")
     viewer_base_url = os.getenv("FOLDRUN_VIEWER_URL") or "Not configured"
 
     # Build configuration context for the agent
@@ -1015,19 +1014,5 @@ Show full details including GCS bucket, viewer URL. If any value shows "Not conf
 
     return agent
 
-
-# For direct import
-def get_agent() -> Agent:
-    """Get a configured FoldRun agent instance.
-
-    This is the main entry point for importing the agent.
-
-    Returns:
-        Configured Agent instance
-    """
-    return create_alphafold_agent()
-
-
-# Required for ADK web command
 root_agent = create_alphafold_agent()
-app = root_agent
+app = App(root_agent=root_agent, name="foldrun_app")

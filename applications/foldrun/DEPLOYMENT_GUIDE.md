@@ -170,7 +170,6 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 | Artifact Registry | `foldrun-repo` | Container images |
 | Cloud Run Service | `foldrun-viewer` | 3D structure viewer (IAP-secured) |
 | Cloud Run Job | `foldrun-analysis-job` | Parallel prediction analysis (AF2 + OF3 + Boltz-2) |
-| Cloud Run Service | `foldrun-a2a` | A2A protocol proxy (optional) |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent |
 
 ## 4. Testing and Validation
@@ -277,103 +276,95 @@ access the viewer.
 > ./deploy-all.sh
 > ```
 
-## 5b. A2A Protocol Proxy (Optional)
+## 5b. A2A Protocol Integration (Native)
 
-The A2A (Agent-to-Agent) proxy exposes the FoldRun agent via the [A2A protocol](https://google.github.io/a2a/),
-enabling interoperability with other A2A-compatible agents. The proxy is a thin Cloud Run
-service that forwards requests to the Agent Runtime deployment.
+The FoldRun agent natively exposes endpoints via the [A2A protocol](https://google.github.io/a2a/) directly from the Agent Runtime deployment, enabling interoperability with other A2A-compatible agents without requiring a separate proxy service.
 
-### Deploy the A2A Proxy
+### Exposing the A2A Endpoint
 
-The A2A proxy is built and deployed automatically by `deploy-all.sh` via Cloud Build.
-To deploy it standalone:
-
-```bash
-cd src/foldrun-a2a
-bash deploy.sh YOUR_PROJECT_ID
+The native A2A API routes are mounted automatically by the ADK framework when the agent is deployed.
+The base A2A URL format is:
 ```
-
-The script reads the Agent Runtime resource ID from `foldrun-agent/deployment_metadata.json`
-(created by the agent deploy step). You can also set it explicitly:
-
-```bash
-AGENT_ENGINE_RESOURCE=projects/<num>/locations/YOUR_REGION/reasoningEngines/<id> \
-  bash deploy.sh YOUR_PROJECT_ID
+https://{location}-aiplatform.googleapis.com/reasoningEngines/v1/projects/{project_id}/locations/{location}/reasoningEngines/{agent_runtime_id}/api/a2a/foldrun_app
 ```
+where `{agent_runtime_id}` is the numeric ID of your Reasoning Engine instance. The full URL is printed to the console on a successful `./deploy-all.sh --steps build` deployment.
 
-### Grant Access to the A2A Proxy
+### Grant Access to the A2A Endpoint
 
-The A2A proxy requires authentication. Callers need the `roles/run.invoker` role
-on the `foldrun-a2a` Cloud Run service. Grant access to individual users, a Google
-Group, or a service account:
+Access to the native Agent Runtime A2A endpoint is managed via Agent Platform IAM permissions. Callers must have the `roles/aiplatform.user` role (or the specific `aiplatform.reasoningEngines.query` and `aiplatform.reasoningEngines.get` permissions) on the target project or Reasoning Engine resource.
+
+Grant access to individual users, a Google Group, or a service account:
 
 ```bash
-# Grant to a Google Group (recommended for teams)
-gcloud run services add-iam-policy-binding foldrun-a2a \
-  --region=YOUR_REGION \
-  --member="group:my-team@example.com" \
-  --role="roles/run.invoker" \
-  --project=YOUR_PROJECT_ID
-
-# Grant to an individual user
-gcloud run services add-iam-policy-binding foldrun-a2a \
-  --region=YOUR_REGION \
-  --member="user:alice@example.com" \
-  --role="roles/run.invoker" \
-  --project=YOUR_PROJECT_ID
-
-# Grant to a service account (for agent-to-agent calls)
-gcloud run services add-iam-policy-binding foldrun-a2a \
-  --region=YOUR_REGION \
+# Grant access to a service account (for agent-to-agent calls)
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="serviceAccount:other-agent-sa@OTHER_PROJECT.iam.gserviceaccount.com" \
-  --role="roles/run.invoker" \
-  --project=YOUR_PROJECT_ID
+  --role="roles/aiplatform.user"
 ```
 
-Callers authenticate with an identity token scoped to the service URL:
+### Authenticating and Querying
+
+Because the endpoint is hosted under `aiplatform.googleapis.com`, callers must authenticate using standard Google OAuth **Access Tokens** (`gcloud auth print-access-token` or application default credentials) rather than OIDC Identity Tokens.
+
+#### 1. Check the Agent Card
+
+The A2A agent card describes the agent's tools, system instructions, and schema. Retrieve it via:
+
 ```bash
-gcloud auth print-identity-token --audiences=https://YOUR_A2A_URL
+# Construct A2A_URL from your deployment outputs
+A2A_URL="https://YOUR_REGION-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_ID/locations/YOUR_REGION/reasoningEngines/YOUR_AGENT_RUNTIME_ID/api/a2a/foldrun_app"
+
+curl -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "${A2A_URL}/.well-known/agent-card.json"
 ```
 
-### Test the A2A Proxy
+#### 2. Query the Endpoint using CLI
+
+You can query the native A2A endpoint using the `google-agents-cli`:
 
 ```bash
-cd src/foldrun-a2a
-
-# Check the agent card
-curl -H "Authorization: Bearer $(gcloud auth print-identity-token --audiences=https://YOUR_A2A_URL)" \
-  https://YOUR_A2A_URL/.well-known/agent.json
-
-# Run the integration test
-python test_a2a.py https://YOUR_A2A_URL
+agents-cli run \
+  --url "https://YOUR_REGION-aiplatform.googleapis.com/v1/projects/YOUR_PROJECT_ID/locations/YOUR_REGION/reasoningEngines/YOUR_AGENT_RUNTIME_ID" \
+  --mode a2a \
+  "What can you do?"
 ```
 
-### Connect via Gemini CLI
+#### 3. Connect via Gemini CLI (Remote Agent Configuration)
 
-Create `~/.gemini/agents/foldrun.md`:
+Create or update `~/.gemini/agents/foldrun.md`:
 
 ```markdown
 ---
 kind: remote
 name: FoldRun
 description: Protein structure prediction agent
-agent_card_url: https://YOUR_A2A_URL/.well-known/agent.json
+agent_card_url: https://YOUR_REGION-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_ID/locations/YOUR_REGION/reasoningEngines/YOUR_AGENT_RUNTIME_ID/api/a2a/foldrun_app/.well-known/agent-card.json
 auth:
   type: google-credentials
 ---
 ```
 
-Then use it:
+Then query the agent:
 
 ```bash
 gemini -a foldrun "Predict the structure of ubiquitin"
 ```
 
-The A2A URL is printed at the end of deployment. You can also retrieve it with:
+## 5c. Gemini Enterprise Integration (Optional)
+
+You can automatically register your deployed agent with Gemini Enterprise during deployment by passing your application ID to the deployment script.
 
 ```bash
-gcloud run services describe foldrun-a2a --region=YOUR_REGION --format='value(status.url)'
+./deploy-all.sh YOUR_PROJECT_ID --gemini-enterprise-app-id YOUR_GEMINI_ENTERPRISE_APP_ID
 ```
+
+Alternatively, you can set it as an environment variable before running the script:
+```bash
+export GEMINI_ENTERPRISE_APP_ID="YOUR_GEMINI_ENTERPRISE_APP_ID"
+./deploy-all.sh YOUR_PROJECT_ID
+```
+
+This triggers the `register-agent` step in the Cloud Build pipeline, which runs `agents-cli publish gemini-enterprise` to register the agent's definition and deployment runtime against the specified app ID.
 
 ## 6. Troubleshooting
 
@@ -387,8 +378,8 @@ gcloud run services describe foldrun-a2a --region=YOUR_REGION --format='value(st
 | Terraform backend error | State bucket mismatch | Script runs `terraform init -reconfigure` automatically |
 | Predictions fail after deploy | Databases still downloading | Check `gcloud batch jobs list`; wait for downloads to complete |
 | Viewer shows 403 | IAP not configured for your domain | Set `iap_access_domain` in Terraform and re-apply |
-| A2A proxy returns 403 | Caller lacks `run.invoker` role | Grant `roles/run.invoker` on the `foldrun-a2a` service (see "Grant Access" in section 5b) |
-| A2A proxy returns 500 | Agent Runtime resource ID misconfigured | Check `AGENT_ENGINE_RESOURCE` env var on the Cloud Run service |
+| A2A endpoint returns 403 | Caller lacks `aiplatform.user` role or invalid token | Ensure caller has `roles/aiplatform.user` on the project, and is passing a GCP Access Token (`gcloud auth print-access-token`), NOT an Identity Token |
+| A2A endpoint returns 404 | Agent Runtime URL or app name is incorrect | Verify that the path suffix matches your configured app name (default: `/api/a2a/foldrun_app`) and the reasoning engine ID is correct |
 
 ## 7. Local Development
 

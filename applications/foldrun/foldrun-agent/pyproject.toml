@@ -11,18 +11,18 @@ authors = [
 
 dependencies = [
     # ADK and AI Platform
-    "google-adk>=1.28.0",
-    "google-cloud-aiplatform[agent_engines,adk]>=1.143.0",
+    "google-adk[gcp]>=2.0.0,<3.0.0",
+    "google-cloud-aiplatform[adk,agent-engines,evaluation]>=1.156.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
-    "nest_asyncio>=1.5.0",
+    "nest-asyncio>=1.5.0",
     # GCP services (previously in MCP server)
     "google-cloud-storage>=2.18.0",
     "google-cloud-filestore>=1.8.0",
     "google-cloud-pipeline-components>=2.20.0",
     "google-cloud-run>=0.10.0",
     "google-cloud-compute>=1.19.0",
-    "google-cloud-logging>=3.0.0",
+    "google-cloud-logging>=3.12.0,<4.0.0",
     "opentelemetry-instrumentation-fastapi>=0.59b0",
     "google-cloud-batch>=0.17.0",
     "google-cloud-artifact-registry>=1.11.0",
@@ -33,6 +33,11 @@ dependencies = [
     "biopython>=1.81",
     "numpy>=1.24.0",
     "requests",
+    "a2a-sdk[http-server]~=0.3.22",
+    "aiohttp>=3.13.4",
+    "gcsfs>=2024.11.0",
+    "opentelemetry-instrumentation-google-genai>=0.1.0,<1.0.0",
+    "protobuf>=6.31.1,<7.0.0",
 ]
 
 [project.optional-dependencies]

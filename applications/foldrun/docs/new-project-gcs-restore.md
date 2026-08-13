@@ -55,7 +55,7 @@ This uses Terraform to create all required GCP resources including:
 - GCS buckets (pipeline data and database backups)
 - Artifact Registry repository
 - Service accounts with appropriate IAM roles
-- Cloud Run services (viewer, A2A proxy)
+- Cloud Run service (viewer)
 - Cloud Run Job (FoldRun prediction analysis)
 
 **Wait for this to complete before proceeding to Step 3.** The batch compute

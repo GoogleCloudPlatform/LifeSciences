@@ -14,6 +14,6 @@
 
 """AlphaFold2 ADK Agent application."""
 
-from foldrun_app.agent import create_alphafold_agent, get_agent, root_agent
+from foldrun_app.agent import create_alphafold_agent, app
 
-__all__ = ["get_agent", "create_alphafold_agent", "root_agent"]
+__all__ = ["create_alphafold_agent", "app"]

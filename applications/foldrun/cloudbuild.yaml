@@ -180,7 +180,7 @@ steps:
   # Runs whenever any component or the agent itself is in the target.
   # Skipped only for analysis-job-only targets.
   # ============================================================================
-  - id: 'deploy-agent-engine'
+  - id: 'deploy-agent-runtime'
     name: 'python:3.12-slim'
     dir: 'foldrun-agent'
     entrypoint: bash
@@ -205,106 +205,77 @@ steps:
         apt-get update && apt-get install -y curl
         curl -LsSf https://astral.sh/uv/install.sh | sh
         export PATH="$$HOME/.local/bin:$$PATH"
-        uv sync --frozen
 
-        (uv export --frozen --no-hashes --no-header --no-dev --no-emit-project --no-annotate > foldrun_app/app_utils/.requirements.txt 2>/dev/null || \
-         uv export --frozen --no-hashes --no-header --no-dev --no-emit-project > foldrun_app/app_utils/.requirements.txt)
+        # Create deployment_metadata.json to target the existing engine
+        echo "{\"remote_agent_runtime_id\": \"${_AGENT_RUNTIME_ID}\", \"deployment_target\": \"agent_runtime\"}" > deployment_metadata.json
 
-        export GCP_PROJECT_ID=$PROJECT_ID
-        export GCP_REGION=${_REGION}
-        export GCS_BUCKET_NAME=${_BUCKET_NAME}
-        export GCS_DATABASES_BUCKET=${_DATABASES_BUCKET}
-        export FILESTORE_ID=${_FILESTORE_ID}
-        export ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest
-        export OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
-        export BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest
+        ENV_VARS_ARR=(
+            "GOOGLE_GENAI_USE_ENTERPRISE=1"
+            "GOOGLE_CLOUD_LOCATION=${_MODEL_ENDPOINT_LOCATION}"
+            "GCP_REGION=${_REGION}"
+            "GCS_BUCKET_NAME=${_BUCKET_NAME}"
+            "GCS_DATABASES_BUCKET=${_DATABASES_BUCKET}"
+            "FILESTORE_ID=${_FILESTORE_ID}"
+            "ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest"
+            "OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest"
+            "BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest"
+            "FOLDRUN_VIEWER_URL=${_FOLDRUN_VIEWER_URL}"
+            "ANALYSIS_JOB_NAME=foldrun-analysis-job"
+            "PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}"
+        )
 
-        ENV_VARS="GOOGLE_CLOUD_LOCATION=${_MODEL_ENDPOINT_LOCATION},GCP_REGION=${_REGION},GCS_BUCKET_NAME=${_BUCKET_NAME},GCS_DATABASES_BUCKET=${_DATABASES_BUCKET},FILESTORE_ID=${_FILESTORE_ID},ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest,BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest,FOLDRUN_VIEWER_URL=${_FOLDRUN_VIEWER_URL},ANALYSIS_JOB_NAME=foldrun-analysis-job,PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}"
+        ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
         [[ -n "${_NETWORK_ID}" ]] && ENV_VARS="$$ENV_VARS,NETWORK=${_NETWORK_ID}"
         [[ -n "${_NETWORK_PROJECT_NUMBER}" ]] && ENV_VARS="$$ENV_VARS,NETWORK_PROJECT_NUMBER=${_NETWORK_PROJECT_NUMBER}"
 
-        uv run -m foldrun_app.app_utils.deploy \
-          --project=$PROJECT_ID \
-          --location=${_REGION} \
-          --service-account=${_AGENT_SA_EMAIL} \
-          --set-env-vars=$$ENV_VARS
+        uvx google-agents-cli@0.6.1 deploy \
+            --project=$PROJECT_ID \
+            --region=${_REGION} \
+            --deployment-target=agent_runtime \
+            --service-name="FoldRun_Agent" \
+            --service-account="${_AGENT_SA_EMAIL}" \
+            --update-env-vars="$$ENV_VARS" \
+            --no-confirm-project
+
+        A2A_URL="https://${_REGION}-aiplatform.googleapis.com/reasoningEngines/v1/${_AGENT_RUNTIME_ID}/api/a2a/foldrun_app"
+        echo ""
+        echo "A2A URL: $$A2A_URL"
+        echo "A2A Agent Card: $$A2A_URL/.well-known/agent-card.json"
     waitFor: ['build-push-af2-components', 'build-push-of3-components', 'build-push-boltz2-components']
 
   # ============================================================================
-  # 4b. FoldRun A2A Proxy (Cloud Run Service — optional)
+  # 5. [Optional] Register Agent with Gemini Enterprise
   # ============================================================================
-  - id: 'build-push-a2a'
-    name: 'gcr.io/cloud-builders/docker'
+  - id: 'register-agent'
+    name: 'python:3.13-slim'
+    dir: 'foldrun-agent'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
-        _skip_agent=false
-        if [[ "${_BUILD_TARGET}" != "all" ]] && [[ "${_BUILD_TARGET}" != "agent" ]] && \
-           [[ "$$_t" != *",viewer,"* ]] && [[ "$$_t" != *",af2,"* ]] && \
-           [[ "$$_t" != *",of3,"* ]] && [[ "$$_t" != *",boltz2,"* ]]; then
-          _skip_agent=true
-        fi
-        if [[ "$$_skip_agent" == "true" ]]; then
-          echo "Skipping a2a build (BUILD_TARGET=${_BUILD_TARGET})"
-          exit 0
-        fi
-        docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest || true
-        docker build \
-          -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest \
-          --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest \
-          src/foldrun-a2a/
-        docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest
-    waitFor: ['-']
-
-  - id: 'deploy-a2a'
-    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        _t=",${_BUILD_TARGET},"
-        _skip_agent=false
-        if [[ "${_BUILD_TARGET}" != "all" ]] && [[ "${_BUILD_TARGET}" != "agent" ]] && \
-           [[ "$$_t" != *",viewer,"* ]] && [[ "$$_t" != *",af2,"* ]] && \
-           [[ "$$_t" != *",of3,"* ]] && [[ "$$_t" != *",boltz2,"* ]]; then
-          _skip_agent=true
-        fi
-        if [[ "$$_skip_agent" == "true" ]]; then
-          echo "Skipping a2a deploy (BUILD_TARGET=${_BUILD_TARGET})"
+        set -e
+        if [ -z "${_GEMINI_ENTERPRISE_APP_ID}" ]; then
+          echo "Skipping Gemini Enterprise registration (APP_ID not provided)."
           exit 0
         fi
 
-        AGENT_ENGINE_RESOURCE=$$(python3 -c "import json; print(json.load(open('/workspace/foldrun-agent/deployment_metadata.json'))['remote_agent_engine_id'])")
-        echo "Agent Runtime resource: $$AGENT_ENGINE_RESOURCE"
+        apt-get update && apt-get install -y curl
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$$HOME/.local/bin:$$PATH"
 
-        gcloud run deploy foldrun-a2a \
-          --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-a2a:latest \
-          --region ${_REGION} \
-          --service-account ${_AGENT_SA_EMAIL} \
-          --set-env-vars GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_REGION=${_REGION},AGENT_ENGINE_RESOURCE=$$AGENT_ENGINE_RESOURCE \
-          --memory 512Mi \
-          --cpu 1 \
-          --timeout 300 \
-          --min-instances 0 \
-          --max-instances 5 \
-          --no-allow-unauthenticated
-
-        A2A_URL=$$(gcloud run services describe foldrun-a2a \
-          --region ${_REGION} --format 'value(status.url)')
-
-        gcloud run services update foldrun-a2a \
-          --region ${_REGION} \
-          --update-env-vars AGENT_BASE_URL=$$A2A_URL
-
-        echo ""
-        echo "A2A proxy deployed: $$A2A_URL"
-        echo "Agent card:         $$A2A_URL/.well-known/agent.json"
-    waitFor: ['build-push-a2a', 'deploy-agent-engine']
+        # Run publish command
+        export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
+        uvx google-agents-cli@0.6.1 publish gemini-enterprise \
+          --agent-runtime-id="$_AGENT_RUNTIME_ID" \
+          --gemini-enterprise-app-id="${_GEMINI_ENTERPRISE_APP_ID}" \
+          --display-name="FoldRun" \
+          --description="Agentic Protein Folding on Google Cloud" \
+          --registration-type=adk \
+          --project-id=$PROJECT_ID
+    waitFor: ['deploy-agent-runtime']
 
   # ============================================================================
-  # 5. Data Download — handled locally by deploy-all.sh, not here.
+  # 6. Data Download — handled locally by deploy-all.sh, not here.
   # ============================================================================
 
 substitutions:
@@ -323,6 +294,8 @@ substitutions:
   _BUILD_TARGET: "all"
   _MODEL_ENDPOINT_LOCATION: "global"
   _FOLDRUN_VIEWER_URL: ""
+  _AGENT_RUNTIME_ID: ""
+  _GEMINI_ENTERPRISE_APP_ID: ""
 timeout: 3600s
 options:
   logging: CLOUD_LOGGING_ONLY

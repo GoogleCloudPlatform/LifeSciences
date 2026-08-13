@@ -1,0 +1,4 @@
+name: foldrun-agent
+agent_directory: foldrun_app
+create_params:
+  deployment_target: agent_runtime

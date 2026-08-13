@@ -49,6 +49,8 @@ usage() {
     echo "                   convert options: uniref90, mgnify, small_bfd"
     echo "  --force        With --steps data: re-download even if databases exist in GCS."
     echo "  --clean        Remove generated build artifacts (.egg-info, .venv, etc.)"
+    echo "  --gemini-enterprise-app-id APP_ID"
+    echo "                         App ID for Gemini Enterprise registration."
     echo ""
     echo "Environment variables:"
     echo "  DOWNLOAD_MODE      Database download mode: reduced (default) or full"
@@ -57,6 +59,7 @@ usage() {
     echo "  ENABLE_VIEWER_IAP  Enable IAP for the viewer: true (default) or false"
     echo "  OF3_VERSION        OpenFold3 Docker image tag to use (default: 0.4.0)"
     echo "  BOLTZ_VERSION      Boltz-2 pip package version to install (default: 2.2.1)"
+    echo "  GEMINI_ENTERPRISE_APP_ID  Gemini Enterprise App ID (optional)"
     echo ""
     echo "  The following override the auto-detected naming conventions for"
     echo "  --steps build and --steps data (terraform not required if infra exists):"
@@ -115,6 +118,10 @@ while [[ $# -gt 0 ]]; do
             FORCE_DATA=true
             shift
             ;;
+        --gemini-enterprise-app-id)
+            GEMINI_ENTERPRISE_APP_ID="$2"
+            shift 2
+            ;;
         --clean)
             echo "Cleaning generated build artifacts..."
             rm -rf foldrun-agent/.venv
@@ -172,6 +179,7 @@ AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
 OF3_VERSION=${OF3_VERSION:-"0.4.0"}
 BOLTZ_VERSION=${BOLTZ_VERSION:-"2.2.1"}
 ENABLE_VIEWER_IAP=${ENABLE_VIEWER_IAP:-"true"}
+GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID:-""}
 IAP_ACCESS_DOMAIN=${IAP_ACCESS_DOMAIN:-$(gcloud config get-value account | awk -F '@' '{print $2}')}
 TERRAFORM_DIR="terraform"
 BUCKET_NAME="${PROJECT_ID}-foldrun-data"
@@ -210,6 +218,7 @@ echo "IAP Domain:    $IAP_ACCESS_DOMAIN"
 echo "Download Mode: $DOWNLOAD_MODE"
 echo "Steps:         $STEPS"
 echo "Build Target:  $BUILD_TARGET"
+echo "Gemini Ent. App ID: ${GEMINI_ENTERPRISE_APP_ID:-[Not Set]}"
 echo ""
 
 # ==============================================================================
@@ -240,6 +249,7 @@ extract_terraform_outputs() {
     export NETWORK_ID="${NETWORK_ID:-}"
     export NETWORK_PROJECT_NUMBER="${NETWORK_PROJECT_NUMBER:-}"
     export TF_VIEWER_URL="${TF_VIEWER_URL:-}"
+    export GEMINI_ENTERPRISE_APP_ID="${GEMINI_ENTERPRISE_APP_ID:-}"
 
     # If terraform is available, cross-check naming-convention defaults against
     # actual state outputs (important for Shared VPC and custom resource names).
@@ -268,6 +278,7 @@ extract_terraform_outputs() {
             v=$(_tf network_project_number); if [[ -n "$v" ]]; then echo "NETWORK_PROJECT_NUMBER=$v"; fi
             v=$(_tf model_endpoint_location); if [[ -n "$v" ]]; then echo "MODEL_ENDPOINT_LOCATION=$v"; fi
             v=$(_tf foldrun_viewer_url);     if [[ -n "$v" ]]; then echo "TF_VIEWER_URL=$v"; fi
+            v=$(_tf agent_runtime_id);       if [[ -n "$v" ]]; then echo "AGENT_RUNTIME_ID=$v"; fi
         ) > "$_tf_env" 2>/dev/null || true
         while IFS='=' read -r key val; do
             [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="$val"
@@ -290,6 +301,8 @@ extract_terraform_outputs() {
     echo "  NETWORK_PROJECT_NUMBER=$NETWORK_PROJECT_NUMBER"
     echo "  MODEL_ENDPOINT_LOCATION=$MODEL_ENDPOINT_LOCATION"
     echo "  FOLDRUN_VIEWER_URL=$FOLDRUN_VIEWER_URL"
+    echo "  AGENT_RUNTIME_ID=$AGENT_RUNTIME_ID"
+    echo "  GEMINI_ENTERPRISE_APP_ID=$GEMINI_ENTERPRISE_APP_ID"
 }
 
 # ==============================================================================
@@ -355,11 +368,13 @@ if $run_build; then
     echo "  _DATABASES_BUCKET=${DATABASES_BUCKET}"
     echo "  _DOWNLOAD_MODE=${DOWNLOAD_MODE}"
     echo "  _MODEL_ENDPOINT_LOCATION=${MODEL_ENDPOINT_LOCATION}"
+    echo "  _AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID}"
+    echo "  _GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID}"
 
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET",_MODEL_ENDPOINT_LOCATION="$MODEL_ENDPOINT_LOCATION",_FOLDRUN_VIEWER_URL="$FOLDRUN_VIEWER_URL" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET",_MODEL_ENDPOINT_LOCATION="$MODEL_ENDPOINT_LOCATION",_FOLDRUN_VIEWER_URL="$FOLDRUN_VIEWER_URL",_AGENT_RUNTIME_ID="$AGENT_RUNTIME_ID",_GEMINI_ENTERPRISE_APP_ID="$GEMINI_ENTERPRISE_APP_ID" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi
