@@ -76,6 +76,7 @@ from google.adk.tools import skill_toolset
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types
 
+from .app_utils.models import get_gemini_model
 from .sub_agents import (
     deep_research_pipeline,
     entity_analysis_agent,
@@ -311,7 +312,7 @@ in that lane."
 
 
 root_agent = Agent(
-    model=_COORDINATOR_MODEL,
+    model=get_gemini_model(_COORDINATOR_MODEL),
     name="root_agent",
     description=(
         "Biomedical literature research assistant for pharma R&D, medical "

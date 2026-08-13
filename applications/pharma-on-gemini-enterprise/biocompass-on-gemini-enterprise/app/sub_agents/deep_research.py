@@ -62,6 +62,7 @@ from google.adk.events import Event, EventActions
 from google.adk.tools.agent_tool import AgentTool
 from pydantic import BaseModel, Field
 
+from ..app_utils.models import get_gemini_model
 from ..tools.biorxiv import search_preprints
 from ..tools.clinicaltrials import search_clinical_trials
 from ..tools.europe_pmc import (
@@ -184,7 +185,7 @@ def _retriever_instruction(
 
 _pubmed_retriever = LlmAgent(
     name="PubMedRetriever",
-    model=_WORKER_MODEL,
+    model=get_gemini_model(_WORKER_MODEL),
     description="Retrieves the top relevant PubMed articles via NCBI E-utilities.",
     instruction=_retriever_instruction(
         source="PubMed",
@@ -201,7 +202,7 @@ _pubmed_retriever = LlmAgent(
 
 _europe_pmc_retriever = LlmAgent(
     name="EuropePmcRetriever",
-    model=_WORKER_MODEL,
+    model=get_gemini_model(_WORKER_MODEL),
     description="Retrieves articles from Europe PMC (broader than PubMed; full text where open access).",
     instruction=_retriever_instruction(
         source="Europe PMC",
@@ -219,7 +220,7 @@ _europe_pmc_retriever = LlmAgent(
 
 _preprint_retriever = LlmAgent(
     name="PreprintRetriever",
-    model=_WORKER_MODEL,
+    model=get_gemini_model(_WORKER_MODEL),
     description="Retrieves bioRxiv / medRxiv preprints — surfaces the latest results.",
     instruction=_retriever_instruction(
         source="preprint (bioRxiv / medRxiv)",
@@ -236,7 +237,7 @@ _preprint_retriever = LlmAgent(
 
 _trials_retriever = LlmAgent(
     name="TrialsRetriever",
-    model=_WORKER_MODEL,
+    model=get_gemini_model(_WORKER_MODEL),
     description="Retrieves matching clinical trials from ClinicalTrials.gov.",
     instruction=_retriever_instruction(
         source="ClinicalTrials.gov",
@@ -323,7 +324,7 @@ async def _synthesizer_instruction(ctx: ReadonlyContext) -> str:
 
 _synthesizer = LlmAgent(
     name="Synthesizer",
-    model=_COORDINATOR_MODEL,
+    model=get_gemini_model(_COORDINATOR_MODEL),
     description="Merges parallel retrieval results into a single evidence brief.",
     instruction=_synthesizer_instruction,
     output_key=_S_DRAFT,
@@ -428,7 +429,7 @@ async def _critic_instruction(ctx: ReadonlyContext) -> str:
 
 _critic = LlmAgent(
     name="Critic",
-    model=_COORDINATOR_MODEL,
+    model=get_gemini_model(_COORDINATOR_MODEL),
     description="Scores the draft for completeness, faithfulness, and balance.",
     instruction=_critic_instruction,
     output_schema=CriticVerdict,

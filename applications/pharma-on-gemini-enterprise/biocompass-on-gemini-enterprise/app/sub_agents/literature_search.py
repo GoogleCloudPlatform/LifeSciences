@@ -18,6 +18,7 @@ import os
 
 from google.adk.agents.llm_agent import Agent
 
+from ..app_utils.models import get_gemini_model
 from ..tools.eutils import (
     advanced_search,
     get_article,
@@ -29,7 +30,7 @@ from ..tools.eutils import (
 _MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.6-flash")
 
 literature_search_agent = Agent(
-    model=_MODEL,
+    model=get_gemini_model(_MODEL),
     name="literature_search_agent",
     description=(
         "Light, fast PubMed specialist. Use for keyword / author / PMID "

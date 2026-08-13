@@ -29,6 +29,8 @@ from google import genai
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 
+from ..app_utils.models import MODEL_HTTP_OPTIONS
+
 _IMAGE_MODEL = os.getenv("IMAGE_MODEL_NAME", "gemini-3-pro-image")
 _IMAGE_SIZE = os.getenv("IMAGE_SIZE", "2K")
 
@@ -110,18 +112,18 @@ async def visualize_concept(
         f"Detailed description:\n{description}\n\n{_BIOMEDICAL_STYLE}"
     )
 
-    client = genai.Client()
-    response = client.models.generate_content(
-        model=_IMAGE_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_modalities=["IMAGE"],
-            image_config=types.ImageConfig(
-                image_size=_IMAGE_SIZE,
-                aspect_ratio=aspect_ratio,
+    async with genai.Client(http_options=MODEL_HTTP_OPTIONS).aio as aclient:
+        response = await aclient.models.generate_content(
+            model=_IMAGE_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(
+                    image_size=_IMAGE_SIZE,
+                    aspect_ratio=aspect_ratio,
+                ),
             ),
-        ),
-    )
+        )
 
     candidates = getattr(response, "candidates", None) or []
     for candidate in candidates:

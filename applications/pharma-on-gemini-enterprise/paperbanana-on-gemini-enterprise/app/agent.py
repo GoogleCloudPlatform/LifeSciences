@@ -57,6 +57,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.agents.sequential_agent import SequentialAgent
 from google.adk.apps import App
 from google.adk.events import Event, EventActions
+from google.adk.models.google_llm import Gemini
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.tools.agent_tool import AgentTool
@@ -78,12 +79,31 @@ from .prompts import (
 # model_garden_agent uses for Claude in us-east5.
 os.environ["GOOGLE_CLOUD_LOCATION"] = os.getenv("MODEL_LOCATION", "global")
 
-_PLANNER_MODEL = os.getenv("PLANNER_MODEL_NAME", "gemini-3.1-pro-preview")
-_IMAGE_MODEL = os.getenv("IMAGE_MODEL_NAME", "gemini-3-pro-image")
 _MAX_CRITIC_ROUNDS = int(os.getenv("MAX_CRITIC_ROUNDS", "3"))
 # Nano Banana Pro (gemini-3-pro-image) supports 1K, 2K, 4K.
 # Default to 4K for publication-quality output; drop to 2K/1K for faster turns.
 _IMAGE_SIZE = os.getenv("IMAGE_SIZE", "4K")
+
+# Retry configuration for model calls to handle transient 429 RESOURCE_EXHAUSTED
+# and 5xx server errors across both agent and genai client layers.
+_RETRY_OPTIONS = types.HttpRetryOptions(
+    attempts=int(os.getenv("MODEL_RETRY_ATTEMPTS", "5")),
+    initial_delay=float(os.getenv("MODEL_RETRY_INITIAL_DELAY", "1.0")),
+    max_delay=float(os.getenv("MODEL_RETRY_MAX_DELAY", "60.0")),
+    exp_base=float(os.getenv("MODEL_RETRY_EXP_BASE", "2.0")),
+    jitter=float(os.getenv("MODEL_RETRY_JITTER", "1.0")),
+    http_status_codes=[408, 429, 500, 502, 503, 504],
+)
+_HTTP_OPTIONS = types.HttpOptions(retry_options=_RETRY_OPTIONS)
+
+_PLANNER_MODEL = Gemini(
+    model=os.getenv("PLANNER_MODEL_NAME", "gemini-3.1-pro-preview"),
+    retry_options=_RETRY_OPTIONS,
+)
+_IMAGE_MODEL = Gemini(
+    model=os.getenv("IMAGE_MODEL_NAME", "gemini-3-pro-image"),
+    retry_options=_RETRY_OPTIONS,
+)
 
 _STYLE_GUIDE_PATH = Path(__file__).parent / "style_guide.md"
 _STYLE_GUIDE = _STYLE_GUIDE_PATH.read_text(encoding="utf-8")
@@ -379,7 +399,11 @@ async def _build_visualizer_request(
 
     llm_request.contents = [types.Content(role="user", parts=parts)]
     if llm_request.config is None:
-        llm_request.config = types.GenerateContentConfig()
+        llm_request.config = types.GenerateContentConfig(http_options=_HTTP_OPTIONS)
+    elif llm_request.config.http_options is None:
+        llm_request.config.http_options = _HTTP_OPTIONS
+    elif llm_request.config.http_options.retry_options is None:
+        llm_request.config.http_options.retry_options = _RETRY_OPTIONS
     llm_request.config.response_modalities = ["IMAGE"]
     llm_request.config.image_config = types.ImageConfig(image_size=_IMAGE_SIZE)
 

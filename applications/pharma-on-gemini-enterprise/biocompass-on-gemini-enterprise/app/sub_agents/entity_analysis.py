@@ -18,6 +18,7 @@ import os
 
 from google.adk.agents.llm_agent import Agent
 
+from ..app_utils.models import get_gemini_model
 from ..tools.pubtator import (
     annotate_articles,
     find_related_entities,
@@ -27,7 +28,7 @@ from ..tools.pubtator import (
 _MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.6-flash")
 
 entity_analysis_agent = Agent(
-    model=_MODEL,
+    model=get_gemini_model(_MODEL),
     name="entity_analysis_agent",
     description=(
         "Specialist for biomedical entity extraction and relationship "
