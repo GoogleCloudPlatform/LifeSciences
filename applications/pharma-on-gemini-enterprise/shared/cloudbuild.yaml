@@ -58,7 +58,6 @@ steps:
         fi
         terraform apply -auto-approve $$TF_VARS
         terraform output -raw reasoning_engine_id > /workspace/reasoning_engine_id.txt
-        terraform output -raw logs_data_bucket > /workspace/logs_data_bucket.txt
         terraform output -raw agent_display_name > /workspace/agent_display_name.txt
         terraform output -raw agent_description > /workspace/agent_description.txt
 
@@ -77,22 +76,13 @@ steps:
 
         # Read the reasoning engine ID from the previous step
         ENGINE_ID=$(cat /workspace/reasoning_engine_id.txt)
-        LOGS_BUCKET=$(cat /workspace/logs_data_bucket.txt)
         AGENT_DISPLAY_NAME=$(cat /workspace/agent_display_name.txt)
 
         # Create deployment_metadata.json to target the existing engine
         echo "{\"remote_agent_runtime_id\": \"$$ENGINE_ID\", \"deployment_target\": \"agent_runtime\"}" > deployment_metadata.json
 
         # Base env vars
-        ENV_VARS_ARR=(
-          "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=${_ENABLE_TELEMETRY}"
-          "OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK=upload"
-          "OTEL_INSTRUMENTATION_GENAI_UPLOAD_BASE_PATH=gs://$$LOGS_BUCKET/$_GENAI_TELEMETRY_PATH"
-          "OTEL_INSTRUMENTATION_GENAI_UPLOAD_FORMAT=jsonl"
-          "OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental"
-          "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=NO_CONTENT"
-          "LOGS_BUCKET_NAME=$$LOGS_BUCKET"
-        )
+        ENV_VARS_ARR=()
 
         # Append additional dynamic env vars if provided
         if [ ! -z "${_ENV_VARS}" ]; then
@@ -104,7 +94,7 @@ steps:
         ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
 
         # Exclude non-runtime assets from Agent Runtime upload to stay under 8MB limit
-        printf ".git\n.gitignore\n.venv\n__pycache__\n*.pyc\ndocs\nterraform\ndeployment\ntests\n" > .gcloudignore
+        printf ".git\n.gitignore\n.venv\n__pycache__\n*.pyc\ndocs\nterraform\ndeployment\ntests\n\n.env" > .gcloudignore
 
         # Deploy the agent using agents-cli
         uvx google-agents-cli@1.2.1 deploy \
@@ -150,12 +140,10 @@ steps:
 
 substitutions:
   _AGENT_DIR: "." # e.g. applications/pharma-on-gemini-enterprise/model-garden-on-gemini-enterprise
-  _ENABLE_TELEMETRY: "true"
   _GEMINI_ENTERPRISE_APP_ID: ""
   _REGION: us-central1  
   _TF_STATE_BUCKET: ""
   _LOGS_BUCKET_NAME: "" # Optional: Bring your own bucket
-  _GENAI_TELEMETRY_PATH: "completions"
   _ENV_VARS: "" # Optional: Extra env vars (semicolon-separated, e.g. "MODEL_NAME=gemini-3.6-flash;MODEL_LOCATION=global")
 
 options:

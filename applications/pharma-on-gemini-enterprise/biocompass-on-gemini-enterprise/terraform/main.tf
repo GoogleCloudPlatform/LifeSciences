@@ -44,8 +44,8 @@ resource "google_project_service" "api" {
     "bigquery.googleapis.com",
     "bigqueryconnection.googleapis.com"
   ])
-  project = var.project_id
-  service = each.value
+  project            = var.project_id
+  service            = each.value
   disable_on_destroy = false
 }
 
@@ -68,9 +68,9 @@ resource "google_bigquery_connection_iam_member" "member" {
 }
 
 resource "google_project_iam_member" "connection_agent_platform_user" {
-  project = var.project_id
-  role    = "roles/aiplatform.user"
-  member  = "serviceAccount:${google_bigquery_connection.cloud_resource.cloud_resource[0].service_account_id}"
+  project    = var.project_id
+  role       = "roles/aiplatform.user"
+  member     = "serviceAccount:${google_bigquery_connection.cloud_resource.cloud_resource[0].service_account_id}"
   depends_on = [google_bigquery_connection.cloud_resource]
 }
 
@@ -81,7 +81,7 @@ resource "google_bigquery_dataset" "remote_models" {
   friendly_name              = "Remote Models"
   description                = "Remote models to Agent Platform"
   delete_contents_on_destroy = true
-  depends_on = [google_project_service.api]
+  depends_on                 = [google_project_service.api]
 }
 
 locals {
