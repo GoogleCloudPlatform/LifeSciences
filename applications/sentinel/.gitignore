@@ -75,7 +75,9 @@ data/
 *.vercel
 
 # Internal/local-only docs (not for public repo)
-sentinel_agent/FUTURE_DEVELOPMENTS.md
+app/FUTURE_DEVELOPMENTS.md
 
 # ADK runtime (session db, artifacts, eval state)
 .adk/
+
+deployment_metadata.json

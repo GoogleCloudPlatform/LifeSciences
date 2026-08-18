@@ -23,13 +23,12 @@ use as a starting point.
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class ReviewLens(str, Enum):
+class ReviewLens(StrEnum):
     """Which MLR perspective produced a finding."""
 
     MEDICAL = "medical"
@@ -43,7 +42,7 @@ class ReviewLens(str, Enum):
     CUSTOM = "custom"
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     """Severity bands.
 
     INFORMATIONAL is intentionally distinct from LOW: it captures observations
@@ -58,7 +57,7 @@ class Severity(str, Enum):
     CRITICAL = "critical"
 
 
-class EvidenceDepth(str, Enum):
+class EvidenceDepth(StrEnum):
     """How thoroughly a finding has been substantiated.
 
     SURFACE: Observed in the content itself, no cross-referencing.
@@ -73,7 +72,7 @@ class EvidenceDepth(str, Enum):
     DEEP = "deep"
 
 
-class ConfidenceBand(str, Enum):
+class ConfidenceBand(StrEnum):
     """Qualitative confidence band for human-readable summaries."""
 
     LOW = "low"
@@ -81,7 +80,7 @@ class ConfidenceBand(str, Enum):
     HIGH = "high"
 
 
-class IssueCategory(str, Enum):
+class IssueCategory(StrEnum):
     """Categories grouped by review lens.
 
     The grouping is informational only; categories may legitimately be
@@ -130,30 +129,30 @@ class IssueCategory(str, Enum):
 class ContentLocation(BaseModel):
     """Pointer to where in the content an item or finding lives."""
 
-    page: Optional[int] = Field(
+    page: int | None = Field(
         None, description="Page number for paginated content (PDF)."
     )
-    section: Optional[str] = Field(
+    section: str | None = Field(
         None,
         description=(
             "Section identifier — for HTML this might be a heading or DOM "
             "selector; for images, a region label such as 'header banner'."
         ),
     )
-    bbox: Optional[list[float]] = Field(
+    bbox: list[float] | None = Field(
         None,
         description=(
             "Normalized bounding box [x_min, y_min, x_max, y_max] in 0..1 "
             "coordinates for image content."
         ),
     )
-    quote: Optional[str] = Field(
+    quote: str | None = Field(
         None,
         description="Short verbatim excerpt for textual content.",
     )
 
 
-class ContentItemKind(str, Enum):
+class ContentItemKind(StrEnum):
     """Kinds of notable elements the intake agent extracts."""
 
     PRODUCT_CLAIM = "product_claim"
@@ -184,14 +183,14 @@ class ContentItem(BaseModel):
         ...,
         description="The verbatim text or a short factual description for visuals.",
     )
-    location: Optional[ContentLocation] = None
-    notes: Optional[str] = Field(
+    location: ContentLocation | None = None
+    notes: str | None = Field(
         None,
         description="Intake-agent observations worth carrying to the reviewers.",
     )
 
 
-class AudienceType(str, Enum):
+class AudienceType(StrEnum):
     """Who the piece appears to be written for."""
 
     HEALTHCARE_PROFESSIONAL = "healthcare_professional"
@@ -208,6 +207,14 @@ class ContentInventory(BaseModel):
     refer to, rather than re-quoting the content.
     """
 
+    is_promotional: bool = Field(
+        default=True,
+        description=(
+            "Whether the submission contains promotional pharmaceutical content "
+            "intended for MLR review (True) or is a conversational question, "
+            "informational inquiry, greeting, or non-promotional text (False)."
+        ),
+    )
     content_summary: str = Field(
         ...,
         description="2-4 sentence neutral summary of what the submission communicates.",
@@ -221,7 +228,7 @@ class ContentInventory(BaseModel):
         ...,
         description="Why the intake agent inferred this audience.",
     )
-    product_or_topic: Optional[str] = Field(
+    product_or_topic: str | None = Field(
         None,
         description="Product, indication, or topic the piece centers on, if discernible.",
     )
@@ -254,7 +261,7 @@ class Finding(BaseModel):
         default_factory=list,
         description="ContentInventory item_ids this finding relates to.",
     )
-    quoted_content: Optional[str] = Field(
+    quoted_content: str | None = Field(
         None,
         description="Verbatim excerpt the finding hinges on, if applicable.",
     )
@@ -286,7 +293,7 @@ class Finding(BaseModel):
         default_factory=list,
         description="Possible remediation paths, presented as options not mandates.",
     )
-    location: Optional[ContentLocation] = None
+    location: ContentLocation | None = None
 
 
 class ReviewerOutput(BaseModel):
@@ -360,7 +367,7 @@ class Defense(BaseModel):
     )
     argument: str = Field(
         ...,
-        description="The advocate's argument (2–4 sentences).",
+        description="The advocate's argument (2-4 sentences).",
     )
     charitable_interpretation: str = Field(
         ...,
@@ -369,11 +376,10 @@ class Defense(BaseModel):
             "The point is to give critics a fair counter-frame to weigh."
         ),
     )
-    proposed_compromise: Optional[str] = Field(
+    proposed_compromise: str | None = Field(
         None,
         description=(
-            "If the advocate would concede a middle-ground revision, "
-            "describe it here."
+            "If the advocate would concede a middle-ground revision, describe it here."
         ),
     )
     likely_to_dispute: list[ReviewLens] = Field(
@@ -396,7 +402,7 @@ class SubmitterDefenseBrief(BaseModel):
     overall_framing: str = Field(
         ...,
         description=(
-            "1–3 sentence narrative of how the advocate would frame the "
+            "1-3 sentence narrative of how the advocate would frame the "
             "submission charitably."
         ),
     )
@@ -455,8 +461,7 @@ class GapCriticOutput(BaseModel):
     completeness_assessment: str = Field(
         ...,
         description=(
-            "Brief narrative on coverage — which lenses look thorough, "
-            "which look thin."
+            "Brief narrative on coverage — which lenses look thorough, which look thin."
         ),
     )
 

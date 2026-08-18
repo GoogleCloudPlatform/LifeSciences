@@ -7,7 +7,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Mirrors sentinel_agent/schemas.py FinalReport.
+ * Mirrors app/schemas.py FinalReport.
  */
 
 export type ReviewLens =

@@ -51,4 +51,7 @@ GAP_CRITIC = load("gap_critic")
 CRITIC_MERGER = load("critic_merger")
 LOOP_DECIDER = load("loop_decider")
 
+# Direct responder (non-promotional short circuit)
+DIRECT_RESPONDER = load("direct_responder")
+
 SYNTHESIZER = load("synthesizer")
