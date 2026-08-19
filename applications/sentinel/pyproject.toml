@@ -30,13 +30,13 @@ dependencies = [
     "pillow>=12.0.0",
     "google-cloud-storage>=2.14.0",
     "starlette>=1.0.1",
-    "a2a-sdk[http-server]~=0.3.22",
+    "a2a-sdk[http-server]~=1.1.2",
     "aiohttp>=3.13.4",
     "gcsfs>=2024.11.0",
     "google-cloud-aiplatform[agent-engines,evaluation]>=1.156.0",
     "google-cloud-logging>=3.12.0,<4.0.0",
     "opentelemetry-resourcedetector-gcp<=1.12.0a0",
-    "protobuf>=6.31.1,<7.0.0",
+    "protobuf>=7.35.1,<7.36.0",
     "pyopenssl<26",
 ]
 
