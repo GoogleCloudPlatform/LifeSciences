@@ -24,7 +24,12 @@ from typing import Any, Dict
 from google.cloud import aiplatform as vertex_ai
 
 from ..base import BOLTZ2Tool
-from ..utils.input_converter import count_tokens, fasta_to_boltz2_yaml, is_boltz2_yaml, validate_boltz2_yaml
+from ..utils.input_converter import (
+    count_tokens,
+    fasta_to_boltz2_yaml,
+    is_boltz2_yaml,
+    validate_boltz2_yaml,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +60,16 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         enable_flex_start = arguments.get("enable_flex_start", True)
 
         import random
+
         base_seed = arguments.get("base_seed")
         if base_seed is None:
             base_seed = random.randint(0, 2**32 - 1)
 
         # Determine input type and load content
         is_gcs = isinstance(input_data, str) and input_data.startswith("gs://")
-        is_file = os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
+        is_file = (
+            os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
+        )
 
         if is_gcs:
             bucket_name = input_data[5:].split("/", 1)[0]
@@ -80,7 +88,8 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             if not ok:
                 return {
                     "status": "error",
-                    "message": "Invalid Boltz-2 query YAML:\n" + "\n".join(f"  - {e}" for e in errors),
+                    "message": "Invalid Boltz-2 query YAML:\n"
+                    + "\n".join(f"  - {e}" for e in errors),
                 }
             for w in warnings:
                 logger.warning(f"Boltz-2 YAML warning: {w}")
@@ -138,13 +147,20 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         )
         # Prepare labels — parse chain count from YAML for job_type
         import yaml as _yaml
+
         _parsed = _yaml.safe_load(query_yaml) if isinstance(query_yaml, str) else {}
         _seqs = _parsed.get("sequences", []) if _parsed else []
-        _num_chains = sum(
-            len(s[list(s.keys())[0]].get("id", ["?"])) if isinstance(s[list(s.keys())[0]].get("id"), list)
+        _num_chains = (
+            sum(
+                len(s[list(s.keys())[0]].get("id", ["?"]))
+                if isinstance(s[list(s.keys())[0]].get("id"), list)
+                else 1
+                for s in _seqs
+                if s
+            )
+            if _seqs
             else 1
-            for s in _seqs if s
-        ) if _seqs else 1
+        )
         query_name = job_name
         labels = {
             "model_type": "boltz2",

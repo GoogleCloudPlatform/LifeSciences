@@ -20,8 +20,15 @@ import os
 def _read_pipeline_source():
     path = os.path.join(
         os.path.dirname(__file__),
-        "..", "..", "..", "..",
-        "foldrun_app", "models", "af2", "pipeline", "pipelines",
+        "..",
+        "..",
+        "..",
+        "..",
+        "foldrun_app",
+        "models",
+        "af2",
+        "pipeline",
+        "pipelines",
         "alphafold_inference_pipeline.py",
     )
     with open(os.path.normpath(path)) as f:
@@ -31,8 +38,15 @@ def _read_pipeline_source():
 def _read_component(name: str) -> str:
     path = os.path.join(
         os.path.dirname(__file__),
-        "..", "..", "..", "..",
-        "foldrun_app", "models", "af2", "pipeline", "components",
+        "..",
+        "..",
+        "..",
+        "..",
+        "foldrun_app",
+        "models",
+        "af2",
+        "pipeline",
+        "components",
         f"{name}.py",
     )
     with open(os.path.normpath(path)) as f:

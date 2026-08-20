@@ -88,7 +88,9 @@ class AF2SubmitMonomerTool(AF2Tool):
 
         # Validate and prepare FASTA
         is_gcs = isinstance(sequence, str) and sequence.startswith("gs://")
-        is_fasta_file = os.path.isfile(sequence) if isinstance(sequence, str) and not is_gcs else False
+        is_fasta_file = (
+            os.path.isfile(sequence) if isinstance(sequence, str) and not is_gcs else False
+        )
 
         if is_gcs:
             bucket_name = sequence[5:].split("/", 1)[0]

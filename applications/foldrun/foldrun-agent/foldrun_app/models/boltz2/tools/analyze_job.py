@@ -124,7 +124,9 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                     cif_name = "/".join(parts_list[:-1] + [cif_filename])
 
                     # pde_{stem}_model_N.npz — written when --write_full_pde is passed
-                    pde_filename = filename.replace("confidence_", "pde_", 1).replace(".json", ".npz")
+                    pde_filename = filename.replace("confidence_", "pde_", 1).replace(
+                        ".json", ".npz"
+                    )
                     pde_name = "/".join(parts_list[:-1] + [pde_filename])
 
                     if name in seen:
@@ -207,14 +209,16 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                 query_yaml_uri = f"gs://{bucket}/boltz2_queries/{query_name_label}.yaml"
                 logger.info(f"Resolved query YAML URI from label: {query_yaml_uri}")
             else:
-                logger.warning("No 'query_name' label found on pipeline job — query YAML will not be embedded in analysis")
+                logger.warning(
+                    "No 'query_name' label found on pipeline job — query YAML will not be embedded in analysis"
+                )
         except Exception as e:
             logger.warning(f"Could not resolve query YAML URI: {e}")
 
         # Build task configuration
         task_config = {
             "job_id": job_id,
-            "affinity_uri": affinity_uri,   # None if affinity was not requested
+            "affinity_uri": affinity_uri,  # None if affinity was not requested
             "query_yaml_uri": query_yaml_uri,  # Resolved here; passed to consolidate_results
             "predictions": [
                 {

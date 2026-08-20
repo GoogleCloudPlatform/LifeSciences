@@ -211,8 +211,10 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         #                alphafold-inference-pipeline-20251112172826  (legacy)
         # Timestamped dir: pipeline_runs/20251112_172826/
         timestamp_search = None
-        if "alphafold2-inference-pipeline-" in job_id.lower() or \
-                "alphafold-inference-pipeline-" in job_id.lower():
+        if (
+            "alphafold2-inference-pipeline-" in job_id.lower()
+            or "alphafold-inference-pipeline-" in job_id.lower()
+        ):
             timestamp = job_id.split("-")[-1]  # Get the timestamp part
             if timestamp.isdigit() and len(timestamp) >= 14:
                 # Format as YYYYMMDD_HHMMSS

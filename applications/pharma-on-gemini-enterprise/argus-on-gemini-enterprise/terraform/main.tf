@@ -31,12 +31,12 @@ provider "google" {
 module "agent_infra" {
   source = "git::https://github.com/GoogleCloudPlatform/LifeSciences.git//applications/pharma-on-gemini-enterprise/shared/terraform/agent-infrastructure?ref=main"
 
-  project_id         = var.project_id
-  region             = var.region
-  agent_id           = "argus-agent"
-  display_name       = "Argus — Life Sciences M&A Diligence"
-  description        = "Due-diligence agent for pharma/biotech M&A. Answers quick questions about a potential acquisition, produces investment-grade acquisition whitepapers (PDF) on a named target, and recommends acquisition targets from a thesis. Draws on regulatory and scientific document corpora, SEC EDGAR financials, and web search. Use for acquisition screening, target due diligence, drug pipeline, clinical, regulatory, and financial assessment questions."
-  logs_bucket_name   = var.logs_bucket_name
+  project_id       = var.project_id
+  region           = var.region
+  agent_id         = "argus-agent"
+  display_name     = "Argus — Life Sciences M&A Diligence"
+  description      = "Due-diligence agent for pharma/biotech M&A. Answers quick questions about a potential acquisition, produces investment-grade acquisition whitepapers (PDF) on a named target, and recommends acquisition targets from a thesis. Draws on regulatory and scientific document corpora, SEC EDGAR financials, and web search. Use for acquisition screening, target due diligence, drug pipeline, clinical, regulatory, and financial assessment questions."
+  logs_bucket_name = var.logs_bucket_name
 }
 
 

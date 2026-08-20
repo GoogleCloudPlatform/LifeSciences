@@ -44,9 +44,7 @@ if TYPE_CHECKING:
 # URI advertised on the agent card describing the executor extension shipped
 # by ADK. Kept as a module-level constant so callers can override or extend
 # the capabilities list when needed.
-_ADK_AGENT_EXECUTOR_EXTENSION_URI = (
-    "https://google.github.io/adk-docs/a2a/a2a-extension/"
-)
+_ADK_AGENT_EXECUTOR_EXTENSION_URI = "https://google.github.io/adk-docs/a2a/a2a-extension/"
 
 
 def _default_capabilities() -> AgentCapabilities:

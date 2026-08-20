@@ -97,9 +97,7 @@ class TestAF2HardwareConfig:
         from foldrun_app.models.af2.base import AF2Tool
 
         tool = AF2Tool({"name": "test", "description": "test"})
-        config = tool._get_hardware_config(
-            "auto", seq_length=500, is_multimer=False
-        )
+        config = tool._get_hardware_config("auto", seq_length=500, is_multimer=False)
         assert config["predict_accel"] == "NVIDIA_TESLA_A100"
         assert config["predict_machine"] == "a2-highgpu-1g"
 
@@ -108,9 +106,7 @@ class TestAF2HardwareConfig:
         from foldrun_app.models.af2.base import AF2Tool
 
         tool = AF2Tool({"name": "test", "description": "test"})
-        config = tool._get_hardware_config(
-            "auto", seq_length=2000, is_multimer=False
-        )
+        config = tool._get_hardware_config("auto", seq_length=2000, is_multimer=False)
         assert config["predict_accel"] == "NVIDIA_A100_80GB"
         assert config["predict_machine"] == "a2-ultragpu-1g"
 
@@ -225,7 +221,9 @@ class TestAF2HardwareConfig:
         from foldrun_app.models.af2.base import AF2Tool
         from foldrun_app.models.af2.config import Config
 
-        with patch.object(Config, "supported_gpus", new_callable=lambda: property(lambda self: ["A100"])):
+        with patch.object(
+            Config, "supported_gpus", new_callable=lambda: property(lambda self: ["A100"])
+        ):
             tool = AF2Tool({"name": "test", "description": "test"})
             config = tool._get_hardware_config("L4")
             assert config["predict_accel"] == "NVIDIA_TESLA_A100"

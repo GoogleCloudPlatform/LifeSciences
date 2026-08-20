@@ -74,7 +74,9 @@ def _auto_detect_gpus(config):
                 config.set_supported_gpus(boltz2_supported)
                 logger.info(f"Auto-configured BOLTZ2 supported GPUs: {boltz2_supported}")
             else:
-                logger.warning("No A100+ GPUs found! BOLTZ2 requires at least A100. Keeping defaults.")
+                logger.warning(
+                    "No A100+ GPUs found! BOLTZ2 requires at least A100. Keeping defaults."
+                )
         else:
             logger.warning("No GPUs found with limit > 0! Keeping defaults.")
 

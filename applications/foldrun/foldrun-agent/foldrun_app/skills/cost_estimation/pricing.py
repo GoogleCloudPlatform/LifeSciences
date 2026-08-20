@@ -67,10 +67,34 @@ DEFAULT_PRICES = {
 # Machine type specifications
 # ---------------------------------------------------------------------------
 MACHINE_SPECS = {
-    "c2-standard-16": {"core_key": "c2", "vcpus": 16, "ram_gib": 64, "gpu_key": None, "gpu_count": 0},
-    "g2-standard-12": {"core_key": "g2", "vcpus": 12, "ram_gib": 48, "gpu_key": None, "gpu_count": 0},
-    "a2-highgpu-1g": {"core_key": "a2", "vcpus": 12, "ram_gib": 85, "gpu_key": None, "gpu_count": 0},
-    "a2-ultragpu-1g": {"core_key": "a2", "vcpus": 12, "ram_gib": 170, "gpu_key": None, "gpu_count": 0},
+    "c2-standard-16": {
+        "core_key": "c2",
+        "vcpus": 16,
+        "ram_gib": 64,
+        "gpu_key": None,
+        "gpu_count": 0,
+    },
+    "g2-standard-12": {
+        "core_key": "g2",
+        "vcpus": 12,
+        "ram_gib": 48,
+        "gpu_key": None,
+        "gpu_count": 0,
+    },
+    "a2-highgpu-1g": {
+        "core_key": "a2",
+        "vcpus": 12,
+        "ram_gib": 85,
+        "gpu_key": None,
+        "gpu_count": 0,
+    },
+    "a2-ultragpu-1g": {
+        "core_key": "a2",
+        "vcpus": 12,
+        "ram_gib": 170,
+        "gpu_key": None,
+        "gpu_count": 0,
+    },
 }
 
 GPU_PRICE_KEYS = {
@@ -109,84 +133,84 @@ DURATION_ANCHORS = {
         # MSA=34.4 min, predict=17.0 min, relax=4.5 min).
         "L4": [
             #  residues, msa, predict/task, relax/task
-            (50,   30,  16,  4),
-            (100,  33,  17,  4.5),
-            (300,  37,  19,  5),
-            (500,  42,  22,  6),
-            (750,  48,  28,  8),
-            (1000, 55,  35,  10),
-            (1500, 65,  45, 13),
+            (50, 30, 16, 4),
+            (100, 33, 17, 4.5),
+            (300, 37, 19, 5),
+            (500, 42, 22, 6),
+            (750, 48, 28, 8),
+            (1000, 55, 35, 10),
+            (1500, 65, 45, 13),
         ],
         "A100": [
-            (50,   30,   8,  3),
-            (100,  33,   9,  3.5),
-            (300,  37,  11,  4),
-            (500,  42,  14,  5),
-            (1000, 55,  20,  6),
-            (1500, 65,  28,  8),
+            (50, 30, 8, 3),
+            (100, 33, 9, 3.5),
+            (300, 37, 11, 4),
+            (500, 42, 14, 5),
+            (1000, 55, 20, 6),
+            (1500, 65, 28, 8),
         ],
         "A100_80GB": [
-            (50,   30,   6,  3),
-            (100,  33,   7,  3),
-            (300,  37,   9,  3.5),
-            (500,  42,  12,  4),
-            (1000, 55,  17,  5),
-            (2000, 70,  25,  6),
+            (50, 30, 6, 3),
+            (100, 33, 7, 3),
+            (300, 37, 9, 3.5),
+            (500, 42, 12, 4),
+            (1000, 55, 17, 5),
+            (2000, 70, 25, 6),
         ],
     },
     "af2_multimer": {
         # predict_per_task is per individual prediction (of 25 total by default)
         "A100": [
-            (300,  35,  15,  5),
-            (1000, 45,  22,  8),
-            (2000, 55,  35, 12),
-            (3000, 70,  50, 18),
+            (300, 35, 15, 5),
+            (1000, 45, 22, 8),
+            (2000, 55, 35, 12),
+            (3000, 70, 50, 18),
         ],
         "A100_80GB": [
-            (300,  35,  12,  4),
-            (1000, 45,  18,  6),
-            (2000, 55,  28,  8),
-            (3000, 70,  40, 12),
+            (300, 35, 12, 4),
+            (1000, 45, 18, 6),
+            (2000, 55, 28, 8),
+            (3000, 70, 40, 12),
         ],
     },
     "of3": {
         # predict_per_task is per seed (each seed runs num_diffusion_samples)
         "A100": [
-            (100,  10,   1.5, 0),
-            (300,  13,   2.5, 0),
-            (600,  15,   5,   0),
-            (1000, 18,   8,   0),
-            (1500, 20,  12,   0),
-            (2000, 25,  18,   0),
+            (100, 10, 1.5, 0),
+            (300, 13, 2.5, 0),
+            (600, 15, 5, 0),
+            (1000, 18, 8, 0),
+            (1500, 20, 12, 0),
+            (2000, 25, 18, 0),
         ],
         "A100_80GB": [
-            (100,  10,   1,   0),
-            (300,  13,   2,   0),
-            (600,  15,   4,   0),
-            (1000, 18,   6,   0),
-            (1500, 20,  10,   0),
-            (2000, 25,  15,   0),
-            (3000, 30,  22,   0),
+            (100, 10, 1, 0),
+            (300, 13, 2, 0),
+            (600, 15, 4, 0),
+            (1000, 18, 6, 0),
+            (1500, 20, 10, 0),
+            (2000, 25, 15, 0),
+            (3000, 30, 22, 0),
         ],
     },
     "boltz2": {
         # predict_per_task is per seed (each seed runs num_diffusion_samples)
         "A100": [
-            (100,  10,   1.5, 0),
-            (300,  13,   2.5, 0),
-            (600,  15,   5,   0),
-            (1000, 18,   8,   0),
-            (1500, 20,  12,   0),
-            (2000, 25,  18,   0),
+            (100, 10, 1.5, 0),
+            (300, 13, 2.5, 0),
+            (600, 15, 5, 0),
+            (1000, 18, 8, 0),
+            (1500, 20, 12, 0),
+            (2000, 25, 18, 0),
         ],
         "A100_80GB": [
-            (100,  10,   1,   0),
-            (300,  13,   2,   0),
-            (600,  15,   4,   0),
-            (1000, 18,   6,   0),
-            (1500, 20,  10,   0),
-            (2000, 25,  15,   0),
-            (3000, 30,  22,   0),
+            (100, 10, 1, 0),
+            (300, 13, 2, 0),
+            (600, 15, 4, 0),
+            (1000, 18, 6, 0),
+            (1500, 20, 10, 0),
+            (2000, 25, 15, 0),
+            (3000, 30, 22, 0),
         ],
     },
 }
@@ -222,7 +246,9 @@ OTHER_MONTHLY = {
 
 
 def _interpolate_durations(
-    job_type: str, gpu_type: str, sequence_length: int,
+    job_type: str,
+    gpu_type: str,
+    sequence_length: int,
 ) -> tuple:
     """Interpolate (msa_min, predict_per_task_min, relax_per_task_min) from anchors.
 
@@ -290,8 +316,9 @@ def _machine_for_gpu(gpu_type: str) -> str:
     return "a2-highgpu-1g"
 
 
-def _hourly_rate(machine_type: str, gpu_type: Optional[str], gpu_count: int,
-                 spot: bool, prices: dict) -> float:
+def _hourly_rate(
+    machine_type: str, gpu_type: Optional[str], gpu_count: int, spot: bool, prices: dict
+) -> float:
     """Calculate the hourly rate for a machine + GPU combo."""
     spec = MACHINE_SPECS[machine_type]
     suffix = "_spot" if spot else ""
@@ -315,6 +342,7 @@ def fetch_live_prices(region: str = "us-central1") -> Optional[dict]:
     """
     try:
         from google.cloud import billing_v1
+
         client = billing_v1.CloudCatalogClient()
 
         prices = {}
@@ -445,7 +473,9 @@ def _estimate_phases(
         prices: Price dict
     """
     msa_min, predict_per_task_min, relax_per_task_min = _interpolate_durations(
-        job_type, gpu_type, sequence_length,
+        job_type,
+        gpu_type,
+        sequence_length,
     )
 
     phases = []
@@ -454,14 +484,16 @@ def _estimate_phases(
     msa_machine = "c2-standard-16"
     msa_rate = _hourly_rate(msa_machine, None, 0, spot, prices)
     msa_cost = (msa_min / 60) * msa_rate
-    phases.append({
-        "phase": "MSA / Data Pipeline",
-        "machine_type": msa_machine,
-        "gpu": "None (CPU, Jackhmmer)",
-        "duration_minutes": round(msa_min, 1),
-        "hourly_rate": round(msa_rate, 4),
-        "cost": round(msa_cost, 2),
-    })
+    phases.append(
+        {
+            "phase": "MSA / Data Pipeline",
+            "machine_type": msa_machine,
+            "gpu": "None (CPU, Jackhmmer)",
+            "duration_minutes": round(msa_min, 1),
+            "hourly_rate": round(msa_rate, 4),
+            "cost": round(msa_cost, 2),
+        }
+    )
 
     # Phase 2: Predict
     predict_machine = _machine_for_gpu(gpu_type)
@@ -479,15 +511,17 @@ def _estimate_phases(
         predict_desc = f"{num_predictions} models"
 
     predict_cost = (predict_total_min / 60) * predict_rate
-    phases.append({
-        "phase": "Predict",
-        "machine_type": predict_machine,
-        "gpu": f"{gpu_type} x 1",
-        "duration_minutes": round(predict_total_min, 1),
-        "detail": predict_desc,
-        "hourly_rate": round(predict_rate, 4),
-        "cost": round(predict_cost, 2),
-    })
+    phases.append(
+        {
+            "phase": "Predict",
+            "machine_type": predict_machine,
+            "gpu": f"{gpu_type} x 1",
+            "duration_minutes": round(predict_total_min, 1),
+            "detail": predict_desc,
+            "hourly_rate": round(predict_rate, 4),
+            "cost": round(predict_cost, 2),
+        }
+    )
 
     # Phase 3: Relax (AF2 only — OF3 has no relax step)
     if job_type.startswith("af2") and relax_per_task_min > 0:
@@ -496,15 +530,17 @@ def _estimate_phases(
         relax_rate = _hourly_rate(relax_machine, relax_gpu, 1, spot, prices)
         relax_total_min = relax_per_task_min * num_predictions
         relax_cost = (relax_total_min / 60) * relax_rate
-        phases.append({
-            "phase": "Relax",
-            "machine_type": relax_machine,
-            "gpu": f"{relax_gpu} x 1",
-            "duration_minutes": round(relax_total_min, 1),
-            "detail": f"{num_predictions} structures",
-            "hourly_rate": round(relax_rate, 4),
-            "cost": round(relax_cost, 2),
-        })
+        phases.append(
+            {
+                "phase": "Relax",
+                "machine_type": relax_machine,
+                "gpu": f"{relax_gpu} x 1",
+                "duration_minutes": round(relax_total_min, 1),
+                "detail": f"{num_predictions} structures",
+                "hourly_rate": round(relax_rate, 4),
+                "cost": round(relax_cost, 2),
+            }
+        )
 
     return phases
 
@@ -554,12 +590,22 @@ def estimate_single_job(
 
     # Build phases for both pricing modes
     spot_phases = _estimate_phases(
-        job_type, gpu_type, sequence_length, num_predictions,
-        num_diffusion_samples, True, prices,
+        job_type,
+        gpu_type,
+        sequence_length,
+        num_predictions,
+        num_diffusion_samples,
+        True,
+        prices,
     )
     ondemand_phases = _estimate_phases(
-        job_type, gpu_type, sequence_length, num_predictions,
-        num_diffusion_samples, False, prices,
+        job_type,
+        gpu_type,
+        sequence_length,
+        num_predictions,
+        num_diffusion_samples,
+        False,
+        prices,
     )
 
     spot_total = round(sum(p["cost"] for p in spot_phases), 2)
@@ -605,20 +651,20 @@ def _compute_items_for_mode(
 
         gpu_type = _auto_select_gpu(job_type, seq_len)
         num_predictions = DEFAULT_PREDICT_TASKS.get(job_type, 5)
-        phases = _estimate_phases(
-            job_type, gpu_type, seq_len, num_predictions, 5, spot, prices
-        )
+        phases = _estimate_phases(job_type, gpu_type, seq_len, num_predictions, 5, spot, prices)
         per_job = round(sum(p["cost"] for p in phases), 2)
         monthly = round(per_job * count, 2)
         total += monthly
-        items.append({
-            "job_type": job_type,
-            "jobs_per_month": count,
-            "estimated_cost_per_job": per_job,
-            "gpu_type": gpu_type,
-            "num_predict_tasks": num_predictions,
-            "estimated_monthly": monthly,
-        })
+        items.append(
+            {
+                "job_type": job_type,
+                "jobs_per_month": count,
+                "estimated_cost_per_job": per_job,
+                "gpu_type": gpu_type,
+                "num_predict_tasks": num_predictions,
+                "estimated_monthly": monthly,
+            }
+        )
 
     return items, round(total, 2)
 
@@ -666,10 +712,16 @@ def estimate_monthly(
     ]
 
     spot_items, spot_compute = _compute_items_for_mode(
-        job_configs, True, region, prices,
+        job_configs,
+        True,
+        region,
+        prices,
     )
     od_items, od_compute = _compute_items_for_mode(
-        job_configs, False, region, prices,
+        job_configs,
+        False,
+        region,
+        prices,
     )
 
     # Infrastructure (same regardless of pricing mode)
@@ -678,10 +730,12 @@ def estimate_monthly(
     if include_infrastructure:
         for key, item in INFRASTRUCTURE_MONTHLY.items():
             infra_total += item["cost"]
-            infra_items.append({
-                "item": item["description"],
-                "monthly_cost": item["cost"],
-            })
+            infra_items.append(
+                {
+                    "item": item["description"],
+                    "monthly_cost": item["cost"],
+                }
+            )
 
     # Other costs (same regardless of pricing mode)
     other_total = sum(item["cost"] for item in OTHER_MONTHLY.values())
@@ -728,8 +782,10 @@ def estimate_monthly(
 # Actual cost retrieval from Agent Platform job history
 # ---------------------------------------------------------------------------
 
-def _job_hourly_rate(machine_type: str, gpu_enum: Optional[str], gpu_count: int,
-                     is_spot: bool, prices: dict) -> float:
+
+def _job_hourly_rate(
+    machine_type: str, gpu_enum: Optional[str], gpu_count: int, is_spot: bool, prices: dict
+) -> float:
     """Calculate hourly rate for a Agent Platform custom job's hardware config.
 
     Args:
@@ -791,9 +847,7 @@ def get_actual_costs(
     # Build filter for FoldRun jobs
     filter_str = 'labels.submitted_by="foldrun-agent"'
     if pipeline_job_id:
-        filter_str += (
-            f' AND labels.vertex-ai-pipelines-run-billing-id="{pipeline_job_id}"'
-        )
+        filter_str += f' AND labels.vertex-ai-pipelines-run-billing-id="{pipeline_job_id}"'
 
     request = aiplatform_v1.ListCustomJobsRequest(
         parent=parent,
@@ -817,9 +871,7 @@ def get_actual_costs(
     pipelines: dict = {}
     for job in all_jobs:
         labels = dict(job.labels) if job.labels else {}
-        billing_id = labels.get(
-            "vertex-ai-pipelines-run-billing-id", "unknown"
-        )
+        billing_id = labels.get("vertex-ai-pipelines-run-billing-id", "unknown")
 
         if billing_id not in pipelines:
             pipelines[billing_id] = {
@@ -858,28 +910,26 @@ def get_actual_costs(
         if start_time and end_time:
             duration_min = (end_time - start_time).total_seconds() / 60
 
-        hourly_rate_od = _job_hourly_rate(
-            machine_type, gpu_enum, gpu_count, False, prices
-        )
-        hourly_rate_spot = _job_hourly_rate(
-            machine_type, gpu_enum, gpu_count, True, prices
-        )
+        hourly_rate_od = _job_hourly_rate(machine_type, gpu_enum, gpu_count, False, prices)
+        hourly_rate_spot = _job_hourly_rate(machine_type, gpu_enum, gpu_count, True, prices)
         actual_rate = hourly_rate_spot if is_spot else hourly_rate_od
         actual_cost = (duration_min / 60) * actual_rate
 
         gpu_str = f"{gpu_enum} x{gpu_count}" if gpu_enum else "None (CPU)"
 
-        pipelines[billing_id]["tasks"].append({
-            "phase": job.display_name,
-            "machine_type": machine_type,
-            "gpu": gpu_str,
-            "scheduling": "FLEX_START" if is_spot else "ON_DEMAND",
-            "actual_duration_minutes": round(duration_min, 1),
-            "hourly_rate": round(actual_rate, 4),
-            "actual_cost": round(actual_cost, 2),
-            "on_demand_cost": round((duration_min / 60) * hourly_rate_od, 2),
-            "flex_start_cost": round((duration_min / 60) * hourly_rate_spot, 2),
-        })
+        pipelines[billing_id]["tasks"].append(
+            {
+                "phase": job.display_name,
+                "machine_type": machine_type,
+                "gpu": gpu_str,
+                "scheduling": "FLEX_START" if is_spot else "ON_DEMAND",
+                "actual_duration_minutes": round(duration_min, 1),
+                "hourly_rate": round(actual_rate, 4),
+                "actual_cost": round(actual_cost, 2),
+                "on_demand_cost": round((duration_min / 60) * hourly_rate_od, 2),
+                "flex_start_cost": round((duration_min / 60) * hourly_rate_spot, 2),
+            }
+        )
 
     # Build pipeline run summaries
     runs = []
@@ -887,9 +937,7 @@ def get_actual_costs(
     grand_total_od = 0.0
     grand_total_spot = 0.0
 
-    for billing_id, pipeline in sorted(
-        pipelines.items(), key=lambda x: x[0]
-    ):
+    for billing_id, pipeline in sorted(pipelines.items(), key=lambda x: x[0]):
         tasks = pipeline["tasks"]
         run_actual = sum(t["actual_cost"] for t in tasks)
         run_od = sum(t["on_demand_cost"] for t in tasks)
@@ -908,11 +956,7 @@ def get_actual_costs(
             seq_len = int(seq_len_str)
             jt = None
             if model == "alphafold2":
-                jt = (
-                    "af2_monomer"
-                    if pipeline["job_type"] == "monomer"
-                    else "af2_multimer"
-                )
+                jt = "af2_monomer" if pipeline["job_type"] == "monomer" else "af2_multimer"
             elif model == "openfold3":
                 jt = "of3"
 
@@ -924,25 +968,27 @@ def get_actual_costs(
                     "estimated_on_demand": est_od,
                     "estimated_flex_start": est_spot,
                     "actual_total": round(run_actual, 2),
-                    "estimate_accuracy_pct": round(
-                        (1 - abs(run_spot - est_spot) / est_spot) * 100
-                    ) if est_spot > 0 else None,
+                    "estimate_accuracy_pct": round((1 - abs(run_spot - est_spot) / est_spot) * 100)
+                    if est_spot > 0
+                    else None,
                 }
 
-        runs.append({
-            "pipeline_id": billing_id,
-            "model": model,
-            "job_type": pipeline["job_type"],
-            "sequence_name": pipeline["seq_name"],
-            "sequence_length": pipeline["seq_len"],
-            "gpu_type": pipeline["gpu_type"],
-            "tasks": tasks,
-            "actual_total_cost": round(run_actual, 2),
-            "on_demand_equivalent": round(run_od, 2),
-            "flex_start_equivalent": round(run_spot, 2),
-            "total_duration_minutes": round(total_min, 1),
-            "estimate_comparison": estimate_comparison,
-        })
+        runs.append(
+            {
+                "pipeline_id": billing_id,
+                "model": model,
+                "job_type": pipeline["job_type"],
+                "sequence_name": pipeline["seq_name"],
+                "sequence_length": pipeline["seq_len"],
+                "gpu_type": pipeline["gpu_type"],
+                "tasks": tasks,
+                "actual_total_cost": round(run_actual, 2),
+                "on_demand_equivalent": round(run_od, 2),
+                "flex_start_equivalent": round(run_spot, 2),
+                "total_duration_minutes": round(total_min, 1),
+                "estimate_comparison": estimate_comparison,
+            }
+        )
 
     return {
         "project_id": project_id,

@@ -59,6 +59,7 @@ def predict_boltz2(
 
     # Copy query YAML to local dir so boltz derives a deterministic stem
     import shutil
+
     query_local = os.path.join(output_dir, "patched_query.yaml")
     shutil.copy2(updated_query_json.path, query_local)
 
@@ -74,8 +75,8 @@ def predict_boltz2(
         f"--cache={nfs_cache_path}",
         f"--seed={seed_value}",
         "--override",
-        "--no_kernels",      # disable cuequivariance CUDA kernels — requires newer
-                             # driver than Agent Platform A100 nodes currently support
+        "--no_kernels",  # disable cuequivariance CUDA kernels — requires newer
+        # driver than Agent Platform A100 nodes currently support
         "--write_full_pde",  # write pde_{stem}_model_N.npz for PDE heatmap plots
     ]
 

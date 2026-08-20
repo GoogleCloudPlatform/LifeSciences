@@ -79,12 +79,8 @@ def start_server() -> subprocess.Popen[str]:
     )
 
     # Start threads to log stdout and stderr in real-time
-    threading.Thread(
-        target=log_output, args=(process.stdout, logger.info), daemon=True
-    ).start()
-    threading.Thread(
-        target=log_output, args=(process.stderr, logger.error), daemon=True
-    ).start()
+    threading.Thread(target=log_output, args=(process.stdout, logger.info), daemon=True).start()
+    threading.Thread(target=log_output, args=(process.stderr, logger.error), daemon=True).start()
 
     return process
 
@@ -146,9 +142,7 @@ def test_adk_run_sse(server_fixture: subprocess.Popen[str]) -> None:
         "new_message": {"role": "user", "parts": [{"text": "Hi!"}]},
         "streaming": True,
     }
-    response = requests.post(
-        RUN_SSE_URL, headers=HEADERS, json=data, stream=True, timeout=60
-    )
+    response = requests.post(RUN_SSE_URL, headers=HEADERS, json=data, stream=True, timeout=60)
     assert response.status_code == 200
 
     events = []
@@ -196,9 +190,7 @@ def test_a2a_chat_stream(server_fixture: subprocess.Popen[str]) -> None:
             line_str = line.decode("utf-8")
             if line_str.startswith("data: "):
                 responses.append(
-                    SendStreamingMessageResponse.model_validate(
-                        json.loads(line_str[6:])
-                    )
+                    SendStreamingMessageResponse.model_validate(json.loads(line_str[6:]))
                 )
 
     assert responses, "No responses received from stream"
@@ -232,9 +224,7 @@ def test_collect_feedback(server_fixture: subprocess.Popen[str]) -> None:
         "session_id": "test-session-456",
         "text": "Great response!",
     }
-    response = requests.post(
-        FEEDBACK_URL, json=feedback_data, headers=HEADERS, timeout=10
-    )
+    response = requests.post(FEEDBACK_URL, json=feedback_data, headers=HEADERS, timeout=10)
     assert response.status_code == 200
 
 

@@ -46,9 +46,6 @@ from .shared_utils import (
 logger = logging.getLogger(__name__)
 
 
-
-
-
 def generate_gemini_expert_analysis(summary_data: dict) -> dict:
     """Generate expert analysis using Gemini via Google GenAI SDK."""
     try:
@@ -295,36 +292,36 @@ def consolidate_results(
     try:
         query_json_path = job_metadata.get("parameters", {}).get("query_json_path")
         if query_json_path and isinstance(query_json_path, str):
-                query_data = download_json_from_gcs(query_json_path)
-                queries = query_data.get("queries", {})
-                if queries:
-                    query_name = list(queries.keys())[0]
-                    fasta_header = query_name
-                    chains = queries[query_name].get("chains", [])
-                    seqs = [
-                        c.get("sequence", "")
-                        for c in chains
-                        if c.get("molecule_type") == "protein"
-                    ]
-                    fasta_sequence = "/".join(seqs) if seqs else None
+            query_data = download_json_from_gcs(query_json_path)
+            queries = query_data.get("queries", {})
+            if queries:
+                query_name = list(queries.keys())[0]
+                fasta_header = query_name
+                chains = queries[query_name].get("chains", [])
+                seqs = [
+                    c.get("sequence", "")
+                    for c in chains
+                    if c.get("molecule_type") == "protein"
+                ]
+                fasta_sequence = "/".join(seqs) if seqs else None
 
-                    clean_queries = {}
-                    for qname, qdata in queries.items():
-                        clean_chains = []
-                        for chain in qdata.get("chains", []):
-                            clean_chain = {
-                                "molecule_type": chain.get("molecule_type"),
-                                "chain_ids": chain.get("chain_ids"),
-                            }
-                            if chain.get("sequence"):
-                                clean_chain["sequence"] = chain["sequence"]
-                            if chain.get("smiles"):
-                                clean_chain["smiles"] = chain["smiles"]
-                            if chain.get("ccd_codes"):
-                                clean_chain["ccd_codes"] = chain["ccd_codes"]
-                            clean_chains.append(clean_chain)
-                        clean_queries[qname] = {"chains": clean_chains}
-                    input_query_json = {"queries": clean_queries}
+                clean_queries = {}
+                for qname, qdata in queries.items():
+                    clean_chains = []
+                    for chain in qdata.get("chains", []):
+                        clean_chain = {
+                            "molecule_type": chain.get("molecule_type"),
+                            "chain_ids": chain.get("chain_ids"),
+                        }
+                        if chain.get("sequence"):
+                            clean_chain["sequence"] = chain["sequence"]
+                        if chain.get("smiles"):
+                            clean_chain["smiles"] = chain["smiles"]
+                        if chain.get("ccd_codes"):
+                            clean_chain["ccd_codes"] = chain["ccd_codes"]
+                        clean_chains.append(clean_chain)
+                    clean_queries[qname] = {"chains": clean_chains}
+                input_query_json = {"queries": clean_queries}
     except Exception as e:
         logger.warning(f"Could not load input sequence: {e}")
 
@@ -505,7 +502,9 @@ def run_task(
 
         if plddt_scores:
             plddt_plot_path = f"/tmp/plddt_plot_{task_index}.png"
-            plot_plddt_distribution(plddt_scores, sample_name, plddt_plot_path, chain_info)
+            plot_plddt_distribution(
+                plddt_scores, sample_name, plddt_plot_path, chain_info
+            )
             plddt_plot_uri = f"{output_base}/plddt_plot_{task_index}.png"
             upload_to_gcs(plddt_plot_path, plddt_plot_uri)
             plot_files["plddt_plot"] = plddt_plot_uri
@@ -513,7 +512,13 @@ def run_task(
 
         if pde_matrix:
             pde_plot_path = f"/tmp/pde_plot_{task_index}.png"
-            plot_error_matrix(pde_matrix, sample_name, "Predicted Distance Error (Å)", pde_plot_path, chain_info)
+            plot_error_matrix(
+                pde_matrix,
+                sample_name,
+                "Predicted Distance Error (Å)",
+                pde_plot_path,
+                chain_info,
+            )
             pde_plot_uri = f"{output_base}/pde_plot_{task_index}.png"
             upload_to_gcs(pde_plot_path, pde_plot_uri)
             plot_files["pde_plot"] = pde_plot_uri

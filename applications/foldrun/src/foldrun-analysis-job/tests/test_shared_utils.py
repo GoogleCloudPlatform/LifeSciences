@@ -35,7 +35,13 @@ from foldrun_analysis import shared_utils  # noqa: E402
 class TestGetJobMetadata:
     """Unit tests for get_job_metadata function."""
 
-    @patch.dict(os.environ, {"GOOGLE_CLOUD_PROJECT": "test-project", "PIPELINE_JOB_LOCATION": "us-central1"})
+    @patch.dict(
+        os.environ,
+        {
+            "GOOGLE_CLOUD_PROJECT": "test-project",
+            "PIPELINE_JOB_LOCATION": "us-central1",
+        },
+    )
     @patch("google.cloud.aiplatform_v1.PipelineServiceClient")
     def test_get_job_metadata_success(self, mock_client_cls):
         """Verify that get_job_metadata successfully retrieves and formats pipeline job metadata."""
@@ -70,7 +76,9 @@ class TestGetJobMetadata:
         # Mock time fields
         create_time = datetime(2026, 6, 9, 12, 0, 0, tzinfo=timezone.utc)
         start_time = datetime(2026, 6, 9, 12, 5, 0, tzinfo=timezone.utc)
-        end_time = datetime(2026, 6, 9, 13, 17, 0, tzinfo=timezone.utc) # 1 hour 12 minutes (4320 seconds)
+        end_time = datetime(
+            2026, 6, 9, 13, 17, 0, tzinfo=timezone.utc
+        )  # 1 hour 12 minutes (4320 seconds)
 
         mock_job.create_time = create_time
         mock_job.start_time = start_time
@@ -107,12 +115,20 @@ class TestGetJobMetadata:
         metadata = shared_utils.get_job_metadata("test-job-id")
         assert metadata == {"labels": {}, "parameters": {}}
 
-    @patch.dict(os.environ, {"GOOGLE_CLOUD_PROJECT": "test-project", "PIPELINE_JOB_LOCATION": "us-central1"})
+    @patch.dict(
+        os.environ,
+        {
+            "GOOGLE_CLOUD_PROJECT": "test-project",
+            "PIPELINE_JOB_LOCATION": "us-central1",
+        },
+    )
     @patch("google.cloud.aiplatform_v1.PipelineServiceClient")
     def test_get_job_metadata_exception(self, mock_client_cls):
         """Verify that get_job_metadata catches exceptions, logs them, and returns empty structures."""
         mock_client = MagicMock()
-        mock_client.get_pipeline_job.side_effect = Exception("Vertex AI connection error")
+        mock_client.get_pipeline_job.side_effect = Exception(
+            "Vertex AI connection error"
+        )
         mock_client_cls.return_value = mock_client
 
         metadata = shared_utils.get_job_metadata("test-job-id")

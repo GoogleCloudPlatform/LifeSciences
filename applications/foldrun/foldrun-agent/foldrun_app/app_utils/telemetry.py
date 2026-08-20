@@ -23,9 +23,7 @@ def setup_telemetry() -> str | None:
     os.environ.setdefault("GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", "true")
 
     bucket = os.environ.get("LOGS_BUCKET_NAME")
-    capture_content = os.environ.get(
-        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "false"
-    )
+    capture_content = os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "false")
     if bucket and capture_content != "false":
         logging.info(
             "Prompt-response logging enabled - mode: NO_CONTENT (metadata only, no prompts/responses)"
@@ -33,9 +31,7 @@ def setup_telemetry() -> str | None:
         os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] = "NO_CONTENT"
         os.environ.setdefault("OTEL_INSTRUMENTATION_GENAI_UPLOAD_FORMAT", "jsonl")
         os.environ.setdefault("OTEL_INSTRUMENTATION_GENAI_COMPLETION_HOOK", "upload")
-        os.environ.setdefault(
-            "OTEL_SEMCONV_STABILITY_OPT_IN", "gen_ai_latest_experimental"
-        )
+        os.environ.setdefault("OTEL_SEMCONV_STABILITY_OPT_IN", "gen_ai_latest_experimental")
         commit_sha = os.environ.get("COMMIT_SHA", "dev")
         os.environ.setdefault(
             "OTEL_RESOURCE_ATTRIBUTES",

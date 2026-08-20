@@ -19,6 +19,7 @@ import logging
 import numpy as np
 import time
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -174,14 +175,16 @@ def _detect_atom_site_columns(cif_text: str) -> dict:
     return {name: idx for idx, name in enumerate(col_names)}
 
 
-def parse_cif_chains(cif_text: str, extract_plddt: bool = False) -> tuple[list[dict], list[float]]:
+def parse_cif_chains(
+    cif_text: str, extract_plddt: bool = False
+) -> tuple[list[dict], list[float]]:
     """Parse CIF atom_site records to extract per-chain info and optionally per-atom pLDDT.
 
     Supports dynamic index lookup based on loop headers, with a fallback to
     standard OpenFold3 hardcoded indices when loop headers are absent.
     """
     col_map = _detect_atom_site_columns(cif_text)
-    
+
     # Fallback to OF3 hardcoded indices if header is missing
     if col_map:
         chain_col = col_map.get("auth_asym_id", 11)
@@ -226,8 +229,26 @@ def parse_cif_chains(cif_text: str, extract_plddt: bool = False) -> tuple[list[d
         info = chains[cid]
         comp_ids = info["comp_ids"]
         standard_aa = {
-            "ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE",
-            "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"
+            "ALA",
+            "ARG",
+            "ASN",
+            "ASP",
+            "CYS",
+            "GLN",
+            "GLU",
+            "GLY",
+            "HIS",
+            "ILE",
+            "LEU",
+            "LYS",
+            "MET",
+            "PHE",
+            "PRO",
+            "SER",
+            "THR",
+            "TRP",
+            "TYR",
+            "VAL",
         }
         rna_bases = {"A", "C", "G", "U"}
         dna_bases = {"DA", "DC", "DG", "DT"}
@@ -268,8 +289,16 @@ def plot_plddt_distribution(
     # If chain info available, color each chain differently
     if chain_info and len(chain_info) > 1:
         chain_colors = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
+            "#bcbd22",
+            "#17becf",
         ]
         offset = 0
         for i, ci in enumerate(chain_info):
@@ -308,7 +337,8 @@ def plot_plddt_distribution(
     ax.set_xlabel(x_label, fontsize=10)
     ax.set_ylabel("pLDDT Score", fontsize=10)
     ax.set_title(
-        f"Per-Residue Confidence (pLDDT) - {title_name}" if not chain_info
+        f"Per-Residue Confidence (pLDDT) - {title_name}"
+        if not chain_info
         else f"Per-Atom Confidence (pLDDT) - {title_name}",
         fontsize=11,
         fontweight="bold",
@@ -355,14 +385,26 @@ def plot_error_matrix(
                 )
                 mid = offset + n / 2
                 ax.text(
-                    -2, mid, f"{ci['chain_id']}", ha="right", va="center",
-                    fontsize=9, fontweight="bold", color="#333"
+                    -2,
+                    mid,
+                    f"{ci['chain_id']}",
+                    ha="right",
+                    va="center",
+                    fontsize=9,
+                    fontweight="bold",
+                    color="#333",
                 )
             else:
                 mid = offset + n / 2
                 ax.text(
-                    -2, mid, f"{ci['chain_id']}", ha="right", va="center",
-                    fontsize=9, fontweight="bold", color="#333"
+                    -2,
+                    mid,
+                    f"{ci['chain_id']}",
+                    ha="right",
+                    va="center",
+                    fontsize=9,
+                    fontweight="bold",
+                    color="#333",
                 )
             offset += n
 
@@ -478,7 +520,7 @@ def wait_for_sibling_tasks(
     waited = 0
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
-    
+
     # Ensure prefix doesn't start with / but ends with /
     prefix_clean = prefix.replace(f"gs://{bucket_name}/", "")
     if prefix_clean.startswith("/"):
@@ -493,14 +535,20 @@ def wait_for_sibling_tasks(
         ]
 
         if len(completed_files) >= task_count:
-            logger.info(f"All {task_count} sibling task analysis files found successfully")
+            logger.info(
+                f"All {task_count} sibling task analysis files found successfully"
+            )
             return True
 
-        logger.info(f"Waiting for sibling tasks... ({len(completed_files)}/{task_count} files found)")
+        logger.info(
+            f"Waiting for sibling tasks... ({len(completed_files)}/{task_count} files found)"
+        )
         time.sleep(interval)
         waited += interval
 
-    logger.warning(f"Timeout waiting for sibling tasks. Proceeding consolidation with {len(completed_files)}/{task_count} files.")
+    logger.warning(
+        f"Timeout waiting for sibling tasks. Proceeding consolidation with {len(completed_files)}/{task_count} files."
+    )
     return False
 
 
@@ -547,13 +595,17 @@ def get_job_metadata(job_id: str) -> dict:
 
         project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
         if not project_id:
-            logger.warning("GOOGLE_CLOUD_PROJECT environment variable not set, cannot retrieve job metadata")
+            logger.warning(
+                "GOOGLE_CLOUD_PROJECT environment variable not set, cannot retrieve job metadata"
+            )
             return job_metadata
 
         # Parse region from job_id if it's a full resource name
         region = os.environ.get("PIPELINE_JOB_LOCATION")
         if not region:
-            logger.warning("PIPELINE_JOB_LOCATION environment variable not set, cannot retrieve job metadata")
+            logger.warning(
+                "PIPELINE_JOB_LOCATION environment variable not set, cannot retrieve job metadata"
+            )
             return job_metadata
 
         client = vertex_ai.PipelineServiceClient(
@@ -617,4 +669,3 @@ def get_job_metadata(job_id: str) -> dict:
         logger.error(f"Could not get job metadata: {e}", exc_info=True)
 
     return job_metadata
-

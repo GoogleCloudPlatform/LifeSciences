@@ -49,9 +49,6 @@ from .shared_utils import (
 logger = logging.getLogger(__name__)
 
 
-
-
-
 def generate_gemini_expert_analysis(summary_data: dict) -> dict:
     """Generate expert analysis using Gemini via Google GenAI SDK."""
     try:
@@ -537,7 +534,9 @@ def run_task(
         cif_plddt_scores = []
         try:
             cif_text = download_text_from_gcs(cif_uri)
-            chain_info, cif_plddt_scores = parse_cif_chains(cif_text, extract_plddt=True)
+            chain_info, cif_plddt_scores = parse_cif_chains(
+                cif_text, extract_plddt=True
+            )
         except Exception as e:
             logger.warning(f"Could not parse CIF: {e}")
 
@@ -606,7 +605,9 @@ def run_task(
 
         if plddt_scores:
             plddt_plot_path = f"/tmp/plddt_plot_{task_index}.png"
-            plot_plddt_distribution(plddt_scores, sample_name, plddt_plot_path, chain_info)
+            plot_plddt_distribution(
+                plddt_scores, sample_name, plddt_plot_path, chain_info
+            )
             plddt_plot_uri = f"{output_base}/plddt_plot_{task_index}.png"
             upload_to_gcs(plddt_plot_path, plddt_plot_uri)
             plot_files["plddt_plot"] = plddt_plot_uri
@@ -614,7 +615,13 @@ def run_task(
 
         if pde_matrix:
             pde_plot_path = f"/tmp/pde_plot_{task_index}.png"
-            plot_error_matrix(pde_matrix, sample_name, "Predicted Distance Error (Å)", pde_plot_path, chain_info)
+            plot_error_matrix(
+                pde_matrix,
+                sample_name,
+                "Predicted Distance Error (Å)",
+                pde_plot_path,
+                chain_info,
+            )
             pde_plot_uri = f"{output_base}/pde_plot_{task_index}.png"
             upload_to_gcs(pde_plot_path, pde_plot_uri)
             plot_files["pde_plot"] = pde_plot_uri

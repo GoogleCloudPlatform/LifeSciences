@@ -38,42 +38,49 @@ PROTEIN_SEQ = "MKQHEDKLEEELLSKNYHLENEVAR"
 RNA_SEQ = "ACGUACGUACGUACGUACGUACGUACGUACGUACGU"
 DNA_SEQ = "ACGTACGTACGTACGTACGTACGTACGTACGTACGT"
 
-VALID_JSON = json.dumps({
-    "queries": {
-        "test": {
-            "chains": [
-                {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ}
-            ]
+VALID_JSON = json.dumps(
+    {
+        "queries": {
+            "test": {
+                "chains": [
+                    {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ}
+                ]
+            }
         }
     }
-})
+)
 
-VALID_MULTICHAIN_JSON = json.dumps({
-    "queries": {
-        "test": {
-            "chains": [
-                {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
-                {"molecule_type": "rna", "chain_ids": ["B"], "sequence": RNA_SEQ},
-            ]
+VALID_MULTICHAIN_JSON = json.dumps(
+    {
+        "queries": {
+            "test": {
+                "chains": [
+                    {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
+                    {"molecule_type": "rna", "chain_ids": ["B"], "sequence": RNA_SEQ},
+                ]
+            }
         }
     }
-})
+)
 
-VALID_LIGAND_JSON = json.dumps({
-    "queries": {
-        "test": {
-            "chains": [
-                {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
-                {"molecule_type": "ligand", "chain_ids": ["B"], "smiles": "CC(=O)O"},
-            ]
+VALID_LIGAND_JSON = json.dumps(
+    {
+        "queries": {
+            "test": {
+                "chains": [
+                    {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
+                    {"molecule_type": "ligand", "chain_ids": ["B"], "smiles": "CC(=O)O"},
+                ]
+            }
         }
     }
-})
+)
 
 
 # ---------------------------------------------------------------------------
 # fasta_to_of3_json
 # ---------------------------------------------------------------------------
+
 
 class TestFastaToOF3Json:
     """FASTA → OF3 JSON conversion."""
@@ -164,6 +171,7 @@ class TestFastaToOF3Json:
 # is_of3_json
 # ---------------------------------------------------------------------------
 
+
 class TestIsOF3Json:
     """OF3 JSON format detection."""
 
@@ -208,6 +216,7 @@ class TestIsOF3Json:
 # validate_of3_json
 # ---------------------------------------------------------------------------
 
+
 class TestValidateOF3Json:
     """validate_of3_json() structural and sequence validation."""
 
@@ -225,59 +234,83 @@ class TestValidateOF3Json:
         assert ok, errors
 
     def test_valid_ligand_ccd(self):
-        data = json.dumps({
-            "queries": {
-                "test": {
-                    "chains": [
-                        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
-                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": ["ATP"]},
-                    ]
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {
+                                "molecule_type": "protein",
+                                "chain_ids": ["A"],
+                                "sequence": PROTEIN_SEQ,
+                            },
+                            {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": ["ATP"]},
+                        ]
+                    }
                 }
             }
-        })
+        )
         ok, errors, _ = validate_of3_json(data)
         assert ok, errors
 
     def test_valid_ligand_ccd_string(self):
-        data = json.dumps({
-            "queries": {
-                "test": {
-                    "chains": [
-                        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
-                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": "ATP"},
-                    ]
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {
+                                "molecule_type": "protein",
+                                "chain_ids": ["A"],
+                                "sequence": PROTEIN_SEQ,
+                            },
+                            {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": "ATP"},
+                        ]
+                    }
                 }
             }
-        })
+        )
         ok, errors, _ = validate_of3_json(data)
         assert ok, errors
 
     def test_ligand_ccd_codes_invalid_type(self):
-        data = json.dumps({
-            "queries": {
-                "test": {
-                    "chains": [
-                        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
-                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": 123},
-                    ]
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {
+                                "molecule_type": "protein",
+                                "chain_ids": ["A"],
+                                "sequence": PROTEIN_SEQ,
+                            },
+                            {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": 123},
+                        ]
+                    }
                 }
             }
-        })
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("must be a string or a list of strings" in e for e in errors)
 
     def test_ligand_ccd_codes_not_strings(self):
-        data = json.dumps({
-            "queries": {
-                "test": {
-                    "chains": [
-                        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": PROTEIN_SEQ},
-                        {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": [123]},
-                    ]
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {
+                                "molecule_type": "protein",
+                                "chain_ids": ["A"],
+                                "sequence": PROTEIN_SEQ,
+                            },
+                            {"molecule_type": "ligand", "chain_ids": ["B"], "ccd_codes": [123]},
+                        ]
+                    }
                 }
             }
-        })
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("must be strings" in e for e in errors)
@@ -303,102 +336,155 @@ class TestValidateOF3Json:
         assert any("chains" in e for e in errors)
 
     def test_missing_molecule_type(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"chain_ids": ["A"], "sequence": PROTEIN_SEQ}
-            ]}}
-        })
+        data = json.dumps(
+            {"queries": {"test": {"chains": [{"chain_ids": ["A"], "sequence": PROTEIN_SEQ}]}}}
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("molecule_type" in e for e in errors)
 
     def test_unknown_molecule_type(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "peptide", "chain_ids": ["A"], "sequence": PROTEIN_SEQ}
-            ]}}
-        })
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {
+                                "molecule_type": "peptide",
+                                "chain_ids": ["A"],
+                                "sequence": PROTEIN_SEQ,
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("molecule_type" in e.lower() or "peptide" in e for e in errors)
 
     def test_missing_chain_ids(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "protein", "sequence": PROTEIN_SEQ}
-            ]}}
-        })
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {"chains": [{"molecule_type": "protein", "sequence": PROTEIN_SEQ}]}
+                }
+            }
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("chain_ids" in e for e in errors)
 
     def test_invalid_protein_chars(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "protein", "chain_ids": ["A"], "sequence": "MKQ123HEDKL"}
-            ]}}
-        })
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {
+                                "molecule_type": "protein",
+                                "chain_ids": ["A"],
+                                "sequence": "MKQ123HEDKL",
+                            }
+                        ]
+                    }
+                }
+            }
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("invalid characters" in e.lower() for e in errors)
 
     def test_invalid_rna_chars(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "rna", "chain_ids": ["A"], "sequence": "ACGUTACGU"}
-            ]}}
-        })
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {"molecule_type": "rna", "chain_ids": ["A"], "sequence": "ACGUTACGU"}
+                        ]
+                    }
+                }
+            }
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("invalid characters" in e.lower() for e in errors)
 
     def test_invalid_dna_chars(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "dna", "chain_ids": ["A"], "sequence": "ACGUACGT"}
-            ]}}
-        })
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {"molecule_type": "dna", "chain_ids": ["A"], "sequence": "ACGUACGT"}
+                        ]
+                    }
+                }
+            }
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("invalid characters" in e.lower() for e in errors)
 
     def test_empty_sequence(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "protein", "chain_ids": ["A"], "sequence": ""}
-            ]}}
-        })
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [{"molecule_type": "protein", "chain_ids": ["A"], "sequence": ""}]
+                    }
+                }
+            }
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("empty" in e.lower() for e in errors)
 
     def test_ligand_missing_smiles_and_ccd(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "ligand", "chain_ids": ["B"]}
-            ]}}
-        })
+        data = json.dumps(
+            {"queries": {"test": {"chains": [{"molecule_type": "ligand", "chain_ids": ["B"]}]}}}
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert any("smiles" in e.lower() or "ccd_codes" in e.lower() for e in errors)
 
     def test_short_protein_produces_warning(self):
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "protein", "chain_ids": ["A"], "sequence": "MKQ"}
-            ]}}
-        })
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {"molecule_type": "protein", "chain_ids": ["A"], "sequence": "MKQ"}
+                        ]
+                    }
+                }
+            }
+        )
         _, _, warnings = validate_of3_json(data)
         assert any("short" in w.lower() for w in warnings)
 
     def test_multiple_errors_reported_at_once(self):
         """All errors should be collected, not stopped at the first."""
-        data = json.dumps({
-            "queries": {"test": {"chains": [
-                {"molecule_type": "protein", "sequence": "MKQ123"},  # missing chain_ids + bad chars
-                {"molecule_type": "rna", "chain_ids": ["B"], "sequence": "ACGUT"},  # bad RNA chars
-            ]}}
-        })
+        data = json.dumps(
+            {
+                "queries": {
+                    "test": {
+                        "chains": [
+                            {
+                                "molecule_type": "protein",
+                                "sequence": "MKQ123",
+                            },  # missing chain_ids + bad chars
+                            {
+                                "molecule_type": "rna",
+                                "chain_ids": ["B"],
+                                "sequence": "ACGUT",
+                            },  # bad RNA chars
+                        ]
+                    }
+                }
+            }
+        )
         ok, errors, _ = validate_of3_json(data)
         assert not ok
         assert len(errors) >= 2
@@ -407,6 +493,7 @@ class TestValidateOF3Json:
 # ---------------------------------------------------------------------------
 # _validate_sequence_chars
 # ---------------------------------------------------------------------------
+
 
 class TestValidateSequenceChars:
     """Direct unit tests for _validate_sequence_chars."""
@@ -447,36 +534,53 @@ class TestValidateSequenceChars:
 # count_tokens
 # ---------------------------------------------------------------------------
 
+
 class TestCountTokens:
     """Token counting with OF3 schema."""
 
     def test_single_chain(self):
-        query = {"queries": {"test": {"chains": [
-            {"molecule_type": "protein", "sequence": "ACDEFGHIKL"}
-        ]}}}
+        query = {
+            "queries": {
+                "test": {"chains": [{"molecule_type": "protein", "sequence": "ACDEFGHIKL"}]}
+            }
+        }
         assert count_tokens(query) == 10
 
     def test_multiple_chains(self):
-        query = {"queries": {"test": {"chains": [
-            {"molecule_type": "protein", "sequence": "ACDEFGHIKL"},
-            {"molecule_type": "rna", "sequence": "ACGU"},
-        ]}}}
+        query = {
+            "queries": {
+                "test": {
+                    "chains": [
+                        {"molecule_type": "protein", "sequence": "ACDEFGHIKL"},
+                        {"molecule_type": "rna", "sequence": "ACGU"},
+                    ]
+                }
+            }
+        }
         assert count_tokens(query) == 14
 
     def test_ligand_not_counted(self):
         """Ligands (SMILES) contribute 0 tokens."""
-        query = {"queries": {"test": {"chains": [
-            {"molecule_type": "protein", "sequence": "ACDE"},
-            {"molecule_type": "ligand", "smiles": "CC(=O)O"},
-        ]}}}
+        query = {
+            "queries": {
+                "test": {
+                    "chains": [
+                        {"molecule_type": "protein", "sequence": "ACDE"},
+                        {"molecule_type": "ligand", "smiles": "CC(=O)O"},
+                    ]
+                }
+            }
+        }
         assert count_tokens(query) == 4
 
     def test_empty_queries(self):
         assert count_tokens({"queries": {}}) == 0
 
     def test_multiple_queries_summed(self):
-        query = {"queries": {
-            "q1": {"chains": [{"molecule_type": "protein", "sequence": "ACDE"}]},
-            "q2": {"chains": [{"molecule_type": "rna", "sequence": "ACGU"}]},
-        }}
+        query = {
+            "queries": {
+                "q1": {"chains": [{"molecule_type": "protein", "sequence": "ACDE"}]},
+                "q2": {"chains": [{"molecule_type": "rna", "sequence": "ACGU"}]},
+            }
+        }
         assert count_tokens(query) == 8

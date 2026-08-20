@@ -31,12 +31,12 @@ provider "google" {
 module "agent_infra" {
   source = "git::https://github.com/GoogleCloudPlatform/LifeSciences.git//applications/pharma-on-gemini-enterprise/shared/terraform/agent-infrastructure?ref=main"
 
-  project_id         = var.project_id
-  region             = var.region
-  agent_id           = "biocompass-agent"
-  display_name       = "BioCompass on Gemini Enterprise"
-  description        = "Biomedical literature research assistant for pharma R&D, medical affairs, and clinical / HEOR teams. Searches PubMed + Europe PMC + bioRxiv/medRxiv + ClinicalTrials.gov in parallel, looks up small-molecule chemistry via PubChem, extracts entities + relationships via PubTator3, renders publication-style figures with Nano Banana Pro, and orchestrates seven pharma methodology skills (PICO, PRISMA, MoA, target dossier, competitive scan, safety signal scan, AOP construction)."
-  logs_bucket_name   = var.logs_bucket_name
+  project_id       = var.project_id
+  region           = var.region
+  agent_id         = "biocompass-agent"
+  display_name     = "BioCompass on Gemini Enterprise"
+  description      = "Biomedical literature research assistant for pharma R&D, medical affairs, and clinical / HEOR teams. Searches PubMed + Europe PMC + bioRxiv/medRxiv + ClinicalTrials.gov in parallel, looks up small-molecule chemistry via PubChem, extracts entities + relationships via PubTator3, renders publication-style figures with Nano Banana Pro, and orchestrates seven pharma methodology skills (PICO, PRISMA, MoA, target dossier, competitive scan, safety signal scan, AOP construction)."
+  logs_bucket_name = var.logs_bucket_name
 }
 
 

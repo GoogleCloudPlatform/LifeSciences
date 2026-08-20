@@ -68,6 +68,7 @@ sequences:
 # fasta_to_boltz2_yaml
 # ---------------------------------------------------------------------------
 
+
 class TestFastaToBoltz2Yaml:
     """FASTA → Boltz-2 YAML conversion."""
 
@@ -149,6 +150,7 @@ class TestFastaToBoltz2Yaml:
 # is_boltz2_yaml
 # ---------------------------------------------------------------------------
 
+
 class TestIsBoltz2Yaml:
     """Boltz-2 YAML format detection."""
 
@@ -194,6 +196,7 @@ class TestIsBoltz2Yaml:
 # ---------------------------------------------------------------------------
 # validate_boltz2_yaml
 # ---------------------------------------------------------------------------
+
 
 class TestValidateBoltz2Yaml:
     """validate_boltz2_yaml() structural and sequence validation."""
@@ -368,6 +371,7 @@ sequences:
 # _validate_sequence_chars
 # ---------------------------------------------------------------------------
 
+
 class TestValidateSequenceChars:
     """Direct unit tests for _validate_sequence_chars."""
 
@@ -408,6 +412,7 @@ class TestValidateSequenceChars:
 # ---------------------------------------------------------------------------
 # count_tokens
 # ---------------------------------------------------------------------------
+
 
 class TestCountTokens:
     """Token counting using YAML parsing."""

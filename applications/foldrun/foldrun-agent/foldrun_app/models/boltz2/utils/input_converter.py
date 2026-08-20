@@ -14,7 +14,6 @@
 
 """Convert FASTA sequences to BOLTZ2 query YAML format."""
 
-
 import re
 from typing import Optional
 
@@ -141,6 +140,7 @@ def is_boltz2_yaml(content: str) -> bool:
         return False
     try:
         import yaml
+
         data = yaml.safe_load(content)
     except Exception:
         return False
@@ -167,6 +167,7 @@ def validate_boltz2_yaml(content: str) -> tuple[bool, list[str], list[str]]:
 
     try:
         import yaml
+
         data = yaml.safe_load(content)
     except Exception as e:
         return False, [f"YAML parse error: {e}"], []
@@ -226,9 +227,7 @@ def validate_boltz2_yaml(content: str) -> tuple[bool, list[str], list[str]]:
                     errors.append(f"sequences[{i}].{mol_type}: 'sequence' is empty or missing")
                 else:
                     seq_errors = _validate_sequence_chars(str(seq), mol_type)
-                    errors.extend(
-                        f"sequences[{i}].{mol_type}: {e}" for e in seq_errors
-                    )
+                    errors.extend(f"sequences[{i}].{mol_type}: {e}" for e in seq_errors)
                     if mol_type == "protein" and len(str(seq)) < 5:
                         warnings.append(
                             f"sequences[{i}].protein: very short sequence ({len(str(seq))} residues)"
@@ -249,6 +248,7 @@ def count_tokens(yaml_data: str) -> int:
     """
     try:
         import yaml
+
         data = yaml.safe_load(yaml_data)
         total = 0
         for entry in data.get("sequences", []):

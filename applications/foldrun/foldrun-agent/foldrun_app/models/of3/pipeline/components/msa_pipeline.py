@@ -123,11 +123,15 @@ def msa_pipeline_of3(
                         break
 
             if cache_hit:
-                logging.info(f"Cache hit for chain {seq_key} ({seq_type}_{seq_hash}). Reusing MSAs.")
+                logging.info(
+                    f"Cache hit for chain {seq_key} ({seq_type}_{seq_hash}). Reusing MSAs."
+                )
                 chain["main_msa_file_paths"] = seq_cache_dir
                 num_msa_chains += 1
                 if seq_type == "protein" and use_templates and os.path.exists(pdb_seqres_path):
-                    chain["template_alignment_file_path"] = os.path.join(seq_cache_dir, "pdb_seqres.sto")
+                    chain["template_alignment_file_path"] = os.path.join(
+                        seq_cache_dir, "pdb_seqres.sto"
+                    )
                     num_template_chains += 1
                 continue
 
@@ -295,7 +299,9 @@ def msa_pipeline_of3(
                 if seq_type in ("protein", "rna"):
                     chain["main_msa_file_paths"] = seq_cache_dir
                     if seq_type == "protein" and "template_alignment_file_path" in chain:
-                        chain["template_alignment_file_path"] = os.path.join(seq_cache_dir, "pdb_seqres.sto")
+                        chain["template_alignment_file_path"] = os.path.join(
+                            seq_cache_dir, "pdb_seqres.sto"
+                        )
 
     # Write updated query JSON (with injected MSA and template paths)
     updated_query_json.uri = f"{updated_query_json.uri}.json"

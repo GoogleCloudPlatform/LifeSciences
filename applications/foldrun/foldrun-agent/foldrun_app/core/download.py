@@ -236,8 +236,8 @@ def submit_download(
         # Fall back to dest_path (NFS)
         gcs_sync = (
             f"echo '=== Backing up to GCS: {gcs_path} ==='\n"
-            f"SYNC_SOURCE=\"${{GCS_SYNC_SOURCE:-{dest_path}/}}\"\n"
-            f"gcloud storage rsync --recursive \"$SYNC_SOURCE\" {gcs_path} 2>&1\n"
+            f'SYNC_SOURCE="${{GCS_SYNC_SOURCE:-{dest_path}/}}"\n'
+            f'gcloud storage rsync --recursive "$SYNC_SOURCE" {gcs_path} 2>&1\n'
         )
 
     full_script = (

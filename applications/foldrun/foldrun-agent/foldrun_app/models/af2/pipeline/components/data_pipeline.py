@@ -47,9 +47,7 @@ def data_pipeline(
     from alphafold_utils import run_data_pipeline, run_mmseqs2_data_pipeline
 
     preset = "multimer" if run_multimer_system else "monomer"
-    logging.info(
-        f"Starting {preset} AlphaFold data pipeline (msa_method={msa_method})"
-    )
+    logging.info(f"Starting {preset} AlphaFold data pipeline (msa_method={msa_method})")
     t0 = time.time()
 
     mount_path = ref_databases.uri
@@ -69,13 +67,16 @@ def data_pipeline(
     # Cache key covers all inputs that affect the features.pkl content.
     with open(sequence.path) as _f:
         fasta_content = _f.read().strip()
-    cache_key_data = json.dumps({
-        "sequence": fasta_content,
-        "max_template_date": max_template_date,
-        "preset": preset,
-        "use_small_bfd": use_small_bfd,
-        "msa_method": msa_method,
-    }, sort_keys=True)
+    cache_key_data = json.dumps(
+        {
+            "sequence": fasta_content,
+            "max_template_date": max_template_date,
+            "preset": preset,
+            "use_small_bfd": use_small_bfd,
+            "msa_method": msa_method,
+        },
+        sort_keys=True,
+    )
     seq_hash = hashlib.sha256(cache_key_data.encode()).hexdigest()
     cache_key = f"{preset}_{seq_hash}"
 
@@ -163,10 +164,13 @@ def data_pipeline(
     os.makedirs(tmp_dir, exist_ok=True)
     shutil.copy(features.path, os.path.join(tmp_dir, "features.pkl"))
     with open(os.path.join(tmp_dir, "metadata.json"), "w") as _f:
-        json.dump({
-            "features_metadata": dict(features.metadata),
-            "msas_metadata": msas.metadata,
-        }, _f)
+        json.dump(
+            {
+                "features_metadata": dict(features.metadata),
+                "msas_metadata": msas.metadata,
+            },
+            _f,
+        )
     try:
         os.rename(tmp_dir, seq_cache_dir)
         logging.info(f"Cached AF2 features for {cache_key}")

@@ -157,10 +157,7 @@ def get_actual_job_costs(
     import os
 
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    region = (
-        os.getenv("GCP_REGION")
-        or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-    )
+    region = os.getenv("GCP_REGION") or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
     if not project_id:
         return {"error": "GOOGLE_CLOUD_PROJECT not configured"}

@@ -59,7 +59,7 @@ class OF3SubmitPredictionTool(OF3Tool):
                 "message": (
                     f"OpenFold3 parameters file ({self.config.params_path}) was not found in GCS bucket gs://{self.config.databases_bucket_name}. "
                     f"Please update your data using `./deploy-all.sh {self.config.project_id} --steps data --db of3_params --force`"
-                )
+                ),
             }
 
         input_data = arguments.get("input")
@@ -71,13 +71,16 @@ class OF3SubmitPredictionTool(OF3Tool):
         use_templates = arguments.get("use_templates", True)
 
         import random
+
         base_seed = arguments.get("base_seed")
         if base_seed is None:
             base_seed = random.randint(0, 2**32 - 1)
 
         # Determine input type and load content
         is_gcs = isinstance(input_data, str) and input_data.startswith("gs://")
-        is_file = os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
+        is_file = (
+            os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
+        )
 
         if is_gcs:
             bucket_name = input_data[5:].split("/", 1)[0]
@@ -156,8 +159,13 @@ class OF3SubmitPredictionTool(OF3Tool):
         # Prepare labels — extract first query name from the queries dict
         query_names = list(query_json.get("queries", {}).keys())
         query_name = query_names[0] if query_names else job_name
-        _all_chains = [c for q in query_json.get("queries", {}).values() for c in q.get("chains", [])]
-        _num_chains = sum(len(c.get("chain_ids", ["?"])) if isinstance(c.get("chain_ids"), list) else 1 for c in _all_chains)
+        _all_chains = [
+            c for q in query_json.get("queries", {}).values() for c in q.get("chains", [])
+        ]
+        _num_chains = sum(
+            len(c.get("chain_ids", ["?"])) if isinstance(c.get("chain_ids"), list) else 1
+            for c in _all_chains
+        )
         labels = {
             "model_type": "openfold3",
             "job_type": "monomer" if _num_chains <= 1 else "complex",

@@ -253,9 +253,7 @@ def validate_of3_json(content: str) -> tuple[bool, list[str], list[str]]:
                     )
                 else:
                     seq_errors = _validate_sequence_chars(str(seq), mol_type)
-                    errors.extend(
-                        f"queries.{query_name}.chains[{i}]: {e}" for e in seq_errors
-                    )
+                    errors.extend(f"queries.{query_name}.chains[{i}]: {e}" for e in seq_errors)
                     if mol_type == "protein" and len(str(seq)) < 5:
                         warnings.append(
                             f"queries.{query_name}.chains[{i}].protein: "

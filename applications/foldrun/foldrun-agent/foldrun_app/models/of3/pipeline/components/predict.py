@@ -111,8 +111,7 @@ def predict_of3(
         with open(runner_yaml_path, "w") as f:
             yaml.dump(runner_config, f, default_flow_style=False)
         logging.info(
-            f"Runner YAML written: {runner_yaml_path} "
-            f"(structure_directory={nfs_mmcif_dir})"
+            f"Runner YAML written: {runner_yaml_path} (structure_directory={nfs_mmcif_dir})"
         )
     elif use_templates:
         logging.warning(
@@ -156,7 +155,9 @@ def predict_of3(
     if _is_monomer:
         logging.info("Monomer detected — ranking samples by ptm (not sample_ranking_score)")
     else:
-        logging.info(f"Complex detected ({len(_chains)} chains) — ranking samples by sample_ranking_score")
+        logging.info(
+            f"Complex detected ({len(_chains)} chains) — ranking samples by sample_ranking_score"
+        )
 
     best_cif = None
     best_conf = None

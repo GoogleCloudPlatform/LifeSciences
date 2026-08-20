@@ -67,9 +67,16 @@ from foldrun_app.skills.cost_estimation import (
     estimate_monthly_cost,
     get_actual_job_costs,
 )
-from foldrun_app.skills.visualization import open_boltz2_structure_viewer, open_of3_structure_viewer, open_structure_viewer
+from foldrun_app.skills.visualization import (
+    open_boltz2_structure_viewer,
+    open_of3_structure_viewer,
+    open_structure_viewer,
+)
 from foldrun_app.skills.job_submission import submit_boltz2_prediction
-from foldrun_app.skills.results_analysis import boltz2_analyze_job_parallel, boltz2_get_analysis_results
+from foldrun_app.skills.results_analysis import (
+    boltz2_analyze_job_parallel,
+    boltz2_get_analysis_results,
+)
 
 # Agent instructions - detailed guidance for the AI agent
 AGENT_INSTRUCTION = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, OpenFold3, and Boltz-2.
@@ -890,6 +897,7 @@ if os.getenv("BOLTZ2_COMPONENTS_IMAGE"):
         ]
     )
 
+
 def create_alphafold_agent(model: str = None) -> Agent:
     """Create and configure the FoldRun agent (AF2 + OF3) with native ADK tools.
 
@@ -1013,6 +1021,7 @@ Show full details including GCS bucket, viewer URL. If any value shows "Not conf
     )
 
     return agent
+
 
 root_agent = create_alphafold_agent()
 app = App(root_agent=root_agent, name="foldrun_app")

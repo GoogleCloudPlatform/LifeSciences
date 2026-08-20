@@ -71,9 +71,6 @@ def calculate_pae_stats(raw_prediction: dict) -> dict | None:
     return stats
 
 
-
-
-
 def generate_gemini_expert_analysis(summary_data: dict) -> dict:
     """Generate expert analysis using Gemini via Google GenAI SDK."""
     try:
@@ -291,16 +288,16 @@ def consolidate_results(
     try:
         sequence_path = job_metadata.get("parameters", {}).get("sequence_path")
         if sequence_path and isinstance(sequence_path, str):
-                bucket_obj = storage_client.bucket(bucket_name)
-                blob_path = sequence_path.replace(f"gs://{bucket_name}/", "")
-                blob = bucket_obj.blob(blob_path)
+            bucket_obj = storage_client.bucket(bucket_name)
+            blob_path = sequence_path.replace(f"gs://{bucket_name}/", "")
+            blob = bucket_obj.blob(blob_path)
 
-                if blob.exists():
-                    fasta_text = blob.download_as_text()
-                    lines = fasta_text.strip().split("\n")
-                    if lines and lines[0].startswith(">"):
-                        fasta_header = lines[0][1:].strip()
-                        fasta_sequence = "".join(lines[1:])
+            if blob.exists():
+                fasta_text = blob.download_as_text()
+                lines = fasta_text.strip().split("\n")
+                if lines and lines[0].startswith(">"):
+                    fasta_header = lines[0][1:].strip()
+                    fasta_sequence = "".join(lines[1:])
     except Exception as e:
         logger.warning(f"Could not load FASTA sequence: {e}")
 

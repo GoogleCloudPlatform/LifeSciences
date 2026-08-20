@@ -69,7 +69,9 @@ class TestConfigModuleIsolation:
         assert af2_config.ALPHAFOLD_COMPONENTS_IMAGE == "af2-image:latest"
 
         # Now load BOLTZ2 pipeline (in same process)
-        from foldrun_app.models.boltz2.utils.pipeline_utils import load_vertex_pipeline as load_boltz2
+        from foldrun_app.models.boltz2.utils.pipeline_utils import (
+            load_vertex_pipeline as load_boltz2,
+        )
 
         boltz2_pipeline = load_boltz2(enable_flex_start=False)
 
@@ -89,7 +91,9 @@ class TestConfigModuleIsolation:
                 del sys.modules[key]
 
         # Load BOLTZ2 first
-        from foldrun_app.models.boltz2.utils.pipeline_utils import load_vertex_pipeline as load_boltz2
+        from foldrun_app.models.boltz2.utils.pipeline_utils import (
+            load_vertex_pipeline as load_boltz2,
+        )
 
         boltz2_pipeline = load_boltz2(enable_flex_start=True)
 
