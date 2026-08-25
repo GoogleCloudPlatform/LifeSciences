@@ -13,8 +13,6 @@
 # limitations under the License.
 """A component encapsulating AlphaFold hhblits tool."""
 
-from typing import List
-
 import config as config
 from kfp import dsl
 from kfp.dsl import Artifact, Input, Output
@@ -24,7 +22,7 @@ from kfp.dsl import Artifact, Input, Output
 def hhblits(
     sequence: Input[Artifact],
     ref_databases: Input[Artifact],
-    databases: List[str],
+    databases: list[str],
     msa: Output[Artifact],
     n_cpu: int = 12,
     maxseq: int = 1_000_000,

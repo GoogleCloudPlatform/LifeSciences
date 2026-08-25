@@ -13,8 +13,6 @@
 # limitations under the License.
 """A component encapsulating AlphaFold hhsearch tool."""
 
-from typing import List
-
 import config as config
 from kfp import dsl
 from kfp.dsl import Artifact, Input, Output
@@ -25,7 +23,7 @@ def hhsearch(
     sequence: Input[Artifact],
     ref_databases: Input[Artifact],
     msa: Input[Artifact],
-    template_dbs: List[str],
+    template_dbs: list[str],
     mmcif_db: str,
     obsolete_db: str,
     max_template_date: str,
@@ -50,7 +48,7 @@ def hhsearch(
         os.path.join(mount_path, ref_databases.metadata[database]) for database in template_dbs
     ]
 
-    hhr, features = run_hhsearch(
+    hhr, _features = run_hhsearch(
         sequence_path=sequence.path,
         msa_path=msa.path,
         msa_data_format=msa.metadata["data_format"],

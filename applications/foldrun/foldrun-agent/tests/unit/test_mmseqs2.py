@@ -297,7 +297,7 @@ class TestNetworkQualification:
                 with patch("google.cloud.resourcemanager_v3.ProjectsClient") as mock_rm:
                     mock_rm.return_value.get_project.return_value = mock_project
 
-                    ip, network = tool._get_filestore_info()
+                    _ip, network = tool._get_filestore_info()
 
                     assert network == "projects/1051554583006/global/networks/foldrun-network"
 
@@ -494,8 +494,10 @@ class TestConvertMMseqs2Tool:
 
                 # Pre-cleanup should handle both the final db and _tmp artifacts
                 lines = script.split("\n")
-                cleanup_lines = [l for l in lines if "rm -f" in l and "Cleaning" not in l]
-                tmp_cleanup = [l for l in cleanup_lines if "_tmp" in l]
+                cleanup_lines = [
+                    line for line in lines if "rm -f" in line and "Cleaning" not in line
+                ]
+                tmp_cleanup = [line for line in cleanup_lines if "_tmp" in line]
                 assert len(tmp_cleanup) >= 1, "Should clean up _tmp files from failed previous runs"
 
     def test_filestore_failure_returns_error(self, mock_env_vars):
@@ -913,7 +915,7 @@ class TestSubmitToolMMseqs2Validation:
     def test_monomer_mmseqs2_label_set(self, mock_env_vars):
         """Monomer: msa_method='mmseqs2' is included in pipeline labels."""
         tool = self._make_monomer_tool(mock_env_vars)
-        result, mock_pj = self._run_with_mocked_pipeline(
+        _result, mock_pj = self._run_with_mocked_pipeline(
             tool,
             {
                 "sequence": ">test\nMKTIALSYIF",

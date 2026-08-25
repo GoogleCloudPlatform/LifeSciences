@@ -16,7 +16,7 @@
 
 import logging
 import time
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
 
@@ -42,7 +42,7 @@ _CANCEL_POLL_INTERVAL = 5
 class AF2DeleteJobTool(AF2Tool):
     """Tool for deleting AlphaFold2 pipeline jobs."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Delete a pipeline job from Agent Platform.
 

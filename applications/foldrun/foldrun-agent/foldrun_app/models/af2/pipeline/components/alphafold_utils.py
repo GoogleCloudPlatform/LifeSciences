@@ -33,7 +33,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from typing import Dict, List, Mapping, Tuple
+from collections.abc import Mapping
 
 import numpy as np
 from alphafold.common import (
@@ -74,7 +74,7 @@ MMSEQS2_BINARY_PATH = shutil.which("mmseqs")
 MAX_TEMPLATE_HITS = 20
 
 
-def _load_features(features_path: str) -> Dict[str, str]:
+def _load_features(features_path: str) -> dict[str, str]:
     """Loads pickeled features."""
     with open(features_path, "rb") as f:
         features = pickle.load(f)
@@ -95,7 +95,7 @@ def _read_msa(msa_path: str, msa_format: str) -> str:
     return msa
 
 
-def _read_sequence(sequence_path: str) -> Tuple[str, str, int]:
+def _read_sequence(sequence_path: str) -> tuple[str, str, int]:
     """Reads and parses a FASTA sequence file."""
     with open(sequence_path) as f:
         sequence_str = f.read()
@@ -105,7 +105,7 @@ def _read_sequence(sequence_path: str) -> Tuple[str, str, int]:
     return sequences[0], sequence_descs[0], len(sequences[0])
 
 
-def _read_template_features(template_features_path) -> Dict[str, str]:
+def _read_template_features(template_features_path) -> dict[str, str]:
     """Reads and unpickles a pdb structure."""
     with open(template_features_path, "rb") as f:
         template_features = pickle.load(f)
@@ -129,7 +129,7 @@ def run_data_pipeline(
     msa_output_path: str,
     features_output_path: str,
     use_small_bfd: bool,
-) -> Tuple[Dict, Dict[str, int]]:
+) -> tuple[dict, dict[str, int]]:
     """Runs AlphaFold data pipeline."""
     if run_multimer_system:
         template_searcher = hmmsearch.Hmmsearch(
@@ -203,7 +203,7 @@ def run_data_pipeline(
     else:
         paths = [os.path.join(msa_output_path, file) for file in os.listdir(msa_output_path)]
     for file in paths:
-        with open(file, "r") as f:
+        with open(file) as f:
             artifact = f.read()
         file_format = file.split(".")[-1]
         if file_format == "sto":
@@ -271,13 +271,13 @@ def relax_protein(
     max_iterations: int = 0,
     tolerance: float = 2.39,
     stiffness: float = 10.0,
-    exclude_residues: List[str] = [],
+    exclude_residues: list[str] = [],
     max_outer_iterations: int = 3,
     use_gpu=False,
 ) -> Mapping[str, str]:
     """Runs AMBER relaxation."""
 
-    with open(unrelaxed_protein_path, "r") as f:
+    with open(unrelaxed_protein_path) as f:
         unrelaxed_protein_pdb = f.read()
 
     unrelaxed_structure = protein.from_pdb_string(unrelaxed_protein_pdb)
@@ -301,7 +301,7 @@ def relax_protein(
 def predict_relax(
     model_features_path: str,
     model_params_path: str,
-    prediction_runners: List[Dict],
+    prediction_runners: list[dict],
     num_ensemble: int,
     run_multimer_system: bool,
     raw_prediction_path: str,
@@ -311,13 +311,13 @@ def predict_relax(
     max_iterations: int = 0,
     tolerance: float = 2.39,
     stiffness: float = 10.0,
-    exclude_residues: List[str] = [],
+    exclude_residues: list[str] = [],
     max_outer_iterations: int = 3,
     use_gpu=True,
 ) -> Mapping[str, str]:
     """Runs predictions and relaxations sequentially on all specified models."""
 
-    model_names = set([runner["model_name"] for runner in prediction_runners])
+    model_names = {runner["model_name"] for runner in prediction_runners}
     runners = {}
     for model_name in model_names:
         model_config = config.model_config(model_name)
@@ -421,10 +421,10 @@ def predict_relax(
 
 def aggregate(
     sequence_path: str,
-    msa_paths: List[Tuple[str, str]],
+    msa_paths: list[tuple[str, str]],
     template_features_path: str,
     output_features_path: str,
-) -> Dict:
+) -> dict:
     """Aggregates MSAs and template features to create model features."""
 
     # Create sequence features
@@ -463,7 +463,7 @@ def run_jackhmmer(input_path: str, msa_path: str, database_path: str, maxseq: in
     return parsers.parse_stockholm(results["sto"]), "sto"
 
 
-def run_hhblits(input_path: str, msa_path: str, database_paths: List[str], n_cpu: int, maxseq: int):
+def run_hhblits(input_path: str, msa_path: str, database_paths: list[str], n_cpu: int, maxseq: int):
     """Runs hhblits and saves results to a file."""
 
     runner = hhblits.HHBlits(
@@ -486,7 +486,7 @@ def run_hhsearch(
     msa_data_format: str,
     template_hits_path: str,
     template_features_path: str,
-    template_dbs_paths: List[str],
+    template_dbs_paths: list[str],
     mmcif_path: str,
     obsolete_path: str,
     max_template_date: str,
@@ -687,7 +687,7 @@ def run_mmseqs2_data_pipeline(
     max_template_date: str,
     msa_output_path: str,
     features_output_path: str,
-) -> Tuple[Dict, Dict[str, int]]:
+) -> tuple[dict, dict[str, int]]:
     """MSA generation using MMseqs2-GPU, then standard AF2 feature generation.
 
     Replaces JackHMMER/HHblits MSA search with GPU-accelerated MMseqs2 for
@@ -739,7 +739,7 @@ def run_mmseqs2_data_pipeline(
 
         # Run uniprot search for multimer pairing
         all_chain_features = {}
-        for chain_idx, (seq, desc) in enumerate(zip(sequences, descriptions)):
+        for chain_idx, (_seq, desc) in enumerate(zip(sequences, descriptions)):
             chain_fasta = os.path.join(msa_output_path, f"chain_{chain_idx}.fasta")
             uniprot_runner = jackhmmer.Jackhmmer(
                 binary_path=JACKHMMER_BINARY_PATH,
@@ -808,7 +808,7 @@ def run_mmseqs2_data_pipeline(
     for filepath in paths:
         ext = filepath.split(".")[-1]
         try:
-            with open(filepath, "r") as f:
+            with open(filepath) as f:
                 content = f.read()
             if ext == "sto":
                 parsed = parsers.parse_stockholm(content)
@@ -850,7 +850,7 @@ def _run_mmseqs2_single_chain(
     max_template_date: str,
     run_multimer_system: bool,
     gpu: bool = True,
-) -> Dict:
+) -> dict:
     """Run MMseqs2 MSA search + template search for a single chain.
 
     Returns AlphaFold feature dict for this chain.

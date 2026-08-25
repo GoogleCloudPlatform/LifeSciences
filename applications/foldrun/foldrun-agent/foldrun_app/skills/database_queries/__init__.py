@@ -21,7 +21,7 @@ from .tools import (
 )
 
 __all__ = [
+    "query_alphafold_db_annotations",
     "query_alphafold_db_prediction",
     "query_alphafold_db_summary",
-    "query_alphafold_db_annotations",
 ]

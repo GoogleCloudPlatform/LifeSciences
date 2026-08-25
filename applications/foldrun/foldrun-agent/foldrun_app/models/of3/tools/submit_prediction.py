@@ -19,7 +19,7 @@ import logging
 import os
 import tempfile
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
 
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class OF3SubmitPredictionTool(OF3Tool):
     """Tool for submitting OpenFold3 structure predictions."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Submit OF3 prediction job.
 
         Args:
@@ -211,7 +211,7 @@ class OF3SubmitPredictionTool(OF3Tool):
         # Chain info from queries dict
         mol_types = {}
         num_chains = 0
-        for qname, qdata in query_json.get("queries", {}).items():
+        for _qname, qdata in query_json.get("queries", {}).items():
             for chain in qdata.get("chains", []):
                 mt = chain.get("molecule_type", "protein")
                 mol_types[mt] = mol_types.get(mt, 0) + len(chain.get("chain_ids", ["?"]))

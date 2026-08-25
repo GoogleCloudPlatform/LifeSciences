@@ -17,7 +17,7 @@
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import quote_plus
 
 from google.cloud import run_v2, storage
@@ -65,7 +65,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
 
         return f"{pipeline_root}analysis/"
 
-    def _check_cloudrun_execution_status(self, execution_name: str) -> Dict[str, Any]:
+    def _check_cloudrun_execution_status(self, execution_name: str) -> dict[str, Any]:
         """Check the status of a Cloud Run job execution.
 
         Args:
@@ -108,7 +108,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             logger.warning(f"Could not check Cloud Run execution status: {e}")
             return None
 
-    def _read_from_gcs(self, gcs_uri: str) -> Dict[str, Any]:
+    def _read_from_gcs(self, gcs_uri: str) -> dict[str, Any]:
         """Read JSON data from GCS."""
         if not gcs_uri.startswith("gs://"):
             raise ValueError(f"Invalid GCS URI: {gcs_uri}")
@@ -124,7 +124,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
         content = blob.download_as_text()
         return json.loads(content)
 
-    def _write_to_gcs(self, gcs_uri: str, data: Dict[str, Any]) -> None:
+    def _write_to_gcs(self, gcs_uri: str, data: dict[str, Any]) -> None:
         """Write JSON data to GCS."""
         if not gcs_uri.startswith("gs://"):
             raise ValueError(f"Invalid GCS URI: {gcs_uri}")
@@ -139,7 +139,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
 
         blob.upload_from_string(json.dumps(data, indent=2), content_type="application/json")
 
-    def _list_completed_analyses(self, analysis_path: str) -> List[str]:
+    def _list_completed_analyses(self, analysis_path: str) -> list[str]:
         """List all completed analysis files in GCS."""
         if not analysis_path.startswith("gs://"):
             raise ValueError(f"Invalid GCS URI: {analysis_path}")
@@ -161,7 +161,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
 
         return completed
 
-    def _get_job_metadata(self, job_id: str) -> Dict[str, Any]:
+    def _get_job_metadata(self, job_id: str) -> dict[str, Any]:
         """Extract job metadata including accelerator, machine type, timing, etc."""
         try:
             from ..utils.vertex_utils import get_pipeline_job
@@ -283,8 +283,8 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             return f"{hours:.0f}h {minutes:.0f}m"
 
     def _calculate_summary(
-        self, all_analyses: List[Dict[str, Any]], top_n: int, job_id: str = None
-    ) -> Dict[str, Any]:
+        self, all_analyses: list[dict[str, Any]], top_n: int, job_id: str | None = None
+    ) -> dict[str, Any]:
         """Calculate summary statistics from all analyses (AlphaFold DB style)."""
         if not all_analyses:
             return {}
@@ -431,7 +431,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             "recommendations": recommendations,
         }
 
-    def _get_quality_distribution(self, analyses: List[Dict[str, Any]]) -> Dict[str, int]:
+    def _get_quality_distribution(self, analyses: list[dict[str, Any]]) -> dict[str, int]:
         """Calculate distribution of quality assessments."""
         distribution = {
             "very_high_confidence": 0,
@@ -447,7 +447,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
 
         return distribution
 
-    def _calculate_confidence_breakdown(self, best_analysis: Dict[str, Any]) -> Dict[str, Any]:
+    def _calculate_confidence_breakdown(self, best_analysis: dict[str, Any]) -> dict[str, Any]:
         """
         Calculate confidence breakdown as percentages (AlphaFold DB style).
 
@@ -485,7 +485,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             },
         }
 
-    def _get_download_urls(self, job_id: str, best_analysis: Dict[str, Any]) -> Dict[str, str]:
+    def _get_download_urls(self, job_id: str, best_analysis: dict[str, Any]) -> dict[str, str]:
         """
         Generate direct download URLs for prediction files (AlphaFold DB style).
 
@@ -536,8 +536,8 @@ class AF2GetAnalysisResultsTool(AF2Tool):
         return downloads
 
     def _generate_recommendations(
-        self, analyses: List[Dict[str, Any]], summary: Dict[str, Any]
-    ) -> List[str]:
+        self, analyses: list[dict[str, Any]], summary: dict[str, Any]
+    ) -> list[str]:
         """Generate recommendations based on analysis."""
         recommendations = []
 
@@ -590,7 +590,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
 
         return recommendations
 
-    def _get_sequence_from_job(self, job_id: str) -> Optional[str]:
+    def _get_sequence_from_job(self, job_id: str) -> str | None:
         """Extract FASTA sequence from job labels or GCS."""
         try:
             from ..utils.vertex_utils import get_pipeline_job
@@ -635,7 +635,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             return None
 
     def _build_viewer_url(
-        self, job_id: str, summary_uri: str, summary: Dict[str, Any]
+        self, job_id: str, summary_uri: str, summary: dict[str, Any]
     ) -> str | None:
         """Build the viewer URL from analysis results.
 
@@ -670,7 +670,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             logger.warning(f"Could not build viewer URL: {e}")
             return None
 
-    def _trim_summary(self, summary: Dict[str, Any]) -> Dict[str, Any]:
+    def _trim_summary(self, summary: dict[str, Any]) -> dict[str, Any]:
         """Remove bulky per-residue score arrays from top_predictions to reduce response size.
 
         Keeps plddt_scores only in best_prediction (for confidence breakdown).
@@ -683,7 +683,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
                 pred.pop("plddt_scores", None)
         return summary
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Get analysis results from Cloud Run.
 
@@ -716,7 +716,7 @@ class AF2GetAnalysisResultsTool(AF2Tool):
         try:
             job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
         except Exception as e:
-            return {"status": "error", "message": f"Could not find job {job_id}: {str(e)}"}
+            return {"status": "error", "message": f"Could not find job {job_id}: {e!s}"}
 
         # Get analysis path
         analysis_path = self._get_analysis_path(job)

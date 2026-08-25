@@ -15,7 +15,7 @@
 """Tool for checking status of genetic database download Cloud Batch jobs."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import batch_v1
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class AF2CheckDatabaseDownloadTool(AF2Tool):
     """Check the status of genetic database download Cloud Batch jobs."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         job_id = arguments.get("job_id")
         list_all = arguments.get("list_all", False)
 
@@ -41,7 +41,7 @@ class AF2CheckDatabaseDownloadTool(AF2Tool):
                 "message": "Provide either 'job_id' to check a specific job or 'list_all=true' to list all download jobs.",
             }
 
-    def _check_single_job(self, job_id: str) -> Dict[str, Any]:
+    def _check_single_job(self, job_id: str) -> dict[str, Any]:
         """Check status of a single Cloud Batch download job."""
         try:
             client = batch_v1.BatchServiceClient()
@@ -85,7 +85,7 @@ class AF2CheckDatabaseDownloadTool(AF2Tool):
 
             # Add task status counts
             if job.status and job.status.task_groups:
-                for tg_name, tg_status in job.status.task_groups.items():
+                for _tg_name, tg_status in job.status.task_groups.items():
                     counts = {}
                     for count_entry in tg_status.counts:
                         counts[count_entry.state.name] = count_entry.count
@@ -105,10 +105,10 @@ class AF2CheckDatabaseDownloadTool(AF2Tool):
             return {
                 "status": "error",
                 "job_id": job_id,
-                "message": f"Failed to check job status: {str(e)}",
+                "message": f"Failed to check job status: {e!s}",
             }
 
-    def _list_download_jobs(self) -> Dict[str, Any]:
+    def _list_download_jobs(self) -> dict[str, Any]:
         """List all database download Cloud Batch jobs."""
         try:
             client = batch_v1.BatchServiceClient()
@@ -146,10 +146,10 @@ class AF2CheckDatabaseDownloadTool(AF2Tool):
             logger.error(f"Failed to list download jobs: {e}", exc_info=True)
             return {
                 "status": "error",
-                "message": f"Failed to list download jobs: {str(e)}",
+                "message": f"Failed to list download jobs: {e!s}",
             }
 
-    def _check_gcs_output(self, gcs_path: str) -> Dict[str, Any]:
+    def _check_gcs_output(self, gcs_path: str) -> dict[str, Any]:
         """Check GCS for downloaded database files."""
         try:
             path = gcs_path.replace("gs://", "")

@@ -16,7 +16,7 @@
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job, get_task_details, list_artifacts
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class AF2GetResultsTool(AF2Tool):
     """Tool for retrieving AlphaFold2 prediction results."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Get prediction results.
 
@@ -44,7 +44,7 @@ class AF2GetResultsTool(AF2Tool):
         """
         job_id = arguments.get("job_id")
         output_dir = arguments.get("output_dir")
-        include_raw_predictions = arguments.get("include_raw_predictions", False)
+        arguments.get("include_raw_predictions", False)
         download_files = arguments.get("download_files", True)
 
         if not job_id:

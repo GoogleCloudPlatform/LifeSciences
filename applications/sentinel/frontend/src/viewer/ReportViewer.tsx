@@ -30,12 +30,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ImageWithBboxes from './ImageWithBboxes';
-import type {
-  Finding,
-  FinalReport,
-  ReviewLens,
-  Severity,
-} from './types';
+import type { Finding, FinalReport, ReviewLens, Severity } from './types';
 
 const SEVERITY_ORDER: Severity[] = [
   'critical',
@@ -249,7 +244,8 @@ function FindingCard({
               </Box>
             )}
 
-          {(finding.location || (finding.related_item_ids?.length ?? 0) > 0) && (
+          {(finding.location ||
+            (finding.related_item_ids?.length ?? 0) > 0) && (
             <Stack
               direction="row"
               spacing={2}
@@ -457,11 +453,7 @@ function ReportDisplay({
         <Section title="Themes">
           <Stack spacing={1}>
             {report.themes.map((t, i) => (
-              <Paper
-                key={i}
-                elevation={0}
-                sx={{ p: 2, bgcolor: '#1f2023' }}
-              >
+              <Paper key={i} elevation={0} sx={{ p: 2, bgcolor: '#1f2023' }}>
                 <Typography variant="body2">{t}</Typography>
               </Paper>
             ))}
@@ -540,9 +532,7 @@ export default function ReportViewer() {
   const [submitted, setSubmitted] = useState<string>('');
   const [showRaw, setShowRaw] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [hoveredFindingId, setHoveredFindingId] = useState<string | null>(
-    null,
-  );
+  const [hoveredFindingId, setHoveredFindingId] = useState<string | null>(null);
   const [expandedFindingIds, setExpandedFindingIds] = useState<Set<string>>(
     new Set(),
   );
@@ -597,16 +587,13 @@ export default function ReportViewer() {
     [],
   );
 
-  const selectFindingFromImage = useCallback(
-    (id: string) => {
-      setExpandedFindingIds((prev) => new Set(prev).add(id));
-      const el = cardRefs.current.get(id);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    },
-    [],
-  );
+  const selectFindingFromImage = useCallback((id: string) => {
+    setExpandedFindingIds((prev) => new Set(prev).add(id));
+    const el = cardRefs.current.get(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, []);
 
   const hasImage = parsed.data && imageUrl;
 
@@ -618,11 +605,7 @@ export default function ReportViewer() {
             Sentinel · Report Viewer
           </Typography>
           {parsed.data && (
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center' }}
-            >
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 Show raw JSON
               </Typography>
@@ -643,8 +626,8 @@ export default function ReportViewer() {
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
             Paste the JSON output from the synthesizer agent (the
-            <code> final_report </code> object). Optionally upload the
-            original submission image to see bounding-box overlays.
+            <code> final_report </code> object). Optionally upload the original
+            submission image to see bounding-box overlays.
           </Typography>
           <TextField
             fullWidth
@@ -683,9 +666,7 @@ export default function ReportViewer() {
                 hidden
                 type="file"
                 accept="image/*"
-                onChange={(e) =>
-                  handleImageUpload(e.target.files?.[0] ?? null)
-                }
+                onChange={(e) => handleImageUpload(e.target.files?.[0] ?? null)}
               />
             </Button>
             {imageUrl && (
@@ -740,7 +721,10 @@ export default function ReportViewer() {
             sx={{
               mt: 3,
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 5fr) minmax(0, 7fr)' },
+              gridTemplateColumns: {
+                xs: '1fr',
+                md: 'minmax(0, 5fr) minmax(0, 7fr)',
+              },
               gap: 3,
               alignItems: 'start',
             }}
@@ -753,10 +737,7 @@ export default function ReportViewer() {
               }}
             >
               <Paper elevation={1} sx={{ p: 2 }}>
-                <Typography
-                  variant="overline"
-                  sx={{ color: 'text.secondary' }}
-                >
+                <Typography variant="overline" sx={{ color: 'text.secondary' }}>
                   Submission · hover to inspect
                 </Typography>
                 <Box sx={{ mt: 1 }}>

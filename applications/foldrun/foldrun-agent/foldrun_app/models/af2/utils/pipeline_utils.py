@@ -16,7 +16,7 @@
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 from foldrun_app.core.pipeline_utils import compile_pipeline  # noqa: F401
 
@@ -73,7 +73,7 @@ def get_pipeline_parameters(
     use_small_bfd: bool = True,
     num_multimer_predictions_per_model: int = 5,
     is_run_relax: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build pipeline parameters dictionary.
 

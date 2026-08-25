@@ -37,14 +37,15 @@ def msa_pipeline_boltz2(
       boltz2_msas_cache/protein_<sha256>/combined.a3m   ← canonical cache entry
       boltz2_msas_tmp/protein_<sha256>_<run_id>/        ← in-progress temp dir (atomic rename)
     """
-    import yaml
+    import hashlib
     import logging
     import os
+    import shutil
     import subprocess
     import time
     import uuid
-    import hashlib
-    import shutil
+
+    import yaml
 
     logging.basicConfig(level=logging.INFO)
     logging.info("Starting BOLTZ2 MSA pipeline")
@@ -201,7 +202,7 @@ def msa_pipeline_boltz2(
 
         # Strip intermediates — only combined.a3m is needed for future cache hits.
         # Removes query.fasta, uniref90.sto, uniref90.a3m, mgnify.sto, mgnify.a3m
-        # before the rename so the cache entry stays lean (~50–100 MB vs ~300–400 MB).
+        # before the rename so the cache entry stays lean (~50-100 MB vs ~300-400 MB).
         for intermediate in (tmp_fasta, uniref90_sto, uniref90_a3m, mgnify_sto, mgnify_a3m):
             try:
                 os.remove(intermediate)

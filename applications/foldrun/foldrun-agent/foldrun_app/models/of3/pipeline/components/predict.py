@@ -129,7 +129,7 @@ def predict_of3(
         "--num_model_seeds=1",
         f"--num_diffusion_samples={num_diffusion_samples}",
         "--use_msa_server=False",
-        f"--use_templates={str(use_templates)}",
+        f"--use_templates={use_templates!s}",
     ]
     if runner_yaml_path:
         cmd.append(f"--runner_yaml={runner_yaml_path}")
@@ -163,7 +163,7 @@ def predict_of3(
     best_conf = None
     best_score = -1.0
 
-    for root, dirs, files in os.walk(output_dir):
+    for root, _dirs, files in os.walk(output_dir):
         for fname in files:
             src = os.path.join(root, fname)
             if fname.endswith("_confidences_aggregated.json"):

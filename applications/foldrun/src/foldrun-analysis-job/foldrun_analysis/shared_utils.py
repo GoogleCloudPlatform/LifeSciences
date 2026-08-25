@@ -16,9 +16,10 @@
 
 import json
 import logging
-import numpy as np
 import time
+
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -279,7 +280,7 @@ def plot_plddt_distribution(
     plddt_scores: list,
     title_name: str,
     output_path: str,
-    chain_info: list[dict] = None,
+    chain_info: list[dict] | None = None,
 ) -> None:
     """Generate unified pLDDT distribution plot (supporting chain coloring & boundaries)."""
     scores = np.array(plddt_scores)
@@ -359,8 +360,8 @@ def plot_error_matrix(
     sample_name: str,
     label: str,
     output_path: str,
-    chain_info: list[dict] = None,
-    max_value: float = None,
+    chain_info: list[dict] | None = None,
+    max_value: float | None = None,
 ) -> None:
     """Generate error matrix (PDE/PAE) heatmap with optional chain gridlines."""
     data = np.array(matrix)
@@ -429,8 +430,8 @@ def plot_iptm_matrix(
     chain_pair_iptm: dict,
     sample_name: str,
     output_path: str,
-    chain_ptm: dict = None,
-    chain_info: list = None,
+    chain_ptm: dict | None = None,
+    chain_info: list | None = None,
 ) -> None:
     """Generate chain x chain ipTM heatmap with per-chain pTM on diagonal."""
     chains = set()
@@ -589,9 +590,9 @@ def get_job_metadata(job_id: str) -> dict:
     """
     job_metadata = {"labels": {}, "parameters": {}}
     try:
-        from google.cloud import aiplatform_v1 as vertex_ai
         import os
-        from datetime import datetime
+
+        from google.cloud import aiplatform_v1 as vertex_ai
 
         project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
         if not project_id:

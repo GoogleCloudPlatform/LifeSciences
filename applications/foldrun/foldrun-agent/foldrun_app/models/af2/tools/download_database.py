@@ -27,7 +27,7 @@ uses Jackhmmer/HHblits directly on the raw FASTA/HH-suite databases.
 
 import logging
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from foldrun_app.core import batch as batch_utils
 from foldrun_app.core.download import _get_models, build_script, load_manifest
@@ -84,7 +84,7 @@ class DownloadDatabaseTool(AF2Tool):
     is available via ConvertMMseqs2Tool.
     """
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         database_name = arguments.get("database_name")
         if not database_name or database_name not in DATABASE_REGISTRY:
             return {
@@ -110,7 +110,7 @@ class DownloadDatabaseTool(AF2Tool):
         except Exception as e:
             return {
                 "status": "error",
-                "message": f"Failed to get Filestore info: {str(e)}. Ensure FILESTORE_ID is configured.",
+                "message": f"Failed to get Filestore info: {e!s}. Ensure FILESTORE_ID is configured.",
             }
 
         nfs_mount = self.config.nfs_mount_point
@@ -188,7 +188,7 @@ class DownloadDatabaseTool(AF2Tool):
             return {
                 "status": "error",
                 "database_name": database_name,
-                "message": f"Failed to submit Cloud Batch job: {str(e)}",
+                "message": f"Failed to submit Cloud Batch job: {e!s}",
             }
 
 
@@ -199,7 +199,7 @@ class ConvertMMseqs2Tool(AF2Tool):
     GPU-accelerated search can be used with msa_method='mmseqs2'.
     """
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         databases = arguments.get("databases")
         if not databases:
             databases = list(MMSEQS2_INDEXABLE_DATABASES.keys())
@@ -221,7 +221,7 @@ class ConvertMMseqs2Tool(AF2Tool):
         except Exception as e:
             return {
                 "status": "error",
-                "message": f"Failed to get Filestore info: {str(e)}",
+                "message": f"Failed to get Filestore info: {e!s}",
             }
 
         nfs_mount = self.config.nfs_mount_point
@@ -310,7 +310,7 @@ class ConvertMMseqs2Tool(AF2Tool):
                     {
                         "status": "error",
                         "database_name": db_name,
-                        "message": f"Failed to submit: {str(e)}",
+                        "message": f"Failed to submit: {e!s}",
                     }
                 )
 

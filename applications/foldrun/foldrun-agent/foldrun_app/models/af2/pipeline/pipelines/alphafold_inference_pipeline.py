@@ -83,24 +83,25 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         )
 
         # Data pipeline: CPU-only for jackhmmer, GPU for mmseqs2
-        dp_kwargs = dict(
+        DataPipelineOp = create_custom_training_job_from_component(
+            data_pipeline,
             display_name="AF2 Data Pipeline",
             machine_type=dp_machine_type,
             nfs_mounts=[
-                dict(
-                    server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
-                    path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
-                    mountPoint=config.NFS_MOUNT_POINT,
-                )
+                {
+                    "server": config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
+                    "path": config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
+                    "mountPoint": config.NFS_MOUNT_POINT,
+                }
             ],
             network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
             strategy=dp_strategy,
+            **(
+                {"accelerator_type": dp_accel_type, "accelerator_count": dp_accel_count}
+                if dp_accel_type and dp_accel_count > 0
+                else {}
+            ),
         )
-        if dp_accel_type and dp_accel_count > 0:
-            dp_kwargs["accelerator_type"] = dp_accel_type
-            dp_kwargs["accelerator_count"] = dp_accel_count
-
-        DataPipelineOp = create_custom_training_job_from_component(data_pipeline, **dp_kwargs)
 
         # Include MMseqs2 database paths in metadata
         db_metadata = {
@@ -196,7 +197,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             )
 
             with dsl.If(is_run_relax == "relax", name="relax-condition"):
-                relax_protein_task = JobRelaxOp(
+                relax_protein_task = JobRelaxOp(  # noqa: F841
                     project=project,
                     location=region,
                     unrelaxed_protein=model_predict_task.outputs["unrelaxed_protein"],

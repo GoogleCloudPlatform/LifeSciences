@@ -134,12 +134,12 @@ def dry_run(db_names, config, manifest, force):
 
     if to_skip:
         print(f"Would skip ({len(to_skip)} already in GCS):")
-        for name, display, nfs_path in to_skip:
+        for name, display, _nfs_path in to_skip:
             print(f"  {name:25s} {display}")
 
     if to_download:
         print(f"\nWould download ({len(to_download)}):")
-        for name, display, nfs_path in to_download:
+        for name, _display, nfs_path in to_download:
             print(f"  {name:25s} -> /mnt/nfs/foldrun/{nfs_path}")
 
     if not to_download:

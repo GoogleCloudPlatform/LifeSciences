@@ -21,7 +21,6 @@ the results from the Gemini API into structured data.
 
 import logging
 from datetime import UTC, datetime
-from typing import Optional
 
 from api.models.schemas import AnalyzeResponse, Issue, Severity
 from api.services.gemini_client import GeminiClient
@@ -51,12 +50,12 @@ class AnalyzerService:
 
     async def analyze(
         self,
-        video_url: Optional[str] = None,
-        image_url: Optional[str] = None,
-        image_data: Optional[bytes] = None,
+        video_url: str | None = None,
+        image_url: str | None = None,
+        image_data: bytes | None = None,
         frame_rate: float = 1.0,
-        model_name: Optional[str] = None,
-        custom_rules: Optional[str] = None,
+        model_name: str | None = None,
+        custom_rules: str | None = None,
     ) -> AnalyzeResponse:
         """
         Analyze a YouTube video or image and return structured results.

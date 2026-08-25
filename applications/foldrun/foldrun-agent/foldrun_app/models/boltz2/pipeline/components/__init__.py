@@ -16,3 +16,9 @@
 from .configure_run import configure_seeds_boltz2
 from .msa_pipeline import msa_pipeline_boltz2
 from .predict import predict_boltz2
+
+__all__ = [
+    "configure_seeds_boltz2",
+    "msa_pipeline_boltz2",
+    "predict_boltz2",
+]

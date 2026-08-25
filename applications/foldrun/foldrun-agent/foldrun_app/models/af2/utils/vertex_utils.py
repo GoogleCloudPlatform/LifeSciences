@@ -15,9 +15,13 @@
 """Agent Platform utilities for pipeline management."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from google.cloud import aiplatform_v1 as vertex_ai
+
+# Re-exported from core for backward compatibility — all model plugins should
+# import from foldrun_app.core.vertex_utils directly.
+from foldrun_app.core.vertex_utils import get_pipeline_job as get_pipeline_job
 
 logger = logging.getLogger(__name__)
 
@@ -66,14 +70,9 @@ def _convert_proto_to_dict(obj: Any) -> Any:
         return None
 
 
-# Re-exported from core for backward compatibility — all model plugins should
-# import from foldrun_app.core.vertex_utils directly.
-from foldrun_app.core.vertex_utils import get_pipeline_job as get_pipeline_job  # noqa: F401
-
-
 def list_pipeline_jobs(
-    project_id: str, region: str, filter_str: Optional[str] = None, page_size: int = 100
-) -> List[vertex_ai.PipelineJob]:
+    project_id: str, region: str, filter_str: str | None = None, page_size: int = 100
+) -> list[vertex_ai.PipelineJob]:
     """
     List pipeline jobs with optional filter.
 
@@ -99,7 +98,7 @@ def list_pipeline_jobs(
     return jobs
 
 
-def get_job_status(job: vertex_ai.PipelineJob) -> Dict[str, Any]:
+def get_job_status(job: vertex_ai.PipelineJob) -> dict[str, Any]:
     """
     Extract status information from pipeline job.
 
@@ -133,7 +132,7 @@ def get_job_status(job: vertex_ai.PipelineJob) -> Dict[str, Any]:
     return status
 
 
-def get_task_details(job: vertex_ai.PipelineJob) -> Dict[str, Any]:
+def get_task_details(job: vertex_ai.PipelineJob) -> dict[str, Any]:
     """
     Extract task execution details from pipeline job.
 
@@ -215,8 +214,8 @@ def get_task_details(job: vertex_ai.PipelineJob) -> Dict[str, Any]:
 
 
 def list_artifacts(
-    project_id: str, region: str, pipeline_context: str, artifact_filter: Optional[str] = None
-) -> List[vertex_ai.Artifact]:
+    project_id: str, region: str, pipeline_context: str, artifact_filter: str | None = None
+) -> list[vertex_ai.Artifact]:
     """
     List artifacts from a pipeline run.
 

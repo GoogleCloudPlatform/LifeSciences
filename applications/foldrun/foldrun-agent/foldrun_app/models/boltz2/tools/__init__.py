@@ -20,8 +20,8 @@ from .open_viewer import BOLTZ2OpenViewerTool
 from .submit_prediction import BOLTZ2SubmitPredictionTool
 
 __all__ = [
-    "BOLTZ2SubmitPredictionTool",
-    "BOLTZ2JobAnalysisTool",
     "BOLTZ2GetAnalysisResultsTool",
+    "BOLTZ2JobAnalysisTool",
     "BOLTZ2OpenViewerTool",
+    "BOLTZ2SubmitPredictionTool",
 ]

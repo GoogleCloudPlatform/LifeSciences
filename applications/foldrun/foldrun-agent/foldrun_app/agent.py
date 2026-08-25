@@ -18,19 +18,22 @@ Multi-model protein structure prediction agent supporting AlphaFold2 and
 OpenFold3. Deployed to Agent Runtime or run locally via ADK.
 """
 
+import logging
 import os
 
 from dotenv import load_dotenv
 from google.adk.agents import Agent
 from google.adk.apps import App
+from google.adk.flows.llm_flows.base_llm_flow import LlmResponse
 from google.adk.tools import FunctionTool
-
-# Load environment variables from agent's .env
-agent_env = os.path.join(os.path.dirname(__file__), "../.env")
-if os.path.exists(agent_env):
-    load_dotenv(agent_env, override=False)
+from google.genai import types
 
 # Import all skill wrapper functions
+from foldrun_app.skills.cost_estimation import (
+    estimate_job_cost,
+    estimate_monthly_cost,
+    get_actual_job_costs,
+)
 from foldrun_app.skills.database_queries import (
     query_alphafold_db_annotations,
     query_alphafold_db_prediction,
@@ -47,12 +50,15 @@ from foldrun_app.skills.job_submission import (
     submit_af2_batch_predictions,
     submit_af2_monomer_prediction,
     submit_af2_multimer_prediction,
+    submit_boltz2_prediction,
     submit_of3_prediction,
 )
 from foldrun_app.skills.results_analysis import (
     analyze_job,
     analyze_job_parallel,
     analyze_prediction_quality,
+    boltz2_analyze_job_parallel,
+    boltz2_get_analysis_results,
     get_analysis_results,
     get_prediction_results,
     of3_analyze_job_parallel,
@@ -62,21 +68,18 @@ from foldrun_app.skills.storage_management import (
     cleanup_gcs_files,
     find_orphaned_gcs_files,
 )
-from foldrun_app.skills.cost_estimation import (
-    estimate_job_cost,
-    estimate_monthly_cost,
-    get_actual_job_costs,
-)
 from foldrun_app.skills.visualization import (
     open_boltz2_structure_viewer,
     open_of3_structure_viewer,
     open_structure_viewer,
 )
-from foldrun_app.skills.job_submission import submit_boltz2_prediction
-from foldrun_app.skills.results_analysis import (
-    boltz2_analyze_job_parallel,
-    boltz2_get_analysis_results,
-)
+
+logger = logging.getLogger(__name__)
+
+# Load environment variables from agent's .env
+agent_env = os.path.join(os.path.dirname(__file__), "../.env")
+if os.path.exists(agent_env):
+    load_dotenv(agent_env, override=False)
 
 # Agent instructions - detailed guidance for the AI agent
 AGENT_INSTRUCTION = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, OpenFold3, and Boltz-2.
@@ -804,14 +807,6 @@ Agent: "Great news! Job X succeeded with a pLDDT of 89.1..." [WRONG - didn't che
 """
 
 
-import logging
-
-from google.adk.flows.llm_flows.base_llm_flow import LlmResponse
-from google.genai import types
-
-logger = logging.getLogger(__name__)
-
-
 def _retry_on_resource_exhausted(callback_context, llm_request, error):
     """Handle 429 RESOURCE_EXHAUSTED by returning a graceful message instead of crashing."""
     error_str = str(error)
@@ -898,7 +893,7 @@ if os.getenv("BOLTZ2_COMPONENTS_IMAGE"):
     )
 
 
-def create_alphafold_agent(model: str = None) -> Agent:
+def create_alphafold_agent(model: str | None = None) -> Agent:
     """Create and configure the FoldRun agent (AF2 + OF3) with native ADK tools.
 
     Args:
@@ -919,9 +914,21 @@ def create_alphafold_agent(model: str = None) -> Agent:
 
     # Get configuration info from environment
     # Support both VERTEX_* and GCP_* variable names for compatibility
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "Not configured")
-    region = os.getenv("GCP_REGION", "us-central1")
-    gcs_bucket = os.getenv("GCS_BUCKET_NAME", "Not configured")
+    project_id = (
+        os.getenv("GCP_PROJECT_ID")
+        or os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("VERTEX_PROJECT_ID")
+        or "Not configured"
+    )
+    region = (
+        os.getenv("GCP_REGION")
+        or os.getenv("GOOGLE_CLOUD_LOCATION")
+        or os.getenv("VERTEX_LOCATION")
+        or "us-central1"
+    )
+    gcs_bucket = (
+        os.getenv("GCS_BUCKET_NAME") or os.getenv("VERTEX_STAGING_BUCKET") or "Not configured"
+    )
     viewer_base_url = os.getenv("FOLDRUN_VIEWER_URL") or "Not configured"
 
     # Build configuration context for the agent

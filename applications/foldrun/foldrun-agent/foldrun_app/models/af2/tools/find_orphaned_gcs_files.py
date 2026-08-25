@@ -15,7 +15,7 @@
 """Tool for finding GCS files that don't have corresponding Agent Platform jobs."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import storage
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class AF2FindOrphanedGCSFilesTool(AF2Tool):
     """Tool for finding GCS files without corresponding Agent Platform jobs."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Find GCS files that don't have corresponding Agent Platform pipeline jobs.
 

@@ -15,7 +15,7 @@
 """Model-agnostic GPU quota querying and hardware detection."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ _QUOTA_MAPPING = {
 }
 
 
-def check_gpu_quota(project_id: str, region: str) -> Dict[str, Any]:
+def check_gpu_quota(project_id: str, region: str) -> dict[str, Any]:
     """Query Compute Engine API and return GPU quota information.
 
     Args:

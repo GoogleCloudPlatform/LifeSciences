@@ -26,6 +26,6 @@ from api.models.schemas import (
 __all__ = [
     "AnalyzeRequest",
     "AnalyzeResponse",
-    "Issue",
     "HealthResponse",
+    "Issue",
 ]

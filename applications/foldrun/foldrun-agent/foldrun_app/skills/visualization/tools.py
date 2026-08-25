@@ -14,8 +14,6 @@
 
 """Visualization tool wrappers for ADK FunctionTool."""
 
-from typing import Optional
-
 from foldrun_app.skills._tool_registry import get_tool
 
 
@@ -71,8 +69,8 @@ def open_boltz2_structure_viewer(
 
 def open_structure_viewer(
     job_id: str,
-    pdb_uri: Optional[str] = None,
-    summary_uri: Optional[str] = None,
+    pdb_uri: str | None = None,
+    summary_uri: str | None = None,
     model_name: str = "Best Model",
     open_browser: bool = True,
 ) -> dict:

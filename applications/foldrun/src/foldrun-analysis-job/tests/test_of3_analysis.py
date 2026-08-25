@@ -15,8 +15,9 @@
 """Tests for OpenFold3 analysis utilities: parse_cif_chains, calculate_per_chain_plddt."""
 
 import sys
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 # Stub heavy imports BEFORE loading the module
 _stubs = {

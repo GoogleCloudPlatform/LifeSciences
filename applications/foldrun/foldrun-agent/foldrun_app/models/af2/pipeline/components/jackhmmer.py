@@ -41,7 +41,7 @@ def jackhmmer(
     mount_path = ref_databases.uri
     database_path = os.path.join(mount_path, ref_databases.metadata[database])
 
-    parsed_msa, msa_format = run_jackhmmer(
+    parsed_msa, _msa_format = run_jackhmmer(
         input_path=sequence.path,
         database_path=database_path,
         msa_path=msa.path,

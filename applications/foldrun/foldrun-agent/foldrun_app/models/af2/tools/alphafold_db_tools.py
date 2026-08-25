@@ -22,7 +22,7 @@ expensive compute jobs.
 Based on ToolUniverse AlphaFold tools implementation.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from ..base import AF2Tool
 from ..utils.alphafold_db import AlphaFoldDBClient
@@ -31,7 +31,7 @@ from ..utils.alphafold_db import AlphaFoldDBClient
 class AlphaFoldDBGetPrediction(AF2Tool):
     """Query AlphaFold DB for full prediction data."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Retrieve full AlphaFold 3D structure prediction from public database.
 
@@ -105,7 +105,7 @@ class AlphaFoldDBGetPrediction(AF2Tool):
 class AlphaFoldDBGetSummary(AF2Tool):
     """Query AlphaFold DB for summary information."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Retrieve summary details of AlphaFold 3D models from public database.
 
@@ -173,7 +173,7 @@ class AlphaFoldDBGetSummary(AF2Tool):
 class AlphaFoldDBGetAnnotations(AF2Tool):
     """Query AlphaFold DB for variant annotations."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Retrieve AlphaFold variant annotations (e.g., missense mutations).
 

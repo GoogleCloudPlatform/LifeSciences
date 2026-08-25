@@ -135,14 +135,14 @@ class TestFastaToOF3Json:
     def test_raw_sequence_no_header(self):
         """Bare sequence without '>' should be accepted."""
         result = fasta_to_of3_json(PROTEIN_SEQ)
-        chains = list(result["queries"].values())[0]["chains"]
+        chains = next(iter(result["queries"].values()))["chains"]
         assert chains[0]["molecule_type"] == "protein"
         assert chains[0]["sequence"] == PROTEIN_SEQ
 
     def test_lowercase_converted_to_uppercase(self):
         fasta = f">protein\n{PROTEIN_SEQ.lower()}"
         result = fasta_to_of3_json(fasta)
-        chains = list(result["queries"].values())[0]["chains"]
+        chains = next(iter(result["queries"].values()))["chains"]
         assert chains[0]["sequence"] == PROTEIN_SEQ.upper()
 
     def test_empty_fasta_raises(self):
@@ -158,7 +158,7 @@ class TestFastaToOF3Json:
         Digit-only invalid chars are removed before validation, not raised."""
         fasta = ">protein\n1 MKQHEDKLEE 2 ELLSKNYHL"
         result = fasta_to_of3_json(fasta)
-        chains = list(result["queries"].values())[0]["chains"]
+        chains = next(iter(result["queries"].values()))["chains"]
         assert chains[0]["sequence"] == "MKQHEDKLEEELLSKNYHL"
 
     def test_too_short_sequence_raises(self):
@@ -221,16 +221,16 @@ class TestValidateOF3Json:
     """validate_of3_json() structural and sequence validation."""
 
     def test_valid_protein(self):
-        ok, errors, warnings = validate_of3_json(VALID_JSON)
+        ok, errors, _warnings = validate_of3_json(VALID_JSON)
         assert ok, errors
         assert errors == []
 
     def test_valid_multichain(self):
-        ok, errors, warnings = validate_of3_json(VALID_MULTICHAIN_JSON)
+        ok, errors, _warnings = validate_of3_json(VALID_MULTICHAIN_JSON)
         assert ok, errors
 
     def test_valid_ligand_smiles(self):
-        ok, errors, warnings = validate_of3_json(VALID_LIGAND_JSON)
+        ok, errors, _warnings = validate_of3_json(VALID_LIGAND_JSON)
         assert ok, errors
 
     def test_valid_ligand_ccd(self):
@@ -326,7 +326,7 @@ class TestValidateOF3Json:
         assert any("queries" in e.lower() for e in errors)
 
     def test_empty_queries(self):
-        ok, errors, _ = validate_of3_json('{"queries": {}}')
+        ok, _errors, _ = validate_of3_json('{"queries": {}}')
         assert not ok
 
     def test_chains_not_a_list(self):

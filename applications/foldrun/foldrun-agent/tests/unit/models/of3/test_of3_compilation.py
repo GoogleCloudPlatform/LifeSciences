@@ -14,14 +14,13 @@
 
 """Tests for OF3 pipeline compilation and config isolation."""
 
-import json
 import os
 import sys
 import tempfile
-import yaml
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 
 @pytest.fixture(autouse=True)
@@ -113,7 +112,7 @@ class TestConfigModuleIsolation:
         # Load OF3 first
         from foldrun_app.models.of3.utils.pipeline_utils import load_vertex_pipeline as load_of3
 
-        of3_pipeline = load_of3(enable_flex_start=True)
+        load_of3(enable_flex_start=True)
 
         from foldrun_app.models.of3.pipeline import config as of3_config
 
@@ -122,7 +121,7 @@ class TestConfigModuleIsolation:
         # Then AF2
         from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline as load_af2
 
-        af2_pipeline = load_af2(enable_flex_start=True, msa_method="jackhmmer")
+        load_af2(enable_flex_start=True, msa_method="jackhmmer")
 
         from foldrun_app.models.af2.pipeline import config as af2_config
 

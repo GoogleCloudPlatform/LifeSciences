@@ -16,7 +16,6 @@
 
 import logging
 import os
-from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 class CoreConfig:
     """Model-agnostic configuration class for FoldRun tools."""
 
-    def __init__(self, env_path: Optional[str] = None):
+    def __init__(self, env_path: str | None = None):
         """
         Initialize configuration from environment variables.
 
@@ -95,15 +94,15 @@ class CoreConfig:
         return os.getenv("FILESTORE_ID")
 
     @property
-    def filestore_ip(self) -> Optional[str]:
+    def filestore_ip(self) -> str | None:
         return os.getenv("FILESTORE_IP")
 
     @property
-    def filestore_network(self) -> Optional[str]:
+    def filestore_network(self) -> str | None:
         return os.getenv("FILESTORE_NETWORK")
 
     @property
-    def network_project_number(self) -> Optional[str]:
+    def network_project_number(self) -> str | None:
         return os.getenv("NETWORK_PROJECT_NUMBER")
 
     @property

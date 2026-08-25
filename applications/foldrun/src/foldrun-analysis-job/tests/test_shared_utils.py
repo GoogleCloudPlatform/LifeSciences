@@ -16,8 +16,8 @@
 
 import os
 import sys
+from datetime import UTC
 from unittest.mock import MagicMock, patch
-import pytest
 
 # Stub heavy imports BEFORE loading the module
 _stubs = {
@@ -45,7 +45,7 @@ class TestGetJobMetadata:
     @patch("google.cloud.aiplatform_v1.PipelineServiceClient")
     def test_get_job_metadata_success(self, mock_client_cls):
         """Verify that get_job_metadata successfully retrieves and formats pipeline job metadata."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         # Create mock PipelineServiceClient instance
         mock_client = MagicMock()
@@ -74,10 +74,10 @@ class TestGetJobMetadata:
         }
 
         # Mock time fields
-        create_time = datetime(2026, 6, 9, 12, 0, 0, tzinfo=timezone.utc)
-        start_time = datetime(2026, 6, 9, 12, 5, 0, tzinfo=timezone.utc)
+        create_time = datetime(2026, 6, 9, 12, 0, 0, tzinfo=UTC)
+        start_time = datetime(2026, 6, 9, 12, 5, 0, tzinfo=UTC)
         end_time = datetime(
-            2026, 6, 9, 13, 17, 0, tzinfo=timezone.utc
+            2026, 6, 9, 13, 17, 0, tzinfo=UTC
         )  # 1 hour 12 minutes (4320 seconds)
 
         mock_job.create_time = create_time

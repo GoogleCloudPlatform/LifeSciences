@@ -19,8 +19,7 @@ Provides NFS-mounted Batch job submission for any model's download tools.
 
 import logging
 import os
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 from google.cloud import batch_v1
 
@@ -42,8 +41,8 @@ def get_filestore_info(
     project_id: str,
     zone: str,
     filestore_id: str,
-    filestore_ip: str = None,
-    filestore_network: str = None,
+    filestore_ip: str | None = None,
+    filestore_network: str | None = None,
 ):
     """Get Filestore IP and network, from env vars or Filestore API.
 
@@ -199,10 +198,10 @@ def submit_batch_job(
     filestore_network: str,
     nfs_share: str,
     nfs_mount: str,
-    labels: Optional[Dict[str, str]] = None,
-    subnet_name: Optional[str] = None,
+    labels: dict[str, str] | None = None,
+    subnet_name: str | None = None,
     local_ssd_count: int = 0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Submit a Cloud Batch job with NFS volume mount.
 
     Returns dict with job_id, job_name, console_url.

@@ -19,7 +19,7 @@ Handles requests for analyzing YouTube videos and images for medical accuracy.
 """
 
 import logging
-from typing import Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
@@ -75,7 +75,7 @@ router = APIRouter(
 )
 async def analyze(
     request: AnalyzeRequest,
-    analyzer: AnalyzerService = Depends(get_analyzer_service),
+    analyzer: Annotated[AnalyzerService, Depends(get_analyzer_service)],
 ) -> AnalyzeResponse:
     """
     Analyze a YouTube video or image for medical accuracy.
@@ -128,14 +128,14 @@ async def analyze(
 
     except ValueError as e:
         # Handle validation errors
-        logger.error(f"Validation error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Validation error: {e!s}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Error analyzing content: {str(e)}", exc_info=True)
+        logger.error(f"Error analyzing content: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="An internal error occured during analysis.",
-        )
+        ) from e
 
 
 @router.post(
@@ -150,20 +150,26 @@ async def analyze(
     },
 )
 async def analyze_upload(
-    file: UploadFile = File(..., description="Image file to analyze"),
-    frame_rate: Optional[float] = Form(
-        default=1.0, description="Frame rate (unused for images)"
-    ),
-    speed: str = Form(default="fast", description="Analysis speed (fast/powerful)"),
-    rules_file: Optional[UploadFile] = File(
-        default=None,
-        description=(
-            "Optional plain-text rules file (brand voice, internal SOPs, "
-            "market-specific restrictions, etc.). Checked alongside the "
-            "standard analysis. See examples/rules/example_rules.txt."
+    file: Annotated[UploadFile, File(description="Image file to analyze")],
+    analyzer: Annotated[AnalyzerService, Depends(get_analyzer_service)],
+    frame_rate: Annotated[
+        float | None,
+        Form(description="Frame rate (unused for images)"),
+    ] = 1.0,
+    speed: Annotated[
+        str,
+        Form(description="Analysis speed (fast/powerful)"),
+    ] = "fast",
+    rules_file: Annotated[
+        UploadFile | None,
+        File(
+            description=(
+                "Optional plain-text rules file (brand voice, internal SOPs, "
+                "market-specific restrictions, etc.). Checked alongside the "
+                "standard analysis. See examples/rules/example_rules.txt."
+            ),
         ),
-    ),
-    analyzer: AnalyzerService = Depends(get_analyzer_service),
+    ] = None,
 ) -> AnalyzeResponse:
     """
     Analyze an uploaded image file for medical accuracy.
@@ -198,7 +204,7 @@ async def analyze_upload(
         file_content = await file.read()
 
         # Read optional rules file (plain text) if supplied
-        custom_rules: Optional[str] = None
+        custom_rules: str | None = None
         if rules_file is not None:
             rules_bytes = await rules_file.read()
             if rules_bytes:
@@ -230,8 +236,8 @@ async def analyze_upload(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error analyzing uploaded file: {str(e)}", exc_info=True)
+        logger.error(f"Error analyzing uploaded file: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="An internal error occured during analysis.",
-        )
+        ) from e

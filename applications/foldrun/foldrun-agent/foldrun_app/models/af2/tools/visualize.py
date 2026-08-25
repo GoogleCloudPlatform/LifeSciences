@@ -17,7 +17,7 @@
 import logging
 import os
 import tempfile
-from typing import Any, Dict
+from typing import Any
 
 from ..base import AF2Tool
 from ..utils.viz_utils import generate_plddt_colored_pdb
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class AF2VisualizationTool(AF2Tool):
     """Tool for generating 3D visualizations of predicted structures."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Generate structure visualization.
 

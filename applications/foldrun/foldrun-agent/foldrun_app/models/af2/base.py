@@ -16,7 +16,7 @@
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from foldrun_app.core.base_tool import BaseTool
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 class AF2Tool(BaseTool):
     """Base class for AlphaFold2 tools following ToolUniverse pattern."""
 
-    def __init__(self, tool_config: Dict[str, Any], config: Optional[Config] = None):
+    def __init__(self, tool_config: dict[str, Any], config: Config | None = None):
         """
         Initialize AF2 tool with configuration.
 
@@ -40,9 +40,9 @@ class AF2Tool(BaseTool):
 
     def _setup_compile_env(
         self,
-        hardware_config: Dict[str, Any],
-        filestore_ip: str = None,
-        filestore_network: str = None,
+        hardware_config: dict[str, Any],
+        filestore_ip: str | None = None,
+        filestore_network: str | None = None,
     ):
         """
         Set up environment variables for pipeline compilation.
@@ -138,12 +138,12 @@ class AF2Tool(BaseTool):
         self,
         gpu_type: str,
         num_gpus: int = 1,
-        relax_gpu_type: Optional[str] = None,
+        relax_gpu_type: str | None = None,
         msa_method: str = "auto",
         use_small_bfd: bool = True,
         seq_length: int = 0,
         is_multimer: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get hardware configuration based on GPU type.
 

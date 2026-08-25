@@ -15,7 +15,7 @@
 """Tool for checking GPU quota and current usage."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from foldrun_app.core.hardware import check_gpu_quota
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class AF2CheckGPUQuotaTool(AF2Tool):
     """Tool for checking GPU quota limits and current usage in a region."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Check GPU quota and current usage for the configured region.
 
@@ -63,17 +63,17 @@ class AF2CheckGPUQuotaTool(AF2Tool):
             logger.error(f"Failed to check GPU quotas: {e}", exc_info=True)
             return {
                 "status": "error",
-                "message": f"Failed to retrieve GPU quota information: {str(e)}",
+                "message": f"Failed to retrieve GPU quota information: {e!s}",
                 "region": region,
             }
 
-    def _generate_summary(self, on_demand: Dict, preemptible: Dict) -> str:
+    def _generate_summary(self, on_demand: dict, preemptible: dict) -> str:
         """Generate human-readable summary of GPU availability."""
         lines = []
 
         if on_demand:
             lines.append("**On-Demand GPUs:**")
-            for quota_name, info in on_demand.items():
+            for _quota_name, info in on_demand.items():
                 lines.append(
                     f"  {info['status_emoji']} {info['friendly_name']}: "
                     f"{info['available']}/{info['limit']} available "
@@ -82,7 +82,7 @@ class AF2CheckGPUQuotaTool(AF2Tool):
 
         if preemptible:
             lines.append("\n**Preemptible/Spot GPUs (for FLEX_START):**")
-            for quota_name, info in preemptible.items():
+            for _quota_name, info in preemptible.items():
                 lines.append(
                     f"  {info['status_emoji']} {info['friendly_name']}: "
                     f"{info['available']}/{info['limit']} available "
@@ -91,14 +91,14 @@ class AF2CheckGPUQuotaTool(AF2Tool):
 
         return "\n".join(lines)
 
-    def _generate_recommendation(self, on_demand: Dict, preemptible: Dict) -> str:
+    def _generate_recommendation(self, on_demand: dict, preemptible: dict) -> str:
         """Generate recommendations based on quota availability."""
         recommendations = []
 
         exhausted = []
         high_usage = []
 
-        for quota_name, info in {**on_demand, **preemptible}.items():
+        for _quota_name, info in {**on_demand, **preemptible}.items():
             if info["status"] == "EXHAUSTED":
                 exhausted.append(info["friendly_name"])
             elif info["status"] == "HIGH_USAGE":

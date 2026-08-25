@@ -18,7 +18,7 @@
 
 Each seed runs on its own A100 via ParallelFor. Within each seed,
 BOLTZ2 generates num_diffusion_samples structures sequentially.
-Default: 5 seeds × 5 samples = 25 structures (AF3 paper protocol).
+Default: 5 seeds x 5 samples = 25 structures (AF3 paper protocol).
 """
 
 import os
@@ -69,11 +69,11 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
             display_name="BOLTZ2 MSA Pipeline",
             machine_type=config.MSA_MACHINE_TYPE,
             nfs_mounts=[
-                dict(
-                    server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
-                    path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
-                    mountPoint=config.NFS_MOUNT_POINT,
-                )
+                {
+                    "server": config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
+                    "path": config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
+                    "mountPoint": config.NFS_MOUNT_POINT,
+                }
             ],
             network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
             strategy="STANDARD",  # CPU-only, no FLEX_START needed
@@ -119,11 +119,11 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
             accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_TESLA_A100"),
             accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
             nfs_mounts=[
-                dict(
-                    server=config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
-                    path=config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
-                    mountPoint=config.NFS_MOUNT_POINT,
-                )
+                {
+                    "server": config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
+                    "path": config.NFS_PATH or os.environ.get("NFS_PATH", "/placeholder"),
+                    "mountPoint": config.NFS_MOUNT_POINT,
+                }
             ],
             network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
             strategy=strategy,
@@ -133,7 +133,7 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
         with dsl.ParallelFor(
             items=configure_seeds_task.outputs["seed_configs"], name="seed-predict"
         ) as seed_config:
-            predict_task = JobPredictOp(
+            JobPredictOp(
                 project=project,
                 location=region,
                 updated_query_json=msa_task.outputs["updated_query_json"],

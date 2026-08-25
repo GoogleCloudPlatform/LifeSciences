@@ -27,7 +27,7 @@ Supports two data sources:
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 from google.cloud import storage
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 DATABASES_YAML = Path(__file__).parent.parent.parent / "databases.yaml"
 
 
-def _get_models(db_config: Dict[str, Any]) -> List[str]:
+def _get_models(db_config: dict[str, Any]) -> list[str]:
     """Get the list of models for a database entry.
 
     Supports both 'models: [af2, of3]' (list) and legacy 'model: af2' (string).
@@ -53,7 +53,7 @@ def _get_models(db_config: Dict[str, Any]) -> List[str]:
     return []
 
 
-def load_manifest(path: Optional[Path] = None) -> Dict[str, Any]:
+def load_manifest(path: Path | None = None) -> dict[str, Any]:
     """Load and return the databases.yaml manifest.
 
     Returns empty dict if the file doesn't exist (e.g., in Agent Runtime
@@ -68,10 +68,10 @@ def load_manifest(path: Optional[Path] = None) -> Dict[str, Any]:
 
 
 def get_databases_for_models(
-    manifest: Dict[str, Any],
-    models: List[str],
-    mode: Optional[str] = None,
-) -> List[str]:
+    manifest: dict[str, Any],
+    models: list[str],
+    mode: str | None = None,
+) -> list[str]:
     """Return database names to download for the given models and mode.
 
     If mode is specified, uses the modes section of the manifest.
@@ -124,10 +124,10 @@ def check_gcs_exists(gcs_bucket: str, nfs_path: str) -> bool:
 
 
 def check_existing(
-    db_names: List[str],
+    db_names: list[str],
     gcs_bucket: str,
-    manifest: Optional[Dict[str, Any]] = None,
-) -> Dict[str, bool]:
+    manifest: dict[str, Any] | None = None,
+) -> dict[str, bool]:
     """Check which databases already exist in GCS.
 
     Returns dict of {db_name: exists_bool}.
@@ -146,7 +146,7 @@ def check_existing(
     return result
 
 
-def build_script(db_name: str, db_config: Dict[str, Any], dest_path: str) -> str:
+def build_script(db_name: str, db_config: dict[str, Any], dest_path: str) -> str:
     """Build the bash script for a database download.
 
     If the entry has a 'script' field, use it directly (with {dest} substitution).
@@ -187,7 +187,7 @@ def _clean_label(value: str) -> str:
 
 def submit_download(
     db_name: str,
-    db_config: Dict[str, Any],
+    db_config: dict[str, Any],
     project_id: str,
     region: str,
     zone: str,
@@ -195,9 +195,9 @@ def submit_download(
     filestore_network: str,
     nfs_share: str,
     nfs_mount: str,
-    gcs_bucket: Optional[str] = None,
-    source_bucket: Optional[str] = None,
-) -> Dict[str, Any]:
+    gcs_bucket: str | None = None,
+    source_bucket: str | None = None,
+) -> dict[str, Any]:
     """Submit a Cloud Batch job to download a single database.
 
     Data source priority:
@@ -298,7 +298,7 @@ def submit_download(
 
 
 def submit_downloads(
-    db_names: List[str],
+    db_names: list[str],
     project_id: str,
     region: str,
     zone: str,
@@ -306,11 +306,11 @@ def submit_downloads(
     filestore_network: str,
     nfs_share: str,
     nfs_mount: str,
-    gcs_bucket: Optional[str] = None,
-    source_bucket: Optional[str] = None,
-    manifest: Optional[Dict[str, Any]] = None,
+    gcs_bucket: str | None = None,
+    source_bucket: str | None = None,
+    manifest: dict[str, Any] | None = None,
     force: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Submit Cloud Batch jobs for multiple databases.
 
     Args:

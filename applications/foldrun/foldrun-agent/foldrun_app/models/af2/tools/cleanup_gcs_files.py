@@ -14,7 +14,7 @@
 
 """Tool for finding and cleaning up GCS files for AlphaFold2 jobs."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from google.cloud import storage
 
@@ -25,7 +25,7 @@ from ..utils.vertex_utils import get_pipeline_job
 class AF2CleanupGCSFilesTool(AF2Tool):
     """Tool for finding and optionally deleting GCS files associated with a job."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Find and optionally delete GCS files associated with a job OR delete specific GCS paths.
 
@@ -63,8 +63,8 @@ class AF2CleanupGCSFilesTool(AF2Tool):
             raise ValueError("Either job_id or gcs_paths is required")
 
     def _delete_paths(
-        self, gcs_paths: List[str], search_only: bool, confirm_delete: bool
-    ) -> Dict[str, Any]:
+        self, gcs_paths: list[str], search_only: bool, confirm_delete: bool
+    ) -> dict[str, Any]:
         """Delete specific GCS paths (bulk deletion mode).
 
         Supports both individual file paths and directory paths.
@@ -174,7 +174,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
 
     def _cleanup_job(
         self, job_id: str, search_only: bool, confirm_delete: bool, include_fasta: bool
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Original job-based cleanup logic."""
 
         # Try to get job details to find the exact job name

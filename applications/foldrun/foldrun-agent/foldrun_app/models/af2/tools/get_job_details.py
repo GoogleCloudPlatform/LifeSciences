@@ -14,7 +14,7 @@
 
 """Tool for retrieving detailed job metadata including FASTA sequences."""
 
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import storage
 
@@ -25,7 +25,7 @@ from ..utils.vertex_utils import get_pipeline_job
 class AF2GetJobDetailsTool(AF2Tool):
     """Tool for retrieving detailed job information including original FASTA sequence."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Get detailed job information including the original FASTA sequence.
 
@@ -95,7 +95,7 @@ class AF2GetJobDetailsTool(AF2Tool):
                         fasta_header = lines[0][1:].strip()  # Remove '>'
                         fasta_sequence = "".join(line.strip() for line in lines[1:])
             except Exception as e:
-                fasta_header = f"Error retrieving input: {str(e)}"
+                fasta_header = f"Error retrieving input: {e!s}"
                 fasta_sequence = None
 
         # Extract job timing info

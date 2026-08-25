@@ -14,14 +14,12 @@
 
 """AlphaFold Database query tool wrappers for ADK FunctionTool."""
 
-from typing import Optional
-
 from foldrun_app.skills._tool_registry import get_tool
 
 
 def query_alphafold_db_prediction(
     qualifier: str,
-    sequence_checksum: Optional[str] = None,
+    sequence_checksum: str | None = None,
 ) -> dict:
     """
     Query AlphaFold Database (EMBL-EBI) for pre-computed protein structure predictions.

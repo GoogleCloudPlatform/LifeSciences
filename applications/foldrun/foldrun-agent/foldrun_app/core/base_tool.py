@@ -16,7 +16,7 @@
 
 import logging
 import re
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
 from google.cloud import storage
@@ -51,7 +51,7 @@ def _ensure_clients(config: CoreConfig):
 class BaseTool:
     """Model-agnostic base class for FoldRun tools."""
 
-    def __init__(self, tool_config: Dict[str, Any], config: CoreConfig):
+    def __init__(self, tool_config: dict[str, Any], config: CoreConfig):
         """
         Initialize base tool with configuration.
 
@@ -82,7 +82,7 @@ class BaseTool:
         path = gs_uri[len("gs://") :]
         return f"https://console.cloud.google.com/storage/browser/{path}"
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Execute the tool - must be implemented by subclasses.
 

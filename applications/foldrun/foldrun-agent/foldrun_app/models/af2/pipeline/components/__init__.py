@@ -22,3 +22,15 @@ from .jackhmmer import jackhmmer
 from .model_predict import predict
 from .predict_relax import predict_relax
 from .relax_protein import relax
+
+__all__ = [
+    "aggregate_features",
+    "configure_run",
+    "data_pipeline",
+    "hhblits",
+    "hhsearch",
+    "jackhmmer",
+    "predict",
+    "predict_relax",
+    "relax",
+]

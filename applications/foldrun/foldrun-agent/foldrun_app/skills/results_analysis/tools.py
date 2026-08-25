@@ -14,14 +14,12 @@
 
 """Results analysis tool wrappers for ADK FunctionTool."""
 
-from typing import Optional
-
 from foldrun_app.skills._tool_registry import get_tool
 
 
 def get_prediction_results(
     job_id: str,
-    output_dir: Optional[str] = None,
+    output_dir: str | None = None,
     include_raw_predictions: bool = False,
     download_files: bool = True,
 ) -> dict:
@@ -37,9 +35,9 @@ def get_prediction_results(
 
 
 def analyze_prediction_quality(
-    job_id: Optional[str] = None,
-    model_index: Optional[int] = None,
-    raw_prediction_path: Optional[str] = None,
+    job_id: str | None = None,
+    model_index: int | None = None,
+    raw_prediction_path: str | None = None,
     analyze_all: bool = False,
     top_n: int = 5,
 ) -> dict:

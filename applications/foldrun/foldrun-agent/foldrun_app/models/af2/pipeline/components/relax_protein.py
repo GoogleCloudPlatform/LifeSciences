@@ -13,8 +13,6 @@
 # limitations under the License.
 """A component encapsulating AlphaFold model relaxation."""
 
-from typing import List
-
 import config as config
 from kfp import dsl
 from kfp.dsl import Artifact, Input, Output
@@ -27,7 +25,7 @@ def relax(
     max_iterations: int = 0,
     tolerance: float = 2.39,
     stiffness: float = 10.0,
-    exclude_residues: List[str] = [],
+    exclude_residues: list[str] = [],
     max_outer_iterations: int = 3,
     use_gpu: bool = True,
     tf_force_unified_memory: str = "",

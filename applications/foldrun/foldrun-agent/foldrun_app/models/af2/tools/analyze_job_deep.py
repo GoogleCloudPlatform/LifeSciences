@@ -16,7 +16,7 @@
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from google.cloud import aiplatform
 from google.cloud import logging as cloud_logging
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class AF2AnalyzeJobDeepTool(AF2Tool):
     """Tool for comprehensive deep analysis of AlphaFold jobs in any state."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Perform analysis of a specific job with configurable detail level.
 
         Args:
@@ -118,9 +118,9 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
 
         except Exception as e:
             logger.error(f"Error analyzing job {job_id}: {e}", exc_info=True)
-            return {"error": f"Failed to analyze job: {str(e)}", "job_id": job_id}
+            return {"error": f"Failed to analyze job: {e!s}", "job_id": job_id}
 
-    def _analyze_failure(self, job, detail_level: str = "detailed") -> Dict[str, Any]:
+    def _analyze_failure(self, job, detail_level: str = "detailed") -> dict[str, Any]:
         """Analyze a failed job.
 
         Args:
@@ -205,7 +205,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
 
         return failure_info
 
-    def _analyze_success(self, job, detail_level: str = "detailed") -> Dict[str, Any]:
+    def _analyze_success(self, job, detail_level: str = "detailed") -> dict[str, Any]:
         """Analyze a successful job.
 
         Args:
@@ -238,7 +238,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
 
         return success_info
 
-    def _analyze_progress(self, job, detail_level: str = "detailed") -> Dict[str, Any]:
+    def _analyze_progress(self, job, detail_level: str = "detailed") -> dict[str, Any]:
         """Analyze a running/pending job.
 
         Args:
@@ -284,7 +284,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
 
         return progress_info
 
-    def _extract_job_id_from_error(self, error_message: str) -> Optional[str]:
+    def _extract_job_id_from_error(self, error_message: str) -> str | None:
         """Extract Custom Job ID from error message containing log URL."""
         if not error_message:
             return None
@@ -302,7 +302,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
 
         return None
 
-    def _fetch_task_logs(self, custom_job_id: str, max_entries: int = 5) -> List[Dict[str, Any]]:
+    def _fetch_task_logs(self, custom_job_id: str, max_entries: int = 5) -> list[dict[str, Any]]:
         """Fetch logs for a failed Custom Job from Cloud Logging.
 
         Args:
@@ -346,7 +346,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
             logger.warning(f"Failed to fetch logs for job {custom_job_id}: {e}")
             return []
 
-    def _get_diagnostic_guidance(self, failed_tasks: List[str]) -> Dict[str, Any]:
+    def _get_diagnostic_guidance(self, failed_tasks: list[str]) -> dict[str, Any]:
         """Get diagnostic guidance based on which tasks failed."""
         guidance = {"likely_causes": [], "recommended_actions": []}
 
@@ -392,7 +392,7 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
 
         return guidance
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Return the JSON schema for the tool's parameters.
 
         Returns:

@@ -15,7 +15,6 @@
 """FASTA validation utilities for AlphaFold submissions."""
 
 import re
-from typing import Dict, List
 
 
 class FastaValidationError(Exception):
@@ -24,7 +23,7 @@ class FastaValidationError(Exception):
     pass
 
 
-def validate_fasta_sequence(sequence: str, is_multimer: bool = False) -> Dict[str, any]:
+def validate_fasta_sequence(sequence: str, is_multimer: bool = False) -> dict[str, any]:
     """Validate a FASTA sequence string for AlphaFold submission.
 
     Args:
@@ -134,7 +133,7 @@ def validate_fasta_sequence(sequence: str, is_multimer: bool = False) -> Dict[st
     return result
 
 
-def _parse_fasta_chains(sequence: str) -> List[Dict[str, str]]:
+def _parse_fasta_chains(sequence: str) -> list[dict[str, str]]:
     """Parse FASTA format into individual chains.
 
     Handles multiple formats:
@@ -219,7 +218,7 @@ def _clean_sequence(sequence: str) -> str:
     return seq
 
 
-def _find_invalid_amino_acids(sequence: str) -> List[str]:
+def _find_invalid_amino_acids(sequence: str) -> list[str]:
     """Find invalid amino acid characters in a sequence.
 
     Args:

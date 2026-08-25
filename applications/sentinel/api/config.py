@@ -18,8 +18,6 @@ Configuration management for Sentinel API.
 This module handles environment variables and application settings using Pydantic.
 """
 
-from typing import Optional
-
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -41,13 +39,13 @@ class Settings(BaseSettings):
         cors_origins: Comma-separated list of allowed CORS origins
     """
 
-    google_cloud_project: Optional[str] = None
+    google_cloud_project: str | None = None
     google_cloud_location: str = "global"
-    gemini_api_key: Optional[str] = None
+    gemini_api_key: str | None = None
     gemini_model_fast: str = "gemini-3.5-flash"
     gemini_model_powerful: str = "gemini-3.5-flash"
     google_genai_use_enterprise: bool = False
-    gcs_bucket_name: Optional[str] = None
+    gcs_bucket_name: str | None = None
     gcs_media_folder: str = "dev"
     api_host: str = "0.0.0.0"
     api_port: int = 8000

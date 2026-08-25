@@ -30,7 +30,6 @@ OF3 query JSON schema:
 
 import json
 import re
-from typing import Optional
 
 # Standard nucleotide alphabet (RNA)
 _RNA_NT = set("ACGU")
@@ -89,7 +88,7 @@ def _detect_molecule_type(sequence: str) -> str:
     return "protein"
 
 
-def fasta_to_of3_json(fasta_content: str, job_name: Optional[str] = None) -> dict:
+def fasta_to_of3_json(fasta_content: str, job_name: str | None = None) -> dict:
     """Convert FASTA content to OF3 query JSON format.
 
     Args:
@@ -147,7 +146,7 @@ def fasta_to_of3_json(fasta_content: str, job_name: Optional[str] = None) -> dic
 
     # Build chains with auto-assigned chain IDs (A, B, C, ...)
     chains = []
-    for i, (seq_id, sequence) in enumerate(parsed):
+    for i, (_seq_id, sequence) in enumerate(parsed):
         chain_id = chr(65 + i) if i < 26 else f"chain_{i}"
         mol_type = _detect_molecule_type(sequence)
         chains.append(
@@ -295,7 +294,7 @@ def count_tokens(query_json: dict) -> int:
         Total token count.
     """
     total = 0
-    for query_name, query_data in query_json.get("queries", {}).items():
+    for _query_name, query_data in query_json.get("queries", {}).items():
         for chain in query_data.get("chains", []):
             total += len(chain.get("sequence", ""))
     return total

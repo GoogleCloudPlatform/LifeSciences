@@ -15,7 +15,7 @@
 """Tool for submitting batch AlphaFold2 predictions."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from ..base import AF2Tool
 from .submit_monomer import AF2SubmitMonomerTool
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class AF2BatchSubmitTool(AF2Tool):
     """Tool for submitting multiple AlphaFold2 predictions in batch."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Submit batch prediction jobs.
 
@@ -113,7 +113,7 @@ class AF2BatchSubmitTool(AF2Tool):
                 logger.info(f"Successfully submitted job: {result['job_name']}")
 
             except Exception as e:
-                logger.error(f"Failed to submit job {idx}: {str(e)}")
+                logger.error(f"Failed to submit job {idx}: {e!s}")
                 failed_jobs.append(
                     {
                         "index": idx,

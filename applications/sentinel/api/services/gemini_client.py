@@ -23,7 +23,6 @@ import asyncio
 import logging
 import tempfile
 import uuid
-from typing import Optional
 
 from google import genai
 from google.cloud import storage
@@ -50,10 +49,10 @@ class GeminiClient:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        project: Optional[str] = None,
-        location: Optional[str] = None,
-        storage_client: Optional[storage.Client] = None,
+        api_key: str | None = None,
+        project: str | None = None,
+        location: str | None = None,
+        storage_client: storage.Client | None = None,
     ):
         """
         Initialize the Gemini client.
@@ -90,7 +89,7 @@ class GeminiClient:
             await self.client.aclose()
 
     @staticmethod
-    def _append_custom_rules(prompt: str, custom_rules: Optional[str]) -> str:
+    def _append_custom_rules(prompt: str, custom_rules: str | None) -> str:
         """Append a user-supplied rules file to an analyzer prompt.
 
         Rules are added as a clearly delimited section so the model treats
@@ -117,9 +116,9 @@ class GeminiClient:
         video_url: str,
         frame_rate: float = 1.0,
         mime_type: str = "video/mp4",
-        model_name: Optional[str] = None,
-        response_schema: Optional[type] = None,
-        custom_rules: Optional[str] = None,
+        model_name: str | None = None,
+        response_schema: type | None = None,
+        custom_rules: str | None = None,
     ) -> str:
         """
         Analyze a video (YouTube or GCS) for medical accuracy and potential issues.
@@ -188,16 +187,16 @@ class GeminiClient:
             return analysis_text
 
         except Exception as e:
-            logger.error(f"Error analyzing video {video_url}: {str(e)}")
+            logger.error(f"Error analyzing video {video_url}: {e!s}")
             raise
 
     async def analyze_image_without_location(
         self,
-        image_url: str = None,
-        image_data: bytes = None,
-        model_name: Optional[str] = None,
-        response_schema: Optional[type] = None,
-        custom_rules: Optional[str] = None,
+        image_url: str | None = None,
+        image_data: bytes | None = None,
+        model_name: str | None = None,
+        response_schema: type | None = None,
+        custom_rules: str | None = None,
     ) -> str:
         """
         Analyze an image for medical accuracy without providing location coordinates.
@@ -227,12 +226,12 @@ class GeminiClient:
 
     async def find_issue_location(
         self,
-        image_url: str = None,
-        image_data: bytes = None,
+        image_url: str | None = None,
+        image_data: bytes | None = None,
         issue_description: str = "",
         issue_context: str = "",
-        model_name: Optional[str] = None,
-        response_schema: Optional[type] = None,
+        model_name: str | None = None,
+        response_schema: type | None = None,
     ) -> str:
         """
         Find the location of a specific issue in an image.
@@ -268,11 +267,11 @@ class GeminiClient:
 
     async def analyze_image(
         self,
-        image_url: str = None,
-        image_data: bytes = None,
-        model_name: Optional[str] = None,
-        response_schema: Optional[type] = None,
-        custom_rules: Optional[str] = None,
+        image_url: str | None = None,
+        image_data: bytes | None = None,
+        model_name: str | None = None,
+        response_schema: type | None = None,
+        custom_rules: str | None = None,
     ) -> str:
         """
         Analyze an image for medical accuracy and potential issues (with locations).
@@ -322,12 +321,12 @@ class GeminiClient:
 
     async def _analyze_image_with_prompt(
         self,
-        image_url: str = None,
-        image_data: bytes = None,
+        image_url: str | None = None,
+        image_data: bytes | None = None,
         prompt: str = "",
-        model_name: Optional[str] = None,
-        response_schema: Optional[type] = None,
-        custom_rules: Optional[str] = None,
+        model_name: str | None = None,
+        response_schema: type | None = None,
+        custom_rules: str | None = None,
     ) -> str:
         """
         Helper method to analyze an image with a custom prompt.
@@ -442,7 +441,7 @@ class GeminiClient:
             return analysis_text
 
         except Exception as e:
-            logger.error(f"Error analyzing image: {str(e)}")
+            logger.error(f"Error analyzing image: {e!s}")
             raise
 
     def extract_video_id(self, video_url: str) -> str:

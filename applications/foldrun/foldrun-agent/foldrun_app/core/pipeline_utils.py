@@ -17,13 +17,12 @@
 import logging
 import os
 import tempfile
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 def compile_pipeline(
-    pipeline_function, output_path: Optional[str] = None, pipeline_name: str = "alphafold-pipeline"
+    pipeline_function, output_path: str | None = None, pipeline_name: str = "alphafold-pipeline"
 ) -> str:
     """
     Compile KFP pipeline.

@@ -16,7 +16,7 @@
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from foldrun_app.core.base_tool import BaseTool
 
@@ -28,14 +28,14 @@ logger = logging.getLogger(__name__)
 class OF3Tool(BaseTool):
     """Base class for OpenFold3 tools following ToolUniverse pattern."""
 
-    def __init__(self, tool_config: Dict[str, Any], config: Optional[OF3Config] = None):
+    def __init__(self, tool_config: dict[str, Any], config: OF3Config | None = None):
         super().__init__(tool_config, config or OF3Config())
 
     def _setup_compile_env(
         self,
-        hardware_config: Dict[str, Any],
-        filestore_ip: str = None,
-        filestore_network: str = None,
+        hardware_config: dict[str, Any],
+        filestore_ip: str | None = None,
+        filestore_network: str | None = None,
     ):
         """Set up environment variables for OF3 pipeline compilation."""
         nfs_server = filestore_ip or self.config.filestore_ip or ""
@@ -84,7 +84,7 @@ class OF3Tool(BaseTool):
         gpu_type: str,
         num_gpus: int = 1,
         num_tokens: int = 0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get hardware configuration for OF3 pipeline.
 
         No relax phase, no MMseqs2 GPU data pipeline — simpler than AF2.

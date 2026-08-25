@@ -21,7 +21,7 @@ Handles listing and retrieving files from Google Cloud Storage.
 import asyncio
 import datetime
 import logging
-from typing import List
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -56,7 +56,7 @@ class StorageItem(BaseModel):
 
 
 class StorageListResponse(BaseModel):
-    items: List[StorageItem]
+    items: list[StorageItem]
 
 
 @router.post(
@@ -66,7 +66,8 @@ class StorageListResponse(BaseModel):
     description="Upload a file to the configured Google Cloud Storage bucket.",
 )
 async def upload_file(
-    file: UploadFile = File(...), client: storage.Client = Depends(get_storage_client)
+    file: Annotated[UploadFile, File()],
+    client: Annotated[storage.Client, Depends(get_storage_client)],
 ):
     """
     Upload a file to GCS.
@@ -97,11 +98,11 @@ async def upload_file(
         )
 
     except Exception as e:
-        logger.error(f"Error uploading file: {str(e)}", exc_info=True)
+        logger.error(f"Error uploading file: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to upload file: {str(e)}",
-        )
+            detail=f"Failed to upload file: {e!s}",
+        ) from e
 
 
 @router.delete(
@@ -110,8 +111,8 @@ async def upload_file(
     description="Delete a file from the configured Google Cloud Storage bucket.",
 )
 async def delete_file(
-    file_path: str = Path(..., description="Full path to the file in GCS bucket"),
-    client: storage.Client = Depends(get_storage_client),
+    file_path: Annotated[str, Path(description="Full path to the file in GCS bucket")],
+    client: Annotated[storage.Client, Depends(get_storage_client)],
 ):
     """
     Delete a file from GCS.
@@ -131,8 +132,8 @@ async def delete_file(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting file {file_path}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to delete file")
+        logger.error(f"Error deleting file {file_path}: {e!s}")
+        raise HTTPException(status_code=500, detail="Failed to delete file") from e
 
 
 @router.get(
@@ -141,7 +142,9 @@ async def delete_file(
     summary="List files in GCS bucket",
     description="List all images in the configured Google Cloud Storage bucket and folder.",
 )
-async def list_files(client: storage.Client = Depends(get_storage_client)):
+async def list_files(
+    client: Annotated[storage.Client, Depends(get_storage_client)],
+):
     """
     List files in the configured GCS bucket.
     """
@@ -186,11 +189,11 @@ async def list_files(client: storage.Client = Depends(get_storage_client)):
         return StorageListResponse(items=items)
 
     except Exception as e:
-        logger.error(f"Error listing storage files: {str(e)}", exc_info=True)
+        logger.error(f"Error listing storage files: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to list storage files: {str(e)}",
-        )
+            detail=f"Failed to list storage files: {e!s}",
+        ) from e
 
 
 @router.get(
@@ -199,9 +202,9 @@ async def list_files(client: storage.Client = Depends(get_storage_client)):
     description="Stream file content from GCS (proxy), supports Range requests for video.",
 )
 async def get_file(
-    file_path: str = Path(..., description="Full path to the file in GCS bucket"),
-    range_header: str = Header(None, alias="Range"),
-    client: storage.Client = Depends(get_storage_client),
+    file_path: Annotated[str, Path(description="Full path to the file in GCS bucket")],
+    client: Annotated[storage.Client, Depends(get_storage_client)],
+    range_header: Annotated[str | None, Header(alias="Range")] = None,
 ):
     """
     Stream file content from GCS with Range support.
@@ -285,5 +288,5 @@ async def get_file(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving file {file_path}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve file")
+        logger.error(f"Error retrieving file {file_path}: {e!s}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve file") from e

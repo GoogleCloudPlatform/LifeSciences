@@ -20,7 +20,7 @@ import os
 import pickle
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import matplotlib
 import numpy as np
@@ -36,9 +36,9 @@ from .shared_utils import (
     download_json_from_gcs,
     get_job_metadata,
     get_quality_assessment,
-    upload_to_gcs,
-    plot_plddt_distribution,
     plot_error_matrix,
+    plot_plddt_distribution,
+    upload_to_gcs,
     wait_for_sibling_tasks,
 )
 
@@ -214,8 +214,7 @@ IMPORTANT: Begin your response directly with the report. Do NOT include any prea
             "status": "success",
             "analysis": response.text + disclaimer,
             "model": gemini_model,
-            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            + "Z",
+            "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
             "ai_generated": True,
         }
 
@@ -331,8 +330,7 @@ def consolidate_results(
     summary_data = {
         "job_id": job_id,
         "model_type": "alphafold2",
-        "analyzed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        + "Z",
+        "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
         "summary": summary,
         "best_prediction": best,
         "top_predictions": all_analyses[:10],
@@ -454,8 +452,7 @@ def run_task(
             "quality_assessment": quality,
             "has_pae": pae_stats is not None,
             "uri": prediction_uri,
-            "analyzed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            + "Z",
+            "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
             "plots": plot_files,
         }
 

@@ -20,7 +20,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import matplotlib
 import numpy as np
@@ -31,19 +31,19 @@ from google.genai import types
 matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
 
 from .shared_utils import (
+    calculate_per_chain_plddt,
     calculate_plddt_stats,
     download_image_from_gcs,
     download_json_from_gcs,
     download_text_from_gcs,
     get_job_metadata,
     get_quality_assessment,
-    upload_to_gcs,
     parse_cif_chains,
-    plot_plddt_distribution,
     plot_error_matrix,
     plot_iptm_matrix,
+    plot_plddt_distribution,
+    upload_to_gcs,
     wait_for_sibling_tasks,
-    calculate_per_chain_plddt,
 )
 
 logger = logging.getLogger(__name__)
@@ -221,8 +221,6 @@ IMPORTANT: Begin your response directly with the analysis. Do NOT include any pr
                 logger.warning(f"Could not include ipTM matrix plot: {e}")
 
         gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
-        project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-        location = os.getenv("GOOGLE_CLOUD_LOCATION")
 
         with genai.Client() as client:
             response = client.models.generate_content(
@@ -244,8 +242,7 @@ IMPORTANT: Begin your response directly with the analysis. Do NOT include any pr
             "status": "success",
             "analysis": response.text + disclaimer,
             "model": gemini_model,
-            "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            + "Z",
+            "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
             "ai_generated": True,
         }
 
@@ -461,8 +458,7 @@ def consolidate_results(
     summary_data = {
         "job_id": job_id,
         "model_type": "boltz2",
-        "analyzed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        + "Z",
+        "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
         "summary": summary,
         "best_prediction": best,
         "top_predictions": all_analyses[:10],
@@ -669,8 +665,7 @@ def run_task(
             "cif_uri": cif_uri,
             "aggregated_uri": aggregated_uri,
             "confidences_uri": confidences_uri,
-            "analyzed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            + "Z",
+            "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
             "plots": plot_files,
         }
 

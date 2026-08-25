@@ -16,7 +16,7 @@
 
 import logging
 import webbrowser
-from typing import Any, Dict
+from typing import Any
 
 from ..base import BOLTZ2Tool
 
@@ -26,11 +26,11 @@ logger = logging.getLogger(__name__)
 class BOLTZ2OpenViewerTool(BOLTZ2Tool):
     """Opens the FoldRun structure viewer for completed BOLTZ2 predictions."""
 
-    def __init__(self, tool_config: Dict[str, Any], config: Any):
+    def __init__(self, tool_config: dict[str, Any], config: Any):
         super().__init__(tool_config, config)
         self.viewer_base_url = config.viewer_url
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Open the viewer for an BOLTZ2 job.
 
         Args:

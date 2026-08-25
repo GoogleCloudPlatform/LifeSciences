@@ -15,7 +15,6 @@
 """Convert FASTA sequences to BOLTZ2 query YAML format."""
 
 import re
-from typing import Optional
 
 # Standard nucleotide alphabet (RNA)
 _RNA_NT = set("ACGU")
@@ -72,7 +71,7 @@ def _validate_sequence_chars(sequence: str, mol_type: str) -> list[str]:
     return errors
 
 
-def fasta_to_boltz2_yaml(fasta_content: str, job_name: Optional[str] = None) -> str:
+def fasta_to_boltz2_yaml(fasta_content: str, job_name: str | None = None) -> str:
     """Convert FASTA content (or raw sequence) to BOLTZ2 query YAML format."""
     content = fasta_content.strip()
     if not content.startswith(">"):
@@ -119,7 +118,7 @@ def fasta_to_boltz2_yaml(fasta_content: str, job_name: Optional[str] = None) -> 
         raise ValueError("FASTA validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
 
     yaml_lines = ["version: 1", "sequences:"]
-    for i, (seq_id, sequence) in enumerate(parsed):
+    for i, (_seq_id, sequence) in enumerate(parsed):
         chain_id = chr(65 + i) if i < 26 else f"chain_{i}"
         mol_type = _detect_molecule_type(sequence)
         yaml_lines.append(f"  - {mol_type}:")

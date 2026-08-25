@@ -17,10 +17,10 @@
 import os
 import sys
 import tempfile
-import yaml
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 
 @pytest.fixture(autouse=True)
@@ -66,8 +66,9 @@ class TestAF2PipelineCompilation:
     def test_monomer_pipeline_compiles(self):
         """Standard jackhmmer monomer pipeline compiles without error."""
         _clear_config_cache()
-        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
         from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
 
         pipeline = load_vertex_pipeline(enable_flex_start=False, msa_method="jackhmmer")
         out = os.path.join(tempfile.gettempdir(), "af2_mono_test.yaml")
@@ -81,8 +82,9 @@ class TestAF2PipelineCompilation:
     def test_flex_start_pipeline_compiles(self):
         """FLEX_START pipeline compiles without error."""
         _clear_config_cache()
-        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
         from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
 
         pipeline = load_vertex_pipeline(enable_flex_start=True, msa_method="jackhmmer")
         out = os.path.join(tempfile.gettempdir(), "af2_flex_test.yaml")
@@ -96,8 +98,9 @@ class TestAF2PipelineCompilation:
     def test_compiled_pipeline_contains_predict(self):
         """Compiled YAML references a predict task."""
         _clear_config_cache()
-        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
         from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
 
         pipeline = load_vertex_pipeline(enable_flex_start=False)
         out = os.path.join(tempfile.gettempdir(), "af2_check_predict.yaml")
@@ -111,8 +114,9 @@ class TestAF2PipelineCompilation:
     def test_compiled_pipeline_contains_relax(self):
         """Compiled YAML references a relax task — AF2-specific."""
         _clear_config_cache()
-        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
         from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
 
         pipeline = load_vertex_pipeline(enable_flex_start=False)
         out = os.path.join(tempfile.gettempdir(), "af2_check_relax.yaml")
@@ -126,8 +130,9 @@ class TestAF2PipelineCompilation:
     def test_compiled_pipeline_contains_data_pipeline(self):
         """Compiled YAML references a data pipeline (MSA) task."""
         _clear_config_cache()
-        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
         from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
 
         pipeline = load_vertex_pipeline(enable_flex_start=False)
         out = os.path.join(tempfile.gettempdir(), "af2_check_msa.yaml")
@@ -141,8 +146,9 @@ class TestAF2PipelineCompilation:
     def test_compiled_pipeline_has_sequence_path_parameter(self):
         """Compiled YAML exposes sequence_path as a required input parameter."""
         _clear_config_cache()
-        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
         from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
 
         pipeline = load_vertex_pipeline(enable_flex_start=False)
         out = os.path.join(tempfile.gettempdir(), "af2_check_seqpath.yaml")

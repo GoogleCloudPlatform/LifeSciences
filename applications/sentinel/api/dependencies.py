@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+from typing import Annotated
 
 from fastapi import Depends, Request
 from google.cloud import storage
@@ -42,7 +43,7 @@ def get_storage_client(request: Request) -> storage.Client:
 
 
 def get_analyzer_service(
-    client: GeminiClient = Depends(get_gemini_client),
+    client: Annotated[GeminiClient, Depends(get_gemini_client)],
 ) -> AnalyzerService:
     """Dependency for getting an AnalyzerService instance with the shared client."""
     return AnalyzerService(gemini_client=client)

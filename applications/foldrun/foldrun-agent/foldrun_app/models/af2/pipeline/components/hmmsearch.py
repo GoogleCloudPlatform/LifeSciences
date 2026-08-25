@@ -44,7 +44,7 @@ def hmmsearch(
 
     mount_path = ref_databases.uri
 
-    msa, features = run_hmmsearch(
+    msa, _features = run_hmmsearch(
         sequence_path=sequence.path,
         msa_path=msa.path,
         msa_data_format=msa.metadata["data_format"],

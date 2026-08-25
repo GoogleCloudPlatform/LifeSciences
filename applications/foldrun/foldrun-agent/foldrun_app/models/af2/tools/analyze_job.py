@@ -18,7 +18,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import run_v2, storage
 
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class AF2JobAnalysisTool(AF2Tool):
     """Tool for triggering parallel analysis via Cloud Run Jobs."""
 
-    def __init__(self, tool_config: Dict[str, Any], config: Any):
+    def __init__(self, tool_config: dict[str, Any], config: Any):
         super().__init__(tool_config, config)
         self.job_name = os.getenv("ANALYSIS_JOB_NAME", "foldrun-analysis-job")
 
@@ -65,7 +65,7 @@ class AF2JobAnalysisTool(AF2Tool):
 
         return f"{pipeline_root}analysis/"
 
-    def _write_to_gcs(self, gcs_uri: str, data: Dict[str, Any]) -> None:
+    def _write_to_gcs(self, gcs_uri: str, data: dict[str, Any]) -> None:
         """Write JSON data to GCS."""
         if not gcs_uri.startswith("gs://"):
             raise ValueError(f"Invalid GCS URI: {gcs_uri}")
@@ -108,7 +108,7 @@ class AF2JobAnalysisTool(AF2Tool):
             logger.warning(f"Could not check for existing analysis: {e}")
             return False, None
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Trigger parallel analysis via Cloud Run Job.
 
@@ -135,7 +135,7 @@ class AF2JobAnalysisTool(AF2Tool):
         try:
             job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
         except Exception as e:
-            return {"status": "error", "message": f"Could not find job {job_id}: {str(e)}"}
+            return {"status": "error", "message": f"Could not find job {job_id}: {e!s}"}
         task_details = get_task_details(job)
         predictions = task_details.get("predictions", [])
 

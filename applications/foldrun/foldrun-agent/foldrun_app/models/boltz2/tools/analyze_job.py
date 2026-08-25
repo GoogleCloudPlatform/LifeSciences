@@ -18,7 +18,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import run_v2, storage
 
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
     """Triggers parallel analysis of Boltz2 predictions via Cloud Run Jobs."""
 
-    def __init__(self, tool_config: Dict[str, Any], config: Any):
+    def __init__(self, tool_config: dict[str, Any], config: Any):
         super().__init__(tool_config, config)
         self.job_name = os.getenv("ANALYSIS_JOB_NAME", "foldrun-analysis-job")
 
@@ -52,7 +52,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
 
         return f"{pipeline_root}analysis/"
 
-    def _write_to_gcs(self, gcs_uri: str, data: Dict[str, Any]) -> None:
+    def _write_to_gcs(self, gcs_uri: str, data: dict[str, Any]) -> None:
         """Write JSON data to GCS."""
         if not gcs_uri.startswith("gs://"):
             raise ValueError(f"Invalid GCS URI: {gcs_uri}")
@@ -85,7 +85,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
             logger.warning(f"Could not check for existing analysis: {e}")
             return False, None
 
-    def _discover_boltz2_samples(self, job: Any) -> tuple[list[Dict[str, Any]], str | None]:
+    def _discover_boltz2_samples(self, job: Any) -> tuple[list[dict[str, Any]], str | None]:
         """Discover BOLTZ2 output samples and optional affinity file from GCS.
 
         Returns:
@@ -121,13 +121,13 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                 if "/confidence_" in name:
                     # e.g. .../boltz_results_patched_query/predictions/patched_query/confidence_patched_query_model_0.json
                     cif_filename = filename.replace("confidence_", "", 1).replace(".json", ".cif")
-                    cif_name = "/".join(parts_list[:-1] + [cif_filename])
+                    cif_name = "/".join([*parts_list[:-1], cif_filename])
 
                     # pde_{stem}_model_N.npz — written when --write_full_pde is passed
                     pde_filename = filename.replace("confidence_", "pde_", 1).replace(
                         ".json", ".npz"
                     )
-                    pde_name = "/".join(parts_list[:-1] + [pde_filename])
+                    pde_name = "/".join([*parts_list[:-1], pde_filename])
 
                     if name in seen:
                         continue
@@ -151,7 +151,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
         logger.info(f"Discovered {len(samples)} BOLTZ2 samples")
         return samples, affinity_uri
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Trigger parallel analysis via Cloud Run Job.
 
         Args:
@@ -174,7 +174,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
         try:
             job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
         except Exception as e:
-            return {"status": "error", "message": f"Could not find job {job_id}: {str(e)}"}
+            return {"status": "error", "message": f"Could not find job {job_id}: {e!s}"}
 
         # Determine analysis path
         analysis_path = self._get_analysis_path(job)

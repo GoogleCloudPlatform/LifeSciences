@@ -25,6 +25,57 @@ dev = [
     "pytest-mock>=3.10.0",
 ]
 
+[project.optional-dependencies]
+lint = [
+    "ruff>=0.4.6,<1.0.0",
+    "ty>=0.0.1a0",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "C",  # flake8-comprehensions
+    "B",   # flake8-bugbear
+    "UP", # pyupgrade
+    "RUF", # ruff specific rules
+]
+ignore = ["E501", "C901", "B006", "RUF001", "B905"] # ignore line too long, too complex, unicode characters
+
+[tool.ruff.lint.isort]
+known-first-party = ["foldrun_analysis"]
+
+[tool.ty]
+# ty is Astral's Rust-based type checker (same team as ruff/uv)
+# See: https://docs.astral.sh/ty/
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+exclude = [".venv/**"]
+
+[tool.ty.rules]
+# Ignore common issues with third-party libraries and dynamic code patterns
+unresolved-import = "ignore"
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-return-type = "ignore"
+possibly-missing-attribute = "ignore"
+not-subscriptable = "ignore"
+deprecated = "ignore"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true

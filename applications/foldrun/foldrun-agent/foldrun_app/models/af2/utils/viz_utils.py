@@ -16,7 +16,7 @@
 
 import logging
 import pickle
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -31,7 +31,7 @@ PLDDT_BANDS = [
 ]
 
 
-def load_raw_prediction(pickle_path: str) -> Dict[str, Any]:
+def load_raw_prediction(pickle_path: str) -> dict[str, Any]:
     """
     Load raw prediction pickle file.
 
@@ -48,7 +48,7 @@ def load_raw_prediction(pickle_path: str) -> Dict[str, Any]:
     return raw_prediction
 
 
-def calculate_plddt_stats(raw_prediction: Dict[str, Any]) -> Dict[str, Any]:
+def calculate_plddt_stats(raw_prediction: dict[str, Any]) -> dict[str, Any]:
     """
     Calculate pLDDT statistics.
 
@@ -80,7 +80,7 @@ def calculate_plddt_stats(raw_prediction: Dict[str, Any]) -> Dict[str, Any]:
     return stats
 
 
-def calculate_pae_stats(raw_prediction: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def calculate_pae_stats(raw_prediction: dict[str, Any]) -> dict[str, Any] | None:
     """
     Calculate PAE statistics (if available).
 
@@ -159,7 +159,7 @@ def overwrite_b_factors(pdb_content: str, b_factors: np.ndarray) -> str:
 
 
 def generate_plddt_colored_pdb(
-    pdb_path: str, raw_prediction_path: str, output_path: Optional[str] = None
+    pdb_path: str, raw_prediction_path: str, output_path: str | None = None
 ) -> str:
     """
     Generate PDB file with B-factors colored by pLDDT bands.
@@ -176,7 +176,7 @@ def generate_plddt_colored_pdb(
     raw_prediction = load_raw_prediction(raw_prediction_path)
 
     # Read PDB
-    with open(pdb_path, "r") as f:
+    with open(pdb_path) as f:
         pdb_content = f.read()
 
     # Calculate banded B-factors

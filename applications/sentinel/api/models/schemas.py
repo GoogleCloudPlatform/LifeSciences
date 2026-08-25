@@ -20,13 +20,12 @@ API requests and responses.
 """
 
 from datetime import datetime
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     """Severity levels for identified issues."""
 
     LOW = "low"
@@ -35,7 +34,7 @@ class Severity(str, Enum):
     CRITICAL = "critical"
 
 
-class IssueCategory(str, Enum):
+class IssueCategory(StrEnum):
     """Categories for medical literature review issues."""
 
     MEDICAL_ACCURACY = "medical_accuracy"
@@ -112,17 +111,17 @@ class Issue(BaseModel):
         description="Detailed description of the issue",
         min_length=10,
     )
-    context: Optional[str] = Field(
+    context: str | None = Field(
         None,
         description="Relevant context or quote from the video",
     )
-    location: Optional[Location] = Field(
+    location: Location | None = Field(
         None,
         description="Location in image (for image analysis only)",
     )
 
 
-class AnalysisSpeed(str, Enum):
+class AnalysisSpeed(StrEnum):
     """Analysis speed/model selection."""
 
     FAST = "fast"
@@ -140,7 +139,7 @@ class AnalyzeRequest(BaseModel):
         speed: Analysis speed/model selection (fast=Flash, powerful=Pro)
     """
 
-    video_url: Optional[str] = Field(
+    video_url: str | None = Field(
         None,
         description="YouTube video URL or GCS URI (gs://...)",
         examples=[
@@ -148,12 +147,12 @@ class AnalyzeRequest(BaseModel):
             "gs://bucket/video.mp4",
         ],
     )
-    image_url: Optional[str] = Field(
+    image_url: str | None = Field(
         None,
         description="Image URL to analyze (HTTPS URL or gs:// URI)",
         examples=["https://example.com/medical-diagram.jpg", "gs://bucket/image.jpg"],
     )
-    frame_rate: Optional[float] = Field(
+    frame_rate: float | None = Field(
         default=1.0,
         description="Frame rate for video sampling in frames per second (default: 1.0). Lower values reduce token usage. Only applies to video analysis.",
         ge=0.1,
@@ -164,7 +163,7 @@ class AnalyzeRequest(BaseModel):
         default=AnalysisSpeed.FAST,
         description="Analysis speed/model selection. 'fast' uses Gemini Flash, 'powerful' uses Gemini Pro.",
     )
-    custom_rules: Optional[str] = Field(
+    custom_rules: str | None = Field(
         default=None,
         description=(
             "Optional free-text rules file (brand voice, internal SOPs, "
@@ -185,7 +184,7 @@ class AnalysisResponseSchema(BaseModel):
     issues: list[Issue] = Field(
         ..., description="List of medical/content issues identified"
     )
-    summary: Optional[str] = Field(None, description="A brief summary of the findings")
+    summary: str | None = Field(None, description="A brief summary of the findings")
 
 
 class AnalyzeResponse(BaseModel):

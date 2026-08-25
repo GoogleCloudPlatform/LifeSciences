@@ -20,7 +20,7 @@ databases.yaml.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from foldrun_app.core.download import get_databases_for_models, load_manifest
 
@@ -37,7 +37,7 @@ class DownloadAllDatabasesTool(AF2Tool):
     Each job downloads directly to NFS and backs up to GCS.
     """
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         download_mode = arguments.get("download_mode", "full")
         if download_mode == "full_dbs":
             download_mode = "full"

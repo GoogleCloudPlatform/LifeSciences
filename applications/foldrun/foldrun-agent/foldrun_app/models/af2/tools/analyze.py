@@ -17,7 +17,7 @@
 import logging
 import os
 import tempfile
-from typing import Any, Dict, List
+from typing import Any
 
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job, get_task_details
@@ -62,7 +62,7 @@ class AF2AnalysisTool(AF2Tool):
             size_bytes /= 1024.0
         return f"{size_bytes:.2f} TB"
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Analyze prediction quality.
 
@@ -167,7 +167,7 @@ class AF2AnalysisTool(AF2Tool):
             "warnings": [],
         }
 
-    def _analyze_single_prediction(self, index: int, prediction: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze_single_prediction(self, index: int, prediction: dict[str, Any]) -> dict[str, Any]:
         """
         Analyze a single prediction and clean up immediately.
 
@@ -230,7 +230,7 @@ class AF2AnalysisTool(AF2Tool):
                 "error": str(e),
             }
 
-    def _analyze_all_predictions(self, job_id: str, top_n: int = 5) -> Dict[str, Any]:
+    def _analyze_all_predictions(self, job_id: str, top_n: int = 5) -> dict[str, Any]:
         """
         Analyze all predictions from a job and compare them.
 
@@ -418,7 +418,7 @@ class AF2AnalysisTool(AF2Tool):
             "warnings": [a for a in all_analyses if "error" in a],
         }
 
-    def _get_quality_distribution(self, analyses: List[Dict[str, Any]]) -> Dict[str, int]:
+    def _get_quality_distribution(self, analyses: list[dict[str, Any]]) -> dict[str, int]:
         """Calculate distribution of quality assessments."""
         distribution = {
             "very_high_confidence": 0,
@@ -435,8 +435,8 @@ class AF2AnalysisTool(AF2Tool):
         return distribution
 
     def _generate_recommendations(
-        self, analyses: List[Dict[str, Any]], summary: Dict[str, Any]
-    ) -> List[str]:
+        self, analyses: list[dict[str, Any]], summary: dict[str, Any]
+    ) -> list[str]:
         """Generate recommendations based on analysis."""
         recommendations = []
 
@@ -444,7 +444,7 @@ class AF2AnalysisTool(AF2Tool):
             return ["No successful predictions to analyze"]
 
         best = analyses[0]
-        worst = analyses[-1]
+        analyses[-1]
 
         # Best model recommendation
         recommendations.append(
@@ -491,7 +491,7 @@ class AF2AnalysisTool(AF2Tool):
                 )
 
         # Model diversity
-        unique_models = set(a["model_name"].split("_")[0] for a in analyses)
+        unique_models = {a["model_name"].split("_")[0] for a in analyses}
         if len(unique_models) > 1:
             recommendations.append(
                 f"Analyzed {len(unique_models)} different model architectures for robustness"

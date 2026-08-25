@@ -37,7 +37,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from typing import Dict, List, Mapping, Sequence, Tuple
+from typing import Dict, List, Mapping, Tuple
 
 from alphafold.common import protein
 from alphafold.common import residue_constants

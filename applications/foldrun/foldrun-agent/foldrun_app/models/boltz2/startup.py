@@ -33,7 +33,7 @@ def get_tool_configs():
     """Load and cache boltz2_tools.json (read once, shared everywhere)."""
     global _tool_configs
     if _tool_configs is None:
-        with open(_TOOL_CONFIG_PATH, "r") as f:
+        with open(_TOOL_CONFIG_PATH) as f:
             _tool_configs = json.load(f)
     return _tool_configs
 

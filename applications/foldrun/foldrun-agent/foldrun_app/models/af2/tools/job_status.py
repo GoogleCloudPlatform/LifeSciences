@@ -15,7 +15,7 @@
 """Tool for checking AlphaFold2 job status."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_job_status, get_pipeline_job, get_task_details
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class AF2JobStatusTool(AF2Tool):
     """Tool for checking status of AlphaFold2 prediction jobs."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Check job status with concise summary appropriate for the job state.
 

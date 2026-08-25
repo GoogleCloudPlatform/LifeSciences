@@ -14,8 +14,6 @@
 
 """Cost estimation tool wrappers for ADK FunctionTool."""
 
-from typing import Optional
-
 from foldrun_app.skills.cost_estimation.pricing import (
     estimate_monthly,
     estimate_single_job,
@@ -29,7 +27,7 @@ def estimate_job_cost(
     sequence_length: int = 300,
     num_predictions_per_model: int = 5,
     num_diffusion_samples: int = 5,
-    region: Optional[str] = None,
+    region: str | None = None,
 ) -> dict:
     """Estimate the cost of a single FoldRun prediction job.
 
@@ -81,7 +79,7 @@ def estimate_monthly_cost(
     boltz2_jobs: int = 0,
     avg_sequence_length: int = 300,
     include_infrastructure: bool = True,
-    region: Optional[str] = None,
+    region: str | None = None,
 ) -> dict:
     """Estimate monthly and annual FoldRun costs for a given workload.
 
@@ -127,7 +125,7 @@ def estimate_monthly_cost(
 
 
 def get_actual_job_costs(
-    pipeline_job_id: Optional[str] = None,
+    pipeline_job_id: str | None = None,
     limit: int = 50,
 ) -> dict:
     """Retrieve actual costs for completed FoldRun prediction jobs.

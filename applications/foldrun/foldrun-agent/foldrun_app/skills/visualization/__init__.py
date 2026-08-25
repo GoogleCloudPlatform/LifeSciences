@@ -16,4 +16,4 @@
 
 from .tools import open_boltz2_structure_viewer, open_of3_structure_viewer, open_structure_viewer
 
-__all__ = ["open_structure_viewer", "open_of3_structure_viewer", "open_boltz2_structure_viewer"]
+__all__ = ["open_boltz2_structure_viewer", "open_of3_structure_viewer", "open_structure_viewer"]

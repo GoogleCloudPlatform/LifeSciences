@@ -14,8 +14,6 @@
 
 """Job management tool wrappers for ADK FunctionTool."""
 
-from typing import Optional
-
 from foldrun_app.skills._tool_registry import get_tool
 
 
@@ -25,14 +23,14 @@ def check_job_status(job_id: str) -> dict:
 
 
 def list_jobs(
-    filter: Optional[str] = None,
-    label_filter: Optional[dict] = None,
-    state: Optional[str] = None,
-    job_type: Optional[str] = None,
-    gpu_type: Optional[str] = None,
-    seq_name: Optional[str] = None,
-    min_seq_length: Optional[int] = None,
-    max_seq_length: Optional[int] = None,
+    filter: str | None = None,
+    label_filter: dict | None = None,
+    state: str | None = None,
+    job_type: str | None = None,
+    gpu_type: str | None = None,
+    seq_name: str | None = None,
+    min_seq_length: int | None = None,
+    max_seq_length: int | None = None,
     limit: int = 20,
     check_analysis: bool = True,
 ) -> dict:
@@ -104,7 +102,7 @@ def delete_job(job_id: str, confirm: bool = False) -> dict:
     return get_tool("af2_delete_job").run({"job_id": job_id, "confirm": confirm})
 
 
-def check_gpu_quota(region: Optional[str] = None) -> dict:
+def check_gpu_quota(region: str | None = None) -> dict:
     """
     Check GPU quota limits and current usage in the configured region.
 

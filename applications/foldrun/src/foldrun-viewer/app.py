@@ -270,11 +270,11 @@ def _discover_boltz2_predictions(pipeline_root: str) -> list:
             cif_filename = filename.replace("confidence_", "", 1).replace(
                 ".json", ".cif"
             )
-            cif_name = "/".join(parts_list[:-1] + [cif_filename])
+            cif_name = "/".join([*parts_list[:-1], cif_filename])
             pde_filename = filename.replace("confidence_", "pde_", 1).replace(
                 ".json", ".npz"
             )
-            pde_name = "/".join(parts_list[:-1] + [pde_filename])
+            pde_name = "/".join([*parts_list[:-1], pde_filename])
             sample_name = filename.replace("confidence_", "", 1).replace(".json", "")
             predictions.append(
                 {

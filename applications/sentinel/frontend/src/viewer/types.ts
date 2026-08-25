@@ -17,12 +17,7 @@ export type ReviewLens =
   | 'editorial'
   | 'custom';
 
-export type Severity =
-  | 'critical'
-  | 'high'
-  | 'medium'
-  | 'low'
-  | 'informational';
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'informational';
 
 export type ConfidenceBand = 'low' | 'medium' | 'high';
 

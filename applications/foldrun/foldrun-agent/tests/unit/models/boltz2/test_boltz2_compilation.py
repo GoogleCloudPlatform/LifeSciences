@@ -14,14 +14,13 @@
 
 """Tests for BOLTZ2 pipeline compilation and config isolation."""
 
-import json
 import os
 import sys
 import tempfile
-import yaml
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 
 @pytest.fixture(autouse=True)
@@ -95,7 +94,7 @@ class TestConfigModuleIsolation:
             load_vertex_pipeline as load_boltz2,
         )
 
-        boltz2_pipeline = load_boltz2(enable_flex_start=True)
+        load_boltz2(enable_flex_start=True)
 
         from foldrun_app.models.boltz2.pipeline import config as boltz2_config
 
@@ -104,7 +103,7 @@ class TestConfigModuleIsolation:
         # Then AF2
         from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline as load_af2
 
-        af2_pipeline = load_af2(enable_flex_start=True, msa_method="jackhmmer")
+        load_af2(enable_flex_start=True, msa_method="jackhmmer")
 
         from foldrun_app.models.af2.pipeline import config as af2_config
 

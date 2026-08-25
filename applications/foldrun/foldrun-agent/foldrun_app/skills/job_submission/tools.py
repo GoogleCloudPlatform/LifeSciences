@@ -14,20 +14,18 @@
 
 """Job submission tool wrappers for ADK FunctionTool."""
 
-from typing import Optional
-
 from foldrun_app.skills._tool_registry import get_tool
 
 
 def submit_af2_monomer_prediction(
     sequence: str,
-    job_name: Optional[str] = None,
+    job_name: str | None = None,
     max_template_date: str = "2030-01-01",
     use_small_bfd: bool = True,
     run_relaxation: bool = True,
     gpu_type: str = "auto",
-    relax_gpu_type: Optional[str] = None,
-    vertex_repo_path: Optional[str] = None,
+    relax_gpu_type: str | None = None,
+    vertex_repo_path: str | None = None,
     enable_flex_start: bool = True,
     msa_method: str = "auto",
 ) -> dict:
@@ -61,14 +59,14 @@ def submit_af2_monomer_prediction(
 
 def submit_af2_multimer_prediction(
     sequence: str,
-    job_name: Optional[str] = None,
+    job_name: str | None = None,
     max_template_date: str = "2030-01-01",
     use_small_bfd: bool = True,
     run_relaxation: bool = True,
     gpu_type: str = "auto",
-    relax_gpu_type: Optional[str] = None,
+    relax_gpu_type: str | None = None,
     num_predictions_per_model: int = 5,
-    vertex_repo_path: Optional[str] = None,
+    vertex_repo_path: str | None = None,
     enable_flex_start: bool = True,
     msa_method: str = "auto",
 ) -> dict:
@@ -108,7 +106,7 @@ def submit_af2_batch_predictions(batch_config: list[dict]) -> dict:
 
 def submit_of3_prediction(
     input: str,
-    job_name: Optional[str] = None,
+    job_name: str | None = None,
     num_model_seeds: int = 1,
     num_diffusion_samples: int = 5,
     gpu_type: str = "auto",
@@ -154,7 +152,7 @@ def submit_of3_prediction(
 
 def submit_boltz2_prediction(
     input: str,
-    job_name: Optional[str] = None,
+    job_name: str | None = None,
     num_model_seeds: int = 1,
     num_diffusion_samples: int = 5,
     gpu_type: str = "auto",

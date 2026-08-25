@@ -64,7 +64,7 @@ class TestFixFasta:
         result = fix_fasta(corrupt)
         # Should have two headers and two sequences
         assert result.count(">") == 2
-        lines = [l for l in result.strip().split("\n") if l.strip()]
+        lines = [line for line in result.strip().split("\n") if line.strip()]
         # 4 lines: header, seq, header, seq
         assert len(lines) == 4
 

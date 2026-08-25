@@ -14,13 +14,13 @@
 
 """Tool for submitting Boltz2 structure predictions."""
 
-import yaml
 import logging
 import os
 import tempfile
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
+import yaml
 from google.cloud import aiplatform as vertex_ai
 
 from ..base import BOLTZ2Tool
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
     """Tool for submitting Boltz2 structure predictions."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Submit BOLTZ2 prediction job.
 
         Args:
@@ -152,8 +152,8 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         _seqs = _parsed.get("sequences", []) if _parsed else []
         _num_chains = (
             sum(
-                len(s[list(s.keys())[0]].get("id", ["?"]))
-                if isinstance(s[list(s.keys())[0]].get("id"), list)
+                len(s[next(iter(s.keys()))].get("id", ["?"]))
+                if isinstance(s[next(iter(s.keys()))].get("id"), list)
                 else 1
                 for s in _seqs
                 if s

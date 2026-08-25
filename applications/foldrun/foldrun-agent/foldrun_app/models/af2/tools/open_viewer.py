@@ -16,7 +16,7 @@
 
 import logging
 import webbrowser
-from typing import Any, Dict
+from typing import Any
 
 from ..base import AF2Tool
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class AF2OpenViewerTool(AF2Tool):
     """Opens the FoldRun structure viewer for completed predictions."""
 
-    def __init__(self, tool_config: Dict[str, Any], config: Any):
+    def __init__(self, tool_config: dict[str, Any], config: Any):
         """Initialize the viewer tool.
 
         Args:
@@ -37,7 +37,7 @@ class AF2OpenViewerTool(AF2Tool):
         # Cloud Run viewer service URL from config (can be overridden via AF2_VIEWER_URL env var)
         self.viewer_base_url = config.viewer_url
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Execute the tool to open the viewer.
 
         Args:

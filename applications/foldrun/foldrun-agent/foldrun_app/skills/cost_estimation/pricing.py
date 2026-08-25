@@ -22,7 +22,6 @@ Verified against Cloud Billing Catalog API on 2026-04-15.
 """
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +118,8 @@ VERTEX_GPU_TO_PRICE_KEY = {
 # value is used (clamped).
 #
 # "predict_per_task_min" is per individual predict task:
-#   - AF2 monomer:  5 tasks  (5 models × 1 seed)
-#   - AF2 multimer: 25 tasks (5 models × num_predictions_per_model, default 5)
+#   - AF2 monomer:  5 tasks  (5 models x 1 seed)
+#   - AF2 multimer: 25 tasks (5 models x num_predictions_per_model, default 5)
 #   - OF3:          num_seeds tasks, each running num_diffusion_samples serially
 #
 # Anchors derived from production benchmarks and FoldRun documentation.
@@ -216,8 +215,8 @@ DURATION_ANCHORS = {
 }
 
 # Number of predict tasks per job type
-# AF2 monomer:  5 models × 1 seed = 5 tasks
-# AF2 multimer: 5 models × num_predictions_per_model (default 5) = 25 tasks
+# AF2 monomer:  5 models x 1 seed = 5 tasks
+# AF2 multimer: 5 models x num_predictions_per_model (default 5) = 25 tasks
 # OF3:          num_seeds tasks (each runs num_diffusion_samples serially)
 DEFAULT_PREDICT_TASKS = {
     "af2_monomer": 5,
@@ -317,7 +316,7 @@ def _machine_for_gpu(gpu_type: str) -> str:
 
 
 def _hourly_rate(
-    machine_type: str, gpu_type: Optional[str], gpu_count: int, spot: bool, prices: dict
+    machine_type: str, gpu_type: str | None, gpu_count: int, spot: bool, prices: dict
 ) -> float:
     """Calculate the hourly rate for a machine + GPU combo."""
     spec = MACHINE_SPECS[machine_type]
@@ -335,7 +334,7 @@ def _hourly_rate(
     return vm_cost + gpu_cost
 
 
-def fetch_live_prices(region: str = "us-central1") -> Optional[dict]:
+def fetch_live_prices(region: str = "us-central1") -> dict | None:
     """Fetch live prices from the Cloud Billing Catalog API.
 
     Returns a price dict in the same format as DEFAULT_PRICES, or None on failure.
@@ -388,7 +387,7 @@ def fetch_live_prices(region: str = "us-central1") -> Optional[dict]:
         return None
 
 
-def _match_sku(desc: str) -> Optional[str]:
+def _match_sku(desc: str) -> str | None:
     """Match a SKU description to a price key."""
     is_spot = "spot" in desc or "preemptible" in desc
     is_commitment = "commitment" in desc
@@ -582,9 +581,9 @@ def estimate_single_job(
 
     # Determine total number of predict (and relax) tasks
     if job_type == "af2_monomer":
-        num_predictions = 5  # always 5 models × 1 seed
+        num_predictions = 5  # always 5 models x 1 seed
     elif job_type == "af2_multimer":
-        num_predictions = 5 * num_predictions_per_model  # 5 models × N seeds
+        num_predictions = 5 * num_predictions_per_model  # 5 models x N seeds
     else:  # of3 or boltz2
         num_predictions = num_predictions_per_model  # num_seeds
 
@@ -728,7 +727,7 @@ def estimate_monthly(
     infra_total = 0.0
     infra_items = []
     if include_infrastructure:
-        for key, item in INFRASTRUCTURE_MONTHLY.items():
+        for _key, item in INFRASTRUCTURE_MONTHLY.items():
             infra_total += item["cost"]
             infra_items.append(
                 {
@@ -784,7 +783,7 @@ def estimate_monthly(
 
 
 def _job_hourly_rate(
-    machine_type: str, gpu_enum: Optional[str], gpu_count: int, is_spot: bool, prices: dict
+    machine_type: str, gpu_enum: str | None, gpu_count: int, is_spot: bool, prices: dict
 ) -> float:
     """Calculate hourly rate for a Agent Platform custom job's hardware config.
 
@@ -817,7 +816,7 @@ def _job_hourly_rate(
 def get_actual_costs(
     project_id: str,
     region: str = "us-central1",
-    pipeline_job_id: Optional[str] = None,
+    pipeline_job_id: str | None = None,
     limit: int = 50,
 ) -> dict:
     """Retrieve actual costs for completed Agent Platform jobs.

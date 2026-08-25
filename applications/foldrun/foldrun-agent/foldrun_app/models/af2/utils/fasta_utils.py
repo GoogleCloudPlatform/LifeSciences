@@ -17,7 +17,6 @@
 import logging
 import os
 import re
-from typing import Dict, List, Tuple
 
 from Bio import SeqIO
 
@@ -30,7 +29,7 @@ class FastaValidationError(Exception):
     pass
 
 
-def validate_fasta_file(fasta_path: str) -> Tuple[bool, List[Dict]]:
+def validate_fasta_file(fasta_path: str) -> tuple[bool, list[dict]]:
     """
     Validate FASTA file and extract sequence information.
 
@@ -45,7 +44,7 @@ def validate_fasta_file(fasta_path: str) -> Tuple[bool, List[Dict]]:
         raise FileNotFoundError(f"FASTA file not found: {fasta_path}")
 
     sequences = []
-    with open(fasta_path, "r") as f:
+    with open(fasta_path) as f:
         for record in SeqIO.parse(f, "fasta"):
             sequences.append({"description": record.description, "sequence": str(record.seq)})
 
@@ -58,7 +57,7 @@ def validate_fasta_file(fasta_path: str) -> Tuple[bool, List[Dict]]:
     return is_monomer, sequences
 
 
-def write_fasta(sequences: List[Dict], output_path: str):
+def write_fasta(sequences: list[dict], output_path: str):
     """
     Write sequences to FASTA file.
 
@@ -74,7 +73,7 @@ def write_fasta(sequences: List[Dict], output_path: str):
     logger.info(f"Wrote {len(sequences)} sequence(s) to {output_path}")
 
 
-def parse_fasta_content(fasta_content: str) -> List[Dict]:
+def parse_fasta_content(fasta_content: str) -> list[dict]:
     """
     Parse FASTA content string.
 
@@ -131,7 +130,7 @@ def parse_fasta_content(fasta_content: str) -> List[Dict]:
     return sequences
 
 
-def get_sequence_length(sequences: List[Dict]) -> int:
+def get_sequence_length(sequences: list[dict]) -> int:
     """
     Get total sequence length.
 
@@ -144,7 +143,7 @@ def get_sequence_length(sequences: List[Dict]) -> int:
     return sum(len(seq["sequence"]) for seq in sequences)
 
 
-def _validate_sequences(sequences: List[Dict]) -> None:
+def _validate_sequences(sequences: list[dict]) -> None:
     """Validate sequences for common issues.
 
     Args:
@@ -192,7 +191,7 @@ def _validate_sequences(sequences: List[Dict]) -> None:
         logger.info(f"Validated sequence '{desc}': {len(seq_clean)} residues")
 
 
-def validate_sequence_for_job_type(sequences: List[Dict], is_multimer: bool) -> None:
+def validate_sequence_for_job_type(sequences: list[dict], is_multimer: bool) -> None:
     """Validate that sequence count matches job type.
 
     Args:

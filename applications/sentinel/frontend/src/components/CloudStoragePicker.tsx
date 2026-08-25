@@ -53,15 +53,9 @@ const CloudStoragePicker: React.FC<CloudStoragePickerProps> = ({
   onSelect,
 }) => {
   const [items, setItems] = useState<StorageItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      loadFiles();
-    }
-  }, [open]);
 
   const loadFiles = async () => {
     setLoading(true);
@@ -76,6 +70,35 @@ const CloudStoragePicker: React.FC<CloudStoragePickerProps> = ({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!open) return;
+
+    let ignore = false;
+
+    getStorageFiles()
+      .then((files) => {
+        if (!ignore) {
+          setItems(files);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!ignore) {
+          console.error('Failed to load storage files:', err);
+          setError('Failed to load files from storage.');
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [open]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();

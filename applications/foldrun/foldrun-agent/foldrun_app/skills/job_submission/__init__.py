@@ -23,9 +23,9 @@ from .tools import (
 )
 
 __all__ = [
+    "submit_af2_batch_predictions",
     "submit_af2_monomer_prediction",
     "submit_af2_multimer_prediction",
-    "submit_af2_batch_predictions",
     "submit_boltz2_prediction",
     "submit_of3_prediction",
 ]

@@ -17,7 +17,7 @@
 import json
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any
 from urllib.parse import quote_plus
 
 from google.cloud import run_v2, storage
@@ -48,7 +48,7 @@ class OF3GetAnalysisResultsTool(OF3Tool):
 
         return f"{pipeline_root}analysis/"
 
-    def _read_from_gcs(self, gcs_uri: str) -> Dict[str, Any]:
+    def _read_from_gcs(self, gcs_uri: str) -> dict[str, Any]:
         """Read JSON data from GCS."""
         if not gcs_uri.startswith("gs://"):
             raise ValueError(f"Invalid GCS URI: {gcs_uri}")
@@ -64,7 +64,7 @@ class OF3GetAnalysisResultsTool(OF3Tool):
         content = blob.download_as_text()
         return json.loads(content)
 
-    def _check_cloudrun_execution_status(self, execution_name: str) -> Dict[str, Any] | None:
+    def _check_cloudrun_execution_status(self, execution_name: str) -> dict[str, Any] | None:
         """Check Cloud Run job execution status."""
         try:
             client = run_v2.ExecutionsClient()
@@ -94,7 +94,7 @@ class OF3GetAnalysisResultsTool(OF3Tool):
             logger.warning(f"Could not check Cloud Run execution status: {e}")
             return None
 
-    def _list_completed_analyses(self, analysis_path: str) -> List[str]:
+    def _list_completed_analyses(self, analysis_path: str) -> list[str]:
         """List all completed analysis files in GCS."""
         if not analysis_path.startswith("gs://"):
             raise ValueError(f"Invalid GCS URI: {analysis_path}")
@@ -125,7 +125,7 @@ class OF3GetAnalysisResultsTool(OF3Tool):
             logger.warning(f"Could not build viewer URL: {e}")
             return None
 
-    def _trim_summary(self, summary: Dict[str, Any]) -> Dict[str, Any]:
+    def _trim_summary(self, summary: dict[str, Any]) -> dict[str, Any]:
         """Remove bulky per-residue score arrays to reduce response size."""
         if "top_predictions" in summary:
             for pred in summary["top_predictions"]:
@@ -135,7 +135,7 @@ class OF3GetAnalysisResultsTool(OF3Tool):
                 pred.pop("plddt_scores", None)
         return summary
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Get OF3 analysis results.
 
         Args:
@@ -160,7 +160,7 @@ class OF3GetAnalysisResultsTool(OF3Tool):
         try:
             job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
         except Exception as e:
-            return {"status": "error", "message": f"Could not find job {job_id}: {str(e)}"}
+            return {"status": "error", "message": f"Could not find job {job_id}: {e!s}"}
 
         analysis_path = self._get_analysis_path(job)
 

@@ -202,16 +202,16 @@ class TestValidateBoltz2Yaml:
     """validate_boltz2_yaml() structural and sequence validation."""
 
     def test_valid_protein(self):
-        ok, errors, warnings = validate_boltz2_yaml(VALID_PROTEIN_YAML)
+        ok, errors, _warnings = validate_boltz2_yaml(VALID_PROTEIN_YAML)
         assert ok, errors
         assert errors == []
 
     def test_valid_multichain(self):
-        ok, errors, warnings = validate_boltz2_yaml(VALID_MULTICHAIN_YAML)
+        ok, errors, _warnings = validate_boltz2_yaml(VALID_MULTICHAIN_YAML)
         assert ok, errors
 
     def test_valid_ligand_smiles(self):
-        ok, errors, warnings = validate_boltz2_yaml(VALID_LIGAND_YAML)
+        ok, errors, _warnings = validate_boltz2_yaml(VALID_LIGAND_YAML)
         assert ok, errors
 
     def test_valid_ligand_ccd(self):

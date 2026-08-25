@@ -16,7 +16,7 @@
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def inject_dws_scheduling(pipeline_spec_path: str) -> None:
     logger.info(f"Injecting DWS FLEX_START into pipeline spec: {pipeline_spec_path}")
 
     # Load the compiled pipeline spec
-    with open(pipeline_spec_path, "r") as f:
+    with open(pipeline_spec_path) as f:
         pipeline_spec = json.load(f)
 
     # Navigate to deployment config
@@ -48,7 +48,7 @@ def inject_dws_scheduling(pipeline_spec_path: str) -> None:
         if "container" in executor_spec:
             # This is a ContainerExecution (CustomJob)
             # Check if it has workerPoolSpecs
-            custom_job = executor_spec.get("container", {})
+            executor_spec.get("container", {})
 
             # The worker pool specs are in the executor's custom job template
             # We need to add scheduling at the right level
@@ -74,7 +74,7 @@ def inject_dws_scheduling(pipeline_spec_path: str) -> None:
         logger.warning("No executors found to modify. DWS scheduling not added.")
 
 
-def inject_dws_into_runtime_config(pipeline_job_dict: Dict[str, Any]) -> Dict[str, Any]:
+def inject_dws_into_runtime_config(pipeline_job_dict: dict[str, Any]) -> dict[str, Any]:
     """
     Alternative approach: Inject DWS at the PipelineJob level via runtime config.
 

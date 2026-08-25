@@ -20,8 +20,8 @@ from .open_viewer import OF3OpenViewerTool
 from .submit_prediction import OF3SubmitPredictionTool
 
 __all__ = [
-    "OF3SubmitPredictionTool",
-    "OF3JobAnalysisTool",
     "OF3GetAnalysisResultsTool",
+    "OF3JobAnalysisTool",
     "OF3OpenViewerTool",
+    "OF3SubmitPredictionTool",
 ]

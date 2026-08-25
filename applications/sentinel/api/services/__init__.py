@@ -20,6 +20,6 @@ from api.services.analyzer_service import AnalyzerService
 from api.services.gemini_client import GeminiClient
 
 __all__ = [
-    "GeminiClient",
     "AnalyzerService",
+    "GeminiClient",
 ]

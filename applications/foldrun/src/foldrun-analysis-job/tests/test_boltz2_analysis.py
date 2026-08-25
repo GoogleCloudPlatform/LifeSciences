@@ -15,8 +15,9 @@
 """Tests for Boltz-2 analysis utilities: parse_affinity, parse_cif_chains."""
 
 import sys
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 # Stub heavy imports BEFORE loading the module
 _stubs = {
@@ -28,8 +29,10 @@ _stubs = {
 for name, stub in _stubs.items():
     sys.modules.setdefault(name, stub)
 
-from foldrun_analysis import boltz2_analyzer  # noqa: E402
-from foldrun_analysis import shared_utils  # noqa: E402
+from foldrun_analysis import (  # noqa: E402
+    boltz2_analyzer,
+    shared_utils,
+)
 
 
 class TestParseAffinity:
@@ -84,7 +87,7 @@ class TestParseAffinity:
         assert result["binding_likelihood"] == "low"
 
     def test_delta_g_formula(self):
-        """ΔG = pIC50 × 1.364 kcal/mol (from official Boltz-2 docs)."""
+        """ΔG = pIC50 × 1.364 kcal/mol (from official Boltz-2 docs)."""  # noqa: RUF002
         raw = {"affinity_pred_value": 0.0, "affinity_probability_binary": 0.5}
         result = boltz2_analyzer.parse_affinity(raw)
         assert abs(result["delta_g_kcal_mol"] - 8.184) < 0.01

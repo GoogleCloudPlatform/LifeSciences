@@ -18,11 +18,9 @@ import logging
 import os
 import tempfile
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
-
-logger = logging.getLogger(__name__)
 
 from ..base import AF2Tool
 from ..utils.fasta_utils import (
@@ -32,11 +30,13 @@ from ..utils.fasta_utils import (
     write_fasta,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class AF2SubmitMonomerTool(AF2Tool):
     """Tool for submitting monomer AlphaFold2 predictions."""
 
-    def run(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Submit monomer prediction job.
 
@@ -68,9 +68,7 @@ class AF2SubmitMonomerTool(AF2Tool):
         relax_gpu_type = arguments.get("relax_gpu_type")  # Optional override for relax phase
         enable_flex_start = arguments.get("enable_flex_start", True)
         msa_method = arguments.get("msa_method", "auto")  # 'auto', 'jackhmmer', or 'mmseqs2'
-        vertex_repo_path = arguments.get(
-            "vertex_repo_path"
-        )  # No longer needed, kept for backwards compatibility
+        arguments.get("vertex_repo_path")  # No longer needed, kept for backwards compatibility
 
         # Validate: explicit mmseqs2 requires use_small_bfd=True and pre-built indexes
         if msa_method == "mmseqs2":

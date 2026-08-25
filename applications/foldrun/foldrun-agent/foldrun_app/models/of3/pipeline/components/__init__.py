@@ -16,3 +16,9 @@
 from .configure_run import configure_seeds_of3
 from .msa_pipeline import msa_pipeline_of3
 from .predict import predict_of3
+
+__all__ = [
+    "configure_seeds_of3",
+    "msa_pipeline_of3",
+    "predict_of3",
+]

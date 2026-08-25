@@ -14,14 +14,12 @@
 
 """Storage management tool wrappers for ADK FunctionTool."""
 
-from typing import Optional
-
 from foldrun_app.skills._tool_registry import get_tool
 
 
 def cleanup_gcs_files(
-    job_id: Optional[str] = None,
-    gcs_paths: Optional[list[str]] = None,
+    job_id: str | None = None,
+    gcs_paths: list[str] | None = None,
     search_only: bool = True,
     confirm_delete: bool = False,
     include_fasta: bool = False,

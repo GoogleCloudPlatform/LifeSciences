@@ -84,7 +84,7 @@ class TestJobSubmissionSkills:
         with _patch_get_tool(mock, _JOB_SUBMISSION):
             from foldrun_app.skills.job_submission import submit_af2_monomer_prediction
 
-            result = submit_af2_monomer_prediction(
+            submit_af2_monomer_prediction(
                 sequence=">test\nMKTIALSYIF",
                 gpu_type="L4",
                 msa_method="mmseqs2",
@@ -140,7 +140,7 @@ class TestJobSubmissionSkills:
         with _patch_get_tool(mock, _JOB_SUBMISSION) as mock_get:
             from foldrun_app.skills.job_submission import submit_af2_multimer_prediction
 
-            result = submit_af2_multimer_prediction(
+            submit_af2_multimer_prediction(
                 sequence=">A\nMKTIALSYIF\n>B\nACDEFGHIKL",
                 gpu_type="A100",
                 num_predictions_per_model=5,
@@ -192,7 +192,7 @@ class TestJobManagementSkills:
         with _patch_get_tool(mock, _JOB_MANAGEMENT) as mock_get:
             from foldrun_app.skills.job_management import list_jobs
 
-            result = list_jobs(state="running")
+            list_jobs(state="running")
 
             mock_get.assert_called_with("af2_list_jobs")
             args = mock.run.call_args[0][0]
@@ -253,7 +253,7 @@ class TestJobManagementSkills:
         """check_gpu_quota passes region argument when provided."""
         mock = _mock_tool({"gpus": {}})
 
-        with _patch_get_tool(mock, _JOB_MANAGEMENT) as mock_get:
+        with _patch_get_tool(mock, _JOB_MANAGEMENT):
             from foldrun_app.skills.job_management import check_gpu_quota
 
             check_gpu_quota(region="us-east1")
@@ -345,7 +345,7 @@ class TestDatabaseQuerySkills:
         with _patch_get_tool(mock, _DATABASE_QUERIES) as mock_get:
             from foldrun_app.skills.database_queries import query_alphafold_db_prediction
 
-            result = query_alphafold_db_prediction(qualifier="P69905")
+            query_alphafold_db_prediction(qualifier="P69905")
 
             mock_get.assert_called_with("alphafold_db_get_prediction")
             args = mock.run.call_args[0][0]

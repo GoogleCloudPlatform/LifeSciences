@@ -37,14 +37,14 @@ def msa_pipeline_of3(
     Template alignment files are in Stockholm (.sto) format from jackhmmer, which OF3's
     StoParser can consume directly (see https://openfold-3.readthedocs.io/en/latest/).
     """
+    import hashlib
     import json
     import logging
     import os
+    import shutil
     import subprocess
     import time
     import uuid
-    import hashlib
-    import shutil
 
     logging.basicConfig(level=logging.INFO)
     logging.info("Starting OF3 MSA pipeline")

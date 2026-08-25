@@ -19,7 +19,7 @@ hosted by EMBL-EBI. Based on the ToolUniverse AlphaFoldRESTTool implementation.
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
@@ -32,7 +32,7 @@ class AlphaFoldDBClient:
     def __init__(self, base_url: str = ALPHAFOLD_BASE_URL):
         self.base_url = base_url
 
-    def _build_url(self, endpoint_template: str, arguments: Dict[str, Any]) -> str:
+    def _build_url(self, endpoint_template: str, arguments: dict[str, Any]) -> str:
         """
         Build URL from endpoint template and arguments.
 
@@ -65,7 +65,7 @@ class AlphaFoldDBClient:
 
         return self.base_url + url_path
 
-    def _make_request(self, url: str, timeout: int = 30) -> Dict[str, Any]:
+    def _make_request(self, url: str, timeout: int = 30) -> dict[str, Any]:
         """
         Perform GET request to AlphaFold API.
 
@@ -136,8 +136,8 @@ class AlphaFoldDBClient:
             }
 
     def get_prediction(
-        self, qualifier: str, sequence_checksum: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, qualifier: str, sequence_checksum: str | None = None
+    ) -> dict[str, Any]:
         """
         Retrieve full AlphaFold 3D structure prediction for a protein.
 
@@ -156,7 +156,7 @@ class AlphaFoldDBClient:
         url = self._build_url(endpoint, arguments)
         return self._make_request(url)
 
-    def get_summary(self, qualifier: str) -> Dict[str, Any]:
+    def get_summary(self, qualifier: str) -> dict[str, Any]:
         """
         Retrieve summary details of AlphaFold 3D models for a protein.
 
@@ -172,7 +172,7 @@ class AlphaFoldDBClient:
         url = self._build_url(endpoint, arguments)
         return self._make_request(url)
 
-    def get_annotations(self, qualifier: str, annotation_type: str = "MUTAGEN") -> Dict[str, Any]:
+    def get_annotations(self, qualifier: str, annotation_type: str = "MUTAGEN") -> dict[str, Any]:
         """
         Retrieve AlphaFold variant annotations for a protein.
 
