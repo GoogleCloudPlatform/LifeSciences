@@ -627,9 +627,9 @@ jmp==0.0.4 \
     --hash=sha256:5dfeb0fd7c7a9f72a70fff0aab9d0cbfae32a809c02f4037ff3485ceb33e1730 \
     --hash=sha256:6aa7adbddf2bd574b28c7faf6e81a735eb11f53386447896909c6968dc36807d
     # via dm-haiku
-keras==2.15.0 \
-    --hash=sha256:2dcc6d2e30cf9c951064b63c1f4c404b966c59caf09e01f3549138ec8ee0dd1f \
-    --hash=sha256:81871d298c064dc4ac6b58440fdae67bfcf47c8d7ad28580fab401834c06a575
+keras==3.14.0 \
+    --hash=sha256:19ce94b798caaba4d404ab6ef4753b44219170e5c2868156de8bb0494a260114 \
+    --hash=sha256:86fcf8249a25264a566ac393c287c7ad657000e5e62615dcaad4b3472a17aeda
     # via tensorflow-cpu
 kiwisolver==1.5.0 \
     --hash=sha256:012b1eb16e28718fa782b5e61dc6f2da1f0792ca73bd05d54de6cb9561665fc9 \
