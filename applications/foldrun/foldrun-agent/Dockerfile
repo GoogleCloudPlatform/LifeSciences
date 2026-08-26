@@ -14,7 +14,7 @@
 
 FROM python:3.12-slim
 
-RUN pip install --no-cache-dir uv==0.8.13
+COPY --from=ghcr.io/astral-sh/uv:0.8.13 /uv /uvx /bin/
 
 WORKDIR /code
 
