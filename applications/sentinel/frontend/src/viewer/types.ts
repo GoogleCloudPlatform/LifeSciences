@@ -11,11 +11,7 @@
  */
 
 export type ReviewLens =
-  | 'medical'
-  | 'legal'
-  | 'regulatory'
-  | 'editorial'
-  | 'custom';
+  'medical' | 'legal' | 'regulatory' | 'editorial' | 'custom';
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'informational';
 
