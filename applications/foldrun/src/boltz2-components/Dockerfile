@@ -25,8 +25,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies from locked requirements with hashes
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir --require-hashes --no-deps --extra-index-url https://download.pytorch.org/whl/cu121 -r requirements.txt
+COPY requirements.lock .
+RUN pip3 install --no-cache-dir --require-hashes --no-deps --extra-index-url https://download.pytorch.org/whl/cu121 -r requirements.lock
 
 # No GCS libraries needed — all I/O via NFS mounts and KFP artifacts,
 # consistent with the AF2 container.

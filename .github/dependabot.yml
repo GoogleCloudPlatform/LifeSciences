@@ -1,0 +1,33 @@
+# Dependabot configuration for lifesciences-oss-apps monorepo
+# Scans root and subdirectories by default, excluding vendored/upstream ML model runtimes.
+version: 2
+updates:
+  # Python / pip dependencies for all monorepo applications
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    exclude-paths:
+      - "applications/foldrun/src/alphafold-components/**"
+      - "applications/foldrun/src/boltz2-components/**"
+      - "applications/foldrun/src/openfold3-components/**"
+    groups:
+      monorepo-python:
+        patterns:
+          - "*"
+
+  # Docker dependencies for all monorepo containerfiles
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    exclude-paths:
+      - "applications/foldrun/src/alphafold-components/**"
+      - "applications/foldrun/src/boltz2-components/**"
+      - "applications/foldrun/src/openfold3-components/**"
+
+  # GitHub Actions workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -7,6 +7,13 @@
   ],
   "schedule": ["before 9am on Monday"],
   "timezone": "America/Denver",
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "applications/foldrun/src/alphafold-components/**",
+    "applications/foldrun/src/boltz2-components/**",
+    "applications/foldrun/src/openfold3-components/**"
+  ],
   "prConcurrentLimit": 3,
   "packageRules": [
     {

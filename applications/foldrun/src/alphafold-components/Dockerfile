@@ -75,7 +75,7 @@ RUN git -C /app/alphafold reset --hard $AF2_VERSION
 RUN wget -q -P /app/alphafold/alphafold/common/ \
   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
 
-COPY requirements.txt /app/alphafold/requirements_resolved.txt
+COPY requirements.lock /app/alphafold/requirements_resolved.txt
 RUN pip3 install --no-cache-dir --require-hashes \
     -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
     -r /app/alphafold/requirements_resolved.txt
