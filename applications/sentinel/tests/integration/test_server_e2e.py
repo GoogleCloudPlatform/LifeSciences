@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import json
 import logging
 import os
-import socket
 import subprocess
 import sys
 import threading
@@ -24,16 +24,17 @@ import uuid
 from collections.abc import Iterator
 from typing import Any
 
+import httpx
 import pytest
 import requests
+from a2a.client import ClientConfig, create_client
 from a2a.types import (
     Message,
-    MessageSendParams,
     Part,
     Role,
-    SendStreamingMessageRequest,
-    SendStreamingMessageResponse,
-    TextPart,
+    SendMessageRequest,
+    StreamResponse,
+    TaskState,
 )
 from requests.exceptions import RequestException
 
@@ -41,23 +42,10 @@ from requests.exceptions import RequestException
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-def _free_port() -> int:
-    """Ask the OS for an unused localhost port."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
-
-
-# Bind a free port rather than a fixed 8000: on any machine already serving on
-# 8000 (a stray `adk web`, a leaked server from an earlier run) every test in
-# this file fails with the misleading "Server failed to start".
-PORT = int(os.environ.get("INTEGRATION_TEST_PORT") or _free_port())
-BASE_URL = f"http://127.0.0.1:{PORT}"
+BASE_URL = "http://127.0.0.1:8000"
 RUN_SSE_URL = BASE_URL + "/run_sse"
 A2A_RPC_URL = BASE_URL + "/a2a/app/"
 AGENT_CARD_URL = A2A_RPC_URL + ".well-known/agent-card.json"
-FEEDBACK_URL = BASE_URL + "/feedback"
 
 HEADERS = {"Content-Type": "application/json"}
 
@@ -78,10 +66,12 @@ def start_server() -> subprocess.Popen[str]:
         "--host",
         "0.0.0.0",
         "--port",
-        str(PORT),
+        "8000",
     ]
     env = os.environ.copy()
     env["INTEGRATION_TEST"] = "TRUE"
+    # Advertise a loopback URL so the A2A client can reach the card's transport.
+    env["APP_URL"] = BASE_URL
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -123,6 +113,9 @@ def server_fixture(request: Any) -> Iterator[subprocess.Popen[str]]:
     """Pytest fixture to start and stop the server for testing."""
     logger.info("Starting server process")
     server_process = start_server()
+    if not wait_for_server():
+        pytest.fail("Server failed to start")
+    logger.info("Server process started")
 
     def stop_server() -> None:
         logger.info("Stopping server process")
@@ -130,15 +123,7 @@ def server_fixture(request: Any) -> Iterator[subprocess.Popen[str]]:
         server_process.wait()
         logger.info("Server process stopped")
 
-    # Register the finalizer before the readiness check: a server that never
-    # comes up must still be reaped, otherwise it survives the run and holds
-    # the port, making every subsequent run fail the same way.
     request.addfinalizer(stop_server)
-
-    if not wait_for_server():
-        pytest.fail("Server failed to start")
-    logger.info("Server process started")
-
     yield server_process
 
 
@@ -190,46 +175,35 @@ def test_a2a_chat_stream(server_fixture: subprocess.Popen[str]) -> None:
     """Test the A2A route using the JSON-RPC streaming protocol."""
     logger.info("Starting A2A chat stream test")
 
-    message = Message(
-        message_id=f"msg-user-{uuid.uuid4()}",
-        role=Role.user,
-        parts=[Part(root=TextPart(text="Hi!"))],
-    )
-    request = SendStreamingMessageRequest(
-        id="test-req-001",
-        params=MessageSendParams(message=message),
-    )
-    response = requests.post(
-        A2A_RPC_URL,
-        headers=HEADERS,
-        json=request.model_dump(mode="json", exclude_none=True),
-        stream=True,
-        timeout=60,
-    )
-    assert response.status_code == 200
+    async def _stream() -> list[StreamResponse]:
+        config = ClientConfig(
+            streaming=True,
+            httpx_client=httpx.AsyncClient(timeout=60.0),
+        )
+        client = await create_client(A2A_RPC_URL.rstrip("/"), config)
+        message = Message(
+            message_id=f"msg-user-{uuid.uuid4()}",
+            role=Role.ROLE_USER,
+            parts=[Part(text="Hi!")],
+        )
+        return [
+            chunk
+            async for chunk in client.send_message(SendMessageRequest(message=message))
+        ]
 
-    responses: list[SendStreamingMessageResponse] = []
-    for line in response.iter_lines():
-        if line:
-            line_str = line.decode("utf-8")
-            if line_str.startswith("data: "):
-                responses.append(
-                    SendStreamingMessageResponse.model_validate(
-                        json.loads(line_str[6:])
-                    )
-                )
-
+    responses = asyncio.run(_stream())
     assert responses, "No responses received from stream"
 
-    final_responses = [
-        r.root
-        for r in responses
-        if hasattr(r.root, "result")
-        and hasattr(r.root.result, "final")
-        and r.root.result.final is True
-    ]
-    assert final_responses, "No final response received"
-    assert final_responses[-1].result.status.state == "completed"
+    def _is_completed(chunk: StreamResponse) -> bool:
+        if chunk.HasField("status_update"):
+            return chunk.status_update.status.state == TaskState.TASK_STATE_COMPLETED
+        if chunk.HasField("task"):
+            return chunk.task.status.state == TaskState.TASK_STATE_COMPLETED
+        return False
+
+    assert any(_is_completed(chunk) for chunk in responses), (
+        "No completed task received from stream"
+    )
 
 
 def test_agent_card(server_fixture: subprocess.Popen[str]) -> None:
@@ -238,22 +212,16 @@ def test_agent_card(server_fixture: subprocess.Popen[str]) -> None:
     assert response.status_code == 200, f"A2A endpoint returned {response.status_code}"
 
     served_agent_card = response.json()
-    for field in ("name", "description", "skills", "capabilities", "url", "version"):
+    # supportedInterfaces is the A2A 1.0 marker (replaces url/preferredTransport).
+    for field in (
+        "name",
+        "description",
+        "skills",
+        "capabilities",
+        "version",
+        "supportedInterfaces",
+    ):
         assert field in served_agent_card, f"Missing field in agent card: {field}"
-
-
-def test_collect_feedback(server_fixture: subprocess.Popen[str]) -> None:
-    """Test the feedback collection endpoint (/feedback)."""
-    feedback_data = {
-        "score": 4,
-        "user_id": "test-user-456",
-        "session_id": "test-session-456",
-        "text": "Great response!",
-    }
-    response = requests.post(
-        FEEDBACK_URL, json=feedback_data, headers=HEADERS, timeout=10
-    )
-    assert response.status_code == 200
 
 
 def test_reasoning_engine_stream(server_fixture: subprocess.Popen[str]) -> None:
