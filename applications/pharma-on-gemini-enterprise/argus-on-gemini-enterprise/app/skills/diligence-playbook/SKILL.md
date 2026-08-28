@@ -77,3 +77,4 @@ Every acquisition assessment covers these. Weight them by deal thesis
 - Undisclosed safety signals, clinical holds, or CRLs (complete response letters).
 - Heavy royalty/milestone obligations to third parties on the lead asset.
 - Going-concern language in the latest 10-K/10-Q.
+- Target already acquired, merged, delisted, or subject to a definitive buyout agreement.
