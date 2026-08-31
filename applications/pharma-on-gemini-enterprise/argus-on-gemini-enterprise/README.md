@@ -205,13 +205,48 @@ agents-cli eval grade
 You can deploy the agent directly using `agents-cli deploy`. The CLI will automatically package the agent code in the `app` directory and generate the necessary requirements from `pyproject.toml` and `uv.lock`.
 
 ```bash
+export PROJECT_ID="YOUR_PROJECT_ID"
+export EDGAR_USER_AGENT="Sample Company Name AdminContact@<sample company domain>.com"
+
 uv run agents-cli deploy \
-    --project=YOUR_PROJECT_ID \
+    --project="$PROJECT_ID" \
     --region=us-central1 \
     --service-name="Argus — Life Sciences M&A Diligence" \
     --deployment-target=agent_runtime \
-    --agent-identity
+    --agent-identity \
+    --update-env-vars="EDGAR_USER_AGENT=$EDGAR_USER_AGENT"
 ```
+
+### Grant IAM Roles to the Agent Identity
+
+When deploying with `--agent-identity`, the platform provisions a dedicated agent identity principal for the Reasoning Engine instance, but does not grant project-level IAM roles automatically. You must grant the required roles using `gcloud`:
+
+```bash
+# Set the agent identity principal printed in the deploy output:
+export AGENT_IDENTITY="YOUR_AGENT_IDENTITY_PRINCIPAL"
+
+# 1. Required: View and load Science Skills from Agent Registry (openFDA, ChEMBL, PubMed, etc.)
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="$AGENT_IDENTITY" \
+    --role="roles/agentregistry.viewer"
+
+# 2. Required: Access Gemini models on Agent Platform
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="$AGENT_IDENTITY" \
+    --role="roles/aiplatform.expressUser"
+
+# 3. Required: Consume GCP service APIs
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="$AGENT_IDENTITY" \
+    --role="roles/serviceusage.serviceUsageConsumer"
+
+# 4. Optional: Telemetry & Tracing (if Cloud Observability is enabled)
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="$AGENT_IDENTITY" \
+    --role="roles/telemetry.writer"
+```
+
+> **Tip:** When deploying via Cloud Build + Terraform (recommended for production), these IAM role bindings are configured and applied automatically (see [Deploy with Terraform & Cloud Build](#deploy-with-terraform--cloud-build-recommended-for-production)).
 
 ---
 
