@@ -17,7 +17,7 @@ name = "argus-agent"
 version = "0.1.0"
 description = "ADK agent for Argus Life Sciences M&A Diligence"
 readme = "README.md"
-requires-python = "~=3.13.0"
+requires-python = "~=3.14.7"
 dependencies = [
     "a2a-sdk[http-server]~=0.3.22",
     "aiohttp>=3.13.4",
@@ -29,7 +29,7 @@ dependencies = [
     "markdown>=3.10.2",
     "matplotlib>=3.10.0",
     "mcp>=1.28.1,<2.0.0",
-    "opentelemetry-resourcedetector-gcp<=1.12.0a0",
+    "opentelemetry-resourcedetector-gcp<=1.14.0",
     "protobuf>=6.31.1,<7.0.0",
     "python-dotenv>=1.0.0",
     "xhtml2pdf>=0.2.17",
