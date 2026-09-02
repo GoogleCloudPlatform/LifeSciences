@@ -19,7 +19,7 @@ description = "ADK agent for Argus Life Sciences M&A Diligence"
 readme = "README.md"
 requires-python = "~=3.13.0"
 dependencies = [
-    "a2a-sdk[http-server]~=0.3.22",
+    "a2a-sdk[http-server]~=1.1.2",
     "aiohttp>=3.13.4",
     "gcsfs>=2024.11.0",
     "google-adk[eval,gcp,otel-gcp]>=2.2.0,<3.0.0",
@@ -28,9 +28,9 @@ dependencies = [
     "httpx>=0.28.1",
     "markdown>=3.10.2",
     "matplotlib>=3.10.0",
-    "mcp>=1.28.1,<2.0.0",
+    "mcp>=2.1.1,<2.2.0",
     "opentelemetry-resourcedetector-gcp<=1.12.0a0",
-    "protobuf>=6.31.1,<7.0.0",
+    "protobuf>=7.36.1,<7.37.0",
     "python-dotenv>=1.0.0",
     "xhtml2pdf>=0.2.17",
 ]
