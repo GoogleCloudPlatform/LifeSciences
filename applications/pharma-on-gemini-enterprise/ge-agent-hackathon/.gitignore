@@ -1,0 +1,30 @@
+# secrets and local config
+.env
+.env.local
+*.env.deploybak
+*-key.json
+service-account*.json
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# agents fetched at runtime by scripts/get-agents.sh
+agents/biocompass/
+agents/paperbanana/
+
+# adk local state
+.adk/
+*.log
+
+# os
+.DS_Store
+
+# video clipper working files — media, never commit
+tools/video-clipper/staging/
+*.mov
+*.mp4
+*.wav

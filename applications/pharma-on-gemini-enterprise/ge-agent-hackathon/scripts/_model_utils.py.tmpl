@@ -1,0 +1,107 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Model factory that turns on retry/backoff for every Gemini call.
+
+Why this exists
+---------------
+ADK's `Gemini` wrapper accepts `retry_options`, which it passes through to the
+google-genai client. When an agent is given a model as a plain *string*
+(`model="gemini-3.5-flash"`), `retry_options` is None — and google-genai then
+uses `stop_after_attempt(1)`, i.e. **no retries at all**. A single transient
+429 from dynamic shared quota is therefore fatal, and because ADK surfaces it
+as an ExceptionGroup out of a parallel fan-out, it takes the whole invocation
+down with it.
+
+google-genai already knows how to retry 408/429/5xx with exponential backoff
+and jitter. Nothing was asking it to. Wrapping the model name here does.
+
+Tunable without a code change:
+    LLM_RETRY_ATTEMPTS        (default 5)
+    LLM_RETRY_INITIAL_DELAY   (default 1.0 seconds)
+    LLM_RETRY_MAX_DELAY       (default 30.0 seconds)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+
+from google.adk.models.google_llm import Gemini
+from google.genai import types
+
+
+# ---------------------------------------------------------------------------
+# Concurrency cap
+# ---------------------------------------------------------------------------
+# Retry alone is not enough when many people share one project. A classroom of
+# 30 participants each fanning out 10+ concurrent calls is ~300 in flight; every
+# one of them then retries, which makes the contention worse rather than better.
+#
+# This caps how many Gemini calls a SINGLE process will have in flight at once.
+# It does not coordinate across users — nothing can, without a shared limiter —
+# but it turns each participant's spiky burst into a steady trickle, and in
+# aggregate that is the difference between a project that throttles and one
+# that does not.
+#
+# Tune with LLM_MAX_CONCURRENCY (default 3; set 0 to disable the cap).
+
+_semaphore: asyncio.Semaphore | None = None
+_semaphore_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _get_semaphore() -> asyncio.Semaphore | None:
+    """Lazily create the semaphore, so it binds to the running event loop.
+
+    An asyncio.Semaphore binds to the first loop that awaits it and raises
+    "bound to a different event loop" if it is reused from another one. That
+    happens whenever a process calls asyncio.run() more than once — e.g. an
+    `adk run` retry, or a notebook restarting its loop — so re-create the
+    semaphore when the running loop changes rather than caching it forever.
+    """
+    global _semaphore, _semaphore_loop
+    limit = int(os.getenv("LLM_MAX_CONCURRENCY", "3"))
+    if limit <= 0:
+        return None
+    loop = asyncio.get_running_loop()
+    if _semaphore is None or _semaphore_loop is not loop:
+        _semaphore = asyncio.Semaphore(limit)
+        _semaphore_loop = loop
+    return _semaphore
+
+
+class ThrottledGemini(Gemini):
+    """Gemini with retry/backoff AND a per-process concurrency cap."""
+
+    async def generate_content_async(self, llm_request, stream: bool = False):
+        sem = _get_semaphore()
+        if sem is None:
+            async for resp in super().generate_content_async(llm_request, stream):
+                yield resp
+            return
+        async with sem:
+            async for resp in super().generate_content_async(llm_request, stream):
+                yield resp
+
+
+def resilient_model(name: str) -> Gemini:
+    """Return a Gemini model with backoff enabled and concurrency capped."""
+    return ThrottledGemini(
+        model=name,
+        retry_options=types.HttpRetryOptions(
+            attempts=int(os.getenv("LLM_RETRY_ATTEMPTS", "5")),
+            initial_delay=float(os.getenv("LLM_RETRY_INITIAL_DELAY", "1.0")),
+            max_delay=float(os.getenv("LLM_RETRY_MAX_DELAY", "30.0")),
+            exp_base=2.0,
+        ),
+    )

@@ -1,0 +1,26 @@
+Gemini Enterprise Agent Hackathon Kit
+Copyright 2026 Google LLC
+
+This directory contains original documentation, scripts, starter templates and
+diagrams. It does NOT vendor third-party source code. It is licensed under the
+Apache License, Version 2.0 — see the LICENSE file at the root of this
+repository.
+
+`scripts/get-agents.sh` fetches the following at run time. That code remains under
+its own licence and copyright:
+
+  * BioCompass and PaperBanana
+    github.com/GoogleCloudPlatform/LifeSciences
+    applications/pharma-on-gemini-enterprise/ — Apache-2.0
+
+Referenced but not redistributed:
+
+  * Agent Development Kit — github.com/google/adk-python — Apache-2.0
+  * agents-cli — github.com/google/agents-cli
+  * Healthcare MCP servers — github.com/GoogleCloudPlatform/hcls-mcp-servers — Apache-2.0
+
+Architecture diagrams in docs/architecture/ were generated with Gemini
+(gemini-3-pro-image) and are released under this repository's Apache-2.0 licence.
+
+This is not an officially supported Google product. Demonstration and enablement
+material only — not clinically validated, and no output is medical advice.

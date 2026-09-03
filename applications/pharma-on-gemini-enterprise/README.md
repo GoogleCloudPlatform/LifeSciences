@@ -11,6 +11,12 @@ A collection of [Gemini Enterprise](https://cloud.google.com/products/gemini/ent
 | [Argus Agent](argus-on-gemini-enterprise) | Life-sciences M&A due-diligence agent. Supports quick questions via specialist sub-agents (regulatory/scientific, clinical, financial, market), target screening from an acquirer thesis, and a deep-diligence pipeline running 6 concurrent analysts (scientific PoS, competitive, clinical/regulatory, commercial, financial/deal, IP/exclusivity). Synthesizes findings into investment-grade whitepaper PDFs with code-generated matplotlib charts and conceptual infographics, plus 16:9 executive overview slides. |
 | [BioCompass Agent](biocompass-on-gemini-enterprise) | Biomedical literature research agent for pharma R&D, medical affairs, and clinical / HEOR. Light PubMed lookups + PubTator3 entity analysis + a deep-research `SequentialAgent[ParallelAgent → Synth → Critic loop]` over PubMed + Europe PMC + bioRxiv/medRxiv + ClinicalTrials.gov, plus Nano Banana Pro for concept visualization and a `SkillToolset` shipping six pharma methodology skills (PICO, PRISMA, MoA, target dossier, competitive scan, PV signal scan). |
 
+## Enablement
+
+| Kit | Description |
+| --- | --- |
+| [GE Agent Hackathon Kit](ge-agent-hackathon) | Run a one-day workshop that takes people from a laptop to a custom agent live in Gemini Enterprise, using BioCompass and PaperBanana as the worked examples. Prerequisites and API list, local iteration in `adk web`, deploy and publish with `agents-cli`, a troubleshooting page where every entry is a failure that actually happened, a rehearsed demo guide, and a guide to returning interactive A2UI surfaces instead of text. Also ships a Gemini-based video clipper for turning a raw screen recording into a narrated demo. |
+
 ## Getting started
 
 Pick an agent above and follow the `README.md` inside its directory. Each one has its own `.env` and `pyproject.toml`, uses `uv` for dependency management, and can be deployed locally or via the shared Cloud Build/Terraform pipeline.

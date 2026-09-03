@@ -1,0 +1,58 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[project]
+name = "video-clipper"
+version = "0.1.0"
+description = "Turn a raw screen recording into a narrated demo video with Gemini."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # This is `google-genai`, NOT the retired `google-generativeai`. Support for
+    # the latter has ended; if you see `import google.generativeai`, it's old.
+    "google-genai>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+# ffmpeg + ffprobe are also required and are NOT installable with uv/pip:
+#   macOS:         brew install ffmpeg
+#   Debian/Ubuntu: sudo apt install ffmpeg
+# Verify: ffmpeg -version && ffprobe -version
+
+# Scripts here are run directly (`uv run smart_video_clipper.py`), not imported,
+# so there is nothing to build or install as a package.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "C",   # flake8-comprehensions
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "RUF", # ruff specific rules
+]
+ignore = [
+    "E501",   # line too long
+    "C901",   # too complex
+    "B006",   # mutable default argument
+    "RUF001", # en dashes in console output are deliberate, not typos
+]
