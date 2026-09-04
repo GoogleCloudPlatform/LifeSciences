@@ -28,25 +28,28 @@ This is not an officially supported Google product. This project is intended for
 
 ## How it works
 
-The pipeline is wired with ADK's workflow agents (`SequentialAgent` + `LoopAgent`) and exposed to the conversational root agent as a single `AgentTool` — that shape keeps Gemini Enterprise's "render only the first model event of a turn" constraint happy (the same constraint the [Model Garden agent](../model-garden-on-gemini-enterprise/README.md) had to design around).
+The pipeline is wired with ADK v2 graph-based workflows (`Workflow` DAGs). The conversational lead (`coordinator_agent`) scopes the request and routes to the `paperbanana_pipeline` Workflow via the `generate_figure` routing tool:
 
 ```
-root_agent (Gemini 3, conversational)
-  │   before_model_callback : reattach uploaded PDF (GE strips file bytes)
-  └── tool: PaperBananaPipeline   (AgentTool)
-        SequentialAgent
-          │── PrepInputs       stage tool args + previous-turn snapshot in state
-          │── Planner          LlmAgent  → state["description"]
-          │── Stylist          LlmAgent + style_guide  → state["styled_description"]
-          │── LoopAgent(N=3)
-          │     │── Visualizer   gemini-3-pro-image
-          │     │                  (multimodal: prior image as edit input)
-          │     │                  saves figure_{turn_id}_v{round}.png as artifact
-          │     │── Critic       LlmAgent (vision)  → JSON {critic_suggestions, revised_description}
-          │     `── CriticDecision  parses verdict; escalates loop on
-          │                          "no changes needed", otherwise rolls
-          │                          revised_description into state for next round
-          `── Finalize         emits a summary referencing the saved figure
+root_agent "paperbanana" (Workflow DAG)
+  │
+  ├── (START -> coordinator_agent)  [Conversational Coordinator]
+  │     - injects attached paper PDF into context
+  │     - answers greetings/clarifications conversationally
+  │     - routing tool: generate_figure (sets route="generate_figure")
+  │
+  └── (coordinator_agent -> paperbanana_pipeline)  [Pipeline Workflow DAG]
+        ├── (START -> prep_inputs): mints turn_id, snapshots prior image, resets round state
+        ├── (prep_inputs -> planner_agent): drafts detailed visual description
+        ├── (planner_agent -> stylist_agent): refines with NeurIPS aesthetic guidance
+        ├── (stylist_agent -> visualizer_agent): renders diagram (gemini-3-pro-image)
+        ├── (visualizer_agent -> critic_agent): critiques diagram, emits JSON verdict
+        ├── (critic_agent -> decide_refinement_loop):
+        │     ├── route="refine" ──► visualizer_agent (up to MAX_CRITIC_ROUNDS)
+        │     ├── route="finalize" ──► captioner_agent
+        │     └── route="finalize_direct" ──► finalize (if no image rendered)
+        ├── (captioner_agent -> finalize): inspects rendered image and writes publication caption
+        └── finalize: emits clean Figure caption and attaches final image artifact_delta
 ```
 
 Mapping to PaperVizAgent:
@@ -57,7 +60,8 @@ Mapping to PaperVizAgent:
 | Planner | `PaperBananaPlanner` | `DIAGRAM_PLANNER_AGENT_SYSTEM_PROMPT` ported verbatim |
 | Stylist | `PaperBananaStylist` | `DIAGRAM_STYLIST_AGENT_SYSTEM_PROMPT` + `neurips2025_diagram_style_guide.md` ported verbatim |
 | Visualizer | `PaperBananaVisualizer` | Uses `gemini-3-pro-image` natively — feeds the prior round's image back in for true edit-mode refinement (PaperVizAgent's text-only re-render works here too but loses continuity) |
-| Critic | `PaperBananaCritic` + `PaperBananaCriticDecision` | `DIAGRAM_CRITIC_AGENT_SYSTEM_PROMPT` ported; same JSON schema |
+| Critic | `PaperBananaCritic` + `decide_refinement_loop` | `DIAGRAM_CRITIC_AGENT_SYSTEM_PROMPT` ported; same JSON schema |
+| Captioner | `PaperBananaCaptioner` | Inspects rendered image and drafts a concise, publication-grade caption |
 | Polish (2K/4K upscale) | **native, on by default** | Nano Banana Pro generates at 4K natively (`ImageConfig(image_size="4K")`); set `IMAGE_SIZE=2K` or `1K` in `.env` for faster iteration |
 
 ## Prerequisites
@@ -66,9 +70,9 @@ Mapping to PaperVizAgent:
 2. A [Gemini Enterprise](https://cloud.google.com/products/gemini/enterprise) subscription (for the GE registration step — local testing works without)
 3. [Agent Platform API](https://console.cloud.google.com/apis/library/aiplatform.googleapis.com) and [Discovery Engine API](https://console.cloud.google.com/apis/library/discoveryengine.googleapis.com) enabled
 4. [Cloud Resource Manager API](https://console.developers.google.com/apis/api/cloudresourcemanager.googleapis.com/overview) enabled
-5. Access to the `gemini-3.1-pro-preview` and `gemini-3-pro-image` models (both served from the `global` endpoint)
+5. Access to the `gemini-3.8-flash` and `gemini-3-pro-image` models (both served from the `global` endpoint)
 6. [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed
-7. Python 3.10+
+7. Python 3.13+
 
 ## Setup
 
@@ -91,10 +95,11 @@ GOOGLE_GENAI_USE_ENTERPRISE=1
 GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID
 GOOGLE_CLOUD_LOCATION=us-central1
 MODEL_LOCATION=global
-PLANNER_MODEL_NAME=gemini-3.1-pro-preview
+PLANNER_MODEL_NAME=gemini-3.8-flash
 IMAGE_MODEL_NAME=gemini-3-pro-image
 IMAGE_SIZE=4K            # Nano Banana Pro: 1K, 2K, or 4K
 MAX_CRITIC_ROUNDS=3
+SHOW_THOUGHTS=1
 ```
 
 ## Project layout
@@ -112,12 +117,14 @@ paperbanana-on-gemini-enterprise/
 │   └── outputs.tf
 └── app/                   # Agent source code
     ├── __init__.py
-    ├── agent.py           # root LlmAgent + Sequential / LoopAgent pipeline
+    ├── agent.py           # root Workflow DAG + pipeline Workflow DAG
     ├── prompts.py         # planner / stylist / critic / visualizer system prompts
     ├── style_guide.md     # NeurIPS-style guide
-    ├── agent_runtime_app.py
+    ├── fast_api_app.py    # FastAPI server with A2A & Reasoning Engine routes
     └── app_utils/
-        ├── telemetry.py
+        ├── a2a.py
+        ├── reasoning_engine_adapter.py
+        ├── services.py
         └── typing.py
 ```
 
@@ -131,7 +138,7 @@ Open the URL `adk web` prints (default `http://localhost:8000`), pick `app` (or 
 
 > *"Generate a methodology overview diagram with a clear left-to-right flow."*
 
-Watch the **Events** tab on the right to see the pipeline fire (PrepInputs → Planner → Stylist → Visualizer → Critic → CriticDecision × N → Finalize). On the next turn, ask for a refinement:
+Watch the **Events** tab on the right to see the pipeline fire (coordinator_agent → prep_inputs → PaperBananaPlanner → PaperBananaStylist → PaperBananaVisualizer → PaperBananaCritic → decide_refinement_loop × N → PaperBananaCaptioner → finalize). On the next turn, ask for a refinement:
 
 > *"Use a softer pastel palette and add a 'frozen' snowflake icon on the encoder."*
 
