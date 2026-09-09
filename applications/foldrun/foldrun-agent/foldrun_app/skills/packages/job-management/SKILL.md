@@ -7,10 +7,20 @@ metadata:
     - get_job_details
     - cancel_job
     - delete_job
+    - check_af3_endpoint
+    - deploy_af3_endpoint
+    - undeploy_af3_endpoint
 ---
 
 # Job Management
 
+- **AlphaFold 3 Endpoint Lifecycle (Cost Optimization)**:
+  - Unlike Vertex AI Pipelines (AF2/OF3/Boltz-2) which are ephemeral, an active Vertex AI Endpoint with a deployed model incurs continuous GPU billing (~$1.01/hr on L4).
+  - An endpoint with 0 deployed models costs **$0.00/hr**.
+  - **Check Status & Cost**: Use `check_af3_endpoint` to see whether the endpoint is dormant ($0/hr) or active ($1.01/hr).
+  - **Spin Up GPU**: Use `deploy_af3_endpoint` to deploy the AF3 model onto an L4 GPU (`g2-standard-16`) on demand when starting an AF3 prediction session. Provisioning takes ~5–8 minutes.
+  - **Tear Down to $0/hr**: Use `undeploy_af3_endpoint` immediately when the prediction session is finished to release GPU hardware and revert idle costs to $0.00/hr.
+  - **PROACTIVE GUIDANCE**: When an AF3 prediction completes, ask the user if they have further AF3 jobs to run or if they would like to undeploy the endpoint to avoid ongoing charges.
 - **Check GPU quota**: Use check_gpu_quota to view available GPU capacity BEFORE submitting jobs
   - **Auto-Detection**: The server automatically checks quotas at startup and prints a "Project GPU Inventory".
   - **Smart Filtering**: GPUs with 0 quota are automatically removed from the supported list.

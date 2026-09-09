@@ -37,17 +37,21 @@ from foldrun_app.skills.database_queries.tools import (
 )
 from foldrun_app.skills.job_management.instruction import JOB_MANAGEMENT_INSTRUCTION
 from foldrun_app.skills.job_management.tools import (
+    check_af3_endpoint,
     check_gpu_quota,
     check_job_status,
     delete_job,
+    deploy_af3_endpoint,
     get_job_details,
     list_jobs,
+    undeploy_af3_endpoint,
 )
 from foldrun_app.skills.job_submission.instruction import JOB_SUBMISSION_INSTRUCTION
 from foldrun_app.skills.job_submission.tools import (
     submit_af2_batch_predictions,
     submit_af2_monomer_prediction,
     submit_af2_multimer_prediction,
+    submit_af3_endpoint_prediction,
     submit_boltz2_prediction,
     submit_of3_prediction,
 )
@@ -58,6 +62,7 @@ from foldrun_app.skills.results_analysis.tools import (
     analyze_prediction_quality,
     boltz2_analyze_job_parallel,
     boltz2_get_analysis_results,
+    get_af3_results,
     get_analysis_results,
     get_prediction_results,
     of3_analyze_job_parallel,
@@ -70,12 +75,13 @@ from foldrun_app.skills.storage_management.tools import (
 )
 from foldrun_app.skills.visualization.instruction import VISUALIZATION_INSTRUCTION
 from foldrun_app.skills.visualization.tools import (
+    open_af3_structure_viewer,
     open_boltz2_structure_viewer,
     open_of3_structure_viewer,
     open_structure_viewer,
 )
 
-CORE_HEADER = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, OpenFold3, and Boltz-2.
+CORE_HEADER = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2.
 
 Your role is to help researchers and scientists with:
 1. Submitting protein structure predictions (monomers and multimers)
@@ -150,6 +156,12 @@ class SkillRegistry:
         """Register the baseline FoldRun domain skills with environment-conditional tools."""
         has_of3 = bool(os.getenv("OPENFOLD3_COMPONENTS_IMAGE"))
         has_boltz2 = bool(os.getenv("BOLTZ2_COMPONENTS_IMAGE"))
+        has_af3 = bool(
+            os.getenv("AF3_ENDPOINT")
+            or os.getenv("AF3_AGENT_PLATFORM_ENDPOINT")
+            or os.getenv("AF3_ENDPOINT_ID")
+            or os.getenv("AF3_VERTEX_ENDPOINT")
+        )
 
         # Load instruction bodies from packages/ if available to keep SKILL.md as single source of truth
         adk_skills = {s.name.replace("-", "_"): s for s in self.load_adk_skills()}
@@ -169,27 +181,36 @@ class SkillRegistry:
             submission_tools.append(submit_of3_prediction)
         if has_boltz2:
             submission_tools.append(submit_boltz2_prediction)
+        if has_af3:
+            submission_tools.append(submit_af3_endpoint_prediction)
 
         self.register(
             Skill(
                 name="job_submission",
-                description="Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, OpenFold3, and Boltz-2",
+                description="Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2",
                 instruction=_get_instruction("job_submission", JOB_SUBMISSION_INSTRUCTION),
                 tool_functions=submission_tools,
             )
         )
+
+        management_tools = [
+            check_gpu_quota,
+            list_jobs,
+            check_job_status,
+            get_job_details,
+            delete_job,
+        ]
+        if has_af3:
+            management_tools.extend(
+                [check_af3_endpoint, deploy_af3_endpoint, undeploy_af3_endpoint]
+            )
+
         self.register(
             Skill(
                 name="job_management",
-                description="Job monitoring, GPU quota inspection, status tracking, retry with caching, and job deletion",
+                description="Job monitoring, GPU quota inspection, AF3 endpoint status, retry with caching, and job deletion",
                 instruction=_get_instruction("job_management", JOB_MANAGEMENT_INSTRUCTION),
-                tool_functions=[
-                    check_gpu_quota,
-                    list_jobs,
-                    check_job_status,
-                    get_job_details,
-                    delete_job,
-                ],
+                tool_functions=management_tools,
             )
         )
         self.register(
@@ -216,11 +237,13 @@ class SkillRegistry:
             analysis_tools.extend([of3_analyze_job_parallel, of3_get_analysis_results])
         if has_boltz2:
             analysis_tools.extend([boltz2_analyze_job_parallel, boltz2_get_analysis_results])
+        if has_af3:
+            analysis_tools.append(get_af3_results)
 
         self.register(
             Skill(
                 name="results_analysis",
-                description="Quality assessment (pLDDT, PAE, PDE, ipTM, pTM), parallel batch analysis via Cloud Run, and troubleshooting",
+                description="Quality assessment (pLDDT, PAE, PDE, ipTM, pTM), AF3 confidence metrics, parallel batch analysis via Cloud Run, and troubleshooting",
                 instruction=_get_instruction("results_analysis", RESULTS_ANALYSIS_INSTRUCTION),
                 tool_functions=analysis_tools,
             )
@@ -234,11 +257,13 @@ class SkillRegistry:
             vis_tools.append(open_of3_structure_viewer)
         if has_boltz2:
             vis_tools.append(open_boltz2_structure_viewer)
+        if has_af3:
+            vis_tools.append(open_af3_structure_viewer)
 
         self.register(
             Skill(
                 name="visualization",
-                description="Interactive 3D structure visualization URLs with Mol* for AF2, OF3, and Boltz-2",
+                description="Interactive 3D structure visualization URLs with Mol* for AF2, AF3, OF3, and Boltz-2",
                 instruction=_get_instruction("visualization", VISUALIZATION_INSTRUCTION),
                 tool_functions=vis_tools,
             )

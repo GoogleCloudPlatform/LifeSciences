@@ -1,6 +1,6 @@
 ---
 name: job-submission
-description: Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, OpenFold3, and Boltz-2
+description: Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2
 metadata:
   adk_additional_tools:
     - submit_af2_monomer_prediction
@@ -8,25 +8,28 @@ metadata:
     - submit_af2_batch_predictions
     - submit_of3_prediction
     - submit_boltz2_prediction
+    - submit_af3_endpoint_prediction
 ---
 
 # Job Submission — Model Selection
 
-Three models are available. Choose based on the input:
+Four models are available. Choose based on the input:
 
 | Model | Tool | Use When |
 |-------|------|----------|
 | **AlphaFold2** | `submit_af2_monomer_prediction` | Single-chain protein (monomer) |
 | **AlphaFold2** | `submit_af2_multimer_prediction` | Protein-only complex (multimer) |
 | **AlphaFold2** | `submit_af2_batch_predictions` | Multiple AF2 jobs at once |
+| **AlphaFold3** | `submit_af3_endpoint_prediction` | All-atom complexes (protein, RNA, DNA, ligands, ions); zero-MSA fast screening (`--msa-free`) via managed Agent Platform Endpoint |
 | **OpenFold3** | `submit_of3_prediction` | Protein + RNA, DNA, or ligands; preferred for RNA (has full RNA MSA via nhmmer) |
 | **Boltz-2** | `submit_boltz2_prediction` | Covalent modifications, glycans, or when user explicitly requests it; can do RNA/DNA/ligands but **no RNA MSA** |
 
 **Decision rule**:
 - Protein-only → AlphaFold2 (monomer or multimer)
-- Contains RNA, DNA, or ligands → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy)
+- All-atom fast zero-MSA screening / Agent Platform Endpoint → **AlphaFold 3** (`submit_af3_endpoint_prediction`)
+- Contains RNA, DNA, or ligands with full MSA pipeline → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy)
 - Contains covalent modifications or glycans → **Boltz-2** (only model that supports these)
-- User explicitly requests Boltz-2 → Boltz-2
+- User explicitly requests Boltz-2 or AlphaFold 3 → use requested model
 - RNA + covalent mod/glycan → Boltz-2 (no choice), but note RNA accuracy may be lower without MSA
 
 Boltz-2 natively uses YAML input. `submit_boltz2_prediction` will automatically convert FASTA to Boltz-2 YAML.
@@ -315,3 +318,25 @@ OF3 writes outputs to a nested directory structure:
     timing.json                                       # Runtime in seconds
   inference_query_set.json                            # Input with resolved seeds
 ```
+
+## AlphaFold 3 (AF3) Agent Platform Endpoint & --msa-free Mode
+
+AlphaFold 3 predicts 3D structures across proteins, nucleic acids (DNA/RNA), small molecule ligands, and ions using a diffusion architecture. In FoldRun 2.0, AF3 runs directly against a managed Gemini Enterprise Agent Platform Prediction Endpoint (`AF3_ENDPOINT`), supporting zero-MSA (`--msa-free`) mode for rapid candidate screening and full complex co-folding.
+
+### AF3 Pre-Submission Confirmation Table
+Before calling `submit_af3_endpoint_prediction`, present the following breakdown to the user:
+
+| Phase | Resource | Provisioning / Machine | Estimated Runtime |
+|:---|:---|:---|:---|
+| **Input Formatting** | Local Agent Memory | Zero-MSA (`--msa-free`) Schema | < 1 sec |
+| **Diffusion Prediction** | Managed Agent Platform Endpoint | Dedicated NVIDIA L4 (g2-standard-16) (or A100/H100 if configured) | ~30–90 sec |
+| **Relaxation** | N/A (None) | Diffusion trunk output (no AMBER) | N/A |
+
+> **Hardware Constraints & Operational Rules:**
+> - Runs directly against Google's managed Gemini Enterprise Agent Platform Prediction Endpoint (`AF3_ENDPOINT`).
+> - In `--msa-free` mode, Jackhmmer genetic database searches are bypassed, eliminating local 3TB genetic database and Filestore dependencies.
+> - Supports all-atom multimodal complexes: proteins, ss/dsDNA, RNA, ligands (SMILES/CCD), and ions (e.g. MG, ZN).
+> - Generates publication-ready mmCIF 3D coordinates, pTM, ipTM, ranking scores, and contact probabilities.
+
+Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction`.
+

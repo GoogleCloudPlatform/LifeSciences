@@ -243,3 +243,36 @@ def submit_boltz2_prediction(
     if job_name is not None:
         args["job_name"] = job_name
     return get_tool("boltz2_submit_prediction").run(args)
+
+
+def submit_af3_endpoint_prediction(
+    input: str,
+    job_name: str | None = None,
+    msa_free: bool = True,
+    model_seeds: list[int] | None = None,
+    endpoint_id: str | None = None,
+) -> dict:
+    """Submit AlphaFold 3 all-atom structure prediction to Agent Platform Prediction Endpoint.
+
+    Supports proteins, RNA, DNA, ligands, and ions in --msa-free zero-MSA mode or with custom inputs.
+
+    Args:
+        input: Input sequence in FASTA format, AF3 JSON format, or path to input file / GCS URI.
+            FASTA is automatically converted to AF3 JSON.
+        job_name: Human-readable job name for tracking (optional).
+        msa_free: Whether to run in zero-MSA / --msa-free mode (default: True).
+        model_seeds: Random seed(s) for diffusion generation (default: [1]).
+        endpoint_id: Optional Agent Platform Endpoint ID override.
+    """
+    validated_input = _validate_input_source(input, "input")
+    args = {
+        "input": validated_input,
+        "msa_free": msa_free,
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    if model_seeds is not None:
+        args["model_seeds"] = model_seeds
+    if endpoint_id is not None:
+        args["endpoint_id"] = endpoint_id
+    return get_tool("af3_submit_prediction").run(args)

@@ -100,3 +100,27 @@ def open_structure_viewer(
             "open_browser": open_browser,
         }
     )
+
+
+def open_af3_structure_viewer(
+    job_id: str,
+    open_browser: bool = True,
+) -> dict:
+    """Open the FoldRun structure viewer for AlphaFold 3 all-atom predictions.
+
+    Displays interactive 3D mmCIF structure with pLDDT confidence coloring,
+    nucleic acids, ligands, and ions.
+
+    Args:
+        job_id: AlphaFold 3 prediction job ID
+        open_browser: Automatically open in browser (default: True)
+
+    Returns:
+        Viewer URL and status information
+    """
+    return get_tool("af3_open_viewer").run(
+        {
+            "job_id": job_id,
+            "open_browser": open_browser,
+        }
+    )

@@ -264,3 +264,12 @@ def analyze_job(job_id: str, detail_level: str = "summary") -> dict:
             "detail_level": detail_level,
         }
     )
+
+
+def get_af3_results(job_id: str) -> dict:
+    """Retrieve AlphaFold 3 prediction confidence metrics, ranking score, and mmCIF path from GCS.
+
+    Args:
+        job_id: AlphaFold 3 job ID.
+    """
+    return get_tool("af3_get_results").run({"job_id": job_id})

@@ -116,3 +116,72 @@ def check_gpu_quota(region: str | None = None) -> dict:
     Returns quota limits, current usage, available capacity, and recommendations.
     """
     return get_tool("af2_check_gpu_quota").run({"region": region} if region else {})
+
+
+def check_af3_endpoint(endpoint_id: str | None = None) -> dict:
+    """Check health, deployment status, and hardware configuration of AlphaFold 3 Agent Platform Endpoint.
+
+    Args:
+        endpoint_id: Optional Agent Platform Endpoint ID override.
+    """
+    args = {}
+    if endpoint_id is not None:
+        args["endpoint_id"] = endpoint_id
+    return get_tool("af3_check_endpoint").run(args)
+
+
+def deploy_af3_endpoint(
+    model_id: str | None = None,
+    endpoint_id: str | None = None,
+    machine_type: str = "g2-standard-16",
+    accelerator_type: str = "NVIDIA_L4",
+    accelerator_count: int = 1,
+    sync: bool = False,
+) -> dict:
+    """Deploy AlphaFold 3 model to the Agent Platform Endpoint (spin up GPU resources).
+
+    Allocates dedicated GPU hardware (default: g2-standard-16 with 1x NVIDIA L4 GPU)
+    for interactive prediction campaigns.
+
+    Args:
+        model_id: Optional Agent Platform Model resource name or ID.
+        endpoint_id: Optional Agent Platform Endpoint override.
+        machine_type: Machine type for inference (default: 'g2-standard-16').
+        accelerator_type: GPU accelerator type (default: 'NVIDIA_L4').
+        accelerator_count: Number of GPU accelerators (default: 1).
+        sync: Whether to wait synchronously (~5-8 mins; default: False).
+    """
+    args = {
+        "machine_type": machine_type,
+        "accelerator_type": accelerator_type,
+        "accelerator_count": accelerator_count,
+        "sync": sync,
+    }
+    if model_id is not None:
+        args["model_id"] = model_id
+    if endpoint_id is not None:
+        args["endpoint_id"] = endpoint_id
+    return get_tool("af3_deploy_endpoint").run(args)
+
+
+def undeploy_af3_endpoint(
+    deployed_model_id: str | None = None,
+    endpoint_id: str | None = None,
+    sync: bool = True,
+) -> dict:
+    """Undeploy models from the AlphaFold 3 Agent Platform Endpoint (teardown GPU to $0/hr).
+
+    Releases dedicated GPU hardware from the endpoint, reverting ongoing idle costs
+    to $0.00/hr immediately while preserving the endpoint and model registry entries.
+
+    Args:
+        deployed_model_id: Optional specific deployed model ID to undeploy. If omitted, undeploys all models.
+        endpoint_id: Optional Agent Platform Endpoint override.
+        sync: Whether to wait synchronously (default: True).
+    """
+    args = {"sync": sync}
+    if deployed_model_id is not None:
+        args["deployed_model_id"] = deployed_model_id
+    if endpoint_id is not None:
+        args["endpoint_id"] = endpoint_id
+    return get_tool("af3_undeploy_endpoint").run(args)

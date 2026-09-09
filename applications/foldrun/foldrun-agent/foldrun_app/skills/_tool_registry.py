@@ -51,14 +51,60 @@ def get_tool(tool_name: str):
     if not _initialized:
         _initialize_all_tools()
         _initialized = True
+    if tool_name not in _agents:
+        raise KeyError(
+            f"Tool '{tool_name}' is not initialized. If this is an AF3, OF3, or Boltz-2 tool, "
+            f"verify that the corresponding environment variables (e.g. AF3_ENDPOINT) are set."
+        )
     return _agents[tool_name]
 
 
 def _initialize_all_tools():
-    """Initialize all tool instances (AF2 + OF3 + Boltz2)."""
+    """Initialize all tool instances (AF2 + OF3 + Boltz2 + AF3)."""
     _initialize_af2_tools()
     _initialize_of3_tools()
     _initialize_boltz2_tools()
+    _initialize_af3_tools()
+
+
+def _initialize_af3_tools():
+    """Initialize AlphaFold 3 tool instances."""
+    try:
+        from foldrun_app.models.af3.startup import get_config, get_tool_configs
+        from foldrun_app.models.af3.tools import (
+            AF3CheckEndpointTool,
+            AF3DeployEndpointTool,
+            AF3GetResultsTool,
+            AF3OpenViewerTool,
+            AF3SubmitPredictionTool,
+            AF3UndeployEndpointTool,
+        )
+
+        config = get_config()
+        af3_tools = get_tool_configs()
+
+        tool_classes = {
+            "AF3SubmitPredictionTool": AF3SubmitPredictionTool,
+            "AF3CheckEndpointTool": AF3CheckEndpointTool,
+            "AF3DeployEndpointTool": AF3DeployEndpointTool,
+            "AF3UndeployEndpointTool": AF3UndeployEndpointTool,
+            "AF3GetResultsTool": AF3GetResultsTool,
+            "AF3OpenViewerTool": AF3OpenViewerTool,
+        }
+
+        for tool_config in af3_tools:
+            tool_type = tool_config["type"]
+            tool_name = tool_config["name"]
+            tool_class = tool_classes.get(tool_type)
+
+            if tool_class:
+                _agents[tool_name] = tool_class(tool_config=tool_config, config=config)
+                logger.info(f"Initialized tool: {tool_name}")
+            else:
+                logger.warning(f"Unknown AF3 tool type: {tool_type}")
+
+    except Exception as e:
+        logger.warning(f"AF3 tools not initialized (missing AF3_ENDPOINT?): {e}")
 
 
 def _initialize_boltz2_tools():

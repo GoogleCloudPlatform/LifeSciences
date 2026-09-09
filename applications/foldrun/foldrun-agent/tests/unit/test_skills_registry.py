@@ -152,9 +152,11 @@ class TestSkillRegistry:
         assert "### Smart Retry Guidance for Failed Jobs" not in progressive_instruction
 
     def test_conditional_tools_without_images(self, monkeypatch):
-        """When OF3 and Boltz-2 images are missing, only AF2 tools (22 tools) are registered."""
+        """When OF3, Boltz-2, and AF3 endpoint are missing, only AF2 tools (22 tools) are registered."""
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("BOLTZ2_COMPONENTS_IMAGE", raising=False)
+        monkeypatch.delenv("AF3_VERTEX_ENDPOINT", raising=False)
+        monkeypatch.delenv("AF3_ENDPOINT_ID", raising=False)
 
         af2_registry = SkillRegistry()
         tools = af2_registry.compile_tools()
@@ -167,7 +169,33 @@ class TestSkillRegistry:
         assert len(tools) == 22
         assert "submit_of3_prediction" not in tool_names
         assert "submit_boltz2_prediction" not in tool_names
+        assert "submit_af3_endpoint_prediction" not in tool_names
         assert "submit_af2_monomer_prediction" in tool_names
+
+    def test_conditional_af3_tools(self, monkeypatch):
+        """When AF3_VERTEX_ENDPOINT is configured, all 6 AF3 tools are registered."""
+        monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
+        monkeypatch.delenv("BOLTZ2_COMPONENTS_IMAGE", raising=False)
+        monkeypatch.setenv(
+            "AF3_VERTEX_ENDPOINT", "projects/test-proj/locations/us-central1/endpoints/123"
+        )
+
+        af3_registry = SkillRegistry()
+        tools = af3_registry.compile_tools()
+        tool_names = {
+            getattr(t, "name", None)
+            or getattr(getattr(t, "func", None), "__name__", None)
+            or str(t)
+            for t in tools
+        }
+        # 22 baseline AF2 + 6 AF3 = 28
+        assert len(tools) == 28
+        assert "submit_af3_endpoint_prediction" in tool_names
+        assert "check_af3_endpoint" in tool_names
+        assert "deploy_af3_endpoint" in tool_names
+        assert "undeploy_af3_endpoint" in tool_names
+        assert "get_af3_results" in tool_names
+        assert "open_af3_structure_viewer" in tool_names
 
     def test_tool_introspection_safety_custom_class(self):
         """Tool compilation safely inspects tools lacking a func attribute."""

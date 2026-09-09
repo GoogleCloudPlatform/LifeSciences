@@ -319,4 +319,25 @@ OF3 writes outputs to a nested directory structure:
     timing.json                                       # Runtime in seconds
   inference_query_set.json                            # Input with resolved seeds
 ```
+
+## AlphaFold 3 (AF3) Agent Platform Endpoint & --msa-free Mode
+
+AlphaFold 3 predicts 3D structures across proteins, nucleic acids (DNA/RNA), small molecule ligands, and ions using a diffusion architecture. In FoldRun 2.0, AF3 runs directly against a managed Gemini Enterprise Agent Platform Prediction Endpoint (`AF3_ENDPOINT`), supporting zero-MSA (`--msa-free`) mode for rapid candidate screening and full complex co-folding.
+
+### AF3 Pre-Submission Confirmation Table
+Before calling `submit_af3_endpoint_prediction`, present the following breakdown to the user:
+
+| Phase | Resource | Provisioning / Machine | Estimated Runtime |
+|:---|:---|:---|:---|
+| **Input Formatting** | Local Agent Memory | Zero-MSA (`--msa-free`) Schema | < 1 sec |
+| **Diffusion Prediction** | Managed Agent Platform Endpoint | Dedicated NVIDIA L4 (g2-standard-16) (or A100/H100 if configured) | ~30–90 sec |
+| **Relaxation** | N/A (None) | Diffusion trunk output (no AMBER) | N/A |
+
+> **Hardware Constraints & Operational Rules:**
+> - Runs directly against Google's managed Gemini Enterprise Agent Platform Prediction Endpoint (`AF3_ENDPOINT`).
+> - In `--msa-free` mode, Jackhmmer genetic database searches are bypassed, eliminating local 3TB genetic database and Filestore dependencies.
+> - Supports all-atom multimodal complexes: proteins, ss/dsDNA, RNA, ligands (SMILES/CCD), and ions (e.g. MG, ZN).
+> - Generates publication-ready mmCIF 3D coordinates, pTM, ipTM, ranking scores, and contact probabilities.
+
+Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction`.
 """

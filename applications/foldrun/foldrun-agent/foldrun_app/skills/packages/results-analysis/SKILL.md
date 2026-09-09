@@ -9,12 +9,14 @@ metadata:
     - of3_get_analysis_results
     - boltz2_analyze_job_parallel
     - boltz2_get_analysis_results
+    - get_af3_results
 ---
 
 # Results Analysis & Quality Assessment
 
 - **Download results**: Use get_prediction_results to retrieve PDB files
 - **Analyze quality**: Use analyze_prediction_quality for pLDDT and PAE metrics
+- **AF3 results**: Use get_af3_results to retrieve completed AlphaFold 3 prediction results from GCS (ranking_score, pTM, ipTM, mean pLDDT, and mmCIF path)
 - **Parallel analysis**: Use analyze_job_parallel for fast batch analysis (25 predictions in ~60s)
   - **IMPORTANT**: After starting analysis, DO NOT automatically check for results
   - Tell the user: "Analysis started. This will take 1-2 minutes. Ask me to check results in a few minutes."
@@ -63,6 +65,10 @@ metadata:
 ### OpenFold3 (OF3) Metrics Reference
 For deep metric interpretations, consult the attached reference: `references/of3-metrics.md`.
 Includes details on `sample_ranking_score`, `ptm`, `iptm`, `gpde`, `chain_pair_iptm`, and analysis plot interpretation.
+
+### AlphaFold 3 (AF3) Metrics Reference
+For deep metric interpretations, consult the attached reference: `references/af3-metrics.md`.
+Includes details on `ranking_score` (0.8·ipTM + 0.2·pTM), `ptm`, `iptm`, `mean_plddt`, `has_clash`, `fraction_disordered`, and mmCIF all-atom interpretation.
 
 ## Smart Retry Guidance for Failed Jobs
 When a job fails, analyze the error and suggest targeted fixes — don't just resubmit blindly.
