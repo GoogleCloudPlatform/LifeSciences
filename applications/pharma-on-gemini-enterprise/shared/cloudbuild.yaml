@@ -32,31 +32,37 @@ steps:
     name: 'hashicorp/terraform:1.15.6'
     dir: '${_AGENT_DIR}/terraform'
     entrypoint: 'sh'
+    env:
+      - 'TF_STATE_BUCKET=${_TF_STATE_BUCKET}'
     args:
       - '-c'
       - |
         set -e
-        if [ -z "${_TF_STATE_BUCKET}" ]; then
+        if [ -z "$$TF_STATE_BUCKET" ]; then
           echo "Error: _TF_STATE_BUCKET substitution must be set for remote state."
           exit 1
         fi
         AGENT_ID=$(cat /workspace/agent_id.txt)
-        terraform init -backend-config="bucket=${_TF_STATE_BUCKET}" -backend-config="prefix=terraform/$$AGENT_ID"
+        terraform init -backend-config="bucket=$$TF_STATE_BUCKET" -backend-config="prefix=terraform/$$AGENT_ID"
 
   # 2. Terraform Apply
   - id: 'tf-apply'
     name: 'hashicorp/terraform:1.15.6'
     dir: '${_AGENT_DIR}/terraform'
     entrypoint: 'sh'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'REGION=${_REGION}'
+      - 'LOGS_BUCKET_NAME=${_LOGS_BUCKET_NAME}'
     args:
       - '-c'
       - |
         set -e
-        TF_VARS="-var=project_id=$PROJECT_ID -var=region=${_REGION}"
-        if [ ! -z "${_LOGS_BUCKET_NAME}" ]; then
-          TF_VARS="$$TF_VARS -var=logs_bucket_name=${_LOGS_BUCKET_NAME}"
+        set -- -var="project_id=$$PROJECT_ID" -var="region=$$REGION"
+        if [ ! -z "$$LOGS_BUCKET_NAME" ]; then
+          set -- "$$@" -var="logs_bucket_name=$$LOGS_BUCKET_NAME"
         fi
-        terraform apply -auto-approve $$TF_VARS
+        terraform apply -auto-approve "$$@"
         terraform output -raw reasoning_engine_id > /workspace/reasoning_engine_id.txt
         terraform output -raw agent_display_name > /workspace/agent_display_name.txt
         terraform output -raw agent_description > /workspace/agent_description.txt
@@ -66,6 +72,11 @@ steps:
     name: 'python:3.13-slim'
     dir: '${_AGENT_DIR}'
     entrypoint: 'bash'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'REGION=${_REGION}'
+      - 'ENV_VARS=${_ENV_VARS}'
+      - 'SECRETS=${_SECRETS}'
     args:
       - '-c'
       - |
@@ -85,8 +96,8 @@ steps:
         ENV_VARS_ARR=()
 
         # Append additional dynamic env vars if provided
-        if [ ! -z "${_ENV_VARS}" ]; then
-          IFS=';' read -r -a ADDR <<< "${_ENV_VARS}"
+        if [ ! -z "$$ENV_VARS" ]; then
+          IFS=';' read -r -a ADDR <<< "$$ENV_VARS"
           for i in "$${ADDR[@]}"; do
             ENV_VARS_ARR+=("$$i")
           done
@@ -98,9 +109,9 @@ steps:
 
         # Optional deploy arguments (e.g. secrets)
         DEPLOY_ARGS=()
-        if [ ! -z "${_SECRETS}" ]; then
+        if [ ! -z "$$SECRETS" ]; then
           SECRETS_ARR=()
-          IFS=';' read -r -a SECRETS_ADDR <<< "${_SECRETS}"
+          IFS=';' read -r -a SECRETS_ADDR <<< "$$SECRETS"
           for s in "$${SECRETS_ADDR[@]}"; do
             SECRETS_ARR+=("$$s")
           done
@@ -110,8 +121,8 @@ steps:
 
         # Deploy the agent using agents-cli
         uvx google-agents-cli@1.2.1 deploy \
-            --project=$PROJECT_ID \
-            --region=${_REGION} \
+            --project="$$PROJECT_ID" \
+            --region="$$REGION" \
             --deployment-target=agent_runtime \
             --agent-identity \
             --service-name="$$AGENT_DISPLAY_NAME" \
@@ -124,11 +135,14 @@ steps:
     name: 'python:3.13-slim'
     dir: '${_AGENT_DIR}'
     entrypoint: 'bash'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'GEMINI_ENTERPRISE_APP_ID=${_GEMINI_ENTERPRISE_APP_ID}'
     args:
       - '-c'
       - |
         set -e
-        if [ -z "${_GEMINI_ENTERPRISE_APP_ID}" ]; then
+        if [ -z "$$GEMINI_ENTERPRISE_APP_ID" ]; then
           echo "Skipping Gemini Enterprise registration (APP_ID not provided)."
           exit 0
         fi
@@ -142,14 +156,14 @@ steps:
         AGENT_DESCRIPTION=$(cat /workspace/agent_description.txt)
 
         # Run publish command
-        export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
+        export GOOGLE_CLOUD_PROJECT="$$PROJECT_ID"
         uvx google-agents-cli@1.2.1 publish gemini-enterprise \
           --agent-runtime-id="$$ENGINE_ID" \
-          --gemini-enterprise-app-id="${_GEMINI_ENTERPRISE_APP_ID}" \
+          --gemini-enterprise-app-id="$$GEMINI_ENTERPRISE_APP_ID" \
           --display-name="$$AGENT_DISPLAY_NAME" \
           --description="$$AGENT_DESCRIPTION" \
           --registration-type=adk \
-          --project-id=$PROJECT_ID
+          --project-id="$$PROJECT_ID"
 
 substitutions:
   _AGENT_DIR: "." # e.g. applications/pharma-on-gemini-enterprise/model-garden-on-gemini-enterprise

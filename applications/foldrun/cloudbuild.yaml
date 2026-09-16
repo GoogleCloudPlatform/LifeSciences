@@ -37,36 +37,47 @@ steps:
   - id: 'build-push-viewer'
     name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
-        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",viewer,"* ]]; then
-          docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest || true
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",viewer,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" || true
           docker build \
-            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest \
-            --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" \
             src/foldrun-viewer/
-          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest"
         else
-          echo "Skipping viewer build (BUILD_TARGET=${_BUILD_TARGET})"
+          echo "Skipping viewer build (BUILD_TARGET=$$BUILD_TARGET)"
         fi
     waitFor: ['-']
 
   - id: 'deploy-viewer'
     name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: bash
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'BUCKET_NAME=${_BUCKET_NAME}'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
-        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",viewer,"* ]]; then
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",viewer,"* ]]; then
           gcloud run deploy foldrun-viewer \
-            --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-viewer:latest \
-            --region ${_REGION} \
-            --set-env-vars PROJECT_ID=$PROJECT_ID,BUCKET_NAME=${_BUCKET_NAME},REGION=${_REGION}
+            --image "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" \
+            --region "$$REGION" \
+            --set-env-vars "PROJECT_ID=$$PROJECT_ID,BUCKET_NAME=$$BUCKET_NAME,REGION=$$REGION"
         else
-          echo "Skipping viewer deploy (BUILD_TARGET=${_BUILD_TARGET})"
+          echo "Skipping viewer deploy (BUILD_TARGET=$$BUILD_TARGET)"
         fi
     waitFor: ['build-push-viewer']
 
@@ -76,35 +87,45 @@ steps:
   - id: 'build-push-analysis'
     name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
-        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",analysis,"* ]]; then
-          docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-analysis-job:latest || true
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",analysis,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" || true
           docker build \
-            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-analysis-job:latest \
-            --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-analysis-job:latest \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" \
             src/foldrun-analysis-job/
-          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-analysis-job:latest
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest"
         else
-          echo "Skipping analysis build (BUILD_TARGET=${_BUILD_TARGET})"
+          echo "Skipping analysis build (BUILD_TARGET=$$BUILD_TARGET)"
         fi
     waitFor: ['-']
 
   - id: 'deploy-analysis'
     name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: bash
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
-        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",analysis,"* ]]; then
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",analysis,"* ]]; then
           gcloud run jobs update foldrun-analysis-job \
-            --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/foldrun-analysis-job:latest \
-            --region ${_REGION}
+            --image "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" \
+            --region "$$REGION"
         else
-          echo "Skipping analysis deploy (BUILD_TARGET=${_BUILD_TARGET})"
+          echo "Skipping analysis deploy (BUILD_TARGET=$$BUILD_TARGET)"
         fi
     waitFor: ['build-push-analysis']
 
@@ -114,20 +135,26 @@ steps:
   - id: 'build-push-af2-components'
     name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'AF2_VERSION=${_AF2_VERSION}'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
-        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",af2,"* ]]; then
-          docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest || true
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",af2,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest" || true
           docker build \
-            --build-arg AF2_VERSION=${_AF2_VERSION} \
-            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest \
-            --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest \
+            --build-arg "AF2_VERSION=$$AF2_VERSION" \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest" \
             src/alphafold-components/
-          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest"
         else
-          echo "Skipping af2-components build (BUILD_TARGET=${_BUILD_TARGET})"
+          echo "Skipping af2-components build (BUILD_TARGET=$$BUILD_TARGET)"
         fi
     waitFor: ['-']
 
@@ -137,18 +164,24 @@ steps:
   - id: 'build-push-of3-components'
     name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'OF3_VERSION=${_OF3_VERSION}'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
-        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",of3,"* ]]; then
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",of3,"* ]]; then
           docker build \
-            --build-arg OF3_VERSION=${_OF3_VERSION} \
-            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest \
+            --build-arg "OF3_VERSION=$$OF3_VERSION" \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest" \
             src/openfold3-components/
-          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest"
         else
-          echo "Skipping of3-components build (BUILD_TARGET=${_BUILD_TARGET})"
+          echo "Skipping of3-components build (BUILD_TARGET=$$BUILD_TARGET)"
         fi
     waitFor: ['-']
 
@@ -158,20 +191,26 @@ steps:
   - id: 'build-push-boltz2-components'
     name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'BOLTZ_VERSION=${_BOLTZ_VERSION}'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
-        if [[ "${_BUILD_TARGET}" == "all" ]] || [[ "$$_t" == *",boltz2,"* ]]; then
-          docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest || true
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",boltz2,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest" || true
           docker build \
-            --build-arg BOLTZ_VERSION=${_BOLTZ_VERSION} \
-            --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest \
-            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest \
+            --build-arg "BOLTZ_VERSION=$$BOLTZ_VERSION" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest" \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest" \
             src/boltz2-components/
-          docker push ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest"
         else
-          echo "Skipping boltz2-components build (BUILD_TARGET=${_BUILD_TARGET})"
+          echo "Skipping boltz2-components build (BUILD_TARGET=$$BUILD_TARGET)"
         fi
     waitFor: ['-']
 
@@ -184,21 +223,36 @@ steps:
     name: 'python:3.12-slim'
     dir: 'foldrun-agent'
     entrypoint: bash
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'AGENT_RUNTIME_ID=${_AGENT_RUNTIME_ID}'
+      - 'MODEL_ENDPOINT_LOCATION=${_MODEL_ENDPOINT_LOCATION}'
+      - 'REGION=${_REGION}'
+      - 'BUCKET_NAME=${_BUCKET_NAME}'
+      - 'DATABASES_BUCKET=${_DATABASES_BUCKET}'
+      - 'FILESTORE_ID=${_FILESTORE_ID}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'FOLDRUN_VIEWER_URL=${_FOLDRUN_VIEWER_URL}'
+      - 'PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}'
+      - 'NETWORK_ID=${_NETWORK_ID}'
+      - 'NETWORK_PROJECT_NUMBER=${_NETWORK_PROJECT_NUMBER}'
+      - 'AGENT_SA_EMAIL=${_AGENT_SA_EMAIL}'
     args:
       - '-c'
       - |
-        _t=",${_BUILD_TARGET},"
+        _t=",$$BUILD_TARGET,"
         _skip_agent=false
         # Skip agent deploy only when every token in BUILD_TARGET ends with "-analysis"
-        if [[ "${_BUILD_TARGET}" != "all" ]] && [[ "${_BUILD_TARGET}" != "agent" ]] && \
-           [[ "${_BUILD_TARGET}" != *",agent,"* ]] && \
+        if [[ "$$BUILD_TARGET" != "all" ]] && [[ "$$BUILD_TARGET" != "agent" ]] && \
+           [[ "$$BUILD_TARGET" != *",agent,"* ]] && \
            [[ "$$_t" != *",viewer,"* ]] && [[ "$$_t" != *",af2,"* ]] && \
            [[ "$$_t" != *",of3,"* ]] && [[ "$$_t" != *",boltz2,"* ]]; then
           _skip_agent=true
         fi
 
         if [[ "$$_skip_agent" == "true" ]]; then
-          echo "Skipping agent deploy (BUILD_TARGET=${_BUILD_TARGET})"
+          echo "Skipping agent deploy (BUILD_TARGET=$$BUILD_TARGET)"
           exit 0
         fi
 
@@ -207,37 +261,37 @@ steps:
         export PATH="$$HOME/.local/bin:$$PATH"
 
         # Create deployment_metadata.json to target the existing engine
-        echo "{\"remote_agent_runtime_id\": \"${_AGENT_RUNTIME_ID}\", \"deployment_target\": \"agent_runtime\"}" > deployment_metadata.json
+        echo "{\"remote_agent_runtime_id\": \"$$AGENT_RUNTIME_ID\", \"deployment_target\": \"agent_runtime\"}" > deployment_metadata.json
 
         ENV_VARS_ARR=(
             "GOOGLE_GENAI_USE_ENTERPRISE=1"
-            "GOOGLE_CLOUD_LOCATION=${_MODEL_ENDPOINT_LOCATION}"
-            "GCP_REGION=${_REGION}"
-            "GCS_BUCKET_NAME=${_BUCKET_NAME}"
-            "GCS_DATABASES_BUCKET=${_DATABASES_BUCKET}"
-            "FILESTORE_ID=${_FILESTORE_ID}"
-            "ALPHAFOLD_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/alphafold-components:latest"
-            "OPENFOLD3_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/openfold3-components:latest"
-            "BOLTZ2_COMPONENTS_IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/boltz2-components:latest"
-            "FOLDRUN_VIEWER_URL=${_FOLDRUN_VIEWER_URL}"
+            "GOOGLE_CLOUD_LOCATION=$$MODEL_ENDPOINT_LOCATION"
+            "GCP_REGION=$$REGION"
+            "GCS_BUCKET_NAME=$$BUCKET_NAME"
+            "GCS_DATABASES_BUCKET=$$DATABASES_BUCKET"
+            "FILESTORE_ID=$$FILESTORE_ID"
+            "ALPHAFOLD_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest"
+            "OPENFOLD3_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest"
+            "BOLTZ2_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest"
+            "FOLDRUN_VIEWER_URL=$$FOLDRUN_VIEWER_URL"
             "ANALYSIS_JOB_NAME=foldrun-analysis-job"
-            "PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}"
+            "PIPELINES_SA_EMAIL=$$PIPELINES_SA_EMAIL"
         )
 
         ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
-        [[ -n "${_NETWORK_ID}" ]] && ENV_VARS="$$ENV_VARS,NETWORK=${_NETWORK_ID}"
-        [[ -n "${_NETWORK_PROJECT_NUMBER}" ]] && ENV_VARS="$$ENV_VARS,NETWORK_PROJECT_NUMBER=${_NETWORK_PROJECT_NUMBER}"
+        [[ -n "$$NETWORK_ID" ]] && ENV_VARS="$$ENV_VARS,NETWORK=$$NETWORK_ID"
+        [[ -n "$$NETWORK_PROJECT_NUMBER" ]] && ENV_VARS="$$ENV_VARS,NETWORK_PROJECT_NUMBER=$$NETWORK_PROJECT_NUMBER"
 
         uvx google-agents-cli@0.6.1 deploy \
-            --project=$PROJECT_ID \
-            --region=${_REGION} \
+            --project="$$PROJECT_ID" \
+            --region="$$REGION" \
             --deployment-target=agent_runtime \
             --service-name="FoldRun_Agent" \
-            --service-account="${_AGENT_SA_EMAIL}" \
+            --service-account="$$AGENT_SA_EMAIL" \
             --update-env-vars="$$ENV_VARS" \
             --no-confirm-project
 
-        A2A_URL="https://${_REGION}-aiplatform.googleapis.com/reasoningEngines/v1/${_AGENT_RUNTIME_ID}/api/a2a/foldrun_app"
+        A2A_URL="https://$$REGION-aiplatform.googleapis.com/reasoningEngines/v1/$$AGENT_RUNTIME_ID/api/a2a/foldrun_app"
         echo ""
         echo "A2A URL: $$A2A_URL"
         echo "A2A Agent Card: $$A2A_URL/.well-known/agent-card.json"
@@ -250,11 +304,15 @@ steps:
     name: 'python:3.13-slim'
     dir: 'foldrun-agent'
     entrypoint: 'bash'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'AGENT_RUNTIME_ID=${_AGENT_RUNTIME_ID}'
+      - 'GEMINI_ENTERPRISE_APP_ID=${_GEMINI_ENTERPRISE_APP_ID}'
     args:
       - '-c'
       - |
         set -e
-        if [ -z "${_GEMINI_ENTERPRISE_APP_ID}" ]; then
+        if [ -z "$$GEMINI_ENTERPRISE_APP_ID" ]; then
           echo "Skipping Gemini Enterprise registration (APP_ID not provided)."
           exit 0
         fi
@@ -264,14 +322,14 @@ steps:
         export PATH="$$HOME/.local/bin:$$PATH"
 
         # Run publish command
-        export GOOGLE_CLOUD_PROJECT=$PROJECT_ID
+        export GOOGLE_CLOUD_PROJECT="$$PROJECT_ID"
         uvx google-agents-cli@0.6.1 publish gemini-enterprise \
-          --agent-runtime-id="$_AGENT_RUNTIME_ID" \
-          --gemini-enterprise-app-id="${_GEMINI_ENTERPRISE_APP_ID}" \
+          --agent-runtime-id="$$AGENT_RUNTIME_ID" \
+          --gemini-enterprise-app-id="$$GEMINI_ENTERPRISE_APP_ID" \
           --display-name="FoldRun" \
           --description="Agentic Protein Folding on Google Cloud" \
           --registration-type=adk \
-          --project-id=$PROJECT_ID
+          --project-id="$$PROJECT_ID"
     waitFor: ['deploy-agent-runtime']
 
   # ============================================================================
