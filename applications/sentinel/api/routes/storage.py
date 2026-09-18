@@ -21,6 +21,8 @@ Handles listing and retrieving files from Google Cloud Storage.
 import asyncio
 import datetime
 import logging
+import os
+import posixpath
 from typing import Annotated
 
 from fastapi import (
@@ -41,6 +43,33 @@ from api.dependencies import get_storage_client
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".mp4",
+    ".mov",
+    ".webm",
+    ".avi",
+    ".mpeg",
+    ".mpg",
+}
+
+ALLOWED_MIME_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "video/mp4",
+    "video/quicktime",
+    "video/webm",
+    "video/x-msvideo",
+    "video/avi",
+    "video/mpeg",
+}
+
 router = APIRouter(
     prefix="/api/v1/storage",
     tags=["storage"],
@@ -59,6 +88,35 @@ class StorageListResponse(BaseModel):
     items: list[StorageItem]
 
 
+def _validate_media_file_path(file_path: str) -> str:
+    """Validate that file_path is strictly scoped within settings.gcs_media_folder."""
+    media_prefix = f"{settings.gcs_media_folder.strip('/')}/"
+    if (
+        not file_path
+        or "\x00" in file_path
+        or "\\" in file_path
+        or file_path.startswith("/")
+        or ".." in file_path.split("/")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: invalid or unsafe file path",
+        )
+
+    canonical_path = posixpath.normpath(file_path)
+    if (
+        canonical_path != file_path
+        or not canonical_path.startswith(media_prefix)
+        or len(canonical_path) <= len(media_prefix)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: file path outside configured media directory",
+        )
+
+    return canonical_path
+
+
 @router.post(
     "/upload",
     response_model=StorageItem,
@@ -72,6 +130,22 @@ async def upload_file(
     """
     Upload a file to GCS.
     """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File extension '{ext}' is not allowed.",
+        )
+
+    if not file.content_type or file.content_type.lower() not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Content type '{file.content_type}' is not allowed.",
+        )
+
     try:
         bucket = client.bucket(settings.gcs_bucket_name)
 
@@ -97,6 +171,8 @@ async def upload_file(
             created=blob.time_created or datetime.datetime.now(),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error uploading file: {e!s}", exc_info=True)
         raise HTTPException(
@@ -118,8 +194,9 @@ async def delete_file(
     Delete a file from GCS.
     """
     try:
+        validated_path = _validate_media_file_path(file_path)
         bucket = client.bucket(settings.gcs_bucket_name)
-        blob = bucket.blob(file_path)
+        blob = bucket.blob(validated_path)
 
         exists = await asyncio.to_thread(blob.exists)
         if not exists:
@@ -210,8 +287,9 @@ async def get_file(
     Stream file content from GCS with Range support.
     """
     try:
+        validated_path = _validate_media_file_path(file_path)
         bucket = client.bucket(settings.gcs_bucket_name)
-        blob = bucket.blob(file_path)
+        blob = bucket.blob(validated_path)
 
         exists = await asyncio.to_thread(blob.exists)
         if not exists:
@@ -258,6 +336,8 @@ async def get_file(
                 "Accept-Ranges": "bytes",
                 "Content-Length": str(chunk_size),
                 "Content-Type": blob.content_type or "application/octet-stream",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'",
             }
 
             return StreamingResponse(
@@ -282,7 +362,12 @@ async def get_file(
         return StreamingResponse(
             full_iterfile(),
             media_type=blob.content_type or "application/octet-stream",
-            headers={"Accept-Ranges": "bytes", "Content-Length": str(file_size)},
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(file_size),
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'",
+            },
         )
 
     except HTTPException:

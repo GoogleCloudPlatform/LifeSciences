@@ -21,7 +21,9 @@ YouTube videos, images, and extracting medical literature review insights.
 
 import asyncio
 import logging
+import posixpath
 import tempfile
+import urllib.parse
 import uuid
 
 from google import genai
@@ -111,6 +113,83 @@ class GeminiClient:
             + "\n```\n"
         )
 
+    @staticmethod
+    def _validate_media_uri(uri: str) -> str:
+        """
+        Validate that a user-supplied media URI is safe and authorized.
+
+        For ``gs://`` URIs, enforces that the URI points strictly to the configured
+        ``settings.gcs_bucket_name`` and ``settings.gcs_media_folder`` prefix without
+        any path traversal (``..``), null bytes, or backslash characters.
+        For external URLs, allows only ``http`` or ``https`` schemes with a valid host.
+
+        Args:
+            uri: The media URI to validate.
+
+        Returns:
+            The validated URI string.
+
+        Raises:
+            ValueError: If the URI is malformed, uses an unauthorized bucket/prefix,
+                contains path traversal sequences, or uses an unsupported scheme.
+        """
+        if not uri or not isinstance(uri, str):
+            raise ValueError("Invalid media URI: must be a non-empty string")
+
+        unquoted = urllib.parse.unquote(uri)
+        if "\x00" in unquoted or "\\" in unquoted:
+            raise ValueError(
+                f"Invalid media URI '{uri}': disallowed characters detected"
+            )
+
+        if ".." in uri.split("/") or ".." in unquoted.split("/"):
+            raise ValueError(
+                f"Invalid media URI '{uri}': path traversal ('..') is not allowed"
+            )
+
+        parsed = urllib.parse.urlparse(uri)
+        if parsed.scheme == "gs":
+            bucket_name = settings.gcs_bucket_name
+            if not bucket_name:
+                raise ValueError("Unauthorized GCS URI: GCS bucket is not configured")
+            folder = settings.gcs_media_folder.strip("/")
+            expected_prefix = (
+                f"gs://{bucket_name}/{folder}/" if folder else f"gs://{bucket_name}/"
+            )
+            if not uri.startswith(expected_prefix) or not unquoted.startswith(
+                expected_prefix
+            ):
+                raise ValueError(
+                    f"Unauthorized GCS URI '{uri}': must start with '{expected_prefix}'"
+                )
+
+            object_rel_path = unquoted[len(expected_prefix) :]
+            if not object_rel_path or object_rel_path.startswith("/"):
+                raise ValueError(
+                    f"Unauthorized GCS URI '{uri}': missing object path under '{expected_prefix}'"
+                )
+
+            bucket_path = unquoted[len(f"gs://{bucket_name}/") :]
+            normalized_bucket_path = posixpath.normpath(bucket_path)
+            expected_folder_prefix = f"{folder}/" if folder else ""
+            if expected_folder_prefix and not normalized_bucket_path.startswith(
+                expected_folder_prefix
+            ):
+                raise ValueError(
+                    f"Unauthorized GCS URI '{uri}': path escapes authorized folder '{folder}'"
+                )
+            return uri
+
+        if parsed.scheme in ("http", "https"):
+            if not parsed.netloc:
+                raise ValueError(f"Invalid HTTP(S) URI '{uri}': missing host")
+            return uri
+
+        raise ValueError(
+            f"Unsupported or unauthorized URI scheme in '{uri}'. "
+            "Only authorized gs:// or http(s):// URIs are allowed."
+        )
+
     async def analyze_video(
         self,
         video_url: str,
@@ -144,6 +223,8 @@ class GeminiClient:
             f"Analyzing video: {video_url} with model: {model} at {frame_rate} fps"
         )
 
+        validated_video_url = self._validate_media_uri(video_url)
+
         try:
             # Construct the content with video and prompt
             # Note: Frame rate control is handled by the model itself
@@ -153,7 +234,7 @@ class GeminiClient:
                 parts=[
                     types.Part(
                         file_data=types.FileData(
-                            file_uri=video_url, mime_type=mime_type
+                            file_uri=validated_video_url, mime_type=mime_type
                         )
                     ),
                     types.Part(
@@ -353,7 +434,7 @@ class GeminiClient:
                 if image_data:
                     file_uri = await self._upload_to_gcs(image_data, mime_type)
                 elif image_url:
-                    file_uri = image_url
+                    file_uri = self._validate_media_uri(image_url)
                 else:
                     raise ValueError("Either image_url or image_data must be provided")
 
@@ -403,13 +484,14 @@ class GeminiClient:
                         if os.path.exists(tmp_path):
                             os.unlink(tmp_path)
                 elif image_url:
+                    validated_image_url = self._validate_media_uri(image_url)
                     # Use URL directly
                     contents = types.Content(
                         role="user",
                         parts=[
                             types.Part(
                                 file_data=types.FileData(
-                                    file_uri=image_url, mime_type=mime_type
+                                    file_uri=validated_image_url, mime_type=mime_type
                                 )
                             ),
                             types.Part(text=prompt),

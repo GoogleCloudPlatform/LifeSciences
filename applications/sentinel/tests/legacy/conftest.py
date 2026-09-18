@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from unittest.mock import AsyncMock, MagicMock
+
+os.environ.setdefault("GEMINI_API_KEY", "test-key")
 
 import pytest
 from fastapi.testclient import TestClient
