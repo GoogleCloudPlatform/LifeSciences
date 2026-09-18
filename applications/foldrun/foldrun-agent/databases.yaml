@@ -129,7 +129,7 @@ databases:
     nfs_path: pdb_seqres
     script: |
       aria2c --continue=true 'https://files.rcsb.org/pub/pdb/derived_data/pdb_seqres.txt' --dir={dest}
-      grep --after-context=1 --no-group-separator '>.* mol:protein' {dest}/pdb_seqres.txt > {dest}/pdb_seqres_filtered.txt
+      awk '/^>/ {p = ($0 ~ /mol:protein/)} p' {dest}/pdb_seqres.txt > {dest}/pdb_seqres_filtered.txt
       mv {dest}/pdb_seqres_filtered.txt {dest}/pdb_seqres.txt
 
   uniprot:
@@ -190,6 +190,7 @@ databases:
         rsync -ah /mnt/scratch/pdb_mmcif/mmcif_files/ {dest}/mmcif_files/ 2>/dev/null || true
         sleep 30
       done
+      wait $RSYNC_PID
 
       # 4. Final Cleanup Pass
       echo "Finalizing decompression and move..."

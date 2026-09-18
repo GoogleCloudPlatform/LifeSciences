@@ -45,6 +45,7 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
         _t=",$$BUILD_TARGET,"
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",viewer,"* ]]; then
           docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" || true
@@ -70,6 +71,7 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
         _t=",$$BUILD_TARGET,"
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",viewer,"* ]]; then
           gcloud run deploy foldrun-viewer \
@@ -95,6 +97,7 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
         _t=",$$BUILD_TARGET,"
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",analysis,"* ]]; then
           docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" || true
@@ -119,6 +122,7 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
         _t=",$$BUILD_TARGET,"
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",analysis,"* ]]; then
           gcloud run jobs update foldrun-analysis-job \
@@ -144,6 +148,7 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
         _t=",$$BUILD_TARGET,"
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",af2,"* ]]; then
           docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest" || true
@@ -173,6 +178,7 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
         _t=",$$BUILD_TARGET,"
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",of3,"* ]]; then
           docker build \
@@ -200,6 +206,7 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
         _t=",$$BUILD_TARGET,"
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",boltz2,"* ]]; then
           docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest" || true
@@ -241,6 +248,7 @@ steps:
     args:
       - '-c'
       - |
+        set -euo pipefail
         _t=",$$BUILD_TARGET,"
         _skip_agent=false
         # Skip agent deploy only when every token in BUILD_TARGET ends with "-analysis"
@@ -311,7 +319,7 @@ steps:
     args:
       - '-c'
       - |
-        set -e
+        set -euo pipefail
         if [ -z "$$GEMINI_ENTERPRISE_APP_ID" ]; then
           echo "Skipping Gemini Enterprise registration (APP_ID not provided)."
           exit 0

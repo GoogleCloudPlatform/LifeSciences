@@ -1,12 +1,23 @@
+#!include:.gitignore
+
+# Environment and secrets
+.env
+*.env
+.envrc
+deployment_metadata.json
+
 # Virtual environments
 .venv/
 venv/
 
-# Terraform providers and state
+# Terraform providers, state, and variables
 terraform/.terraform/
 terraform/.terraform.lock.hcl
 terraform/terraform.tfstate*
 terraform/backend.tf
+*.tfvars
+*.tfvars.json
+*.tfstate*
 
 # Python caches and compiled files
 __pycache__/

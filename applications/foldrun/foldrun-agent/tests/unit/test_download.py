@@ -519,3 +519,90 @@ class TestDownloadSecurity:
                 assert tokens[2] == "rsync"
                 assert tokens[3] == "--recursive"
                 assert tokens[5].startswith("gs://bucket/path/ ; id > /mnt/nfs/pwned.txt #")
+
+
+# ------------------------------------------------------------------ #
+# Security / Reliability: Database setup scripts
+# ------------------------------------------------------------------ #
+
+
+class TestDatabaseSetupScripts:
+    """Validate database setup scripts for multi-line FASTA handling and background exit checks."""
+
+    def test_pdb_seqres_preserves_multiline_fasta_sequences(self, tmp_path):
+        """pdb_seqres filter preserves multi-line protein sequences and filters non-proteins."""
+        import subprocess
+
+        manifest = load_manifest()
+        script = manifest["databases"]["pdb_seqres"]["script"]
+
+        # Extract the filter line that writes to {dest}/pdb_seqres_filtered.txt
+        filter_lines = [
+            line.strip()
+            for line in script.splitlines()
+            if "pdb_seqres_filtered.txt" in line and not line.strip().startswith("mv ")
+        ]
+        assert len(filter_lines) == 1, f"Expected 1 filter line, found: {filter_lines}"
+        filter_cmd = filter_lines[0].replace("{dest}", str(tmp_path))
+
+        # Sample input with multi-line protein, multi-line RNA, and single-line protein
+        sample_fasta = (
+            ">1abc_A mol:protein length:66  TEST PROTEIN 1\n"
+            "MKTAYIAKQRQISFVKSHFSRQ\n"
+            "LEERLGLIEVQAPILSRVGDGT\n"
+            "QDNLSGAEKAVQVKVKALPDAQ\n"
+            ">1xyz_B mol:na length:32  TEST RNA\n"
+            "ACGUACGUACGUACGU\n"
+            "CGUACGUACGUACGUA\n"
+            ">2def_A mol:protein length:10  TEST PROTEIN 2\n"
+            "ACDEFGHIKL\n"
+        )
+        input_file = tmp_path / "pdb_seqres.txt"
+        input_file.write_text(sample_fasta)
+
+        subprocess.run(["bash", "-e", "-c", filter_cmd], check=True)
+
+        filtered_content = (tmp_path / "pdb_seqres_filtered.txt").read_text()
+        expected_content = (
+            ">1abc_A mol:protein length:66  TEST PROTEIN 1\n"
+            "MKTAYIAKQRQISFVKSHFSRQ\n"
+            "LEERLGLIEVQAPILSRVGDGT\n"
+            "QDNLSGAEKAVQVKVKALPDAQ\n"
+            ">2def_A mol:protein length:10  TEST PROTEIN 2\n"
+            "ACDEFGHIKL\n"
+        )
+        assert filtered_content == expected_content
+
+    def test_pdb_mmcif_waits_for_background_rsync_exit_status(self):
+        """pdb_mmcif setup waits on $RSYNC_PID after loop so non-zero exit fails under set -e."""
+        import subprocess
+
+        manifest = load_manifest()
+        script = manifest["databases"]["pdb_mmcif"]["script"]
+        lines = [line.strip() for line in script.splitlines() if line.strip()]
+
+        # Verify wait $RSYNC_PID immediately follows the monitoring loop's `done`
+        done_indices = [i for i, line in enumerate(lines) if line == "done"]
+        assert len(done_indices) == 1, (
+            f"Expected 1 'done' statement in pdb_mmcif script, got {done_indices}"
+        )
+        done_idx = done_indices[0]
+        assert done_idx + 1 < len(lines) and lines[done_idx + 1] == "wait $RSYNC_PID", (
+            "Expected 'wait $RSYNC_PID' immediately after the background rsync monitoring loop 'done'"
+        )
+
+        # Verify behavior under `set -e` when background process fails
+        loop_and_post_check = "\n".join(lines[done_idx - 1 : done_idx + 2])
+        test_harness = (
+            "set -e\n"
+            "(exit 23) &\n"
+            "RSYNC_PID=$!\n"
+            "while kill -0 $RSYNC_PID 2>/dev/null; do\n"
+            f"  {loop_and_post_check}\n"
+            "echo 'SHOULD_NOT_REACH_HERE'\n"
+        )
+        result = subprocess.run(["bash", "-c", test_harness], capture_output=True, text=True)
+        assert result.returncode != 0, (
+            "Script should fail under 'set -e' when background rsync exits with non-zero status"
+        )
+        assert "SHOULD_NOT_REACH_HERE" not in result.stdout
