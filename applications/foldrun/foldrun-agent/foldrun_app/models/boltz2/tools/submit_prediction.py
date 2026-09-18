@@ -37,6 +37,33 @@ logger = logging.getLogger(__name__)
 class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
     """Tool for submitting Boltz2 structure predictions."""
 
+    @staticmethod
+    def _validate_local_file_path(file_path: str) -> str:
+        """Validate that a local file path resides within an explicitly authorized directory.
+
+        Uses ``os.path.realpath`` to resolve symlinks and relative segments before
+        verifying directory containment via ``os.path.commonpath``.
+        """
+        allowed_dir = os.environ.get("FOLDRUN_ALLOWED_INPUT_DIR", "").strip()
+        if not allowed_dir:
+            raise ValueError(
+                "Local file input is not allowed unless FOLDRUN_ALLOWED_INPUT_DIR is explicitly configured. "
+                "Provide inline FASTA/YAML content or a gs:// URI instead."
+            )
+
+        real_allowed = os.path.realpath(allowed_dir)
+        real_path = os.path.realpath(file_path)
+
+        if (
+            os.path.commonpath([real_allowed, real_path]) != real_allowed
+            or real_path == real_allowed
+        ):
+            raise ValueError(
+                f"Local file path '{file_path}' is outside the authorized directory '{real_allowed}'."
+            )
+
+        return real_path
+
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Submit BOLTZ2 prediction job.
 
@@ -77,7 +104,8 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             bucket = self.storage_client.bucket(bucket_name)
             content = bucket.blob(blob_path).download_as_text()
         elif is_file:
-            with open(input_data) as f:
+            validated_path = self._validate_local_file_path(input_data)
+            with open(validated_path) as f:
                 content = f.read()
         else:
             content = input_data

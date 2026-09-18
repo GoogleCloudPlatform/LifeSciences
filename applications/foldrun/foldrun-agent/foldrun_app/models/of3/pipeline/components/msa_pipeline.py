@@ -126,7 +126,16 @@ def msa_pipeline_of3(
                 logging.info(
                     f"Cache hit for chain {seq_key} ({seq_type}_{seq_hash}). Reusing MSAs."
                 )
-                chain["main_msa_file_paths"] = seq_cache_dir
+                msa_filenames = (
+                    ["uniref90_hits.sto", "mgnify_hits.sto"]
+                    if seq_type == "protein"
+                    else ["rfam_hits.sto", "rnacentral_hits.sto"]
+                )
+                chain["main_msa_file_paths"] = [
+                    os.path.join(seq_cache_dir, f)
+                    for f in msa_filenames
+                    if os.path.exists(os.path.join(seq_cache_dir, f))
+                ]
                 num_msa_chains += 1
                 if seq_type == "protein" and use_templates and os.path.exists(pdb_seqres_path):
                     chain["template_alignment_file_path"] = os.path.join(
@@ -284,20 +293,35 @@ def msa_pipeline_of3(
 
                 logging.info(f"RNA MSA complete for {seq_key}")
 
-            # Cache promotion (atomic rename to cache dir)
+            # Cache promotion (atomic rename to cache dir, or merge if already existing)
             try:
                 os.rename(seq_dir, seq_cache_dir)
                 logging.info(f"Cached MSAs for {seq_type}_{seq_hash}")
             except (FileExistsError, OSError):
                 logging.info(
-                    f"Cache already populated for {seq_type}_{seq_hash} by concurrent run or existing cache."
+                    f"Cache already populated for {seq_type}_{seq_hash}; merging newly generated files."
                 )
+                os.makedirs(seq_cache_dir, exist_ok=True)
+                for fname in os.listdir(seq_dir):
+                    src_file = os.path.join(seq_dir, fname)
+                    dst_file = os.path.join(seq_cache_dir, fname)
+                    if os.path.isfile(src_file) and not os.path.exists(dst_file):
+                        shutil.copy2(src_file, dst_file)
                 shutil.rmtree(seq_dir)
 
             # Point to the cache directory
             if os.path.exists(seq_cache_dir):
                 if seq_type in ("protein", "rna"):
-                    chain["main_msa_file_paths"] = seq_cache_dir
+                    msa_filenames = (
+                        ["uniref90_hits.sto", "mgnify_hits.sto"]
+                        if seq_type == "protein"
+                        else ["rfam_hits.sto", "rnacentral_hits.sto"]
+                    )
+                    chain["main_msa_file_paths"] = [
+                        os.path.join(seq_cache_dir, f)
+                        for f in msa_filenames
+                        if os.path.exists(os.path.join(seq_cache_dir, f))
+                    ]
                     if seq_type == "protein" and "template_alignment_file_path" in chain:
                         chain["template_alignment_file_path"] = os.path.join(
                             seq_cache_dir, "pdb_seqres.sto"

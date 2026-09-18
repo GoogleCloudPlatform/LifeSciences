@@ -119,3 +119,38 @@ class TestParserIntegration:
             assert result["valid"] is True
             assert result["num_chains"] == 2
             assert result["total_length"] == 66
+
+
+class TestFastaReDoS:
+    """Regression and timing tests for ReDoS prevention (CWE-1333)."""
+
+    def test_fix_fasta_linear_time_on_pathological_payload(self):
+        import time
+
+        from foldrun_app.core.fasta import fix_fasta
+
+        payload = ">" + ("A" * 50000) + "!"
+        start = time.perf_counter()
+        result = fix_fasta(payload)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        assert result == payload
+        assert elapsed_ms < 50.0, f"fix_fasta took {elapsed_ms:.2f}ms (expected < 50ms)"
+
+    def test_validate_fasta_sequence_linear_time_on_pathological_payload(self):
+        import time
+
+        import pytest
+
+        from foldrun_app.models.af2.utils.fasta_validator import (
+            FastaValidationError,
+            validate_fasta_sequence,
+        )
+
+        for payload in [">" + ("A" * 50000) + "!", ">header\n" + ("A" * 50000) + "!"]:
+            start = time.perf_counter()
+            with pytest.raises(FastaValidationError):
+                validate_fasta_sequence(payload)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            assert elapsed_ms < 50.0, (
+                f"validate_fasta_sequence took {elapsed_ms:.2f}ms (expected < 50ms)"
+            )

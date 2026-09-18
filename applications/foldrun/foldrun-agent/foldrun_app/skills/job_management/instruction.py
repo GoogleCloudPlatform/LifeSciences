@@ -57,8 +57,13 @@ JOB_MANAGEMENT_INSTRUCTION = """### Job Management
   - If the failure was a transient provisioning error, the retry will likely succeed (tasks now auto-retry 2x with backoff)
   - If the failure was a code/data error, suggest checking get_job_details with detail_level='detailed' first
 - **Delete jobs**: Use delete_job to remove pipeline jobs from Agent Platform
+  - **CRITICAL - Human-in-the-Loop (HITL) Confirmation Policy**:
+    1. NEVER invoke `delete_job(..., confirm=true)` without obtaining explicit user approval first.
+    2. Before deleting any job, clearly explain what will be deleted (the target job ID and its pipeline metadata/history in Agent Platform).
+    3. Explicitly warn the user that deletion is permanent and cannot be undone.
+    4. Ask the user for explicit confirmation and wait for their approval before calling `delete_job(..., confirm=true)`.
   - Requires confirm=true as a safety check
-  - WARNING: This action cannot be undone
+  - WARNING: This action is permanent and cannot be undone
   - Only deletes job metadata from Agent Platform, NOT the GCS output files
   - Use this to clean up failed or unnecessary jobs
 

@@ -15,7 +15,7 @@
 """Model-agnostic KFP pipeline compilation utilities."""
 
 import logging
-import os
+import re
 import tempfile
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,11 @@ def compile_pipeline(
     from kfp import compiler
 
     if output_path is None:
-        output_path = os.path.join(tempfile.gettempdir(), f"{pipeline_name}.json")
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", pipeline_name).strip("_") or "pipeline"
+        with tempfile.NamedTemporaryFile(
+            prefix=f"{safe_name}_", suffix=".json", delete=False
+        ) as tmp_file:
+            output_path = tmp_file.name
 
     compiler.Compiler().compile(pipeline_func=pipeline_function, package_path=output_path)
 

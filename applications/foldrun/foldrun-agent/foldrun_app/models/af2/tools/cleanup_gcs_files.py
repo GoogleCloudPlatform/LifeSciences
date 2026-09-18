@@ -14,12 +14,35 @@
 
 """Tool for finding and cleaning up GCS files for AlphaFold2 jobs."""
 
+import os
+import re
 from typing import Any
 
 from google.cloud import storage
 
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job
+
+ALLOWED_BASE_PREFIXES = ("pipeline_runs/", "fasta/")
+DISALLOWED_JOB_IDS = frozenset(
+    {
+        "pipeline",
+        "pipelines",
+        "pipeline_runs",
+        "runs",
+        "run",
+        "fasta",
+        "model",
+        "models",
+        "output",
+        "outputs",
+        "results",
+        "data",
+        "alphafold",
+        "alphafold2",
+    }
+)
+JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,127}$")
 
 
 class AF2CleanupGCSFilesTool(AF2Tool):
@@ -85,11 +108,37 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         total_size = 0
 
         for gcs_path in gcs_paths:
-            if not gcs_path.startswith("gs://"):
+            if not isinstance(gcs_path, str) or not gcs_path.startswith("gs://"):
                 raise ValueError(f"Invalid GCS path (must start with gs://): {gcs_path}")
 
-            # Extract blob name: gs://bucket/path/to/file -> path/to/file
-            blob_name = "/".join(gcs_path.split("/")[3:])
+            # Extract bucket and blob name: gs://bucket/path/to/file -> bucket, path/to/file
+            path_without_scheme = gcs_path[len("gs://") :]
+            parts = path_without_scheme.split("/", 1)
+            path_bucket = parts[0]
+            blob_name = parts[1] if len(parts) > 1 else ""
+
+            if path_bucket != self.config.bucket_name:
+                raise ValueError(
+                    f"GCS path bucket '{path_bucket}' does not match configured bucket "
+                    f"'{self.config.bucket_name}': {gcs_path}"
+                )
+
+            normalized_blob = blob_name.strip("/")
+            if not normalized_blob:
+                raise ValueError(
+                    f"Invalid GCS path (empty prefix or root bucket path is not allowed): {gcs_path}"
+                )
+
+            segments = normalized_blob.split("/")
+            if ".." in segments or "." in segments:
+                raise ValueError(
+                    f"Invalid GCS path (path traversal segments are not allowed): {gcs_path}"
+                )
+
+            if not blob_name.startswith(ALLOWED_BASE_PREFIXES) or len(segments) < 2:
+                raise ValueError(
+                    f"Invalid GCS path (must target a subpath within {ALLOWED_BASE_PREFIXES}): {gcs_path}"
+                )
 
             # Check if this is a directory path (ends with /)
             if gcs_path.endswith("/"):
@@ -176,6 +225,15 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         self, job_id: str, search_only: bool, confirm_delete: bool, include_fasta: bool
     ) -> dict[str, Any]:
         """Original job-based cleanup logic."""
+        if not isinstance(job_id, str) or not job_id.strip():
+            raise ValueError("job_id must be a non-empty string")
+
+        raw_job_id = job_id.strip()
+        candidate_id = (
+            raw_job_id.split("/")[-1] if raw_job_id.startswith("projects/") else raw_job_id
+        )
+        if not JOB_ID_PATTERN.fullmatch(candidate_id) or candidate_id.lower() in DISALLOWED_JOB_IDS:
+            raise ValueError(f"Invalid or overly generic job_id: {job_id}")
 
         # Try to get job details to find the exact job name
         # If job has been deleted from Agent Platform, use the job_id as the job name
@@ -200,11 +258,14 @@ class AF2CleanupGCSFilesTool(AF2Tool):
             # Job doesn't exist in Agent Platform anymore
             # Use job_id as job_name (user can pass the job name directly)
             job_exists = False
-            job_name = job_id
-            # Strip common prefixes if present
-            if job_name.startswith("projects/"):
-                # Extract just the job name from full resource path
-                job_name = job_name.split("/")[-1]
+            job_name = candidate_id
+
+        if (
+            not job_name
+            or not JOB_ID_PATTERN.fullmatch(job_name)
+            or job_name.lower() in DISALLOWED_JOB_IDS
+        ):
+            raise ValueError(f"Resolved job_name is invalid or overly generic: {job_name}")
 
         # Extract timestamp from job ID for timestamped directory search
         # Job ID format: alphafold2-inference-pipeline-20251112172826 (new)
@@ -267,14 +328,22 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         # Strategy 3: Fallback - search all timestamped directories for job name match
         if not found_files["pipeline_runs"]:  # Only if we haven't found anything yet
             timestamped_prefix = "pipeline_runs/"
+            target_name = job_name.lower()
             try:
                 # List all timestamped directories
                 blobs = bucket.list_blobs(prefix=timestamped_prefix, delimiter="/")
                 for prefix in blobs.prefixes:
-                    # Search within each timestamped directory for job name
+                    # Search within each timestamped directory for exact path segment match
                     dir_blobs = bucket.list_blobs(prefix=prefix)
                     for blob in dir_blobs:
-                        if job_name.lower() in blob.name.lower():
+                        rel_path = (
+                            blob.name[len(prefix) :] if blob.name.startswith(prefix) else blob.name
+                        )
+                        path_segments = [seg.lower() for seg in rel_path.split("/") if seg]
+                        if any(
+                            seg == target_name or os.path.splitext(seg)[0] == target_name
+                            for seg in path_segments
+                        ):
                             blob_path = f"gs://{self.config.bucket_name}/{blob.name}"
                             if not any(
                                 f["path"] == blob_path for f in found_files["pipeline_runs"]

@@ -14,7 +14,53 @@
 
 """Job submission tool wrappers for ADK FunctionTool."""
 
+import os
+import tempfile
+
 from foldrun_app.skills._tool_registry import get_tool
+
+DEFAULT_STAGING_DIR = os.path.realpath(os.path.join(tempfile.gettempdir(), "foldrun_staging"))
+
+
+def _validate_input_source(value: str, param_name: str = "sequence") -> str:
+    """Validate that local file paths in sequence/input stay within the authorized staging directory."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{param_name} must be a non-empty string")
+
+    stripped = value.strip()
+    if stripped.startswith("gs://"):
+        return value
+
+    is_path_like = (
+        stripped.startswith(("/", "~", "./", "../", "file://"))
+        or "\x00" in value
+        or os.path.exists(stripped)
+        or os.path.lexists(stripped)
+        or (
+            "\n" not in stripped
+            and not stripped.startswith((">", "{"))
+            and ("/" in stripped or "\\" in stripped)
+        )
+    )
+
+    if is_path_like:
+        if "\x00" in value or stripped.startswith("file://"):
+            raise ValueError(
+                f"Invalid {param_name}: local file path must reside within the authorized staging directory"
+            )
+        allowed_dir = os.path.realpath(os.getenv("FOLDRUN_STAGING_DIR", DEFAULT_STAGING_DIR))
+        resolved_path = os.path.realpath(os.path.expanduser(stripped))
+        try:
+            common = os.path.commonpath([allowed_dir, resolved_path])
+        except ValueError:
+            common = ""
+        if common != allowed_dir or resolved_path == allowed_dir:
+            raise ValueError(
+                f"Invalid {param_name}: local file path '{stripped}' is outside the authorized staging directory ({allowed_dir})"
+            )
+        return resolved_path
+
+    return value
 
 
 def submit_af2_monomer_prediction(
@@ -41,20 +87,21 @@ def submit_af2_monomer_prediction(
             use_small_bfd. Override with "mmseqs2" (GPU-accelerated, 177x
             faster, requires use_small_bfd=True) or "jackhmmer" (CPU).
     """
-    return get_tool("af2_submit_monomer").run(
-        {
-            "sequence": sequence,
-            "job_name": job_name,
-            "max_template_date": max_template_date,
-            "use_small_bfd": use_small_bfd,
-            "run_relaxation": run_relaxation,
-            "gpu_type": gpu_type,
-            "relax_gpu_type": relax_gpu_type,
-            "vertex_repo_path": vertex_repo_path,
-            "enable_flex_start": enable_flex_start,
-            "msa_method": msa_method,
-        }
-    )
+    validated_sequence = _validate_input_source(sequence, "sequence")
+    args = {
+        "sequence": validated_sequence,
+        "max_template_date": max_template_date,
+        "use_small_bfd": use_small_bfd,
+        "run_relaxation": run_relaxation,
+        "gpu_type": gpu_type,
+        "relax_gpu_type": relax_gpu_type,
+        "vertex_repo_path": vertex_repo_path,
+        "enable_flex_start": enable_flex_start,
+        "msa_method": msa_method,
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    return get_tool("af2_submit_monomer").run(args)
 
 
 def submit_af2_multimer_prediction(
@@ -82,26 +129,35 @@ def submit_af2_multimer_prediction(
             use_small_bfd. Override with "mmseqs2" (GPU-accelerated, 177x
             faster, requires use_small_bfd=True) or "jackhmmer" (CPU).
     """
-    return get_tool("af2_submit_multimer").run(
-        {
-            "sequence": sequence,
-            "job_name": job_name,
-            "max_template_date": max_template_date,
-            "use_small_bfd": use_small_bfd,
-            "run_relaxation": run_relaxation,
-            "gpu_type": gpu_type,
-            "relax_gpu_type": relax_gpu_type,
-            "num_predictions_per_model": num_predictions_per_model,
-            "vertex_repo_path": vertex_repo_path,
-            "enable_flex_start": enable_flex_start,
-            "msa_method": msa_method,
-        }
-    )
+    validated_sequence = _validate_input_source(sequence, "sequence")
+    args = {
+        "sequence": validated_sequence,
+        "max_template_date": max_template_date,
+        "use_small_bfd": use_small_bfd,
+        "run_relaxation": run_relaxation,
+        "gpu_type": gpu_type,
+        "relax_gpu_type": relax_gpu_type,
+        "num_predictions_per_model": num_predictions_per_model,
+        "vertex_repo_path": vertex_repo_path,
+        "enable_flex_start": enable_flex_start,
+        "msa_method": msa_method,
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    return get_tool("af2_submit_multimer").run(args)
 
 
 def submit_af2_batch_predictions(batch_config: list[dict]) -> dict:
     """Submit multiple AlphaFold2 prediction jobs in batch."""
-    return get_tool("af2_submit_batch").run({"batch_config": batch_config})
+    sanitized_batch = []
+    for item in batch_config:
+        entry = dict(item)
+        if "sequence" in entry:
+            entry["sequence"] = _validate_input_source(entry["sequence"], "sequence")
+        if "job_name" in entry and entry["job_name"] is None:
+            del entry["job_name"]
+        sanitized_batch.append(entry)
+    return get_tool("af2_submit_batch").run({"batch_config": sanitized_batch})
 
 
 def submit_of3_prediction(
@@ -137,17 +193,18 @@ def submit_of3_prediction(
             pdb_mmcif databases on NFS (included in 'of3 full' install).
             Set to false for ab initio prediction or to reduce job time.
     """
-    return get_tool("of3_submit_prediction").run(
-        {
-            "input": input,
-            "job_name": job_name,
-            "num_model_seeds": num_model_seeds,
-            "num_diffusion_samples": num_diffusion_samples,
-            "gpu_type": gpu_type,
-            "enable_flex_start": enable_flex_start,
-            "use_templates": use_templates,
-        }
-    )
+    validated_input = _validate_input_source(input, "input")
+    args = {
+        "input": validated_input,
+        "num_model_seeds": num_model_seeds,
+        "num_diffusion_samples": num_diffusion_samples,
+        "gpu_type": gpu_type,
+        "enable_flex_start": enable_flex_start,
+        "use_templates": use_templates,
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    return get_tool("of3_submit_prediction").run(args)
 
 
 def submit_boltz2_prediction(
@@ -175,13 +232,14 @@ def submit_boltz2_prediction(
             A100_80GB for >2000.
         enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
     """
-    return get_tool("boltz2_submit_prediction").run(
-        {
-            "input": input,
-            "job_name": job_name,
-            "num_model_seeds": num_model_seeds,
-            "num_diffusion_samples": num_diffusion_samples,
-            "gpu_type": gpu_type,
-            "enable_flex_start": enable_flex_start,
-        }
-    )
+    validated_input = _validate_input_source(input, "input")
+    args = {
+        "input": validated_input,
+        "num_model_seeds": num_model_seeds,
+        "num_diffusion_samples": num_diffusion_samples,
+        "gpu_type": gpu_type,
+        "enable_flex_start": enable_flex_start,
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    return get_tool("boltz2_submit_prediction").run(args)

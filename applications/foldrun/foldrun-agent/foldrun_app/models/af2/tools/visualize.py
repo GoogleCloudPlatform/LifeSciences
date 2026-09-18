@@ -20,13 +20,33 @@ import tempfile
 from typing import Any
 
 from ..base import AF2Tool
-from ..utils.viz_utils import generate_plddt_colored_pdb
+from ..utils.viz_utils import generate_plddt_colored_pdb, validate_safe_local_path
 
 logger = logging.getLogger(__name__)
 
 
 class AF2VisualizationTool(AF2Tool):
     """Tool for generating 3D visualizations of predicted structures."""
+
+    def _validate_input_path(self, path: str) -> None:
+        """Validate that an input path belongs to the authorized GCS bucket or a safe local directory."""
+        if not path or "\x00" in path:
+            raise ValueError(f"Invalid path: {path!r}")
+
+        if path.startswith("gs://"):
+            without_scheme = path[len("gs://") :]
+            parts = without_scheme.split("/")
+            bucket = parts[0]
+            if not bucket or ".." in parts:
+                raise ValueError(f"Invalid GCS URI: {path}")
+            authorized_bucket = getattr(self.config, "bucket_name", None)
+            if authorized_bucket and bucket != authorized_bucket:
+                raise ValueError(
+                    f"Unauthorized GCS bucket '{bucket}'. Expected '{authorized_bucket}'."
+                )
+        else:
+            nfs_mount = getattr(self.config, "nfs_mount_point", None)
+            validate_safe_local_path(path, extra_allowed_dirs=[nfs_mount] if nfs_mount else None)
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
@@ -51,11 +71,12 @@ class AF2VisualizationTool(AF2Tool):
         if not pdb_path:
             raise ValueError("pdb_path is required")
 
-        # Download PDB if from GCS
-        local_pdb = pdb_path
-        if pdb_path.startswith("gs://"):
-            local_pdb = os.path.join(tempfile.gettempdir(), "structure.pdb")
-            self._download_from_gcs(pdb_path, local_pdb)
+        self._validate_input_path(pdb_path)
+
+        nfs_mount = getattr(self.config, "nfs_mount_point", None)
+        extra_dirs = [nfs_mount] if nfs_mount else None
+        if output_path is not None:
+            output_path = validate_safe_local_path(output_path, extra_allowed_dirs=extra_dirs)
 
         # Generate pLDDT-colored PDB
         if output_format in ["pdb_colored", "both"]:
@@ -65,30 +86,31 @@ class AF2VisualizationTool(AF2Tool):
                     "message": "raw_prediction_path is required for pLDDT coloring",
                 }
 
-            # Download raw prediction if from GCS
-            local_raw = raw_prediction_path
-            if raw_prediction_path.startswith("gs://"):
-                local_raw = os.path.join(tempfile.gettempdir(), "raw_prediction.pkl")
-                self._download_from_gcs(raw_prediction_path, local_raw)
+            self._validate_input_path(raw_prediction_path)
 
-            # Generate colored PDB
-            colored_pdb_path = generate_plddt_colored_pdb(
-                pdb_path=local_pdb, raw_prediction_path=local_raw, output_path=output_path
-            )
+            with tempfile.TemporaryDirectory(prefix="af2_viz_") as tmpdir:
+                local_pdb = pdb_path
+                if pdb_path.startswith("gs://"):
+                    local_pdb = os.path.join(tmpdir, "structure.pdb")
+                    self._download_from_gcs(pdb_path, local_pdb)
 
-            result = {
+                local_raw = raw_prediction_path
+                if raw_prediction_path.startswith("gs://"):
+                    local_raw = os.path.join(tmpdir, "raw_prediction.pkl")
+                    self._download_from_gcs(raw_prediction_path, local_raw)
+
+                # Generate colored PDB
+                colored_pdb_path = generate_plddt_colored_pdb(
+                    pdb_path=local_pdb,
+                    raw_prediction_path=local_raw,
+                    output_path=output_path,
+                )
+
+            return {
                 "status": "success",
                 "colored_pdb_path": colored_pdb_path,
                 "message": "Generated pLDDT-colored PDB file",
             }
-
-            # Cleanup temporary files
-            if pdb_path.startswith("gs://"):
-                os.remove(local_pdb)
-            if raw_prediction_path.startswith("gs://"):
-                os.remove(local_raw)
-
-            return result
 
         # For HTML output (would require py3Dmol)
         if output_format in ["html", "both"]:

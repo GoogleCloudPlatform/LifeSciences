@@ -159,7 +159,7 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
             for blob in fasta_blobs:
                 # Extract job name from fasta/job-name.fasta
                 if blob.name.endswith(".fasta"):
-                    fasta_job_name = blob.name.replace("fasta/", "").replace(".fasta", "")
+                    fasta_job_name = blob.name.removeprefix("fasta/").removesuffix(".fasta")
 
                     if fasta_job_name not in vertex_job_names:
                         orphaned_fasta.append(

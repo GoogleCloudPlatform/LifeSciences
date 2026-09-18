@@ -149,10 +149,15 @@ def data_pipeline(
 
     features.metadata["category"] = "features"
     features.metadata["msa_method"] = msa_method
-    if run_multimer_system:
-        features.metadata["final_dedup_msa_size"] = int(features_dict["num_alignments"])
+    num_alignments = features_dict["num_alignments"]
+    if hasattr(num_alignments, "ndim") and num_alignments.ndim > 0:
+        final_dedup_msa_size = int(num_alignments[0])
+    elif isinstance(num_alignments, (list, tuple)):
+        final_dedup_msa_size = int(num_alignments[0])
     else:
-        features.metadata["final_dedup_msa_size"] = int(features_dict["num_alignments"][0])
+        final_dedup_msa_size = int(num_alignments)
+    features.metadata["final_dedup_msa_size"] = final_dedup_msa_size
+    if not run_multimer_system:
         features.metadata["total_number_templates"] = int(
             features_dict["template_domain_names"].shape[0]
         )

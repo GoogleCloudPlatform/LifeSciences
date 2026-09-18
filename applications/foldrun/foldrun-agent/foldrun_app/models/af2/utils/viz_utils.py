@@ -15,12 +15,82 @@
 """Visualization utilities for AlphaFold structures."""
 
 import logging
+import os
 import pickle
+import tempfile
 from typing import Any
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_BUILTINS = {
+    "dict",
+    "list",
+    "tuple",
+    "set",
+    "frozenset",
+    "int",
+    "float",
+    "str",
+    "bytes",
+    "bool",
+    "complex",
+    "slice",
+    "range",
+}
+
+_ALLOWED_NUMPY_MODULES = {
+    "numpy",
+    "numpy.core.multiarray",
+    "numpy.core.numeric",
+    "numpy._core.multiarray",
+    "numpy._core.numeric",
+}
+
+_ALLOWED_NUMPY_NAMES = {
+    "_reconstruct",
+    "scalar",
+    "ndarray",
+    "dtype",
+    "_frombuffer",
+}
+
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    """Restricted unpickler allowing only safe builtins and NumPy array primitives."""
+
+    def find_class(self, module: str, name: str) -> Any:
+        if module == "builtins" and name in _ALLOWED_BUILTINS:
+            return super().find_class(module, name)
+        if module in _ALLOWED_NUMPY_MODULES and name in _ALLOWED_NUMPY_NAMES:
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(f"Global '{module}.{name}' is forbidden")
+
+
+def validate_safe_local_path(path: str, extra_allowed_dirs: list[str] | None = None) -> str:
+    """Validate that a local filesystem path resolves within allowed directories."""
+    if not path or "\x00" in path:
+        raise ValueError(f"Invalid path: {path!r}")
+
+    resolved = os.path.realpath(path)
+    candidates = [
+        tempfile.gettempdir(),
+        os.getcwd(),
+    ]
+    if extra_allowed_dirs:
+        candidates.extend(d for d in extra_allowed_dirs if d)
+
+    allowed_roots = [os.path.realpath(d) for d in candidates]
+    for root in allowed_roots:
+        try:
+            if os.path.commonpath([resolved, root]) == root:
+                return resolved
+        except ValueError:
+            continue
+
+    raise ValueError(f"Path '{path}' resolves outside allowed directories")
+
 
 # pLDDT confidence bands
 PLDDT_BANDS = [
@@ -33,7 +103,7 @@ PLDDT_BANDS = [
 
 def load_raw_prediction(pickle_path: str) -> dict[str, Any]:
     """
-    Load raw prediction pickle file.
+    Load raw prediction pickle file using restricted deserialization.
 
     Args:
         pickle_path: Path to pickle file
@@ -42,7 +112,7 @@ def load_raw_prediction(pickle_path: str) -> dict[str, Any]:
         Raw prediction dictionary
     """
     with open(pickle_path, "rb") as f:
-        raw_prediction = pickle.load(f)
+        raw_prediction = _RestrictedUnpickler(f).load()
 
     logger.info(f"Loaded raw prediction from {pickle_path}")
     return raw_prediction
@@ -172,6 +242,9 @@ def generate_plddt_colored_pdb(
     Returns:
         Path to colored PDB file
     """
+    if output_path is not None:
+        output_path = validate_safe_local_path(output_path)
+
     # Load raw prediction
     raw_prediction = load_raw_prediction(raw_prediction_path)
 
@@ -197,7 +270,7 @@ def generate_plddt_colored_pdb(
 
     # Write output
     if output_path is None:
-        output_path = pdb_path.replace(".pdb", "_colored.pdb")
+        output_path = validate_safe_local_path(pdb_path.replace(".pdb", "_colored.pdb"))
 
     with open(output_path, "w") as f:
         f.write(colored_pdb)

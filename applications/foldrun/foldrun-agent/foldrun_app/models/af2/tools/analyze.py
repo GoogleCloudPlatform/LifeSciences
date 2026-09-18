@@ -94,14 +94,14 @@ class AF2AnalysisTool(AF2Tool):
         # If raw prediction path provided, analyze directly
         if raw_prediction_path:
             if raw_prediction_path.startswith("gs://"):
-                # Download from GCS
-                import tempfile
-
-                local_path = os.path.join(tempfile.gettempdir(), "raw_prediction.pkl")
-                self._download_from_gcs(raw_prediction_path, local_path)
-                raw_prediction_path = local_path
-
-            raw_prediction = load_raw_prediction(raw_prediction_path)
+                self._validate_gcs_uri(raw_prediction_path)
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    local_path = os.path.join(tmp_dir, "raw_prediction.pkl")
+                    self._download_from_gcs(raw_prediction_path, local_path)
+                    raw_prediction = load_raw_prediction(local_path)
+            else:
+                safe_local_path = self._validate_local_path(raw_prediction_path)
+                raw_prediction = load_raw_prediction(safe_local_path)
 
             # Calculate metrics
             plddt_stats = calculate_plddt_stats(raw_prediction)
@@ -140,21 +140,16 @@ class AF2AnalysisTool(AF2Tool):
         if not raw_pred_uri:
             return {"status": "error", "message": "Raw prediction URI not found"}
 
-        import tempfile
-
-        local_path = os.path.join(tempfile.gettempdir(), "raw_prediction.pkl")
-        self._download_from_gcs(raw_pred_uri, local_path)
-
-        # Load and analyze
-        raw_prediction = load_raw_prediction(local_path)
+        self._validate_gcs_uri(raw_pred_uri)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            local_path = os.path.join(tmp_dir, "raw_prediction.pkl")
+            self._download_from_gcs(raw_pred_uri, local_path)
+            raw_prediction = load_raw_prediction(local_path)
 
         # Calculate metrics
         plddt_stats = calculate_plddt_stats(raw_prediction)
         pae_stats = calculate_pae_stats(raw_prediction)
         quality = get_quality_assessment(plddt_stats["mean"])
-
-        # Cleanup
-        os.remove(local_path)
 
         return {
             "job_id": job_id,
@@ -166,6 +161,50 @@ class AF2AnalysisTool(AF2Tool):
             "has_pae": pae_stats is not None,
             "warnings": [],
         }
+
+    def _validate_gcs_uri(self, gcs_uri: str) -> None:
+        """Validate that a GCS URI targets an authorized project bucket."""
+        if not gcs_uri.startswith("gs://"):
+            raise ValueError(f"Invalid GCS URI: {gcs_uri}")
+
+        parts = gcs_uri[5:].split("/", 1)
+        bucket_name = parts[0]
+        blob_path = parts[1] if len(parts) > 1 else ""
+
+        allowed_buckets = {
+            b
+            for b in (
+                getattr(self.config, "bucket_name", None),
+                getattr(self.config, "databases_bucket_name", None),
+            )
+            if b
+        }
+        if allowed_buckets and bucket_name not in allowed_buckets:
+            raise ValueError(
+                f"Unauthorized GCS bucket '{bucket_name}'. Expected one of: {sorted(allowed_buckets)}"
+            )
+
+        if ".." in blob_path.split("/"):
+            raise ValueError(f"Path traversal detected in GCS URI: {gcs_uri}")
+
+    def _validate_local_path(self, local_path: str) -> str:
+        """Validate and canonicalize a local file path to prevent path traversal."""
+        if "\x00" in local_path:
+            raise ValueError("Invalid local file path: null byte detected")
+
+        resolved_path = os.path.realpath(local_path)
+        allowed_roots = [os.path.realpath(tempfile.gettempdir())]
+        nfs_mount = getattr(self.config, "nfs_mount_point", None)
+        if nfs_mount:
+            allowed_roots.append(os.path.realpath(nfs_mount))
+
+        if not any(os.path.commonpath([resolved_path, root]) == root for root in allowed_roots):
+            raise ValueError(
+                f"Unauthorized local file path: {local_path}. "
+                "Path must reside within an authorized directory."
+            )
+
+        return resolved_path
 
     def _analyze_single_prediction(self, index: int, prediction: dict[str, Any]) -> dict[str, Any]:
         """
@@ -187,10 +226,9 @@ class AF2AnalysisTool(AF2Tool):
                     "error": "No URI found",
                 }
 
-            # Download to temp file
-            local_path = os.path.join(tempfile.gettempdir(), "raw_prediction_temp.pkl")
-
-            try:
+            self._validate_gcs_uri(raw_pred_uri)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                local_path = os.path.join(tmp_dir, "raw_prediction_temp.pkl")
                 self._download_from_gcs(raw_pred_uri, local_path)
 
                 # Load and analyze
@@ -216,11 +254,6 @@ class AF2AnalysisTool(AF2Tool):
                 }
 
                 return analysis
-
-            finally:
-                # Always cleanup the temp file
-                if os.path.exists(local_path):
-                    os.remove(local_path)
 
         except Exception as e:
             logger.error(f"Error analyzing prediction {index + 1}: {e}")

@@ -25,6 +25,7 @@ Supports two data sources:
 """
 
 import logging
+import re
 import shlex
 from datetime import datetime
 from pathlib import Path
@@ -180,8 +181,6 @@ def build_script(db_name: str, db_config: dict[str, Any], dest_path: str) -> str
 
 def _clean_label(value: str) -> str:
     """Clean a string for use as a GCP label value."""
-    import re
-
     cleaned = re.sub(r"[^a-z0-9_-]", "-", value.lower())
     return cleaned[:63]
 
@@ -216,6 +215,11 @@ def submit_download(
     machine_type = db_config.get("machine_type", "n1-standard-4")
     local_ssd_count = db_config.get("local_ssd_count", 0)
     dest_path = f"{nfs_mount}/{nfs_path}"
+    if ".." in dest_path.split("/") or not re.match(r"^/[a-zA-Z0-9_./-]+$", dest_path):
+        raise ValueError(
+            f"Invalid dest_path '{dest_path}'. Must be an absolute path containing only "
+            "alphanumeric characters, underscores, hyphens, dots, and slashes without traversal."
+        )
 
     # Determine data source: GCS restore or internet download
     if source_bucket:
@@ -242,7 +246,11 @@ def submit_download(
         # Fall back to dest_path (NFS)
         gcs_sync = (
             f"echo {shlex.quote(f'=== Backing up to GCS: {gcs_path} ===')}\n"
-            f'SYNC_SOURCE="${{GCS_SYNC_SOURCE:-{safe_dest_path_slash}}}"\n'
+            f'if [ -n "${{GCS_SYNC_SOURCE:-}}" ]; then\n'
+            f'  SYNC_SOURCE="$GCS_SYNC_SOURCE"\n'
+            f"else\n"
+            f"  SYNC_SOURCE={safe_dest_path_slash}\n"
+            f"fi\n"
             f'gcloud storage rsync --recursive "$SYNC_SOURCE" {safe_gcs_path} 2>&1\n'
         )
 

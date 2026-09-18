@@ -20,6 +20,27 @@ get stripped, causing malformed FASTA that fails downstream pipelines.
 
 import re
 
+_VALID_AA = frozenset("ACDEFGHIKLMNPQRSTVWY")
+_MIN_TRAILING_SEQ_LEN = 10
+
+
+def _split_header_sequence(line: str) -> str:
+    """Split a FASTA header line if a >=10-residue AA sequence is concatenated to it.
+
+    Runs in linear O(len(line)) time without regex backtracking.
+    """
+    if not line.startswith(">"):
+        return line
+
+    stripped = line.rstrip()
+    i = len(stripped)
+    while i > 1 and stripped[i - 1] in _VALID_AA:
+        i -= 1
+
+    if len(stripped) - i >= _MIN_TRAILING_SEQ_LEN:
+        return f"{stripped[:i]}\n{stripped[i:]}"
+    return line
+
 
 def fix_fasta(content: str) -> str:
     """Preprocess FASTA content to fix common formatting issues.
@@ -41,16 +62,11 @@ def fix_fasta(content: str) -> str:
     # Insert newline before any '>' that isn't at the start of a line
     content = re.sub(r"([^>\n])(>)", r"\1\n\2", content)
 
-    # Fix headers where sequence is concatenated onto the header line.
+    # Fix headers where sequence is concatenated onto the header line in O(N) time.
     # Match ">header_text" followed by a run of valid amino acids at end of line.
     # Only split if the trailing AA run is >= 10 chars (likely a sequence, not
     # part of the header name like ">GCN4_PROTEIN_A").
-    content = re.sub(
-        r"^(>[^\n]*?)([ACDEFGHIKLMNPQRSTVWY]{10,})\s*$",
-        r"\1\n\2",
-        content,
-        flags=re.MULTILINE,
-    )
+    content = "\n".join(_split_header_sequence(line) for line in content.split("\n"))
 
     # If content has '>' headers but doesn't start with one, the leading
     # text is a headerless sequence. Prepend a default header.

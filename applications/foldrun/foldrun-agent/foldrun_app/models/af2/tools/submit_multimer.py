@@ -24,6 +24,7 @@ from google.cloud import aiplatform as vertex_ai
 
 from ..base import AF2Tool
 from ..utils.fasta_utils import (
+    _validate_sequences,
     get_sequence_length,
     parse_fasta_content,
     validate_fasta_file,
@@ -99,8 +100,15 @@ class AF2SubmitMultimerTool(AF2Tool):
             sequence = bucket.blob(blob_path).download_as_text()
             is_fasta_file = False
         if is_fasta_file:
-            fasta_path = sequence
+            allowed_dir = os.path.realpath(tempfile.gettempdir())
+            resolved_path = os.path.realpath(sequence)
+            if os.path.commonpath([allowed_dir, resolved_path]) != allowed_dir:
+                raise ValueError(
+                    f"Local file path must be within the designated temp directory ({allowed_dir})."
+                )
+            fasta_path = resolved_path
             is_monomer, sequences = validate_fasta_file(fasta_path)
+            _validate_sequences(sequences)
         else:
             # Parse FASTA content
             sequences = parse_fasta_content(sequence)

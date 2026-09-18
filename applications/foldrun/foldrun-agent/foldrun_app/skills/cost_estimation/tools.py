@@ -153,6 +153,11 @@ def get_actual_job_costs(
         differ based on your pricing agreement.
     """
     import os
+    import re
+
+    if pipeline_job_id is not None:
+        if not re.fullmatch(r"^[a-zA-Z0-9_-]+$", pipeline_job_id):
+            return {"error": f"Invalid pipeline_job_id format: {pipeline_job_id!r}"}
 
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
     region = os.getenv("GCP_REGION") or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")

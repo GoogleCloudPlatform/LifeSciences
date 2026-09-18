@@ -113,10 +113,19 @@ class BOLTZ2Tool(BaseTool):
             },
         }
 
-        config = configs.get(gpu_type, configs["A100"]).copy()
+        if gpu_type not in configs:
+            raise ValueError(
+                f"Unsupported GPU type '{gpu_type}' for Boltz-2. Supported types: {list(configs.keys())}"
+            )
 
-        # Enforce supported GPUs logic
-        supported = self.config.supported_gpus
+        # Enforce supported GPUs logic (only accelerators supported by both environment and Boltz-2)
+        supported = [g for g in self.config.supported_gpus if g in configs]
+        if not supported:
+            raise ValueError(
+                f"No Boltz-2 compatible GPUs are supported in this environment! "
+                f"(Supported: {self.config.supported_gpus})"
+            )
+
         if gpu_type not in supported:
             original_type = gpu_type
             upgrade_path = ["A100", "A100_80GB"]
@@ -137,18 +146,14 @@ class BOLTZ2Tool(BaseTool):
                     f"Requested GPU '{original_type}' not supported. Auto-upgrading to '{new_type}'."
                 )
                 gpu_type = new_type
-                config = configs.get(gpu_type).copy()
-            elif supported:
+            else:
                 fallback = supported[0]
                 logger.warning(
                     f"Requested GPU '{original_type}' not supported. Falling back to '{fallback}'."
                 )
                 gpu_type = fallback
-                config = configs.get(gpu_type, configs["A100"]).copy()
-            else:
-                raise ValueError(
-                    f"No GPUs are supported in this environment! (Supported: {supported})"
-                )
+
+        config = configs[gpu_type].copy()
 
         # Multi-GPU machine types
         if num_gpus > 1 and gpu_type in ["A100", "A100_80GB"]:

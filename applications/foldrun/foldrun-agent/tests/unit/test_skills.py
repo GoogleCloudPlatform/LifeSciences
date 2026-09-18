@@ -181,6 +181,85 @@ class TestJobSubmissionSkills:
             args = mock.run.call_args[0][0]
             assert args["batch_config"] == batch
 
+    def test_null_job_name_omitted_from_forwarded_args(self):
+        """Finding 3.7 / 4.40: job_name=None is omitted so downstream .get('job_name', default) works."""
+        mock = _mock_tool({"status": "submitted"})
+
+        with _patch_get_tool(mock, _JOB_SUBMISSION):
+            from foldrun_app.skills.job_submission import (
+                submit_af2_monomer_prediction,
+                submit_af2_multimer_prediction,
+                submit_boltz2_prediction,
+                submit_of3_prediction,
+            )
+
+            submit_af2_monomer_prediction(sequence=">test\nMKTIALSYIF", job_name=None)
+            assert "job_name" not in mock.run.call_args[0][0]
+
+            submit_af2_multimer_prediction(sequence=">A\nMKT\n>B\nACD", job_name=None)
+            assert "job_name" not in mock.run.call_args[0][0]
+
+            submit_of3_prediction(input=">test\nMKTIALSYIF", job_name=None)
+            assert "job_name" not in mock.run.call_args[0][0]
+
+            submit_boltz2_prediction(input=">test\nMKTIALSYIF", job_name=None)
+            assert "job_name" not in mock.run.call_args[0][0]
+
+            # Explicit job_name must still be forwarded
+            submit_af2_monomer_prediction(sequence=">test\nMKTIALSYIF", job_name="explicit-job")
+            assert mock.run.call_args[0][0]["job_name"] == "explicit-job"
+
+    def test_unrestricted_local_file_path_rejected(self, tmp_path, monkeypatch):
+        """Finding 4.41: arbitrary host filesystem paths outside staging dir are rejected."""
+        import pytest
+
+        staging_dir = tmp_path / "staging"
+        staging_dir.mkdir()
+        monkeypatch.setenv("FOLDRUN_STAGING_DIR", str(staging_dir))
+
+        outside_file = tmp_path / "secret.txt"
+        outside_file.write_text("root:x:0:0:root:/root:/bin/bash")
+
+        symlink_escape = staging_dir / "escape.fasta"
+        symlink_escape.symlink_to(outside_file)
+
+        valid_staged_file = staging_dir / "valid.fasta"
+        valid_staged_file.write_text(">valid\nMKTIALSYIF")
+
+        mock = _mock_tool({"status": "submitted"})
+
+        with _patch_get_tool(mock, _JOB_SUBMISSION):
+            from foldrun_app.skills.job_submission import (
+                submit_af2_monomer_prediction,
+                submit_af2_multimer_prediction,
+                submit_boltz2_prediction,
+                submit_of3_prediction,
+            )
+
+            # Arbitrary system path / outside file must be rejected
+            for bad_path in [
+                "/etc/passwd",
+                str(outside_file),
+                str(symlink_escape),
+                "../etc/passwd",
+            ]:
+                with pytest.raises(ValueError, match="staging directory"):
+                    submit_af2_monomer_prediction(sequence=bad_path)
+                with pytest.raises(ValueError, match="staging directory"):
+                    submit_af2_multimer_prediction(sequence=bad_path)
+                with pytest.raises(ValueError, match="staging directory"):
+                    submit_of3_prediction(input=bad_path)
+                with pytest.raises(ValueError, match="staging directory"):
+                    submit_boltz2_prediction(input=bad_path)
+
+            # Valid file inside authorized staging directory must succeed
+            submit_af2_monomer_prediction(sequence=str(valid_staged_file))
+            assert mock.run.call_args[0][0]["sequence"] == str(valid_staged_file.resolve())
+
+            # GCS URIs and inline sequences must succeed
+            submit_af2_monomer_prediction(sequence="gs://my-bucket/input.fasta")
+            assert mock.run.call_args[0][0]["sequence"] == "gs://my-bucket/input.fasta"
+
 
 class TestJobManagementSkills:
     """Tests for job_management skill wrappers."""
@@ -248,6 +327,16 @@ class TestJobManagementSkills:
             check_gpu_quota()
 
             mock_get.assert_called_with("af2_check_gpu_quota")
+
+    def test_job_management_instruction_enforces_hitl_deletion_policy(self):
+        """JOB_MANAGEMENT_INSTRUCTION explicitly enforces HITL user confirmation before delete_job."""
+        from foldrun_app.skills.job_management.instruction import JOB_MANAGEMENT_INSTRUCTION
+
+        instruction_lower = JOB_MANAGEMENT_INSTRUCTION.lower()
+        assert "human-in-the-loop" in instruction_lower
+        assert "what will be deleted" in instruction_lower
+        assert "permanent" in instruction_lower
+        assert "explicit user approval" in instruction_lower
 
     def test_check_gpu_quota_with_region(self):
         """check_gpu_quota passes region argument when provided."""

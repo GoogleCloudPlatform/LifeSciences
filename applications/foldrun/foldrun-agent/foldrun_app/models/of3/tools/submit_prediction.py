@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import tempfile
+import threading
 from datetime import datetime
 from typing import Any
 
@@ -27,6 +28,8 @@ from ..base import OF3Tool
 from ..utils.input_converter import count_tokens, fasta_to_of3_json, is_of3_json, validate_of3_json
 
 logger = logging.getLogger(__name__)
+
+_COMPILE_LOCK = threading.Lock()
 
 
 class OF3SubmitPredictionTool(OF3Tool):
@@ -88,7 +91,23 @@ class OF3SubmitPredictionTool(OF3Tool):
             bucket = self.storage_client.bucket(bucket_name)
             content = bucket.blob(blob_path).download_as_text()
         elif is_file:
-            with open(input_data) as f:
+            allowed_dir = getattr(self.config, "allowed_input_dir", None) or os.environ.get(
+                "FOLDRUN_ALLOWED_INPUT_DIR"
+            )
+            if not allowed_dir:
+                raise ValueError(
+                    "Local file path inputs require an explicitly authorized directory (FOLDRUN_ALLOWED_INPUT_DIR)."
+                )
+            real_allowed = os.path.realpath(allowed_dir)
+            real_path = os.path.realpath(input_data)
+            if (
+                os.path.commonpath([real_allowed, real_path]) != real_allowed
+                or real_path == real_allowed
+            ):
+                raise ValueError(
+                    f"Local file path '{input_data}' is outside the authorized directory."
+                )
+            with open(real_path) as f:
                 content = f.read()
         else:
             content = input_data
@@ -140,21 +159,22 @@ class OF3SubmitPredictionTool(OF3Tool):
             "NVIDIA_A100_80GB": "a100-80gb",
         }
 
-        # Setup environment for pipeline compilation
-        self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
+        with _COMPILE_LOCK:
+            # Setup environment for pipeline compilation
+            self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
 
-        # Load and compile pipeline
-        from ..utils.pipeline_utils import load_vertex_pipeline
+            # Load and compile pipeline
+            from ..utils.pipeline_utils import load_vertex_pipeline
 
-        pipeline = load_vertex_pipeline(enable_flex_start=enable_flex_start)
+            pipeline = load_vertex_pipeline(enable_flex_start=enable_flex_start)
 
-        pipeline_path = os.path.join(tempfile.gettempdir(), f"of3_pipeline_{job_name}.json")
-        from kfp import compiler
+            pipeline_path = os.path.join(tempfile.gettempdir(), f"of3_pipeline_{job_name}.json")
+            from kfp import compiler
 
-        compiler.Compiler().compile(
-            pipeline_func=pipeline,
-            package_path=pipeline_path,
-        )
+            compiler.Compiler().compile(
+                pipeline_func=pipeline,
+                package_path=pipeline_path,
+            )
 
         # Prepare labels — extract first query name from the queries dict
         query_names = list(query_json.get("queries", {}).keys())

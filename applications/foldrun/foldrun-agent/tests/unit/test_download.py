@@ -520,6 +520,95 @@ class TestDownloadSecurity:
                 assert tokens[3] == "--recursive"
                 assert tokens[5].startswith("gs://bucket/path/ ; id > /mnt/nfs/pwned.txt #")
 
+    def test_submit_download_rejects_malicious_dest_path(self):
+        """submit_download validates dest_path against command injection and path traversal."""
+        from foldrun_app.core.download import submit_download
+
+        for bad_nfs_path in [
+            "uniref90/$(id)",
+            "uniref90; rm -rf /",
+            "../../etc/passwd",
+            "uniref90/path with spaces",
+        ]:
+            db_config = {
+                "models": ["af2"],
+                "display_name": "UniRef90",
+                "nfs_path": bad_nfs_path,
+                "source": "https://example.com/uniref90.fasta.gz",
+            }
+            with pytest.raises(ValueError, match="Invalid dest_path"):
+                submit_download(
+                    db_name="uniref90",
+                    db_config=db_config,
+                    project_id="proj",
+                    region="us-central1",
+                    zone="us-central1-a",
+                    filestore_ip="10.0.0.1",
+                    filestore_network="default",
+                    nfs_share="share",
+                    nfs_mount="/mnt/nfs",
+                    gcs_bucket="my-bucket",
+                )
+
+    def test_submit_download_gcs_sync_conditional_assignment(self):
+        """submit_download uses safe conditional shell assignment without double-quoting single-quoted literals."""
+        import subprocess
+        from unittest.mock import patch
+
+        from foldrun_app.core.download import submit_download
+
+        db_config = {
+            "models": ["af2"],
+            "display_name": "UniRef90",
+            "nfs_path": "uniref90",
+            "source": "https://example.com/uniref90.fasta.gz",
+        }
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
+            result = submit_download(
+                db_name="uniref90",
+                db_config=db_config,
+                project_id="proj",
+                region="us-central1",
+                zone="us-central1-a",
+                filestore_ip="10.0.0.1",
+                filestore_network="default",
+                nfs_share="share",
+                nfs_mount="/mnt/nfs/foldrun",
+                gcs_bucket="my-bucket",
+            )
+            assert result["status"] == "submitted"
+            script = mock_submit.call_args[1]["script"]
+
+        assert "${GCS_SYNC_SOURCE:-/" not in script
+        assert 'if [ -n "${GCS_SYNC_SOURCE:-}" ]; then' in script
+
+        # Verify shell evaluation when GCS_SYNC_SOURCE is unset vs set
+        snippet = "\n".join(
+            script.splitlines()[
+                script.splitlines().index(
+                    'if [ -n "${GCS_SYNC_SOURCE:-}" ]; then'
+                ) : script.splitlines().index("fi") + 1
+            ]
+        )
+        default_val = subprocess.check_output(
+            ["bash", "-c", f"{snippet}\nprintf '%s' \"$SYNC_SOURCE\""],
+            env={},
+            text=True,
+        )
+        assert default_val == "/mnt/nfs/foldrun/uniref90/"
+
+        override_val = subprocess.check_output(
+            ["bash", "-c", f"{snippet}\nprintf '%s' \"$SYNC_SOURCE\""],
+            env={"GCS_SYNC_SOURCE": "/mnt/scratch/uniref90/"},
+            text=True,
+        )
+        assert override_val == "/mnt/scratch/uniref90/"
+
 
 # ------------------------------------------------------------------ #
 # Security / Reliability: Database setup scripts

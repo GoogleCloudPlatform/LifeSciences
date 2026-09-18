@@ -16,6 +16,7 @@
 
 import logging
 import os
+import threading
 from typing import Any
 
 from foldrun_app.core.base_tool import BaseTool
@@ -25,8 +26,54 @@ from .config import Config
 logger = logging.getLogger(__name__)
 
 
+_MMSEQS2_ENV_KEYS = (
+    "MMSEQS2_DATA_PIPELINE_MACHINE_TYPE",
+    "MMSEQS2_ACCELERATOR_TYPE",
+    "MMSEQS2_ACCELERATOR_COUNT",
+)
+
+
+class _CompileEnvContext:
+    """Re-entrant context manager that serializes compile env access and restores os.environ on exit."""
+
+    def __init__(
+        self,
+        lock: threading.RLock,
+        env_vars: dict[str, str],
+        keys_to_clear: tuple[str, ...] = (),
+        previous_env: dict[str, str | None] | None = None,
+    ):
+        self._lock = lock
+        self._env_vars = env_vars
+        self._keys_to_clear = keys_to_clear
+        self._previous_env = previous_env if previous_env is not None else {}
+
+    def __enter__(self) -> dict[str, str]:
+        self._lock.acquire()
+        try:
+            for key in self._keys_to_clear:
+                os.environ.pop(key, None)
+            os.environ.update(self._env_vars)
+            return self._env_vars
+        except Exception:
+            self._lock.release()
+            raise
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        try:
+            for key, prev_val in self._previous_env.items():
+                if prev_val is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = prev_val
+        finally:
+            self._lock.release()
+
+
 class AF2Tool(BaseTool):
     """Base class for AlphaFold2 tools following ToolUniverse pattern."""
+
+    _compile_env_lock = threading.RLock()
 
     def __init__(self, tool_config: dict[str, Any], config: Config | None = None):
         """
@@ -43,14 +90,21 @@ class AF2Tool(BaseTool):
         hardware_config: dict[str, Any],
         filestore_ip: str | None = None,
         filestore_network: str | None = None,
-    ):
+    ) -> _CompileEnvContext:
         """
         Set up environment variables for pipeline compilation.
+
+        Explicitly cleans stale MMSEQS2_* overrides when msa_method != "mmseqs2"
+        and returns a re-entrant context manager holding _compile_env_lock so
+        concurrent requests cannot race on os.environ.
 
         Args:
             hardware_config: Hardware configuration dictionary
             filestore_ip: Filestore IP address (optional, uses config if not provided)
             filestore_network: Filestore network (optional, uses config if not provided)
+
+        Returns:
+            Re-entrant context manager guarding process-wide compile environment variables.
         """
         # Use provided values or fall back to config
         nfs_server = filestore_ip or self.config.filestore_ip or ""
@@ -75,6 +129,7 @@ class AF2Tool(BaseTool):
         }
 
         # MMseqs2 GPU data pipeline overrides
+        keys_to_clear: tuple[str, ...] = ()
         if hardware_config.get("msa_method") == "mmseqs2":
             env_vars.update(
                 {
@@ -85,8 +140,22 @@ class AF2Tool(BaseTool):
                     "MMSEQS2_ACCELERATOR_COUNT": str(hardware_config.get("dp_accel_count", 1)),
                 }
             )
+        else:
+            keys_to_clear = _MMSEQS2_ENV_KEYS
 
-        os.environ.update(env_vars)
+        with self._compile_env_lock:
+            tracked_keys = set(env_vars.keys()) | set(keys_to_clear)
+            previous_env = {key: os.environ.get(key) for key in tracked_keys}
+            for key in keys_to_clear:
+                os.environ.pop(key, None)
+            os.environ.update(env_vars)
+
+        return _CompileEnvContext(
+            lock=self._compile_env_lock,
+            env_vars=env_vars,
+            keys_to_clear=keys_to_clear,
+            previous_env=previous_env,
+        )
 
     @staticmethod
     def _recommend_gpu(seq_length: int, is_multimer: bool = False) -> str:

@@ -22,8 +22,11 @@ Verified against Cloud Billing Catalog API on 2026-04-15.
 """
 
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+_VALID_PIPELINE_JOB_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 # ---------------------------------------------------------------------------
 # GCP service IDs (Cloud Billing Catalog)
@@ -843,6 +846,10 @@ def get_actual_costs(
     )
     parent = f"projects/{project_id}/locations/{region}"
 
+    if pipeline_job_id is not None:
+        if not _VALID_PIPELINE_JOB_ID_RE.fullmatch(pipeline_job_id):
+            return {"error": f"Invalid pipeline_job_id format: {pipeline_job_id!r}"}
+
     # Build filter for FoldRun jobs
     filter_str = 'labels.submitted_by="foldrun-agent"'
     if pipeline_job_id:
@@ -856,15 +863,19 @@ def get_actual_costs(
 
     # Collect all succeeded jobs
     all_jobs = []
-    for job in client.list_custom_jobs(request=request):
-        if job.state != aiplatform_v1.JobState.JOB_STATE_SUCCEEDED:
-            continue
-        # Skip Agent Platform pipeline orchestrator jobs (not actual compute)
-        if job.display_name.startswith("caip_pipelines_"):
-            continue
-        all_jobs.append(job)
-        if len(all_jobs) >= limit:
-            break
+    try:
+        for job in client.list_custom_jobs(request=request):
+            if job.state != aiplatform_v1.JobState.JOB_STATE_SUCCEEDED:
+                continue
+            # Skip Agent Platform pipeline orchestrator jobs (not actual compute)
+            if job.display_name.startswith("caip_pipelines_"):
+                continue
+            all_jobs.append(job)
+            if len(all_jobs) >= limit:
+                break
+    except Exception as e:
+        logger.error("Failed to list custom jobs for cost estimation: %s", e)
+        return {"error": f"Failed to retrieve custom jobs: {e}"}
 
     # Group by pipeline billing ID
     pipelines: dict = {}

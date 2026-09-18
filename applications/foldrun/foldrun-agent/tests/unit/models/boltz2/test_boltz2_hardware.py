@@ -107,3 +107,29 @@ class TestBOLTZ2HardwareConfig:
         config = tool._get_hardware_config("A100", num_gpus=4)
         assert config["predict_machine"] == "a2-highgpu-4g"
         assert config["predict_count"] == 4
+
+    def test_unsupported_environment_only_l4_raises(self):
+        """When environment only supports L4, Boltz-2 must raise ValueError instead of falling back to A100."""
+        from foldrun_app.models.boltz2.base import BOLTZ2Tool
+
+        tool = BOLTZ2Tool({"name": "test", "description": "test"})
+        tool.config.set_supported_gpus(["L4"])
+        with pytest.raises(ValueError):
+            tool._get_hardware_config("auto", num_tokens=500)
+
+    def test_explicit_unsupported_gpu_l4_raises(self):
+        """Explicitly requesting unsupported GPU like L4 must raise ValueError."""
+        from foldrun_app.models.boltz2.base import BOLTZ2Tool
+
+        tool = BOLTZ2Tool({"name": "test", "description": "test"})
+        with pytest.raises(ValueError):
+            tool._get_hardware_config("L4")
+
+    def test_fallback_skips_unsupported_accelerators(self):
+        """Fallback selection should only consider GPUs supported by both environment and Boltz-2."""
+        from foldrun_app.models.boltz2.base import BOLTZ2Tool
+
+        tool = BOLTZ2Tool({"name": "test", "description": "test"})
+        tool.config.set_supported_gpus(["L4", "A100"])
+        config = tool._get_hardware_config("A100_80GB")
+        assert config["predict_accel"] == "NVIDIA_TESLA_A100"

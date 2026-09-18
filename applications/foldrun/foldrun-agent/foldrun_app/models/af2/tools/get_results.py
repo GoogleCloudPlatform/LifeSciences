@@ -16,6 +16,8 @@
 
 import logging
 import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from ..base import AF2Tool
@@ -49,6 +51,25 @@ class AF2GetResultsTool(AF2Tool):
 
         if not job_id:
             raise ValueError("job_id is required")
+
+        if output_dir:
+            normalized_parts = output_dir.replace("\\", "/").split("/")
+            if ".." in normalized_parts or ".." in Path(output_dir).parts:
+                raise ValueError(
+                    "Invalid output_dir: directory traversal sequences ('..') are not allowed"
+                )
+            resolved_output_dir = os.path.realpath(output_dir)
+            allowed_roots = [
+                os.path.realpath(os.getcwd()),
+                os.path.realpath(tempfile.gettempdir()),
+            ]
+            if not any(
+                os.path.commonpath([root, resolved_output_dir]) == root for root in allowed_roots
+            ):
+                raise ValueError(
+                    f"Invalid output_dir '{output_dir}': must reside within the working directory or temporary directory"
+                )
+            output_dir = resolved_output_dir
 
         # Get pipeline job
         job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
@@ -90,8 +111,12 @@ class AF2GetResultsTool(AF2Tool):
         best_model = None
 
         for idx, pred in enumerate(predictions):
+            safe_model_name = os.path.basename(str(pred["model_name"]))
+            if not safe_model_name or safe_model_name in (".", ".."):
+                raise ValueError(f"Invalid model_name: {pred['model_name']!r}")
+
             model_info = {
-                "model_name": pred["model_name"],
+                "model_name": safe_model_name,
                 "ranking_confidence": pred["ranking_confidence"],
                 "rank": idx + 1,
             }
@@ -101,7 +126,11 @@ class AF2GetResultsTool(AF2Tool):
                 # Download unrelaxed protein
                 unrelaxed_uri = pred.get("uri")
                 if unrelaxed_uri:
-                    unrelaxed_path = os.path.join(output_dir, f"unrelaxed_{pred['model_name']}.pdb")
+                    unrelaxed_path = os.path.realpath(
+                        os.path.join(output_dir, f"unrelaxed_{safe_model_name}.pdb")
+                    )
+                    if os.path.commonpath([output_dir, unrelaxed_path]) != output_dir:
+                        raise ValueError(f"Resolved file path escapes output_dir: {unrelaxed_path}")
                     try:
                         self._download_from_gcs(unrelaxed_uri, unrelaxed_path)
                         model_info["unrelaxed_pdb_path"] = unrelaxed_path

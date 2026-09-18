@@ -17,6 +17,7 @@
 Provides NFS-mounted Batch job submission for any model's download tools.
 """
 
+import hashlib
 import logging
 import os
 from typing import Any
@@ -113,6 +114,17 @@ def resolve_subnet(project_id: str, region: str, network: str) -> str:
     return matching[0].name
 
 
+def _template_nic_matches(existing: Any, network: str, subnet: str) -> bool:
+    """Return True if an existing InstanceTemplate's primary NIC matches network and subnet."""
+    nics = getattr(getattr(existing, "properties", None), "network_interfaces", None)
+    if not nics:
+        return False
+    nic = nics[0]
+    existing_net = getattr(nic, "network", "") or ""
+    existing_sub = getattr(nic, "subnetwork", "") or ""
+    return existing_net.endswith(network) and existing_sub.endswith(subnet)
+
+
 def get_or_create_instance_template(
     project_id: str,
     machine_type: str,
@@ -123,16 +135,23 @@ def get_or_create_instance_template(
     """Create/reuse a Shielded VM instance template. Returns self_link."""
     from google.cloud import compute_v1
 
+    net_hash = hashlib.sha256(f"{network}:{subnet}".encode()).hexdigest()[:8]
     safe_name = f"foldrun-batch-{machine_type.replace('_', '-')}"
     if local_ssd_count > 0:
         safe_name += f"-{local_ssd_count}ssd"
+    safe_name += f"-{net_hash}"
 
     client = compute_v1.InstanceTemplatesClient()
 
     try:
         existing = client.get(project=project_id, instance_template=safe_name)
-        logger.info(f"Reusing instance template: {safe_name}")
-        return existing.self_link
+        if _template_nic_matches(existing, network, subnet):
+            logger.info(f"Reusing instance template: {safe_name}")
+            return existing.self_link
+        logger.warning(
+            f"Existing instance template {safe_name} has mismatched network/subnet; "
+            "creating isolated replacement template."
+        )
     except Exception:
         pass
 

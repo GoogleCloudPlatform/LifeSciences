@@ -238,3 +238,269 @@ class TestOF3PredictTemplateArgs:
         """Predict passes --runner_yaml flag to run_openfold when templates enabled."""
         source = self._read_predict_source()
         assert "--runner_yaml=" in source
+
+    def test_predict_selects_matching_cif_for_winning_confidence_sample(
+        self, tmp_path, monkeypatch
+    ):
+        """Verify predict_of3 selects the CIF matching the winning confidence sample, not the first CIF in directory."""
+        import json
+        import subprocess
+        import sys
+        from types import SimpleNamespace
+
+        from foldrun_app.models.of3.pipeline import config as of3_config
+
+        monkeypatch.setitem(sys.modules, "config", of3_config)
+        from foldrun_app.models.of3.pipeline.components.predict import predict_of3
+
+        query_json_path = tmp_path / "query.json"
+        query_json_path.write_text(
+            json.dumps({"queries": {"test_query": {"chains": [{"sequence": "ACDE"}]}}})
+        )
+
+        output_dir = tmp_path / "outputs"
+        output_dir.mkdir()
+        predicted_structure_path = output_dir / "predicted_structure"
+        confidence_json_path = output_dir / "confidence_json"
+
+        seed_dir = output_dir / "test_query" / "seed_42"
+        seed_dir.mkdir(parents=True)
+
+        # Sample 0 has lower score
+        (seed_dir / "test_query_seed_42_sample_0_confidences_aggregated.json").write_text(
+            json.dumps({"ptm": 0.45, "sample_ranking_score": 0.45})
+        )
+        (seed_dir / "test_query_seed_42_sample_0_model.cif").write_text("SAMPLE_0_CIF_CONTENT")
+
+        # Sample 1 has higher score
+        (seed_dir / "test_query_seed_42_sample_1_confidences_aggregated.json").write_text(
+            json.dumps({"ptm": 0.92, "sample_ranking_score": 0.92})
+        )
+        (seed_dir / "test_query_seed_42_sample_1_model.cif").write_text("SAMPLE_1_CIF_CONTENT")
+
+        monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: None)
+
+        orig_listdir = os.listdir
+
+        def sorted_listdir(path):
+            return sorted(orig_listdir(path))
+
+        monkeypatch.setattr(os, "listdir", sorted_listdir)
+
+        updated_query_json = SimpleNamespace(path=str(query_json_path))
+        predicted_structure = SimpleNamespace(
+            path=str(predicted_structure_path), uri="gs://bucket/pred", metadata={}
+        )
+        confidence_json = SimpleNamespace(
+            path=str(confidence_json_path), uri="gs://bucket/conf", metadata={}
+        )
+
+        predict_of3.python_func(
+            updated_query_json=updated_query_json,
+            seed_value=42,
+            num_diffusion_samples=2,
+            nfs_params_path="/nfs/params",
+            predicted_structure=predicted_structure,
+            confidence_json=confidence_json,
+            use_templates=False,
+        )
+
+        selected_conf = json.loads(confidence_json_path.read_text())
+        selected_cif = predicted_structure_path.read_text()
+
+        assert selected_conf["ptm"] == 0.92
+        assert selected_cif == "SAMPLE_1_CIF_CONTENT"
+
+
+class TestOF3MSAPipelineCacheBehavior:
+    """Validate MSA cache lookup, file path list injection, and cache promotion merging."""
+
+    @staticmethod
+    def _get_msa_func():
+        import sys
+
+        from foldrun_app.models.of3.pipeline import config as of3_config
+
+        sys.modules["config"] = of3_config
+        from foldrun_app.models.of3.pipeline.components.msa_pipeline import msa_pipeline_of3
+
+        return msa_pipeline_of3.python_func
+
+    @staticmethod
+    def _make_artifact(path: str, uri: str = "", metadata: dict | None = None):
+        class _DummyArtifact:
+            def __init__(self, p, u, m):
+                self.path = p
+                self.uri = u
+                self.metadata = m if m is not None else {}
+
+        return _DummyArtifact(path, uri, metadata)
+
+    def test_main_msa_file_paths_is_list_on_cache_miss_and_hit(self, tmp_path, monkeypatch):
+        """Finding 4.33: chain['main_msa_file_paths'] must be a list of file paths, not a directory string."""
+        import json
+        import subprocess
+
+        msa_func = self._get_msa_func()
+
+        nfs_mount = tmp_path / "nfs"
+        nfs_mount.mkdir()
+        for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
+            (nfs_mount / db_name).write_text(">dummy\nACDEFGHIK\n")
+
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90.fasta",
+                "mgnify": "mgnify.fasta",
+                "pdb_seqres": "pdb_seqres.fasta",
+            },
+        )
+
+        query_input = tmp_path / "query.json"
+        query_input.write_text(
+            json.dumps(
+                {
+                    "queries": {
+                        "test_q": {
+                            "chains": [
+                                {
+                                    "molecule_type": "protein",
+                                    "chain_ids": ["A"],
+                                    "sequence": "ACDEFGHIK",
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+        )
+        query_artifact = self._make_artifact(path=str(query_input), uri=str(query_input))
+        out_miss_path = tmp_path / "out_miss.json"
+        out_miss_artifact = self._make_artifact(path=str(out_miss_path), uri=str(out_miss_path))
+
+        def _fake_run(cmd, check=True):
+            out_idx = cmd.index("-A") + 1
+            with open(cmd[out_idx], "w") as f:
+                f.write("# STOCKHOLM 1.0\n//\n")
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        # First run: cache miss
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_miss_artifact,
+            use_templates=True,
+        )
+        miss_result = json.loads(out_miss_path.read_text())
+        miss_chain = miss_result["queries"]["test_q"]["chains"][0]
+        assert isinstance(miss_chain["main_msa_file_paths"], list), (
+            f"Expected list of file paths on cache miss, got {type(miss_chain['main_msa_file_paths'])}: "
+            f"{miss_chain['main_msa_file_paths']}"
+        )
+        assert all(os.path.isfile(p) for p in miss_chain["main_msa_file_paths"])
+
+        # Second run: cache hit
+        out_hit_path = tmp_path / "out_hit.json"
+        out_hit_artifact = self._make_artifact(path=str(out_hit_path), uri=str(out_hit_path))
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_hit_artifact,
+            use_templates=True,
+        )
+        hit_result = json.loads(out_hit_path.read_text())
+        hit_chain = hit_result["queries"]["test_q"]["chains"][0]
+        assert isinstance(hit_chain["main_msa_file_paths"], list), (
+            f"Expected list of file paths on cache hit, got {type(hit_chain['main_msa_file_paths'])}: "
+            f"{hit_chain['main_msa_file_paths']}"
+        )
+        assert all(os.path.isfile(p) for p in hit_chain["main_msa_file_paths"])
+
+    def test_cache_promotion_merges_template_alignment_when_cache_dir_exists(
+        self, tmp_path, monkeypatch
+    ):
+        """Finding 4.34: When seq_cache_dir already exists (e.g. from use_templates=False),
+        a subsequent run with use_templates=True must merge pdb_seqres.sto into seq_cache_dir
+        rather than deleting it when os.rename fails on non-empty directory.
+        """
+        import json
+        import subprocess
+
+        msa_func = self._get_msa_func()
+
+        nfs_mount = tmp_path / "nfs"
+        nfs_mount.mkdir()
+        for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
+            (nfs_mount / db_name).write_text(">dummy\nACDEFGHIK\n")
+
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90.fasta",
+                "mgnify": "mgnify.fasta",
+                "pdb_seqres": "pdb_seqres.fasta",
+            },
+        )
+
+        query_input = tmp_path / "query.json"
+        query_input.write_text(
+            json.dumps(
+                {
+                    "queries": {
+                        "test_q": {
+                            "chains": [
+                                {
+                                    "molecule_type": "protein",
+                                    "chain_ids": ["A"],
+                                    "sequence": "ACDEFGHIK",
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+        )
+        query_artifact = self._make_artifact(path=str(query_input), uri=str(query_input))
+
+        def _fake_run(cmd, check=True):
+            out_idx = cmd.index("-A") + 1
+            with open(cmd[out_idx], "w") as f:
+                f.write("# STOCKHOLM 1.0\n//\n")
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        # First run: use_templates=False populates seq_cache_dir without pdb_seqres.sto
+        out_no_tpl_path = tmp_path / "out_no_tpl.json"
+        out_no_tpl_artifact = self._make_artifact(
+            path=str(out_no_tpl_path), uri=str(out_no_tpl_path)
+        )
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_no_tpl_artifact,
+            use_templates=False,
+        )
+
+        # Second run: use_templates=True triggers cache miss and generates pdb_seqres.sto
+        out_with_tpl_path = tmp_path / "out_with_tpl.json"
+        out_with_tpl_artifact = self._make_artifact(
+            path=str(out_with_tpl_path), uri=str(out_with_tpl_path)
+        )
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_with_tpl_artifact,
+            use_templates=True,
+        )
+
+        tpl_result = json.loads(out_with_tpl_path.read_text())
+        tpl_chain = tpl_result["queries"]["test_q"]["chains"][0]
+        assert "template_alignment_file_path" in tpl_chain
+        assert os.path.isfile(tpl_chain["template_alignment_file_path"]), (
+            f"Template alignment file was destroyed during cache promotion: "
+            f"{tpl_chain['template_alignment_file_path']}"
+        )

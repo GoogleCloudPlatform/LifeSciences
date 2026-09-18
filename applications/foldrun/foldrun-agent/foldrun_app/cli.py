@@ -1,3 +1,17 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 #!/usr/bin/env python3
 # Copyright 2026 Google LLC
 #
@@ -69,10 +83,12 @@ async def run_with_retry(runner, user_id, session_id, message, max_retries=MAX_R
     last_error = None
 
     for attempt in range(max_retries):
+        events_emitted = False
         try:
             async for event in runner.run_async(
                 user_id=user_id, session_id=session_id, new_message=message
             ):
+                events_emitted = True
                 yield event
             return
 
@@ -86,10 +102,12 @@ async def run_with_retry(runner, user_id, session_id, message, max_retries=MAX_R
                 console.print(
                     f"\n[yellow]⚠ Rate limit exceeded (429). Please wait {retry_delay:.0f}s before trying again.[/yellow]"
                 )
-                raise
+            raise
 
         except ServerError as e:
             last_error = e
+            if events_emitted:
+                raise
             if e.status == 500:
                 if attempt < max_retries - 1:
                     wait_time = RETRY_DELAY * (2**attempt)

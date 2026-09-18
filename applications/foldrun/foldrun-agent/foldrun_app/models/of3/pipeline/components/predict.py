@@ -177,11 +177,10 @@ def predict_of3(
                 if score > best_score:
                     best_score = score
                     best_conf = src
-                    # Look for CIF in same directory
-                    for cif_name in os.listdir(root):
-                        if cif_name.endswith(".cif"):
-                            best_cif = os.path.join(root, cif_name)
-                            break
+                    cif_name = fname.replace("_confidences_aggregated.json", "_model.cif")
+                    cif_candidate = os.path.join(root, cif_name)
+                    if os.path.exists(cif_candidate):
+                        best_cif = cif_candidate
 
     # Copy best results to output artifacts
     if best_cif:

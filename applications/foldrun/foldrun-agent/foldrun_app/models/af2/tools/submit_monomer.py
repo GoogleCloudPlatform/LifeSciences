@@ -16,7 +16,9 @@
 
 import logging
 import os
+import re
 import tempfile
+import threading
 from datetime import datetime
 from typing import Any
 
@@ -26,11 +28,11 @@ from ..base import AF2Tool
 from ..utils.fasta_utils import (
     get_sequence_length,
     parse_fasta_content,
-    validate_fasta_file,
     write_fasta,
 )
 
 logger = logging.getLogger(__name__)
+_COMPILE_ENV_LOCK = threading.Lock()
 
 
 class AF2SubmitMonomerTool(AF2Tool):
@@ -56,7 +58,12 @@ class AF2SubmitMonomerTool(AF2Tool):
         """
         # Extract parameters
         sequence = arguments.get("sequence")
-        job_name = arguments.get("job_name", f"monomer_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        raw_job_name = arguments.get(
+            "job_name", f"monomer_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+        job_name = re.sub(r"[^A-Za-z0-9_.-]", "_", str(raw_job_name)).strip("._-")
+        if not job_name:
+            job_name = f"monomer_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         max_template_date = arguments.get(
             "max_template_date", "2025-04-01"
         )  # Matches DB download date (April 2025)
@@ -86,128 +93,142 @@ class AF2SubmitMonomerTool(AF2Tool):
 
         # Validate and prepare FASTA
         is_gcs = isinstance(sequence, str) and sequence.startswith("gs://")
-        is_fasta_file = (
-            os.path.isfile(sequence) if isinstance(sequence, str) and not is_gcs else False
-        )
+        is_fasta_file = False
 
         if is_gcs:
             bucket_name = sequence[5:].split("/", 1)[0]
             blob_path = sequence[5:].split("/", 1)[1]
             bucket = self.storage_client.bucket(bucket_name)
             sequence = bucket.blob(blob_path).download_as_text()
-            is_fasta_file = False
-        if is_fasta_file:
-            fasta_path = sequence
-            is_monomer, sequences = validate_fasta_file(fasta_path)
-        else:
-            # Parse FASTA content
-            sequences = parse_fasta_content(sequence)
-            is_monomer = len(sequences) == 1
+        elif isinstance(sequence, str) and (
+            os.path.exists(sequence) or sequence.startswith(("/", "./", "../", "~"))
+        ):
+            allowed_dir = os.path.realpath(tempfile.gettempdir())
+            real_path = os.path.realpath(sequence)
+            if os.path.commonpath([real_path, allowed_dir]) != allowed_dir or not os.path.isfile(
+                real_path
+            ):
+                raise ValueError(
+                    f"Local sequence file path must be within authorized directory ({allowed_dir}): {sequence}"
+                )
+            with open(real_path, encoding="utf-8") as f:
+                sequence = f.read()
 
-            # Write to temporary file
-            temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False)
-            write_fasta(sequences, temp_file.name)
-            fasta_path = temp_file.name
+        # Parse and validate FASTA content before writing/uploading to GCS
+        sequences = parse_fasta_content(sequence)
+        is_monomer = len(sequences) == 1
 
         if not is_monomer:
             raise ValueError(
                 "Sequence appears to be multimer. Use submit_af2_multimer_prediction instead."
             )
 
+        # Write validated FASTA sequences to a secure temporary file
+        temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False)
+        write_fasta(sequences, temp_file.name)
+        fasta_path = temp_file.name
+
         seq_name = sequences[0]["description"].split()[0] if sequences else job_name
         seq_length = get_sequence_length(sequences)
 
-        # Upload to GCS
-        gcs_sequence_path = f"gs://{self.config.bucket_name}/fasta/{job_name}.fasta"
-        self._upload_to_gcs(fasta_path, gcs_sequence_path)
+        with tempfile.NamedTemporaryFile(
+            mode="w", prefix=f"af2_pipeline_{job_name}_", suffix=".json", delete=False
+        ) as pipeline_tmp:
+            pipeline_path = pipeline_tmp.name
 
-        # Get Filestore info if not already configured
-        if not self.config.filestore_ip:
-            filestore_ip, filestore_network = self._get_filestore_info()
-        else:
-            filestore_ip = self.config.filestore_ip
-            filestore_network = self.config.filestore_network
+        try:
+            # Upload validated FASTA to GCS
+            gcs_sequence_path = f"gs://{self.config.bucket_name}/fasta/{job_name}.fasta"
+            self._upload_to_gcs(fasta_path, gcs_sequence_path)
 
-        # Setup hardware configuration and environment (auto-selects GPU and MSA method)
-        hardware_config = self._get_hardware_config(
-            gpu_type,
-            relax_gpu_type=relax_gpu_type,
-            msa_method=msa_method,
-            use_small_bfd=use_small_bfd,
-            seq_length=seq_length,
-            is_multimer=False,
-        )
+            # Get Filestore info if not already configured
+            if not self.config.filestore_ip:
+                filestore_ip, filestore_network = self._get_filestore_info()
+            else:
+                filestore_ip = self.config.filestore_ip
+                filestore_network = self.config.filestore_network
 
-        # Resolve actual values for labels and response (in case 'auto' was used)
-        resolved_gpu = hardware_config["predict_accel"]
-        resolved_msa = hardware_config["msa_method"]
-        accel_to_label = {
-            "NVIDIA_L4": "l4",
-            "NVIDIA_TESLA_A100": "a100",
-            "NVIDIA_A100_80GB": "a100-80gb",
-        }
+            # Setup hardware configuration and environment (auto-selects GPU and MSA method)
+            hardware_config = self._get_hardware_config(
+                gpu_type,
+                relax_gpu_type=relax_gpu_type,
+                msa_method=msa_method,
+                use_small_bfd=use_small_bfd,
+                seq_length=seq_length,
+                is_multimer=False,
+            )
 
-        # Pass filestore info to environment setup
-        self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
+            # Resolve actual values for labels and response (in case 'auto' was used)
+            resolved_gpu = hardware_config["predict_accel"]
+            resolved_msa = hardware_config["msa_method"]
+            accel_to_label = {
+                "NVIDIA_L4": "l4",
+                "NVIDIA_TESLA_A100": "a100",
+                "NVIDIA_A100_80GB": "a100-80gb",
+            }
 
-        # Import the vendored pipeline
-        from ..utils.pipeline_utils import load_vertex_pipeline
+            with _COMPILE_ENV_LOCK:
+                # Pass filestore info to environment setup
+                self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
 
-        pipeline = load_vertex_pipeline(
-            enable_flex_start=enable_flex_start, msa_method=resolved_msa
-        )
+                # Import the vendored pipeline
+                from ..utils.pipeline_utils import load_vertex_pipeline
 
-        # Compile pipeline
-        pipeline_path = os.path.join(tempfile.gettempdir(), f"af2_pipeline_{job_name}.json")
-        from kfp import compiler
+                pipeline = load_vertex_pipeline(
+                    enable_flex_start=enable_flex_start, msa_method=resolved_msa
+                )
 
-        compiler.Compiler().compile(pipeline_func=pipeline, package_path=pipeline_path)
+                # Compile pipeline
+                from kfp import compiler
 
-        # Prepare labels (use resolved values, not 'auto')
-        labels = {
-            "model_type": "alphafold2",
-            "job_type": "monomer",
-            "query_name": self._clean_label(seq_name),
-            "num_tokens": str(seq_length),
-            "num_chains": "1",
-            "gpu_type": accel_to_label.get(resolved_gpu, gpu_type.lower().replace("_", "-")),
-            "msa_method": resolved_msa,
-            "submitted_by": "foldrun-agent",
-        }
+                compiler.Compiler().compile(pipeline_func=pipeline, package_path=pipeline_path)
 
-        # Submit pipeline job
-        pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            # Prepare labels (use resolved values, not 'auto')
+            labels = {
+                "model_type": "alphafold2",
+                "job_type": "monomer",
+                "query_name": self._clean_label(seq_name),
+                "num_tokens": str(seq_length),
+                "num_chains": "1",
+                "gpu_type": accel_to_label.get(resolved_gpu, gpu_type.lower().replace("_", "-")),
+                "msa_method": resolved_msa,
+                "submitted_by": "foldrun-agent",
+            }
 
-        # Prepare scheduling strategy
-        job_kwargs = {
-            "display_name": job_name,
-            "template_path": pipeline_path,
-            "pipeline_root": pipeline_root,
-            "parameter_values": {
-                "sequence_path": gcs_sequence_path,
-                "max_template_date": max_template_date,
-                "model_preset": "monomer",
-                "model_params_gcs_location": os.environ.get("MODEL_PARAMS_GCS_LOCATION"),
-                "project": self.config.project_id,
-                "region": self.config.region,
-                "use_small_bfd": use_small_bfd,
-                "num_multimer_predictions_per_model": 1,
-                "is_run_relax": "relax" if run_relaxation else "",
-            },
-            "enable_caching": True,  # Enable caching to reuse previous run results
-            "labels": labels,
-        }
+            # Submit pipeline job
+            pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            model_params_gcs_location = f"gs://{self.config.databases_bucket_name}/alphafold2"
 
-        # Submit pipeline job (DWS scheduling already baked into compiled pipeline if enabled)
-        pipeline_job = vertex_ai.PipelineJob(**job_kwargs)
-        pipeline_job.submit(
-            network=filestore_network, service_account=self.config.pipelines_sa_email
-        )
+            # Prepare scheduling strategy
+            job_kwargs = {
+                "display_name": job_name,
+                "template_path": pipeline_path,
+                "pipeline_root": pipeline_root,
+                "parameter_values": {
+                    "sequence_path": gcs_sequence_path,
+                    "max_template_date": max_template_date,
+                    "model_preset": "monomer",
+                    "model_params_gcs_location": model_params_gcs_location,
+                    "project": self.config.project_id,
+                    "region": self.config.region,
+                    "use_small_bfd": use_small_bfd,
+                    "num_multimer_predictions_per_model": 1,
+                    "is_run_relax": "relax" if run_relaxation else "",
+                },
+                "enable_caching": True,  # Enable caching to reuse previous run results
+                "labels": labels,
+            }
 
-        # Clean up
-        os.remove(pipeline_path)
-        if not is_fasta_file:
-            os.remove(fasta_path)
+            # Submit pipeline job (DWS scheduling already baked into compiled pipeline if enabled)
+            pipeline_job = vertex_ai.PipelineJob(**job_kwargs)
+            pipeline_job.submit(
+                network=filestore_network, service_account=self.config.pipelines_sa_email
+            )
+        finally:
+            if os.path.exists(pipeline_path):
+                os.remove(pipeline_path)
+            if not is_fasta_file and os.path.exists(fasta_path):
+                os.remove(fasta_path)
 
         # Return result
         return {

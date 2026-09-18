@@ -77,7 +77,7 @@ class OF3JobAnalysisTool(OF3Tool):
 
             summary_blob = bucket.blob(f"{prefix}summary.json")
             if summary_blob.exists():
-                content = summary_blob.download_as_string()
+                content = summary_blob.download_as_text()
                 return True, json.loads(content)
 
             return False, None

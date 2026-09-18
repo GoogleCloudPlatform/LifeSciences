@@ -14,7 +14,9 @@
 
 """FASTA validation utilities for AlphaFold submissions."""
 
-import re
+from foldrun_app.core.fasta import fix_fasta
+
+_VALID_AA_WITH_AMBIGUOUS = frozenset("ACDEFGHIKLMNPQRSTVWYXU")
 
 
 class FastaValidationError(Exception):
@@ -149,9 +151,7 @@ def _parse_fasta_chains(sequence: str) -> list[dict[str, str]]:
     """
     chains = []
 
-    # Fix common copy-paste formatting issues (missing newlines, etc.)
-    from foldrun_app.core.fasta import fix_fasta
-
+    # Fix common copy-paste formatting issues in linear O(N) time
     sequence = fix_fasta(sequence)
 
     # Check if it's FASTA format with headers
@@ -211,11 +211,7 @@ def _clean_sequence(sequence: str) -> str:
     Returns:
         Cleaned sequence string (uppercase, no whitespace)
     """
-    # Remove all whitespace
-    seq = re.sub(r"\s+", "", sequence)
-    # Convert to uppercase
-    seq = seq.upper()
-    return seq
+    return "".join(sequence.split()).upper()
 
 
 def _find_invalid_amino_acids(sequence: str) -> list[str]:
@@ -227,19 +223,7 @@ def _find_invalid_amino_acids(sequence: str) -> list[str]:
     Returns:
         List of invalid characters found
     """
-    # Standard amino acids (20 canonical)
-    valid_aa = set("ACDEFGHIKLMNPQRSTVWY")
-
-    # Also allow X (unknown) and U (selenocysteine, rare but valid)
-    valid_aa.add("X")
-    valid_aa.add("U")
-
-    invalid = []
-    for char in sequence.upper():
-        if char not in valid_aa:
-            invalid.append(char)
-
-    return invalid
+    return [char for char in sequence.upper() if char not in _VALID_AA_WITH_AMBIGUOUS]
 
 
 def format_fasta_for_submission(sequence: str, name: str = "sequence") -> str:

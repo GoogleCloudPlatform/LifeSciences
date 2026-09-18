@@ -162,3 +162,119 @@ class TestAF2ComponentSources:
         """version.py component tracks AF2 component image version."""
         src = _read_component("version")
         assert len(src) > 0
+
+
+class TestDataPipelineNumAlignments:
+    """Verify safe integer conversion of features_dict["num_alignments"] in multimer mode."""
+
+    def _run_data_pipeline_with_num_alignments(self, tmp_path, num_alignments_val):
+        import sys
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import patch
+
+        pipeline_dir = os.path.normpath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "..",
+                "..",
+                "foldrun_app",
+                "models",
+                "af2",
+                "pipeline",
+            )
+        )
+        fake_alphafold_utils = ModuleType("alphafold_utils")
+
+        def _fake_run_data_pipeline(**kwargs):
+            with open(kwargs["features_output_path"], "wb") as f:
+                f.write(b"fake_features")
+            return {"num_alignments": num_alignments_val}, {"msa_count": 1}
+
+        fake_alphafold_utils.run_data_pipeline = _fake_run_data_pipeline
+        fake_alphafold_utils.run_mmseqs2_data_pipeline = _fake_run_data_pipeline
+
+        seq_file = tmp_path / "seq.fasta"
+        seq_file.write_text(">chainA\nACDEFG\n>chainB\nACDEFG\n")
+        nfs_dir = tmp_path / "nfs"
+        nfs_dir.mkdir()
+        msas_dir = tmp_path / "msas"
+        features_file = tmp_path / "features.pkl"
+
+        sequence = SimpleNamespace(path=str(seq_file))
+        ref_databases = SimpleNamespace(
+            uri=str(nfs_dir),
+            metadata={
+                "uniref90": "uniref90",
+                "mgnify": "mgnify",
+                "uniref30": "uniref30",
+                "bfd": "bfd",
+                "small_bfd": "small_bfd",
+                "uniprot": "uniprot",
+                "pdb70": "pdb70",
+                "pdb_obsolete": "pdb_obsolete",
+                "pdb_seqres": "pdb_seqres",
+                "pdb_mmcif": "pdb_mmcif",
+            },
+        )
+        msas = SimpleNamespace(path=str(msas_dir), metadata={})
+        features = SimpleNamespace(path=str(features_file), metadata={})
+
+        env = {
+            "GCP_PROJECT_ID": "test-project",
+            "GCP_REGION": "us-central1",
+            "GCS_BUCKET_NAME": "test-bucket",
+            "FILESTORE_ID": "test-nfs",
+            "ALPHAFOLD_COMPONENTS_IMAGE": "af2-image:latest",
+            "BOLTZ2_COMPONENTS_IMAGE": "boltz2-image:stable",
+            "OPENFOLD3_COMPONENTS_IMAGE": "of3-image:latest",
+            "NFS_SERVER": "10.1.0.2",
+            "NFS_PATH": "/datasets",
+            "NFS_MOUNT_POINT": "/mnt/nfs/foldrun",
+            "NETWORK": "projects/123/global/networks/test-net",
+            "DATA_PIPELINE_MACHINE_TYPE": "c2-standard-16",
+            "PREDICT_MACHINE_TYPE": "a2-highgpu-1g",
+            "PREDICT_ACCELERATOR_TYPE": "NVIDIA_TESLA_A100",
+            "PREDICT_ACCELERATOR_COUNT": "1",
+            "RELAX_MACHINE_TYPE": "a2-highgpu-1g",
+            "RELAX_ACCELERATOR_TYPE": "NVIDIA_TESLA_A100",
+            "RELAX_ACCELERATOR_COUNT": "1",
+            "PARALLELISM": "5",
+            "DWS_MAX_WAIT_HOURS": "168",
+            "MODEL_PARAMS_GCS_LOCATION": "gs://test-bucket/alphafold2",
+            "GOOGLE_CLOUD_PROJECT": "test-project",
+            "GOOGLE_CLOUD_LOCATION": "global",
+        }
+        with (
+            patch.dict(os.environ, env, clear=False),
+            patch.dict(sys.modules, {"alphafold_utils": fake_alphafold_utils}),
+        ):
+            if pipeline_dir not in sys.path:
+                sys.path.insert(0, pipeline_dir)
+            from foldrun_app.models.af2.pipeline.components.data_pipeline import data_pipeline
+
+            data_pipeline.python_func(
+                sequence=sequence,
+                ref_databases=ref_databases,
+                run_multimer_system=True,
+                use_small_bfd=True,
+                max_template_date="2022-01-01",
+                msa_method="jackhmmer",
+                msas=msas,
+                features=features,
+            )
+        return features.metadata["final_dedup_msa_size"]
+
+    def test_multimer_num_alignments_1d_numpy_array(self, tmp_path):
+        import numpy as np
+
+        arr = np.array([128, 128, 128], dtype=np.int32)
+        result = self._run_data_pipeline_with_num_alignments(tmp_path, arr)
+        assert result == 128
+        assert isinstance(result, int)
+
+    def test_multimer_num_alignments_scalar(self, tmp_path):
+        result = self._run_data_pipeline_with_num_alignments(tmp_path, 256)
+        assert result == 256
+        assert isinstance(result, int)
