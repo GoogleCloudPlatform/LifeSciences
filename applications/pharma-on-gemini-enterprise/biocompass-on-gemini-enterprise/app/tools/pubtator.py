@@ -23,6 +23,7 @@ gene-interacts-gene, ...).
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 import httpx
@@ -32,15 +33,18 @@ from . import _http
 _BASE_URL = "https://www.ncbi.nlm.nih.gov/research/pubtator3-api"
 _RATE_LIMIT_S = 0.34  # 3 req/sec
 _last_request: float = 0.0
+_rate_limit_lock = asyncio.Lock()
 
 
 async def _rate_limit() -> None:
     global _last_request
-    loop = asyncio.get_event_loop()
-    elapsed = loop.time() - _last_request
-    if elapsed < _RATE_LIMIT_S:
-        await asyncio.sleep(_RATE_LIMIT_S - elapsed)
-    _last_request = loop.time()
+    async with _rate_limit_lock:
+        now = time.monotonic()
+        target = max(now, _last_request + _RATE_LIMIT_S)
+        _last_request = target
+        delay = target - now
+    if delay > 0:
+        await asyncio.sleep(delay)
 
 
 def _err(e: Exception, ctx: str) -> dict[str, Any]:
