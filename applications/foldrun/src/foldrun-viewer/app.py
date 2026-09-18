@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import urllib.parse
 from datetime import datetime
 
 import google.auth
@@ -53,23 +54,49 @@ _creds, _ = google.auth.default(
 storage_client = storage.Client(project=PROJECT_ID, credentials=_creds)
 
 
-def parse_gcs_uri(uri):
-    """Parse gs://bucket/path URI into bucket and path components"""
-    if not uri.startswith("gs://"):
+ALLOWED_GCS_PREFIXES = ("pipeline_runs/",)
+JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def parse_gcs_uri(uri, allowed_extensions=None):
+    """Parse and validate gs://bucket/path URI into bucket and path components."""
+    if not uri or not uri.startswith("gs://"):
         raise ValueError(f"Invalid GCS URI: {uri}")
 
-    uri = uri[5:]  # Remove 'gs://'
-    parts = uri.split("/", 1)
+    uri_body = uri[5:]  # Remove 'gs://'
+    parts = uri_body.split("/", 1)
+    bucket_name = parts[0]
+    blob_path = parts[1] if len(parts) > 1 else ""
 
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], parts[1]
+    if bucket_name != BUCKET_NAME:
+        raise ValueError(
+            f"Access denied: bucket '{bucket_name}' does not match configured BUCKET_NAME"
+        )
+
+    if ".." in blob_path.split("/") or ".." in blob_path or blob_path.startswith("/"):
+        raise ValueError(f"Invalid GCS path: path traversal detected in '{blob_path}'")
+
+    if not blob_path or not any(
+        blob_path.startswith(prefix) for prefix in ALLOWED_GCS_PREFIXES
+    ):
+        raise ValueError(
+            f"Invalid GCS path: '{blob_path}' must start with an allowed prefix {ALLOWED_GCS_PREFIXES}"
+        )
+
+    if allowed_extensions and not blob_path.lower().endswith(allowed_extensions):
+        raise ValueError(
+            f"Invalid GCS path: '{blob_path}' must end with one of {allowed_extensions}"
+        )
+
+    return bucket_name, blob_path
 
 
-def load_gcs_file(uri, as_json=False):
+def load_gcs_file(uri, as_json=False, allowed_extensions=None):
     """Load a file from GCS"""
     try:
-        bucket_name, blob_path = parse_gcs_uri(uri)
+        bucket_name, blob_path = parse_gcs_uri(
+            uri, allowed_extensions=allowed_extensions
+        )
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
 
@@ -87,7 +114,7 @@ def load_gcs_file(uri, as_json=False):
 
 def get_pdb_content(pdb_uri):
     """Get PDB file content from GCS"""
-    return load_gcs_file(pdb_uri)
+    return load_gcs_file(pdb_uri, allowed_extensions=(".pdb",))
 
 
 def get_analysis_summary(job_id=None, summary_uri=None):
@@ -97,7 +124,7 @@ def get_analysis_summary(job_id=None, summary_uri=None):
     date from the pipeline job name and scanning matching pipeline_runs/ dirs.
     """
     if summary_uri:
-        return load_gcs_file(summary_uri, as_json=True)
+        return load_gcs_file(summary_uri, as_json=True, allowed_extensions=(".json",))
 
     if not job_id:
         raise ValueError("Either job_id or summary_uri must be provided")
@@ -363,6 +390,9 @@ def get_pdb():
     try:
         content = get_pdb_content(pdb_uri)
         return content, 200, {"Content-Type": "text/plain"}
+    except ValueError as e:
+        logger.warning(f"Invalid PDB URI: {e}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error fetching PDB: {e}")
         return jsonify({"error": str(e)}), 500
@@ -377,8 +407,11 @@ def get_cif():
         return jsonify({"error": "uri parameter is required"}), 400
 
     try:
-        content = load_gcs_file(cif_uri)
+        content = load_gcs_file(cif_uri, allowed_extensions=(".cif",))
         return content, 200, {"Content-Type": "text/plain"}
+    except ValueError as e:
+        logger.warning(f"Invalid CIF URI: {e}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error fetching CIF: {e}")
         return jsonify({"error": str(e)}), 500
@@ -396,6 +429,9 @@ def get_analysis():
     try:
         summary = get_analysis_summary(job_id=job_id, summary_uri=summary_uri)
         return jsonify(summary)
+    except ValueError as e:
+        logger.warning(f"Invalid analysis request: {e}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error fetching analysis: {e}")
         return jsonify({"error": str(e)}), 500
@@ -410,7 +446,9 @@ def get_image():
         return jsonify({"error": "uri parameter is required"}), 400
 
     try:
-        bucket_name, blob_path = parse_gcs_uri(uri)
+        bucket_name, blob_path = parse_gcs_uri(
+            uri, allowed_extensions=(".png", ".jpg", ".jpeg")
+        )
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
 
@@ -423,6 +461,9 @@ def get_image():
             content_type = "image/jpeg"
 
         return image_bytes, 200, {"Content-Type": content_type}
+    except ValueError as e:
+        logger.warning(f"Invalid image URI: {e}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error fetching image from {uri}: {e}")
         return jsonify({"error": str(e)}), 500
@@ -548,13 +589,18 @@ def trigger_analysis():
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
 
+    if not JOB_ID_PATTERN.match(str(job_id)):
+        return jsonify({"error": "Invalid job_id format"}), 400
+
+    safe_job_id = urllib.parse.quote(str(job_id), safe="")
+
     try:
         authed = _get_authed_session()
 
         # Fetch the full pipeline job to get gcsOutputDirectory
         pj_url = (
             f"https://{REGION}-aiplatform.googleapis.com/v1"
-            f"/projects/{PROJECT_ID}/locations/{REGION}/pipelineJobs/{job_id}"
+            f"/projects/{PROJECT_ID}/locations/{REGION}/pipelineJobs/{safe_job_id}"
         )
         pj_resp = authed.get(pj_url, timeout=15)
         pj_resp.raise_for_status()
