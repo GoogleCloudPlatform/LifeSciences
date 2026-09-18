@@ -45,10 +45,71 @@ from .shared_utils import (
 logger = logging.getLogger(__name__)
 
 
+_ALLOWED_PICKLE_GLOBALS: set[tuple[str, str]] = {
+    ("builtins", "dict"),
+    ("builtins", "list"),
+    ("builtins", "tuple"),
+    ("builtins", "set"),
+    ("builtins", "frozenset"),
+    ("builtins", "int"),
+    ("builtins", "float"),
+    ("builtins", "str"),
+    ("builtins", "bytes"),
+    ("builtins", "bool"),
+    ("builtins", "complex"),
+    ("builtins", "slice"),
+    ("numpy", "ndarray"),
+    ("numpy", "dtype"),
+    ("numpy.core.multiarray", "_reconstruct"),
+    ("numpy.core.multiarray", "scalar"),
+    ("numpy._core.multiarray", "_reconstruct"),
+    ("numpy._core.multiarray", "scalar"),
+    ("numpy.core.numeric", "_frombuffer"),
+    ("numpy._core.numeric", "_frombuffer"),
+    ("ml_dtypes", "bfloat16"),
+}
+
+_ALLOWED_NUMPY_RECONSTRUCTORS = {
+    getattr(getattr(np, "_core", np.core).multiarray, "_reconstruct", None),
+} - {None}
+
+
+def _safe_reconstruct_jax_array(fun, args, arr_state, aval_state=None):
+    """Safely reconstruct a pickled JAX ArrayImpl into a NumPy ndarray."""
+    if fun not in _ALLOWED_NUMPY_RECONSTRUCTORS:
+        raise pickle.UnpicklingError(
+            f"Forbidden constructor in JAX array reconstruction: {fun!r}"
+        )
+    np_value = fun(*args)
+    if not isinstance(np_value, np.ndarray):
+        raise pickle.UnpicklingError(
+            f"Expected ndarray from JAX array reconstruction, got {type(np_value).__name__}"
+        )
+    np_value.__setstate__(arr_state)
+    return np_value
+
+
+class _RestrictedPredictionUnpickler(pickle.Unpickler):
+    """Restricted unpickler permitting only safe NumPy/JAX array and primitive types."""
+
+    def find_class(self, module: str, name: str):
+        if (module, name) == ("jax._src.array", "_reconstruct_array"):
+            return _safe_reconstruct_jax_array
+        if (module, name) in _ALLOWED_PICKLE_GLOBALS:
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(
+            f"Forbidden global during prediction unpickling: {module}.{name}"
+        )
+
+
 def load_raw_prediction(pickle_path: str) -> dict:
-    """Load raw prediction pickle file."""
+    """Load raw prediction pickle file using restricted unpickler."""
     with open(pickle_path, "rb") as f:
-        raw_prediction = pickle.load(f)
+        raw_prediction = _RestrictedPredictionUnpickler(f).load()
+    if not isinstance(raw_prediction, dict):
+        raise pickle.UnpicklingError(
+            f"Expected prediction payload to be a dict, got {type(raw_prediction).__name__}"
+        )
     return raw_prediction
 
 

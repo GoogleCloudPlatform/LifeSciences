@@ -64,3 +64,95 @@ class TestAF2Analysis:
         assert af2_analyzer.get_quality_assessment(65.0) == "low_confidence"
         assert af2_analyzer.get_quality_assessment(50.0) == "low_confidence"
         assert af2_analyzer.get_quality_assessment(45.0) == "very_low_confidence"
+
+    def test_load_raw_prediction_valid_numpy_dict(self, tmp_path):
+        """Legitimate AlphaFold2 prediction dict with NumPy arrays and scalars deserializes cleanly."""
+        import pickle
+
+        import numpy as np
+
+        valid_payload = {
+            "plddt": np.array([91.5, 88.0, 74.2], dtype=np.float32),
+            "predicted_aligned_error": np.array(
+                [[0.5, 2.1, 4.3], [2.0, 0.4, 3.1], [4.1, 3.0, 0.6]],
+                dtype=np.float64,
+            ),
+            "max_predicted_aligned_error": np.float64(31.75),
+            "ranking_confidence": 0.92,
+        }
+        pkl_file = tmp_path / "valid_prediction.pkl"
+        with open(pkl_file, "wb") as f:
+            pickle.dump(valid_payload, f)
+
+        loaded = af2_analyzer.load_raw_prediction(str(pkl_file))
+        assert isinstance(loaded, dict)
+        assert np.allclose(loaded["plddt"], valid_payload["plddt"])
+        assert np.allclose(
+            loaded["predicted_aligned_error"], valid_payload["predicted_aligned_error"]
+        )
+        assert float(loaded["max_predicted_aligned_error"]) == 31.75
+
+    def test_load_raw_prediction_blocks_rce_payload(self, tmp_path):
+        """Malicious pickle payloads attempting arbitrary code execution via __reduce__ are blocked."""
+        import os
+        import pickle
+
+        import pytest
+
+        marker = tmp_path / "rce_marker.txt"
+
+        class ExploitPayload:
+            def __reduce__(self):
+                return (os.system, (f"touch {marker}",))
+
+        malicious_file = tmp_path / "malicious.pkl"
+        with open(malicious_file, "wb") as f:
+            pickle.dump({"plddt": ExploitPayload()}, f)
+
+        with pytest.raises(pickle.UnpicklingError, match="Forbidden global"):
+            af2_analyzer.load_raw_prediction(str(malicious_file))
+
+        assert not marker.exists()
+
+    def test_load_raw_prediction_valid_jax_array_dict(self, tmp_path):
+        """Legitimate AlphaFold2 prediction dict containing JAX arrays deserializes cleanly."""
+        import pickle
+
+        import jax.numpy as jnp
+        import numpy as np
+
+        valid_payload = {
+            "plddt": jnp.array([91.5, 88.0, 74.2], dtype=jnp.float32),
+            "predicted_aligned_error": jnp.array(
+                [[0.5, 2.1, 4.3], [2.0, 0.4, 3.1], [4.1, 3.0, 0.6]],
+                dtype=jnp.float32,
+            ),
+            "bfloat16_logits": jnp.array([1.25, -0.5], dtype=jnp.bfloat16),
+            "max_predicted_aligned_error": np.float64(31.75),
+            "ranking_confidence": 0.92,
+        }
+        pkl_file = tmp_path / "valid_jax_prediction.pkl"
+        with open(pkl_file, "wb") as f:
+            pickle.dump(valid_payload, f)
+
+        loaded = af2_analyzer.load_raw_prediction(str(pkl_file))
+        assert isinstance(loaded, dict)
+        assert isinstance(loaded["plddt"], np.ndarray)
+        assert np.allclose(loaded["plddt"], valid_payload["plddt"])
+        assert np.allclose(
+            loaded["predicted_aligned_error"],
+            valid_payload["predicted_aligned_error"],
+        )
+        assert float(loaded["max_predicted_aligned_error"]) == 31.75
+
+    def test_load_raw_prediction_blocks_forged_jax_reconstructor(self, tmp_path):
+        """Forged constructor passed to _safe_reconstruct_jax_array is rejected."""
+        import pickle
+
+        import pytest
+
+        with pytest.raises(
+            pickle.UnpicklingError,
+            match="Forbidden constructor in JAX array reconstruction",
+        ):
+            af2_analyzer._safe_reconstruct_jax_array(dict, (), {}, {})
