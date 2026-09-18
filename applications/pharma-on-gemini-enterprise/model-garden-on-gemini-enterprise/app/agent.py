@@ -308,6 +308,11 @@ async def _inject_uploaded_artifacts(
 
         # Resolve GE filename markers into inline_data Parts loaded from artifacts.
         injected: set[str] = set()
+        existing_blobs: set[tuple[str | None, bytes | None]] = {
+            (p.inline_data.mime_type, p.inline_data.data)
+            for p in content.parts
+            if p.inline_data is not None
+        }
         name_by_part_id: dict[int, str] = {}
         for part in list(content.parts):
             if not part.text:
@@ -321,15 +326,30 @@ async def _inject_uploaded_artifacts(
                 )
                 if artifact_part is None or artifact_part.inline_data is None:
                     continue
-                new_part = types.Part(
-                    inline_data=types.Blob(
-                        mime_type=artifact_part.inline_data.mime_type,
-                        data=artifact_part.inline_data.data,
-                    )
+                blob_key = (
+                    artifact_part.inline_data.mime_type,
+                    artifact_part.inline_data.data,
                 )
-                content.parts.append(new_part)
-                name_by_part_id[id(new_part)] = name
+                if blob_key not in existing_blobs:
+                    new_part = types.Part(
+                        inline_data=types.Blob(
+                            mime_type=artifact_part.inline_data.mime_type,
+                            data=artifact_part.inline_data.data,
+                        )
+                    )
+                    content.parts.append(new_part)
+                    name_by_part_id[id(new_part)] = name
+                    existing_blobs.add(blob_key)
                 injected.add(name)
+            if injected:
+                part.text = _FILE_MARKER_RE.sub(
+                    lambda m, resolved=injected: (
+                        f"[Uploaded file: {m.group('name').strip()}]"
+                        if m.group("name").strip() in resolved
+                        else m.group(0)
+                    ),
+                    part.text,
+                )
 
         # === OPTIONAL: Code execution routing — uncomment to enable. ===
         # Routes binary data files (xlsx, parquet, etc.) the model can't read

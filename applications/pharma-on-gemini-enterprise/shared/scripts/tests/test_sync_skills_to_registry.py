@@ -18,6 +18,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+import zipfile
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -27,6 +28,7 @@ from sync_skills_to_registry import (
     activate_all_draft_skills,
     is_skill_up_to_date,
     normalize_skill_id,
+    package_skill_to_zip,
     parse_frontmatter,
     sync_skills,
 )
@@ -549,6 +551,31 @@ Here is markdown content.
                                     concurrency=1,
                                 )
                             self.assertEqual(ctx.exception.code, 1)
+
+    def test_package_skill_to_zip_skips_symlinks_escaping_skill_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = pathlib.Path(tmp_dir)
+            secret_file = tmp_path / "outside_secret.txt"
+            secret_file.write_text("sensitive-host-credential", encoding="utf-8")
+
+            skill_dir = tmp_path / "my-skill"
+            skill_dir.mkdir()
+            (skill_dir / "SKILL.md").write_text("# My Skill", encoding="utf-8")
+            scripts_dir = skill_dir / "scripts"
+            scripts_dir.mkdir()
+            (scripts_dir / "helper.py").write_text("print(1)", encoding="utf-8")
+
+            # Create symlink pointing outside skill_dir
+            (skill_dir / "leaked_secret.txt").symlink_to(secret_file)
+
+            zip_path = tmp_path / "skill.zip"
+            package_skill_to_zip(skill_dir, zip_path)
+
+            with zipfile.ZipFile(zip_path, "r") as z:
+                names = set(z.namelist())
+                self.assertIn("SKILL.md", names)
+                self.assertIn("scripts/helper.py", names)
+                self.assertNotIn("leaked_secret.txt", names)
 
 
 if __name__ == "__main__":

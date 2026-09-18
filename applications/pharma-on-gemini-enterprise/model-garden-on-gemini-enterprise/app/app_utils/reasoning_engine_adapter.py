@@ -26,6 +26,7 @@ import inspect
 import json
 
 from fastapi import FastAPI, HTTPException, Request, encoders, responses
+from fastapi.concurrency import run_in_threadpool
 from vertexai.agent_engines.templates.adk import AdkApp
 
 from app.app_utils import services
@@ -96,7 +97,7 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
         output = (
             await method(**kwargs)
             if inspect.iscoroutinefunction(method)
-            else method(**kwargs)
+            else await run_in_threadpool(method, **kwargs)
         )
         return responses.JSONResponse(
             content=encoders.jsonable_encoder({"output": output})

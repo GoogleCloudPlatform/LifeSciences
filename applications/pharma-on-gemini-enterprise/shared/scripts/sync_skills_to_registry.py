@@ -105,8 +105,17 @@ def package_skill_to_zip(skill_dir: pathlib.Path, zip_path: pathlib.Path) -> Non
         ".tar",
         ".gz",
     }
+    resolved_skill_dir = skill_dir.resolve()
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         for file_path in skill_dir.rglob("*"):
+            if file_path.is_symlink() or not file_path.resolve().is_relative_to(
+                resolved_skill_dir
+            ):
+                logger.warning(
+                    "Skipping symlink or path resolving outside skill directory: %s",
+                    file_path,
+                )
+                continue
             if file_path.is_file():
                 if (
                     "__pycache__" in file_path.parts
