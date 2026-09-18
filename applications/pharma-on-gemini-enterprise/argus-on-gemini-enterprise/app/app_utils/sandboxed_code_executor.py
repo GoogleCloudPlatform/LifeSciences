@@ -22,9 +22,12 @@ are dynamically resolved and executed in an isolated sandbox environment.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import signal
 import subprocess
 import sys
+import tempfile
 from typing import override
 
 from google.adk.agents.invocation_context import InvocationContext
@@ -36,6 +39,34 @@ from google.adk.code_executors.code_execution_utils import (
 from pydantic import Field
 
 logger = logging.getLogger("argus.sandboxed_code_executor")
+
+_ALLOWED_ENV_VARS: frozenset[str] = frozenset(
+    {
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "HOME",
+        "TMPDIR",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
+        "UV_CACHE_DIR",
+        "UV_PYTHON",
+        "UV_OFFLINE",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+    }
+)
+
+
+def _build_sanitized_env(temp_dir: str) -> dict[str, str]:
+    """Constructs a minimal allowlisted environment dictionary for subprocess execution."""
+    sanitized = {
+        key: val for key, val in os.environ.items() if key in _ALLOWED_ENV_VARS
+    }
+    sanitized["TMPDIR"] = temp_dir
+    return sanitized
 
 
 def _transform_skill_wrapper_code(code: str) -> str:
@@ -71,8 +102,8 @@ class SandboxedCodeExecutor(BaseCodeExecutor):
 
     Provides:
     1. PEP 723 inline dependency resolution on-demand via `uv run`.
-    2. Subprocess and directory isolation using temporary directories.
-    3. Strict timeout enforcement and stdout/stderr capture.
+    2. Subprocess, environment, and directory isolation using temporary directories.
+    3. Strict timeout enforcement with process-group termination and stdout/stderr capture.
     """
 
     stateful: bool = Field(default=False, frozen=True, exclude=True)
@@ -93,19 +124,29 @@ class SandboxedCodeExecutor(BaseCodeExecutor):
         transformed_code = _transform_skill_wrapper_code(code_execution_input.code)
 
         try:
-            res = subprocess.run(
-                [sys.executable, "-c", transformed_code],
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_seconds,
-            )
-            stdout = res.stdout
-            stderr = res.stderr
-            if res.returncode != 0 and not stderr:
-                stderr = f"Process exited with code {res.returncode}"
-        except subprocess.TimeoutExpired:
-            stdout = ""
-            stderr = f"Code execution timed out after {self.timeout_seconds} seconds."
+            with tempfile.TemporaryDirectory(prefix="argus_sandbox_") as temp_dir:
+                sanitized_env = _build_sanitized_env(temp_dir)
+                proc = subprocess.Popen(
+                    [sys.executable, "-c", transformed_code],
+                    cwd=temp_dir,
+                    env=sanitized_env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+                try:
+                    stdout, stderr = proc.communicate(timeout=self.timeout_seconds)
+                    if proc.returncode != 0 and not stderr:
+                        stderr = f"Process exited with code {proc.returncode}"
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    proc.communicate()
+                    stdout = ""
+                    stderr = f"Code execution timed out after {self.timeout_seconds} seconds."
         except Exception as e:
             stdout = ""
             stderr = f"Subprocess execution error: {e}"

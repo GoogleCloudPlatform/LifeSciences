@@ -173,3 +173,71 @@ def test_create_agent_skill_toolset_with_scoped_skills(
             "clinical-trials-database",
         }
         assert isinstance(toolset._code_executor, SandboxedCodeExecutor)
+
+
+def test_get_local_skill_path_traversal_rejected() -> None:
+    get_local_skill.cache_clear()
+    for invalid_name in [
+        "../diligence-playbook",
+        "../../etc/passwd",
+        "/tmp/malicious-skill",
+        "subdir/skill",
+        "skill..name",
+        "",
+    ]:
+        with pytest.raises(ValueError, match="Invalid skill name"):
+            get_local_skill(invalid_name)
+
+
+@pytest.mark.asyncio
+async def test_scoped_gcp_skill_registry_empty_whitelist_fails_closed() -> None:
+    with patch(
+        "app.app_utils.skills_loader.GCPSkillRegistry.__init__", return_value=None
+    ):
+        reg = ScopedGCPSkillRegistry(
+            project_id="test-project-123",
+            location="us-central1",
+            allowed_skill_ids=[],
+        )
+        reg.project_id = "test-project-123"
+        reg.location = "us-central1"
+        reg.base_url = "https://agentregistry.googleapis.com/v1alpha"
+
+    assert reg.allowed_skill_ids == set()
+
+    with pytest.raises(ValueError, match="is not in the allowed skills"):
+        await reg.get_skill(name="private-openfda-database")
+
+    mock_search_response = MagicMock()
+    mock_search_response.json.return_value = {
+        "skills": [
+            {
+                "name": "projects/p/locations/l/skills/private-openfda-database",
+                "description": "FDA data",
+            }
+        ]
+    }
+    with patch.object(
+        reg, "_make_request", new_callable=AsyncMock, return_value=mock_search_response
+    ):
+        search_res = await reg.search_skills(query="database")
+        assert search_res == []
+
+
+def test_create_agent_skill_toolset_empty_science_skills_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project-123")
+    get_skill_registry.cache_clear()
+    get_local_skill.cache_clear()
+
+    with patch(
+        "app.app_utils.skills_loader.GCPSkillRegistry.__init__", return_value=None
+    ):
+        toolset = create_agent_skill_toolset(
+            science_skill_ids=(),
+            local_skill_names=["diligence-playbook"],
+        )
+
+        assert isinstance(toolset._registry, ScopedGCPSkillRegistry)
+        assert toolset._registry.allowed_skill_ids == set()

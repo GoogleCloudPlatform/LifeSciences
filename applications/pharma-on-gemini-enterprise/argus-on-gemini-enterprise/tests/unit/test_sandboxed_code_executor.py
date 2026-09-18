@@ -112,6 +112,102 @@ class TestSandboxedCodeExecutor(unittest.TestCase):
         )
         self.assertIn("timed out", result.stderr)
 
+    def test_sanitizes_environment_variables_and_isolates_cwd(self):
+        import json
+        import os
+        from unittest.mock import patch
+
+        host_cwd = os.getcwd()
+        probe_code = (
+            "import json, os\n"
+            "print(json.dumps({\n"
+            '  "env": dict(os.environ),\n'
+            '  "cwd": os.getcwd(),\n'
+            "}))\n"
+        )
+        fake_secrets = {
+            "GOOGLE_APPLICATION_CREDENTIALS": "/secret/sa.json",
+            "OPENAI_API_KEY": "sk-test-secret",
+            "AWS_SECRET_ACCESS_KEY": "aws-secret",
+            "CUSTOM_HOST_SECRET": "leaked-host-secret",
+        }
+        with patch.dict(os.environ, fake_secrets):
+            result = self.executor.execute_code(
+                self.mock_context,
+                CodeExecutionInput(code=probe_code),
+            )
+        self.assertIsNone(result.stderr)
+        data = json.loads(result.stdout.strip())
+        child_env = data["env"]
+        for secret_key in fake_secrets:
+            self.assertNotIn(
+                secret_key,
+                child_env,
+                f"Sensitive env var {secret_key} leaked into sandboxed subprocess",
+            )
+        self.assertNotEqual(
+            os.path.realpath(data["cwd"]),
+            os.path.realpath(host_cwd),
+            "Sandboxed subprocess executed in host CWD instead of isolated temporary directory",
+        )
+
+    def test_terminates_grandchild_processes_on_timeout(self):
+        import os
+        import tempfile
+        import time
+
+        with tempfile.NamedTemporaryFile(mode="r+", delete=False) as pid_file:
+            pid_path = pid_file.name
+
+        try:
+            quick_timeout_executor = SandboxedCodeExecutor(timeout_seconds=1)
+            grandchild_spawner_code = (
+                "import subprocess, sys, time\n"
+                f'p = subprocess.Popen([sys.executable, "-c", "import os, time; open({pid_path!r}, \\"w\\").write(str(os.getpid())); time.sleep(30)"])\n'
+                "time.sleep(30)\n"
+            )
+            result = quick_timeout_executor.execute_code(
+                self.mock_context,
+                CodeExecutionInput(code=grandchild_spawner_code),
+            )
+            self.assertIn("timed out", result.stderr)
+
+            # Give OS a brief moment to reap killed processes
+            time.sleep(0.2)
+            with open(pid_path) as f:
+                pid_str = f.read().strip()
+            self.assertTrue(pid_str, "Grandchild process did not write PID")
+            grandchild_pid = int(pid_str)
+
+            def _is_process_running(pid: int) -> bool:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    return False
+                try:
+                    with open(f"/proc/{pid}/status") as status_file:
+                        for line in status_file:
+                            if line.startswith("State:") and "\tZ" in line:
+                                return False
+                except FileNotFoundError:
+                    return False
+                return True
+
+            is_alive = _is_process_running(grandchild_pid)
+            if is_alive:
+                try:
+                    os.kill(grandchild_pid, 9)
+                except ProcessLookupError:
+                    pass
+
+            self.assertFalse(
+                is_alive,
+                f"Grandchild process {grandchild_pid} survived timeout as an orphan",
+            )
+        finally:
+            if os.path.exists(pid_path):
+                os.unlink(pid_path)
+
 
 if __name__ == "__main__":
     unittest.main()

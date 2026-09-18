@@ -558,6 +558,12 @@ Here is markdown content.
             secret_file = tmp_path / "outside_secret.txt"
             secret_file.write_text("sensitive-host-credential", encoding="utf-8")
 
+            outside_dir = tmp_path / "outside_dir"
+            outside_dir.mkdir()
+            (outside_dir / "cred.json").write_text(
+                '{"token": "secret"}', encoding="utf-8"
+            )
+
             skill_dir = tmp_path / "my-skill"
             skill_dir.mkdir()
             (skill_dir / "SKILL.md").write_text("# My Skill", encoding="utf-8")
@@ -565,8 +571,11 @@ Here is markdown content.
             scripts_dir.mkdir()
             (scripts_dir / "helper.py").write_text("print(1)", encoding="utf-8")
 
-            # Create symlink pointing outside skill_dir
+            # Create symlink pointing outside skill_dir (file & directory) and a symlink loop
             (skill_dir / "leaked_secret.txt").symlink_to(secret_file)
+            (skill_dir / "leaked_dir").symlink_to(outside_dir)
+            (skill_dir / "loop_a").symlink_to(skill_dir / "loop_b")
+            (skill_dir / "loop_b").symlink_to(skill_dir / "loop_a")
 
             zip_path = tmp_path / "skill.zip"
             package_skill_to_zip(skill_dir, zip_path)
@@ -576,6 +585,42 @@ Here is markdown content.
                 self.assertIn("SKILL.md", names)
                 self.assertIn("scripts/helper.py", names)
                 self.assertNotIn("leaked_secret.txt", names)
+                self.assertNotIn("leaked_dir/cred.json", names)
+                self.assertNotIn("loop_a", names)
+                self.assertNotIn("loop_b", names)
+
+    def test_discover_skills_skips_symlinked_skill_md_and_files(self):
+        from sync_skills_to_registry import discover_skills
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = pathlib.Path(tmp_dir)
+            secret_file = tmp_path / "outside_secret.txt"
+            secret_file.write_text("TOP_SECRET_CREDENTIAL_LINE", encoding="utf-8")
+
+            repo_dir = tmp_path / "repo"
+            repo_dir.mkdir()
+
+            # 1. Legitimate skill with a symlinked file inside it
+            good_skill = repo_dir / "good-skill"
+            good_skill.mkdir()
+            (good_skill / "SKILL.md").write_text(
+                "---\nname: good-skill\ndescription: Safe skill\n---\n# Good Skill\n",
+                encoding="utf-8",
+            )
+            (good_skill / "tool.py").write_text("x = 1\n", encoding="utf-8")
+            (good_skill / "leaked.txt").symlink_to(secret_file)
+
+            # 2. Malicious skill directory where SKILL.md itself is a symlink to outside secret
+            evil_skill = repo_dir / "evil-skill"
+            evil_skill.mkdir()
+            (evil_skill / "SKILL.md").symlink_to(secret_file)
+
+            discovered = discover_skills(repo_dir)
+            self.assertEqual(len(discovered), 1)
+            self.assertEqual(discovered[0]["skill_id"], "good-skill")
+            self.assertIn("SKILL.md", discovered[0]["files"])
+            self.assertIn("tool.py", discovered[0]["files"])
+            self.assertNotIn("leaked.txt", discovered[0]["files"])
 
 
 if __name__ == "__main__":

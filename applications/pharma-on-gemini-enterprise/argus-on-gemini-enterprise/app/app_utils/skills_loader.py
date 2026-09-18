@@ -65,7 +65,7 @@ class ScopedGCPSkillRegistry(GCPSkillRegistry):
                 strip_skill_prefix(s.strip().lower().replace("_", "-"))
                 for s in allowed_skill_ids
             }
-            if allowed_skill_ids
+            if allowed_skill_ids is not None
             else None
         )
 
@@ -193,7 +193,15 @@ def get_local_skill(skill_name: str) -> Skill:
     Returns:
         The loaded ADK Skill instance.
     """
+    if not re.match(r"^[a-zA-Z0-9_-]+$", skill_name):
+        raise ValueError(f"Invalid skill name: '{skill_name}'")
+
     skill_dir = LOCAL_SKILLS_DIR / skill_name
+    if not skill_dir.resolve().is_relative_to(LOCAL_SKILLS_DIR.resolve()):
+        raise ValueError(
+            f"Skill directory '{skill_dir}' resolves outside of '{LOCAL_SKILLS_DIR}'"
+        )
+
     if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
         raise FileNotFoundError(f"Local skill '{skill_name}' not found at {skill_dir}")
 
@@ -232,7 +240,9 @@ def create_agent_skill_toolset(
     if registry is not None:
         target_registry = registry
     elif include_registry:
-        allowed_tuple = tuple(sorted(science_skill_ids)) if science_skill_ids else None
+        allowed_tuple = (
+            tuple(sorted(science_skill_ids)) if science_skill_ids is not None else None
+        )
         target_registry = get_skill_registry(allowed_skill_ids_tuple=allowed_tuple)
     else:
         target_registry = None

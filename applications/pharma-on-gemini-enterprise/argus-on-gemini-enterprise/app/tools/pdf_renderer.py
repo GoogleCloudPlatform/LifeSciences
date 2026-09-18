@@ -18,14 +18,17 @@ Pure-Python pipeline (markdown -> HTML -> xhtml2pdf) so it runs unmodified on
 Agent Runtime — no native rendering dependencies.
 """
 
+import html as html_lib
 import io
 import re
 from datetime import date
+from pathlib import Path
+from urllib.parse import urlparse
 
 import markdown
 from xhtml2pdf import pisa
 
-from .assets import resolve_tokens_to_paths
+from .assets import _ASSET_DIR, resolve_tokens_to_paths
 
 # The LLM sometimes emits LaTeX/MathJax, which xhtml2pdf cannot render. Convert
 # the common tokens to plain Unicode/text so figures read correctly in the PDF.
@@ -106,6 +109,37 @@ _BACKREF_RE = re.compile(r'\s*<a class="footnote-backref".*?</a>', re.DOTALL)
 _FN_BLOCK_RE = re.compile(r'<div class="footnote">.*?</div>', re.DOTALL)
 _FN_LI_RE = re.compile(r'<li id="fn:[^"]*">(.*?)</li>', re.DOTALL)
 
+_DANGEROUS_BLOCK_RE = re.compile(
+    r"<(style|script|iframe|object)\b[^>]*>.*?</\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_DANGEROUS_TAG_RE = re.compile(
+    r"</?(?:style|script|link|iframe|object|embed|meta|base|form|input|pdf:[a-z0-9_]+)\b[^>]*>",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _sanitize_html(html_text: str) -> str:
+    """Strip dangerous raw HTML/CSS/PDF tags while preserving safe formatting."""
+    cleaned = _DANGEROUS_BLOCK_RE.sub("", html_text)
+    return _DANGEROUS_TAG_RE.sub("", cleaned)
+
+
+def _safe_link_callback(uri: str, rel: str | None = None) -> str:
+    """Restrict xhtml2pdf resource resolution strictly to _ASSET_DIR.
+
+    Blocks network schemes (http://, https://, ftp://, file://, data:, etc.)
+    and verifies that canonical filesystem paths stay within _ASSET_DIR.
+    """
+    parsed = urlparse(uri)
+    if parsed.scheme:
+        raise ValueError(f"Disallowed resource URI scheme: {parsed.scheme}")
+    allowed_root = Path(_ASSET_DIR).resolve()
+    candidate = Path(uri).resolve()
+    if not candidate.is_relative_to(allowed_root):
+        raise ValueError(f"Unauthorized resource path outside asset directory: {uri}")
+    return str(candidate)
+
 
 def _format_footnotes(html: str) -> str:
     """Rewrite Python-Markdown's footnote block into explicitly numbered lines.
@@ -183,35 +217,45 @@ def render_whitepaper_pdf(markdown_text: str, title: str, subtitle: str = "") ->
     Returns:
         PDF file contents as bytes. Raises RuntimeError on render failure.
     """
-    prepared = resolve_tokens_to_paths(_dedupe_stutters(_sanitize_latex(markdown_text)))
-    body_html = _format_footnotes(
-        markdown.markdown(
-            prepared,
-            extensions=[
-                "tables",
-                "sane_lists",
-                "smarty",
-                "toc",
-                "fenced_code",
-                "footnotes",
-            ],
+    sanitized_md = _sanitize_html(markdown_text)
+    prepared = resolve_tokens_to_paths(_dedupe_stutters(_sanitize_latex(sanitized_md)))
+    body_html = _sanitize_html(
+        _format_footnotes(
+            markdown.markdown(
+                prepared,
+                extensions=[
+                    "tables",
+                    "sane_lists",
+                    "smarty",
+                    "toc",
+                    "fenced_code",
+                    "footnotes",
+                ],
+            )
         )
     )
+    safe_title = html_lib.escape(title)
+    safe_subtitle = html_lib.escape(subtitle)
     today = date.today().strftime("%d %B %Y")
     html = f"""<html><head><style>{_CSS}</style></head><body>
     <p class="confidential">CONFIDENTIAL &mdash; PREPARED BY ARGUS DILIGENCE AGENT</p>
-    <h1>{title}</h1>
-    <p class="cover-meta">{subtitle}</p>
+    <h1>{safe_title}</h1>
+    <p class="cover-meta">{safe_subtitle}</p>
     <p class="cover-meta">{today}</p>
     <hr/>
     {body_html}
     <div id="footer">Argus &mdash; Life Sciences M&amp;A Diligence &nbsp;|&nbsp;
-    {title} &nbsp;|&nbsp; Generated {today}. AI-generated analysis: verify all
+    {safe_title} &nbsp;|&nbsp; Generated {today}. AI-generated analysis: verify all
     figures against primary sources before making investment decisions.</div>
     </body></html>"""
 
     buf = io.BytesIO()
-    result = pisa.CreatePDF(io.StringIO(html), dest=buf, encoding="utf-8")
+    result = pisa.CreatePDF(
+        io.StringIO(html),
+        dest=buf,
+        encoding="utf-8",
+        link_callback=_safe_link_callback,
+    )
     if result.err:
         raise RuntimeError(f"PDF rendering failed with {result.err} error(s)")
     return buf.getvalue()

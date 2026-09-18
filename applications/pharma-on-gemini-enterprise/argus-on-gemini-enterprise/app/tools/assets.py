@@ -28,8 +28,7 @@ import os
 import re
 import tempfile
 
-_ASSET_DIR = os.path.join(tempfile.gettempdir(), "argus_assets")
-os.makedirs(_ASSET_DIR, exist_ok=True)
+_ASSET_DIR = tempfile.mkdtemp(prefix="argus_assets_")
 
 _TOKEN_RE = re.compile(r"asset://([A-Za-z0-9_\-]+)")
 
@@ -38,14 +37,21 @@ def save_asset(asset_id: str, png_bytes: bytes) -> str:
     """Persist PNG bytes under an id and return the `asset://<id>` token."""
     asset_id = re.sub(r"[^A-Za-z0-9_\-]", "_", asset_id)
     path = os.path.join(_ASSET_DIR, f"{asset_id}.png")
-    with open(path, "wb") as f:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, "wb") as f:
         f.write(png_bytes)
     return f"asset://{asset_id}"
 
 
 def asset_path(asset_id: str) -> str | None:
+    asset_id = re.sub(r"[^A-Za-z0-9_\-]", "_", asset_id)
     path = os.path.join(_ASSET_DIR, f"{asset_id}.png")
-    return path if os.path.exists(path) else None
+    real_base = os.path.realpath(_ASSET_DIR)
+    real_path = os.path.realpath(path)
+    if os.path.commonpath([real_base, real_path]) != real_base:
+        return None
+    return real_path if os.path.isfile(real_path) else None
 
 
 def resolve_tokens_to_paths(markdown_text: str) -> str:

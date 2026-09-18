@@ -91,6 +91,16 @@ def normalize_skill_id(raw_name: str) -> str:
     return normalized
 
 
+def _is_safe_path_within(path: pathlib.Path, resolved_root: pathlib.Path) -> bool:
+    """Returns True if path is not a symlink and resolves inside resolved_root."""
+    if path.is_symlink():
+        return False
+    try:
+        return path.resolve().is_relative_to(resolved_root)
+    except (OSError, RuntimeError):
+        return False
+
+
 def package_skill_to_zip(skill_dir: pathlib.Path, zip_path: pathlib.Path) -> None:
     """Packages a skill directory into a zip archive file, omitting bulky media files."""
     excluded_extensions = {
@@ -108,9 +118,7 @@ def package_skill_to_zip(skill_dir: pathlib.Path, zip_path: pathlib.Path) -> Non
     resolved_skill_dir = skill_dir.resolve()
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         for file_path in skill_dir.rglob("*"):
-            if file_path.is_symlink() or not file_path.resolve().is_relative_to(
-                resolved_skill_dir
-            ):
+            if not _is_safe_path_within(file_path, resolved_skill_dir):
                 logger.warning(
                     "Skipping symlink or path resolving outside skill directory: %s",
                     file_path,
@@ -152,9 +160,17 @@ def get_git_last_commit_time(
 def discover_skills(repo_dir: pathlib.Path) -> list[dict[str, Any]]:
     """Discovers all skills with SKILL.md inside the repository directory."""
     skills: list[dict[str, Any]] = []
+    resolved_repo_dir = repo_dir.resolve()
 
     for skill_md_path in repo_dir.rglob("SKILL.md"):
+        if not _is_safe_path_within(skill_md_path, resolved_repo_dir):
+            logger.warning(
+                "Skipping symlink or path resolving outside repository directory: %s",
+                skill_md_path,
+            )
+            continue
         skill_dir = skill_md_path.parent
+        resolved_skill_dir = skill_dir.resolve()
         content = skill_md_path.read_text(encoding="utf-8")
         frontmatter = parse_frontmatter(content)
 
@@ -178,7 +194,9 @@ def discover_skills(repo_dir: pathlib.Path) -> list[dict[str, Any]]:
             description = lines[0] if lines else f"Skill {display_name}"
 
         files = [
-            str(p.relative_to(skill_dir)) for p in skill_dir.rglob("*") if p.is_file()
+            str(p.relative_to(skill_dir))
+            for p in skill_dir.rglob("*")
+            if _is_safe_path_within(p, resolved_skill_dir) and p.is_file()
         ]
         git_commit_time = get_git_last_commit_time(
             repo_dir, skill_dir.relative_to(repo_dir)
