@@ -29,6 +29,7 @@ import glob
 import logging
 import os
 import pickle
+import re
 import shutil
 import subprocess
 import tempfile
@@ -671,6 +672,30 @@ def run_mmseqs2_search(
     return n_seqs
 
 
+def _resolve_chain_msa_dir(msa_output_path: str, desc: str, chain_idx: int) -> str:
+    """Resolve and validate a per-chain MSA output directory inside msa_output_path.
+
+    Sanitizes the FASTA description into a safe single-component directory name
+    and enforces canonical path containment within ``msa_output_path``.
+    """
+    safe_desc = re.sub(r"[^a-zA-Z0-9._-]", "_", desc).strip("._")
+    if not safe_desc:
+        safe_desc = f"chain_{chain_idx}"
+    safe_desc = safe_desc[:128]
+
+    real_msa_root = os.path.realpath(msa_output_path)
+    chain_msa_dir = os.path.join(real_msa_root, safe_desc)
+    real_chain_dir = os.path.realpath(chain_msa_dir)
+    if (
+        os.path.commonpath([real_msa_root, real_chain_dir]) != real_msa_root
+        or real_chain_dir == real_msa_root
+    ):
+        raise ValueError(
+            f"Resolved chain MSA directory {real_chain_dir!r} escapes msa_output_path {real_msa_root!r}"
+        )
+    return real_chain_dir
+
+
 def run_mmseqs2_data_pipeline(
     fasta_path: str,
     run_multimer_system: bool,
@@ -716,7 +741,7 @@ def run_mmseqs2_data_pipeline(
             with open(chain_fasta, "w") as f:
                 f.write(f">{desc}\n{seq}\n")
 
-            chain_msa_dir = os.path.join(msa_output_path, desc)
+            chain_msa_dir = _resolve_chain_msa_dir(msa_output_path, desc, chain_idx)
             os.makedirs(chain_msa_dir, exist_ok=True)
 
             chain_feat = _run_mmseqs2_single_chain(

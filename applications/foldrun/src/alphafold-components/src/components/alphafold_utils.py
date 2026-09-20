@@ -33,47 +33,37 @@ import glob
 import logging
 import os
 import pickle
+import re
 import shutil
 import subprocess
 import tempfile
 import time
-from typing import Dict, List, Mapping, Tuple
-
-from alphafold.common import protein
-from alphafold.common import residue_constants
-from alphafold.data import parsers
-from alphafold.data import pipeline
-from alphafold.data import pipeline_multimer
-from alphafold.data import templates
-from alphafold.data.pipeline import make_msa_features
-from alphafold.data.pipeline import make_sequence_features
-from alphafold.data.tools import hhblits
-from alphafold.data.tools import hhsearch
-from alphafold.data.tools import hmmsearch
-from alphafold.data.tools import jackhmmer
-from alphafold.model import config
-from alphafold.model import data
-from alphafold.model import model
-from alphafold.relax import relax
-
+from collections.abc import Mapping
 
 import numpy as np
+from alphafold.common import protein, residue_constants
+from alphafold.data import parsers, pipeline, pipeline_multimer, templates
+from alphafold.data.pipeline import make_msa_features, make_sequence_features
+from alphafold.data.tools import hhblits, hhsearch, hmmsearch, jackhmmer
+from alphafold.model import config, data, model
+from alphafold.relax import relax
 
-
-JACKHMMER_BINARY_PATH = shutil.which('jackhmmer')
-HHBLITS_BINARY_PATH = shutil.which('hhblits')
-HHSEARCH_BINARY_PATH = shutil.which('hhsearch')
-HMMSEARCH_BINARY_PATH = shutil.which('hmmsearch')
-KALIGN_BINARY_PATH = shutil.which('kalign')
-HMMBUILD_BINARY_PATH = shutil.which('hmmbuild')
-MMSEQS2_BINARY_PATH = shutil.which('mmseqs')
+JACKHMMER_BINARY_PATH = shutil.which("jackhmmer")
+HHBLITS_BINARY_PATH = shutil.which("hhblits")
+HHSEARCH_BINARY_PATH = shutil.which("hhsearch")
+HMMSEARCH_BINARY_PATH = shutil.which("hmmsearch")
+KALIGN_BINARY_PATH = shutil.which("kalign")
+HMMBUILD_BINARY_PATH = shutil.which("hmmbuild")
+MMSEQS2_BINARY_PATH = shutil.which("mmseqs")
 
 MAX_TEMPLATE_HITS = 20
 
+logger = logging.getLogger(__name__)
 
-def _load_features(features_path: str) -> Dict[str, str]:
+
+def _load_features(features_path: str) -> dict[str, str]:
     """Loads pickeled features."""
-    with open(features_path, 'rb') as f:
+    with open(features_path, "rb") as f:
         features = pickle.load(f)
     return features
 
@@ -83,29 +73,28 @@ def _read_msa(msa_path: str, msa_format: str) -> str:
     if os.path.exists(msa_path):
         with open(msa_path) as f:
             msa = f.read()
-        if msa_format == 'sto':
+        if msa_format == "sto":
             msa = parsers.parse_stockholm(msa)
-        elif msa_format == 'a3m':
+        elif msa_format == "a3m":
             msa = parsers.parse_a3m(msa)
         else:
-            raise RuntimeError(f'Unsupported MSA format: {msa_format}')
+            raise RuntimeError(f"Unsupported MSA format: {msa_format}")
     return msa
 
 
-def _read_sequence(sequence_path: str) -> Tuple[str, str, int]:
+def _read_sequence(sequence_path: str) -> tuple[str, str, int]:
     """Reads and parses a FASTA sequence file."""
     with open(sequence_path) as f:
         sequence_str = f.read()
     sequences, sequence_descs = parsers.parse_fasta(sequence_str)
     if len(sequences) != 1:
-        raise ValueError(
-            f'More than one input sequence found in {sequence_path}.')
+        raise ValueError(f"More than one input sequence found in {sequence_path}.")
     return sequences[0], sequence_descs[0], len(sequences[0])
 
 
-def _read_template_features(template_features_path) -> Dict[str, str]:
+def _read_template_features(template_features_path) -> dict[str, str]:
     """Reads and unpickles a pdb structure."""
-    with open(template_features_path, 'rb') as f:
+    with open(template_features_path, "rb") as f:
         template_features = pickle.load(f)
     return template_features
 
@@ -127,31 +116,34 @@ def run_data_pipeline(
     msa_output_path: str,
     features_output_path: str,
     use_small_bfd: bool,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Runs AlphaFold data pipeline."""
     if run_multimer_system:
         template_searcher = hmmsearch.Hmmsearch(
             binary_path=HMMSEARCH_BINARY_PATH,
             hmmbuild_binary_path=HMMBUILD_BINARY_PATH,
-            database_path=seqres_database_path)
+            database_path=seqres_database_path,
+        )
         template_featurizer = templates.HmmsearchHitFeaturizer(
             mmcif_dir=mmcif_path,
             max_template_date=max_template_date,
             max_hits=MAX_TEMPLATE_HITS,
             kalign_binary_path=KALIGN_BINARY_PATH,
             release_dates_path=None,
-            obsolete_pdbs_path=obsolete_pdbs_path)
+            obsolete_pdbs_path=obsolete_pdbs_path,
+        )
     else:
         template_searcher = hhsearch.HHSearch(
-            binary_path=HHSEARCH_BINARY_PATH,
-            databases=[pdb70_database_path])
+            binary_path=HHSEARCH_BINARY_PATH, databases=[pdb70_database_path]
+        )
         template_featurizer = templates.HhsearchHitFeaturizer(
             mmcif_dir=mmcif_path,
             max_template_date=max_template_date,
             max_hits=MAX_TEMPLATE_HITS,
             kalign_binary_path=KALIGN_BINARY_PATH,
             release_dates_path=None,
-            obsolete_pdbs_path=obsolete_pdbs_path)
+            obsolete_pdbs_path=obsolete_pdbs_path,
+        )
 
     monomer_data_pipeline = pipeline.DataPipeline(
         jackhmmer_binary_path=JACKHMMER_BINARY_PATH,
@@ -163,53 +155,57 @@ def run_data_pipeline(
         small_bfd_database_path=small_bfd_database_path,
         template_searcher=template_searcher,
         template_featurizer=template_featurizer,
-        use_small_bfd=use_small_bfd)
+        use_small_bfd=use_small_bfd,
+    )
 
     if run_multimer_system:
         data_pipeline = pipeline_multimer.DataPipeline(
             monomer_data_pipeline=monomer_data_pipeline,
             jackhmmer_binary_path=JACKHMMER_BINARY_PATH,
-            uniprot_database_path=uniprot_database_path)
+            uniprot_database_path=uniprot_database_path,
+        )
     else:
         data_pipeline = monomer_data_pipeline
 
     feature_dict = data_pipeline.process(
-        input_fasta_path=fasta_path,
-        msa_output_dir=msa_output_path
+        input_fasta_path=fasta_path, msa_output_dir=msa_output_path
     )
 
-    with open(features_output_path, 'wb') as f:
+    with open(features_output_path, "wb") as f:
         pickle.dump(feature_dict, f, protocol=4)
 
     msas_metadata = {}
-    paths = glob.glob(os.path.join(msa_output_path, '**'), recursive=True)
+    paths = glob.glob(os.path.join(msa_output_path, "**"), recursive=True)
     paths = [path for path in paths if os.path.isfile(path)]
 
     if run_multimer_system:
-        folders = [os.path.join(msa_output_path, folder)
-                   for folder in os.listdir(msa_output_path)
-                   if os.path.isdir(os.path.join(msa_output_path, folder))]
+        folders = [
+            os.path.join(msa_output_path, folder)
+            for folder in os.listdir(msa_output_path)
+            if os.path.isdir(os.path.join(msa_output_path, folder))
+        ]
         paths = []
         for folder in folders:
-            paths += [os.path.join(folder, file)
-                      for file in os.listdir(folder)]
+            paths += [os.path.join(folder, file) for file in os.listdir(folder)]
     else:
-        paths = [os.path.join(msa_output_path, file)
-                 for file in os.listdir(msa_output_path)]
+        paths = [
+            os.path.join(msa_output_path, file) for file in os.listdir(msa_output_path)
+        ]
     for file in paths:
-        with open(file, 'r') as f:
+        with open(file) as f:
             artifact = f.read()
-        file_format = file.split('.')[-1]
-        if file_format == 'sto':
+        file_format = file.split(".")[-1]
+        if file_format == "sto":
             artifact = parsers.parse_stockholm(artifact)
-        elif file_format == 'a3m':
+        elif file_format == "a3m":
             artifact = parsers.parse_a3m(artifact)
-        elif file_format == 'hhr':
+        elif file_format == "hhr":
             artifact = parsers.parse_hhr(artifact)
         else:
-            raise ValueError('Unknown artifact type')
-        msas_metadata[os.path.join(
-            file.split(os.sep)[-2], file.split(os.sep)[-1])] = len(artifact)
+            raise ValueError("Unknown artifact type")
+        msas_metadata[os.path.join(file.split(os.sep)[-2], file.split(os.sep)[-1])] = (
+            len(artifact)
+        )
 
     return feature_dict, msas_metadata
 
@@ -237,31 +233,34 @@ def predict(
         model_config.data.eval.num_ensemble_eval = num_ensemble
 
     model_params = data.get_model_haiku_params(
-        model_name=model_name, data_dir=model_params_path)
+        model_name=model_name, data_dir=model_params_path
+    )
     model_runner = model.RunModel(model_config, model_params)
 
     features = _load_features(model_features_path)
     processed_feature_dict = model_runner.process_features(
-        raw_features=features,
-        random_seed=random_seed)
+        raw_features=features, random_seed=random_seed
+    )
 
     prediction_result = model_runner.predict(
-        feat=processed_feature_dict,
-        random_seed=random_seed)
+        feat=processed_feature_dict, random_seed=random_seed
+    )
 
-    with open(raw_prediction_path, 'wb') as f:
+    with open(raw_prediction_path, "wb") as f:
         pickle.dump(prediction_result, f, protocol=4)
 
-    plddt = prediction_result['plddt']
+    plddt = prediction_result["plddt"]
     plddt_b_factors = np.repeat(
-        plddt[:, None], residue_constants.atom_type_num, axis=-1)
+        plddt[:, None], residue_constants.atom_type_num, axis=-1
+    )
     unrelaxed_structure = protein.from_prediction(
         features=processed_feature_dict,
         result=prediction_result,
         b_factors=plddt_b_factors,
-        remove_leading_feature_dimension=not model_runner.multimer_mode)
+        remove_leading_feature_dimension=not model_runner.multimer_mode,
+    )
     unrelaxed_pdbs = protein.to_pdb(unrelaxed_structure)
-    with open(unrelaxed_protein_path, 'w') as f:
+    with open(unrelaxed_protein_path, "w") as f:
         f.write(unrelaxed_pdbs)
 
     return prediction_result
@@ -273,13 +272,15 @@ def relax_protein(
     max_iterations: int = 0,
     tolerance: float = 2.39,
     stiffness: float = 10.0,
-    exclude_residues: List[str] = [],
+    exclude_residues: list[str] | None = None,
     max_outer_iterations: int = 3,
-    use_gpu=False
+    use_gpu=False,
 ) -> Mapping[str, str]:
     """Runs AMBER relaxation."""
+    if exclude_residues is None:
+        exclude_residues = []
 
-    with open(unrelaxed_protein_path, 'r') as f:
+    with open(unrelaxed_protein_path) as f:
         unrelaxed_protein_pdb = f.read()
 
     unrelaxed_structure = protein.from_pdb_string(unrelaxed_protein_pdb)
@@ -289,11 +290,12 @@ def relax_protein(
         stiffness=stiffness,
         exclude_residues=exclude_residues,
         max_outer_iterations=max_outer_iterations,
-        use_gpu=use_gpu)
+        use_gpu=use_gpu,
+    )
     relaxed_protein_pdb, _, _ = amber_relaxer.process(prot=unrelaxed_structure)
 
-    logging.info(f'Saving relaxed protein to {relaxed_protein_path}')
-    with open(relaxed_protein_path, 'w') as f:
+    logger.info(f"Saving relaxed protein to {relaxed_protein_path}")
+    with open(relaxed_protein_path, "w") as f:
         f.write(relaxed_protein_pdb)
 
     return relaxed_protein_pdb
@@ -302,7 +304,7 @@ def relax_protein(
 def predict_relax(
     model_features_path: str,
     model_params_path: str,
-    prediction_runners: List[Dict],
+    prediction_runners: list[dict],
     num_ensemble: int,
     run_multimer_system: bool,
     raw_prediction_path: str,
@@ -312,13 +314,15 @@ def predict_relax(
     max_iterations: int = 0,
     tolerance: float = 2.39,
     stiffness: float = 10.0,
-    exclude_residues: List[str] = [],
+    exclude_residues: list[str] | None = None,
     max_outer_iterations: int = 3,
-    use_gpu=True
+    use_gpu=True,
 ) -> Mapping[str, str]:
     """Runs predictions and relaxations sequentially on all specified models."""
+    if exclude_residues is None:
+        exclude_residues = []
 
-    model_names = set([runner['model_name'] for runner in prediction_runners])
+    model_names = {runner["model_name"] for runner in prediction_runners}
     runners = {}
     for model_name in model_names:
         model_config = config.model_config(model_name)
@@ -327,18 +331,20 @@ def predict_relax(
         else:
             model_config.data.eval.num_ensemble = num_ensemble
         model_params = data.get_model_haiku_params(
-            model_name=model_name, data_dir=model_params_path)
+            model_name=model_name, data_dir=model_params_path
+        )
         model_runner = model.RunModel(model_config, model_params)
         runners[model_name] = model_runner
 
     model_runners = {}
     for runner in prediction_runners:
-        prediction_name = f'{runner["model_name"]}_pred_{runner["prediction_index"]}'
+        prediction_name = f"{runner['model_name']}_pred_{runner['prediction_index']}"
         model_runners[prediction_name] = (
-            runners[runner['model_name']], runner['random_seed'])
+            runners[runner["model_name"]],
+            runner["random_seed"],
+        )
 
-    logging.info('Have %d models: %s', len(model_runners),
-                 list(model_runners.keys()))
+    logger.info("Have %d models: %s", len(model_runners), list(model_runners.keys()))
 
     if run_relax:
         amber_relaxer = relax.AmberRelaxation(
@@ -347,7 +353,8 @@ def predict_relax(
             stiffness=stiffness,
             exclude_residues=exclude_residues,
             max_outer_iterations=max_outer_iterations,
-            use_gpu=use_gpu)
+            use_gpu=use_gpu,
+        )
     else:
         amber_relaxer = None
 
@@ -358,110 +365,108 @@ def predict_relax(
     relaxed_pdbs = {}
     ranking_confidences = {}
     for model_name, prediction_runner in model_runners.items():
-        logging.info('Running prediction %s', model_name)
+        logger.info("Running prediction %s", model_name)
         t_0 = time.time()
         model_random_seed = prediction_runner[1]
         model_runner = prediction_runner[0]
         processed_feature_dict = model_runner.process_features(
-            feature_dict, random_seed=model_random_seed)
-        timings[f'process_features_{model_name}'] = time.time() - t_0
+            feature_dict, random_seed=model_random_seed
+        )
+        timings[f"process_features_{model_name}"] = time.time() - t_0
 
         t_0 = time.time()
-        prediction_result = model_runner.predict(processed_feature_dict,
-                                                 random_seed=model_random_seed)
+        prediction_result = model_runner.predict(
+            processed_feature_dict, random_seed=model_random_seed
+        )
         t_diff = time.time() - t_0
-        timings[f'predict_and_compile_{model_name}'] = t_diff
-        logging.info(
-            'Total JAX model %s predict time (includes compilation time, see --benchmark): %.1fs',
-            model_name, t_diff)
+        timings[f"predict_and_compile_{model_name}"] = t_diff
+        logger.info(
+            "Total JAX model %s predict time (includes compilation time, see --benchmark): %.1fs",
+            model_name,
+            t_diff,
+        )
 
-        plddt = prediction_result['plddt']
-        ranking_confidences[model_name] = prediction_result['ranking_confidence']
+        plddt = prediction_result["plddt"]
+        ranking_confidences[model_name] = prediction_result["ranking_confidence"]
 
         # Save the model outputs.
         result_output_path = os.path.join(
-            raw_prediction_path, f'result_{model_name}.pkl')
-        with open(result_output_path, 'wb') as f:
+            raw_prediction_path, f"result_{model_name}.pkl"
+        )
+        with open(result_output_path, "wb") as f:
             pickle.dump(prediction_result, f, protocol=4)
 
         # Add the predicted LDDT in the b-factor column.
         # Note that higher predicted LDDT value means higher model confidence.
         plddt_b_factors = np.repeat(
-            plddt[:, None], residue_constants.atom_type_num, axis=-1)
+            plddt[:, None], residue_constants.atom_type_num, axis=-1
+        )
         unrelaxed_protein = protein.from_prediction(
             features=processed_feature_dict,
             result=prediction_result,
             b_factors=plddt_b_factors,
-            remove_leading_feature_dimension=not model_runner.multimer_mode)
+            remove_leading_feature_dimension=not model_runner.multimer_mode,
+        )
 
         unrelaxed_pdbs[model_name] = protein.to_pdb(unrelaxed_protein)
         unrelaxed_pdb_path = os.path.join(
-            unrelaxed_protein_path, f'unrelaxed_{model_name}.pdb')
-        with open(unrelaxed_pdb_path, 'w') as f:
+            unrelaxed_protein_path, f"unrelaxed_{model_name}.pdb"
+        )
+        with open(unrelaxed_pdb_path, "w") as f:
             f.write(unrelaxed_pdbs[model_name])
 
         if amber_relaxer:
             # Relax the prediction.
             t_0 = time.time()
-            relaxed_pdb_str, _, _ = amber_relaxer.process(
-                prot=unrelaxed_protein)
-            timings[f'relax_{model_name}'] = time.time() - t_0
+            relaxed_pdb_str, _, _ = amber_relaxer.process(prot=unrelaxed_protein)
+            timings[f"relax_{model_name}"] = time.time() - t_0
 
             relaxed_pdbs[model_name] = relaxed_pdb_str
 
             # Save the relaxed PDB.
             relaxed_output_path = os.path.join(
-                relaxed_protein_path, f'relaxed_{model_name}.pdb')
-            with open(relaxed_output_path, 'w') as f:
+                relaxed_protein_path, f"relaxed_{model_name}.pdb"
+            )
+            with open(relaxed_output_path, "w") as f:
                 f.write(relaxed_pdb_str)
 
-    logging.info('Final timings  %s ',  timings)
+    logger.info("Final timings  %s ", timings)
 
     return ranking_confidences
 
 
 def aggregate(
     sequence_path: str,
-    msa_paths: List[Tuple[str, str]],
+    msa_paths: list[tuple[str, str]],
     template_features_path: str,
-    output_features_path: str
-) -> Dict[str, str]:
+    output_features_path: str,
+) -> dict[str, str]:
     """Aggregates MSAs and template features to create model features."""
 
     # Create sequence features
     seq, seq_desc, num_res = _read_sequence(sequence_path)
     sequence_features = make_sequence_features(
-        sequence=seq,
-        description=seq_desc,
-        num_res=num_res
+        sequence=seq, description=seq_desc, num_res=num_res
     )
     # Create MSA features
     msas = []
     for msa_path, msa_format in msa_paths:
         msas.append(_read_msa(msa_path, msa_format))
     if not msas:
-        raise RuntimeError('No MSAs passed to the component')
+        raise RuntimeError("No MSAs passed to the component")
     msa_features = make_msa_features(msas=msas)
     # Create template features
     template_features = _read_template_features(template_features_path)
 
-    model_features = {
-        **sequence_features,
-        **msa_features,
-        **template_features
-    }
-    with open(output_features_path, 'wb') as f:
+    model_features = {**sequence_features, **msa_features, **template_features}
+    with open(output_features_path, "wb") as f:
         pickle.dump(model_features, f, protocol=4)
 
     return model_features
 
 
 def run_jackhmmer(
-    input_path: str,
-    msa_path: str,
-    database_path: str,
-    maxseq: int,
-    n_cpu: int = 8
+    input_path: str, msa_path: str, database_path: str, maxseq: int, n_cpu: int = 8
 ):
     """Runs jackhmeer and saves results to files."""
 
@@ -472,18 +477,14 @@ def run_jackhmmer(
     )
 
     results = runner.query(input_path, maxseq)[0]
-    with open(msa_path, 'w') as f:
-        f.write(results['sto'])
+    with open(msa_path, "w") as f:
+        f.write(results["sto"])
 
-    return parsers.parse_stockholm(results['sto']), 'sto'
+    return parsers.parse_stockholm(results["sto"]), "sto"
 
 
 def run_hhblits(
-    input_path: str,
-    msa_path: str,
-    database_paths: List[str],
-    n_cpu: int,
-    maxseq: int
+    input_path: str, msa_path: str, database_paths: list[str], n_cpu: int, maxseq: int
 ):
     """Runs hhblits and saves results to a file."""
 
@@ -495,10 +496,10 @@ def run_hhblits(
     )
 
     results = runner.query(input_path)[0]
-    with open(msa_path, 'w') as f:
-        f.write(results['a3m'])
+    with open(msa_path, "w") as f:
+        f.write(results["a3m"])
 
-    return parsers.parse_a3m(results['a3m']), 'a3m'
+    return parsers.parse_a3m(results["a3m"]), "a3m"
 
 
 def run_hhsearch(
@@ -507,24 +508,22 @@ def run_hhsearch(
     msa_data_format: str,
     template_hits_path: str,
     template_features_path: str,
-    template_dbs_paths: List[str],
+    template_dbs_paths: list[str],
     mmcif_path: str,
     obsolete_path: str,
     max_template_date: str,
     max_template_hits: int,
-    maxseq: int
+    maxseq: int,
 ):
     """Runs hhsearch and saves results to a file."""
 
-    if msa_data_format != 'sto' and msa_data_format != 'a3m':
-        raise ValueError(f'Unsupported MSA format: {msa_data_format}')
+    if msa_data_format != "sto" and msa_data_format != "a3m":
+        raise ValueError(f"Unsupported MSA format: {msa_data_format}")
 
     sequence, _, _ = _read_sequence(sequence_path)
 
     template_searcher = hhsearch.HHSearch(
-        binary_path=HHSEARCH_BINARY_PATH,
-        databases=template_dbs_paths,
-        maxseq=maxseq
+        binary_path=HHSEARCH_BINARY_PATH, databases=template_dbs_paths, maxseq=maxseq
     )
 
     template_featurizer = templates.HhsearchHitFeaturizer(
@@ -539,22 +538,24 @@ def run_hhsearch(
     with open(msa_path) as f:
         msa_str = f.read()
 
-    if msa_data_format == 'sto':
+    if msa_data_format == "sto":
         msa_for_templates = parsers.deduplicate_stockholm_msa(msa_str)
         msa_for_templates = parsers.remove_empty_columns_from_stockholm_msa(
-            msa_for_templates)
+            msa_for_templates
+        )
         msa_for_templates = parsers.convert_stockholm_to_a3m(msa_for_templates)
 
     hhr_str = template_searcher.query(msa_for_templates)
-    with open(template_hits_path, 'w') as f:
+    with open(template_hits_path, "w") as f:
         f.write(hhr_str)
 
     template_hits = template_searcher.get_template_hits(
-        output_string=hhr_str, input_sequence=sequence)
+        output_string=hhr_str, input_sequence=sequence
+    )
     templates_result = template_featurizer.get_templates(
-        query_sequence=sequence,
-        hits=template_hits)
-    with open(template_features_path, 'wb') as f:
+        query_sequence=sequence, hits=template_hits
+    )
+    with open(template_features_path, "wb") as f:
         pickle.dump(templates_result.features, f, protocol=4)
 
     return parsers.parse_hhr(hhr_str), templates_result.features
@@ -570,19 +571,19 @@ def run_hmmsearch(
     mmcif_path: str,
     obsolete_path: str,
     max_template_date,
-    max_template_hits
+    max_template_hits,
 ):
     """Runs hhsearch and saves results to a file."""
 
-    if msa_data_format != 'sto':
-        raise ValueError(f'Unsupported MSA format: {msa_data_format}')
+    if msa_data_format != "sto":
+        raise ValueError(f"Unsupported MSA format: {msa_data_format}")
 
     sequence, _, _ = _read_sequence(sequence_path)
 
     template_searcher = hmmsearch.Hmmsearch(
         binary_path=HMMSEARCH_BINARY_PATH,
         hmmbuild_binary_path=HMMBUILD_BINARY_PATH,
-        database_path=template_db_path
+        database_path=template_db_path,
     )
 
     template_featurizer = templates.HmmsearchHitFeaturizer(
@@ -591,7 +592,7 @@ def run_hmmsearch(
         max_hits=max_template_hits,
         kalign_binary_path=KALIGN_BINARY_PATH,
         obsolete_pdbs_path=obsolete_path,
-        release_dates_path=None
+        release_dates_path=None,
     )
 
     with open(msa_path) as f:
@@ -599,19 +600,21 @@ def run_hmmsearch(
 
     msa_for_templates = parsers.deduplicate_stockholm_msa(msa_str)
     msa_for_templates = parsers.remove_empty_columns_from_stockholm_msa(
-        msa_for_templates)
+        msa_for_templates
+    )
 
     sto_str = template_searcher.query(msa_for_templates)
-    with open(template_hits_path, 'w') as f:
+    with open(template_hits_path, "w") as f:
         f.write(sto_str)
 
     template_hits = template_searcher.get_template_hits(
-        output_string=sto_str, input_sequence=sequence)
+        output_string=sto_str, input_sequence=sequence
+    )
     templates_result = template_featurizer.get_templates(
-        query_sequence=sequence,
-        hits=template_hits)
+        query_sequence=sequence, hits=template_hits
+    )
 
-    with open(template_features_path, 'wb') as f:
+    with open(template_features_path, "wb") as f:
         pickle.dump(templates_result.features, f, protocol=4)
 
     return parsers.parse_stockholm(template_hits), templates_result.features
@@ -642,33 +645,46 @@ def run_mmseqs2_search(
     Returns:
         Number of sequences in the output alignment.
     """
-    query_db = os.path.join(tmp_dir, 'queryDB')
-    result_db = os.path.join(tmp_dir, 'resultDB')
+    query_db = os.path.join(tmp_dir, "queryDB")
+    result_db = os.path.join(tmp_dir, "resultDB")
 
     # Create query database from FASTA
     subprocess.run(
-        [MMSEQS2_BINARY_PATH, 'createdb', query_fasta, query_db],
+        [MMSEQS2_BINARY_PATH, "createdb", query_fasta, query_db],
         check=True,
     )
 
     # Search target database
     search_cmd = [
-        MMSEQS2_BINARY_PATH, 'search',
-        query_db, target_db, result_db, tmp_dir,
-        '--max-seqs', str(max_seqs),
-        '-s', '7.5',
+        MMSEQS2_BINARY_PATH,
+        "search",
+        query_db,
+        target_db,
+        result_db,
+        tmp_dir,
+        "--max-seqs",
+        str(max_seqs),
+        "-s",
+        "7.5",
     ]
     if gpu:
-        search_cmd.extend(['--gpu', '1'])
+        search_cmd.extend(["--gpu", "1"])
     if split > 0:
-        search_cmd.extend(['--split', str(split)])
+        search_cmd.extend(["--split", str(split)])
     subprocess.run(search_cmd, check=True)
 
     # Convert results to A3M
     subprocess.run(
-        [MMSEQS2_BINARY_PATH, 'result2msa',
-         query_db, target_db, result_db, output_a3m,
-         '--msa-format-mode', '6'],
+        [
+            MMSEQS2_BINARY_PATH,
+            "result2msa",
+            query_db,
+            target_db,
+            result_db,
+            output_a3m,
+            "--msa-format-mode",
+            "6",
+        ],
         check=True,
     )
 
@@ -676,9 +692,33 @@ def run_mmseqs2_search(
     n_seqs = 0
     with open(output_a3m) as f:
         for line in f:
-            if line.startswith('>'):
+            if line.startswith(">"):
                 n_seqs += 1
     return n_seqs
+
+
+def _resolve_chain_msa_dir(msa_output_path: str, desc: str, chain_idx: int) -> str:
+    """Resolve and validate a per-chain MSA output directory inside msa_output_path.
+
+    Sanitizes the FASTA description into a safe single-component directory name
+    and enforces canonical path containment within ``msa_output_path``.
+    """
+    safe_desc = re.sub(r"[^a-zA-Z0-9._-]", "_", desc).strip("._")
+    if not safe_desc:
+        safe_desc = f"chain_{chain_idx}"
+    safe_desc = safe_desc[:128]
+
+    real_msa_root = os.path.realpath(msa_output_path)
+    chain_msa_dir = os.path.join(real_msa_root, safe_desc)
+    real_chain_dir = os.path.realpath(chain_msa_dir)
+    if (
+        os.path.commonpath([real_msa_root, real_chain_dir]) != real_msa_root
+        or real_chain_dir == real_msa_root
+    ):
+        raise ValueError(
+            f"Resolved chain MSA directory {real_chain_dir!r} escapes msa_output_path {real_msa_root!r}"
+        )
+    return real_chain_dir
 
 
 def run_mmseqs2_data_pipeline(
@@ -697,7 +737,7 @@ def run_mmseqs2_data_pipeline(
     max_template_date: str,
     msa_output_path: str,
     features_output_path: str,
-) -> Tuple[Dict, Dict[str, int]]:
+) -> tuple[dict, dict[str, int]]:
     """MSA generation using MMseqs2-GPU, then standard AF2 feature generation.
 
     Replaces JackHMMER/HHblits MSA search with GPU-accelerated MMseqs2 for
@@ -706,12 +746,12 @@ def run_mmseqs2_data_pipeline(
 
     Only valid when use_small_bfd=True (all databases are FASTA format).
     """
-    logging.info('Starting MMseqs2-GPU data pipeline')
+    logger.info("Starting MMseqs2-GPU data pipeline")
     os.makedirs(msa_output_path, exist_ok=True)
 
     # Detect GPU availability
     gpu_available = _check_gpu_available()
-    logging.info(f'GPU available for MMseqs2: {gpu_available}')
+    logger.info(f"GPU available for MMseqs2: {gpu_available}")
 
     # Parse input sequences (handles both monomer and multimer FASTA)
     with open(fasta_path) as f:
@@ -722,11 +762,11 @@ def run_mmseqs2_data_pipeline(
         # For multimer: process each chain separately, then combine
         chain_features = []
         for chain_idx, (seq, desc) in enumerate(zip(sequences, descriptions)):
-            chain_fasta = os.path.join(msa_output_path, f'chain_{chain_idx}.fasta')
-            with open(chain_fasta, 'w') as f:
-                f.write(f'>{desc}\n{seq}\n')
+            chain_fasta = os.path.join(msa_output_path, f"chain_{chain_idx}.fasta")
+            with open(chain_fasta, "w") as f:
+                f.write(f">{desc}\n{seq}\n")
 
-            chain_msa_dir = os.path.join(msa_output_path, desc)
+            chain_msa_dir = _resolve_chain_msa_dir(msa_output_path, desc, chain_idx)
             os.makedirs(chain_msa_dir, exist_ok=True)
 
             chain_feat = _run_mmseqs2_single_chain(
@@ -749,29 +789,30 @@ def run_mmseqs2_data_pipeline(
 
         # Run uniprot search for multimer pairing
         all_chain_features = {}
-        for chain_idx, (seq, desc) in enumerate(zip(sequences, descriptions)):
-            chain_fasta = os.path.join(msa_output_path, f'chain_{chain_idx}.fasta')
+        for chain_idx, (_seq, desc) in enumerate(zip(sequences, descriptions)):
+            chain_fasta = os.path.join(msa_output_path, f"chain_{chain_idx}.fasta")
             uniprot_runner = jackhmmer.Jackhmmer(
                 binary_path=JACKHMMER_BINARY_PATH,
                 database_path=uniprot_database_path,
             )
             uniprot_results = uniprot_runner.query(chain_fasta)[0]
-            uniprot_msa = parsers.parse_stockholm(uniprot_results['sto'])
+            uniprot_msa = parsers.parse_stockholm(uniprot_results["sto"])
             chain_features[chain_idx].update(
                 pipeline_multimer.DataPipeline._all_seq_msa_features(
-                    chain_fasta, uniprot_msa))
+                    chain_fasta, uniprot_msa
+                )
+            )
             all_chain_features[desc] = chain_features[chain_idx]
 
         # Pair and merge features
         feature_dict = pipeline_multimer.DataPipeline._pair_and_merge(
-            all_chain_features=all_chain_features)
-        feature_dict = pipeline_multimer.DataPipeline._pad_features(
-            feature_dict)
+            all_chain_features=all_chain_features
+        )
+        feature_dict = pipeline_multimer.DataPipeline._pad_features(feature_dict)
     else:
         # Monomer: single chain
         if len(sequences) != 1:
-            raise ValueError(
-                f'Expected 1 sequence for monomer, got {len(sequences)}')
+            raise ValueError(f"Expected 1 sequence for monomer, got {len(sequences)}")
 
         feature_dict = _run_mmseqs2_single_chain(
             fasta_path=fasta_path,
@@ -791,41 +832,48 @@ def run_mmseqs2_data_pipeline(
         )
 
     # Save features
-    with open(features_output_path, 'wb') as f:
+    with open(features_output_path, "wb") as f:
         pickle.dump(feature_dict, f, protocol=4)
 
     # Collect MSA metadata
     msas_metadata = {}
     if run_multimer_system:
-        folders = [os.path.join(msa_output_path, d)
-                   for d in os.listdir(msa_output_path)
-                   if os.path.isdir(os.path.join(msa_output_path, d))]
+        folders = [
+            os.path.join(msa_output_path, d)
+            for d in os.listdir(msa_output_path)
+            if os.path.isdir(os.path.join(msa_output_path, d))
+        ]
         paths = []
         for folder in folders:
-            paths += [os.path.join(folder, f)
-                      for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
+            paths += [
+                os.path.join(folder, f)
+                for f in os.listdir(folder)
+                if os.path.isfile(os.path.join(folder, f))
+            ]
     else:
-        paths = [os.path.join(msa_output_path, f)
-                 for f in os.listdir(msa_output_path)
-                 if os.path.isfile(os.path.join(msa_output_path, f))]
+        paths = [
+            os.path.join(msa_output_path, f)
+            for f in os.listdir(msa_output_path)
+            if os.path.isfile(os.path.join(msa_output_path, f))
+        ]
 
     for filepath in paths:
-        ext = filepath.split('.')[-1]
+        ext = filepath.split(".")[-1]
         try:
-            with open(filepath, 'r') as f:
+            with open(filepath) as f:
                 content = f.read()
-            if ext == 'sto':
+            if ext == "sto":
                 parsed = parsers.parse_stockholm(content)
-            elif ext == 'a3m':
+            elif ext == "a3m":
                 parsed = parsers.parse_a3m(content)
-            elif ext == 'hhr':
+            elif ext == "hhr":
                 parsed = parsers.parse_hhr(content)
             else:
                 continue
-            key = os.path.join(
-                filepath.split(os.sep)[-2], filepath.split(os.sep)[-1])
+            key = os.path.join(filepath.split(os.sep)[-2], filepath.split(os.sep)[-1])
             msas_metadata[key] = len(parsed)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Skipping MSA metadata entry %s: %s", filepath, exc)
             continue
 
     return feature_dict, msas_metadata
@@ -835,7 +883,8 @@ def _check_gpu_available() -> bool:
     """Check if a CUDA GPU is available for MMseqs2."""
     try:
         result = subprocess.run(
-            ['nvidia-smi'], capture_output=True, timeout=5)
+            ["nvidia-smi"], capture_output=True, timeout=5, check=False
+        )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
@@ -856,7 +905,7 @@ def _run_mmseqs2_single_chain(
     max_template_date: str,
     run_multimer_system: bool,
     gpu: bool = True,
-) -> Dict:
+) -> dict:
     """Run MMseqs2 MSA search + template search for a single chain.
 
     Returns AlphaFold feature dict for this chain.
@@ -870,17 +919,19 @@ def _run_mmseqs2_single_chain(
     #   mgnify:   ~259 GB index / 12 splits = ~22 GB/chunk
     #   small_bfd: ~36 GB index / 2 splits = ~18 GB/chunk
     db_searches = [
-        ('uniref90', uniref90_mmseqs_path, 10000, 8),
-        ('mgnify', mgnify_mmseqs_path, 501, 12),
-        ('small_bfd', small_bfd_mmseqs_path, 10000, 2),
+        ("uniref90", uniref90_mmseqs_path, 10000, 8),
+        ("mgnify", mgnify_mmseqs_path, 501, 12),
+        ("small_bfd", small_bfd_mmseqs_path, 10000, 2),
     ]
 
     msas = []
     for db_name, db_path, max_seqs, split in db_searches:
-        a3m_path = os.path.join(msa_output_dir, f'{db_name}.a3m')
-        tmp_dir = tempfile.mkdtemp(prefix=f'mmseqs2_{db_name}_')
+        a3m_path = os.path.join(msa_output_dir, f"{db_name}.a3m")
+        tmp_dir = tempfile.mkdtemp(prefix=f"mmseqs2_{db_name}_")
         try:
-            logging.info(f'Running MMseqs2 search against {db_name} (gpu={gpu}, split={split})')
+            logger.info(
+                f"Running MMseqs2 search against {db_name} (gpu={gpu}, split={split})"
+            )
             t_search = time.time()
             n_seqs = run_mmseqs2_search(
                 query_fasta=fasta_path,
@@ -891,19 +942,20 @@ def _run_mmseqs2_single_chain(
                 max_seqs=max_seqs,
                 split=split,
             )
-            logging.info(
-                f'MMseqs2 {db_name}: {n_seqs} sequences in {time.time() - t_search:.1f}s')
+            logger.info(
+                f"MMseqs2 {db_name}: {n_seqs} sequences in {time.time() - t_search:.1f}s"
+            )
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
         # Parse the A3M output, stripping null bytes that MMseqs2
         # result2msa can emit for padded sequences.
         with open(a3m_path) as f:
-            a3m_str = f.read().replace('\x00', '')
+            a3m_str = f.read().replace("\x00", "")
         msa = parsers.parse_a3m(a3m_str)
         msas.append(msa)
 
-    logging.info(f'All MMseqs2 searches done in {time.time() - t0:.1f}s')
+    logger.info(f"All MMseqs2 searches done in {time.time() - t0:.1f}s")
 
     # 2. Build sequence features
     sequence_features = make_sequence_features(
@@ -917,7 +969,7 @@ def _run_mmseqs2_single_chain(
 
     # 4. Template search (still CPU — HHsearch for monomer, hmmsearch for multimer)
     # Use the uniref90 A3M as input for template search
-    uniref90_a3m_path = os.path.join(msa_output_dir, 'uniref90.a3m')
+    uniref90_a3m_path = os.path.join(msa_output_dir, "uniref90.a3m")
 
     if run_multimer_system:
         template_searcher = hmmsearch.Hmmsearch(
@@ -937,13 +989,14 @@ def _run_mmseqs2_single_chain(
         with open(uniref90_a3m_path) as f:
             a3m_str = f.read()
         # Write as STO for template search compatibility
-        sto_path = os.path.join(msa_output_dir, 'uniref90.sto')
+        sto_path = os.path.join(msa_output_dir, "uniref90.sto")
         _write_a3m_as_sto(a3m_str, sto_path)
         with open(sto_path) as f:
             sto_str = f.read()
         msa_for_templates = parsers.deduplicate_stockholm_msa(sto_str)
         msa_for_templates = parsers.remove_empty_columns_from_stockholm_msa(
-            msa_for_templates)
+            msa_for_templates
+        )
         hits_str = template_searcher.query(msa_for_templates)
     else:
         template_searcher = hhsearch.HHSearch(
@@ -964,17 +1017,19 @@ def _run_mmseqs2_single_chain(
         hits_str = template_searcher.query(msa_for_templates)
 
     # Save template hits
-    hits_ext = 'sto' if run_multimer_system else 'hhr'
-    hits_path = os.path.join(msa_output_dir, f'pdb_hits.{hits_ext}')
-    with open(hits_path, 'w') as f:
+    hits_ext = "sto" if run_multimer_system else "hhr"
+    hits_path = os.path.join(msa_output_dir, f"pdb_hits.{hits_ext}")
+    with open(hits_path, "w") as f:
         f.write(hits_str)
 
     template_hits = template_searcher.get_template_hits(
-        output_string=hits_str, input_sequence=sequence)
+        output_string=hits_str, input_sequence=sequence
+    )
     templates_result = template_featurizer.get_templates(
-        query_sequence=sequence, hits=template_hits)
+        query_sequence=sequence, hits=template_hits
+    )
 
-    logging.info(f'Template search found {len(template_hits)} hits')
+    logger.info(f"Template search found {len(template_hits)} hits")
 
     # 5. Combine all features
     feature_dict = {
@@ -988,27 +1043,26 @@ def _run_mmseqs2_single_chain(
 
 def _write_a3m_as_sto(a3m_str: str, sto_path: str):
     """Convert A3M alignment to minimal Stockholm format for template search."""
-    lines = a3m_str.strip().split('\n')
+    lines = a3m_str.strip().split("\n")
     names = []
     seqs = []
     current_name = None
     current_seq = []
     for line in lines:
-        if line.startswith('>'):
+        if line.startswith(">"):
             if current_name is not None:
                 names.append(current_name)
-                seqs.append(''.join(current_seq))
+                seqs.append("".join(current_seq))
             current_name = line[1:].split()[0]
             current_seq = []
         else:
             # Remove lowercase insertions for Stockholm format
-            current_seq.append(''.join(c for c in line if not c.islower()))
+            current_seq.append("".join(c for c in line if not c.islower()))
     if current_name is not None:
         names.append(current_name)
-        seqs.append(''.join(current_seq))
+        seqs.append("".join(current_seq))
 
-    with open(sto_path, 'w') as f:
-        f.write('# STOCKHOLM 1.0\n')
-        for name, seq in zip(names, seqs):
-            f.write(f'{name}\t{seq}\n')
-        f.write('//\n')
+    with open(sto_path, "w") as f:
+        f.write("# STOCKHOLM 1.0\n")
+        f.writelines(f"{name}\t{seq}\n" for name, seq in zip(names, seqs))
+        f.write("//\n")
