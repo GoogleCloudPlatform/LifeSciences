@@ -26,7 +26,7 @@ For general prerequisites and setup instructions common to all applications, you
 
 ## Getting help
 
-If you have any questions or if you found any problems with this repository, please report through [GitHub issues]().
+If you have any questions or if you found any problems with this repository, please report through [GitHub issues](https://github.com/GoogleCloudPlatform/LifeSciences/issues).
 
 ## Contributing
 
