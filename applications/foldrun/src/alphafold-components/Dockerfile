@@ -86,9 +86,6 @@ RUN pip3 install --no-cache-dir --require-hashes \
 ADD patches/fix_hmmsearch_parser.py /tmp/fix_hmmsearch_parser.py
 RUN python3 /tmp/fix_hmmsearch_parser.py && rm /tmp/fix_hmmsearch_parser.py
 
-# Add SETUID bit to the ldconfig binary so that non-root users can run it.
-RUN chmod u+s /sbin/ldconfig.real
-
 WORKDIR /modules
 ADD src/components/alphafold_utils.py .
 
