@@ -133,7 +133,21 @@ async def upload_file(
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required")
 
-    ext = os.path.splitext(file.filename)[1].lower()
+    safe_filename = os.path.basename(file.filename)
+    if (
+        not safe_filename
+        or safe_filename != file.filename
+        or safe_filename in {".", ".."}
+        or "\\" in file.filename
+        or "/" in file.filename
+        or "\x00" in file.filename
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename: path traversal and directory separators are not allowed.",
+        )
+
+    ext = os.path.splitext(safe_filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
@@ -149,8 +163,9 @@ async def upload_file(
     try:
         bucket = client.bucket(settings.gcs_bucket_name)
 
-        # Create a safe filename (you might want to add more sanitization or UUIDs here)
-        file_path = f"{settings.gcs_media_folder}/{file.filename}"
+        file_path = _validate_media_file_path(
+            f"{settings.gcs_media_folder.strip('/')}/{safe_filename}"
+        )
         blob = bucket.blob(file_path)
 
         # Upload from file object
@@ -164,7 +179,7 @@ async def upload_file(
         proxy_url = f"/api/v1/storage/file/{file_path}"
 
         return StorageItem(
-            name=file.filename,
+            name=safe_filename,
             uri=f"gs://{settings.gcs_bucket_name}/{file_path}",
             url=proxy_url,
             content_type=blob.content_type,
@@ -299,22 +314,42 @@ async def get_file(
         file_size = blob.size
 
         if range_header:
+            if not range_header.startswith("bytes="):
+                raise HTTPException(
+                    status_code=416,
+                    detail="Range not satisfiable",
+                    headers={"Content-Range": f"bytes */{file_size}"},
+                )
             try:
                 # Parse Range header (e.g., "bytes=0-1023")
-                start_str, end_str = range_header.replace("bytes=", "").split("-")
+                start_str, end_str = range_header[len("bytes=") :].split("-")
+                if not start_str:
+                    raise ValueError("Missing start offset")
                 start = int(start_str)
                 end = int(end_str) if end_str else file_size - 1
-            except ValueError:
-                # Fallback to full content if parsing fails
-                start = 0
-                end = file_size - 1
+            except ValueError as err:
+                raise HTTPException(
+                    status_code=416,
+                    detail="Range not satisfiable",
+                    headers={"Content-Range": f"bytes */{file_size}"},
+                ) from err
 
-            if start >= file_size:
-                raise HTTPException(status_code=416, detail="Range not satisfiable")
+            if start < 0 or end < 0 or start > end or start >= file_size:
+                raise HTTPException(
+                    status_code=416,
+                    detail="Range not satisfiable",
+                    headers={"Content-Range": f"bytes */{file_size}"},
+                )
 
             # Ensure end is within bounds
             end = min(end, file_size - 1)
             chunk_size = end - start + 1
+            if chunk_size <= 0:
+                raise HTTPException(
+                    status_code=416,
+                    detail="Range not satisfiable",
+                    headers={"Content-Range": f"bytes */{file_size}"},
+                )
 
             async def iterfile():
                 f = await asyncio.to_thread(blob.open, "rb")

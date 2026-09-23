@@ -126,3 +126,52 @@ def test_get_file_range_includes_security_headers(test_client):
     assert response.status_code == 206
     assert response.headers.get("X-Content-Type-Options") == "nosniff"
     assert response.headers.get("Content-Security-Policy") == "default-src 'none'"
+
+
+@pytest.mark.parametrize(
+    "malicious_filename",
+    [
+        "../traversal_test.png",
+        "..\\traversal_test.png",
+        "sub/../../traversal_test.png",
+        "subdir/photo.png",
+        "/etc/photo.png",
+    ],
+)
+def test_upload_rejects_path_traversal_filenames(
+    test_client, mock_storage_client, malicious_filename
+):
+    """Uploading a file with directory traversal or path separators must be rejected (CWE-22)."""
+    response = test_client.post(
+        "/api/v1/storage/upload",
+        files={"file": (malicious_filename, b"\x89PNG\r\n\x1a\n", "image/png")},
+    )
+    assert response.status_code in (400, 403), (
+        f"Expected 400 or 403 for {malicious_filename!r}, got {response.status_code}"
+    )
+    mock_storage_client.bucket.return_value.blob.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "invalid_range",
+    [
+        "bytes=100-50",
+        "bytes=10-5",
+        "bytes=1000-1050",
+        "bytes=-5-10",
+        "bytes=-5",
+        "items=0-5",
+    ],
+)
+def test_get_file_rejects_invalid_or_reversed_range_headers(
+    test_client, mock_storage_client, invalid_range
+):
+    """GET /api/v1/storage/file/{file_path} with reversed or invalid Range header returns HTTP 416 (CWE-1284)."""
+    blob = mock_storage_client.bucket.return_value.blob.return_value
+    blob.size = 1000
+    response = test_client.get(
+        "/api/v1/storage/file/dev/photo.png",
+        headers={"Range": invalid_range},
+    )
+    assert response.status_code == 416
+    assert response.headers.get("Content-Range") == "bytes */1000"
