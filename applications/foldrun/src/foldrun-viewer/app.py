@@ -26,7 +26,7 @@ from datetime import datetime
 
 import google.auth
 import google.auth.transport.requests
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 from google.cloud import storage
 
 logging.basicConfig(level=logging.INFO)
@@ -315,16 +315,30 @@ def _discover_boltz2_predictions(pipeline_root: str) -> list:
     return predictions
 
 
+def _validate_job_id(job_id: str) -> str:
+    """Validate job_id against strict allowlist pattern or abort with 400."""
+    if not isinstance(job_id, str) or not JOB_ID_PATTERN.fullmatch(job_id):
+        abort(400, description="Invalid job_id format")
+    return job_id
+
+
+def _redirect_to_combined_viewer(job_id: str):
+    """Return a validated local redirect to the combined viewer for a safe job_id."""
+    safe_job_id = _validate_job_id(job_id)
+    target_url = url_for("combined_viewer", job_id=safe_job_id)
+    parsed_url = urllib.parse.urlparse(target_url)
+    if parsed_url.scheme or parsed_url.netloc or not target_url.startswith("/"):
+        abort(400, description="Invalid redirect target")
+    return redirect(target_url)
+
+
 @app.route("/")
 def index():
     """Landing page - redirects to combined viewer if job_id provided"""
     job_id = request.args.get("job_id")
 
     if job_id:
-        # Redirect to combined viewer
-        from flask import redirect, url_for
-
-        return redirect(url_for("combined_viewer", job_id=job_id))
+        return _redirect_to_combined_viewer(job_id)
 
     return render_template("index.html")
 
@@ -332,15 +346,15 @@ def index():
 @app.route("/job/<job_id>")
 def job_viewer(job_id):
     """Short URL for viewing a job"""
-    from flask import redirect, url_for
-
-    return redirect(url_for("combined_viewer", job_id=job_id))
+    return _redirect_to_combined_viewer(job_id)
 
 
 @app.route("/combined")
 def combined_viewer():
     """Combined structure + analysis viewer"""
     job_id = request.args.get("job_id")
+    if job_id:
+        job_id = _validate_job_id(job_id)
     pdb_uri = request.args.get("pdb_uri")
     summary_uri = request.args.get("summary_uri")
     model_name = request.args.get("model", "Best Model")

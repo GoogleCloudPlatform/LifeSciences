@@ -118,6 +118,50 @@ class TestFinding445JobIdValidation(unittest.TestCase):
                 f"Expected 400 for malicious job_id '{bad_id}', got {resp.status_code}",
             )
 
+    def test_index_and_job_viewer_reject_invalid_job_id_redirect(self):
+        """GET /?job_id=... and /job/<job_id> must reject invalid job_ids and allow valid local redirects."""
+        valid_id = "alphafold-inference-pipeline-20260215153755"
+        for url in (f"/?job_id={valid_id}", f"/job/{valid_id}"):
+            resp = self.client.get(url)
+            self.assertEqual(resp.status_code, 302)
+            self.assertEqual(resp.headers["Location"], f"/combined?job_id={valid_id}")
+
+        malicious_ids = [
+            "https://evil.example.com",
+            "//evil.example.com",
+            "../otherEndpoint",
+            "job 123",
+            "job123?redirect=https://evil.example.com",
+        ]
+        for bad_id in malicious_ids:
+            resp = self.client.get(f"/?job_id={bad_id}")
+            self.assertEqual(
+                resp.status_code,
+                400,
+                f"Expected 400 for GET /?job_id={bad_id}, got {resp.status_code}",
+            )
+            resp_combined = self.client.get(f"/combined?job_id={bad_id}")
+            self.assertEqual(
+                resp_combined.status_code,
+                400,
+                f"Expected 400 for GET /combined?job_id={bad_id}, got {resp_combined.status_code}",
+            )
+
+
+class TestGenerateSvgsDefusedXml(unittest.TestCase):
+    """Verify scripts/generate-svgs.py uses defusedxml.ElementTree instead of xml.etree.ElementTree."""
+
+    def test_generate_svgs_uses_defusedxml(self):
+        script_path = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "scripts", "generate-svgs.py"
+            )
+        )
+        with open(script_path, encoding="utf-8") as f:
+            source = f.read()
+        self.assertIn("import defusedxml.ElementTree as ET", source)
+        self.assertNotIn("xml.etree.ElementTree", source)
+
 
 if __name__ == "__main__":
     unittest.main()

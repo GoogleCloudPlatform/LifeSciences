@@ -18,7 +18,7 @@
 Usage:
     uv venv /tmp/sticker-venv
     source /tmp/sticker-venv/bin/activate
-    uv pip install "qrcode[pil]"
+    uv pip install "qrcode[pil]" defusedxml
     python generate-svgs.py
 
 Outputs:
@@ -29,8 +29,8 @@ Outputs:
 """
 
 import io
-import xml.etree.ElementTree as ET
 
+import defusedxml.ElementTree as ET
 import qrcode
 import qrcode.image.svg
 
@@ -55,7 +55,9 @@ GOOGLE_GREEN = "#34a853"
 TEXT_PRIMARY = "#202124"
 TEXT_SECONDARY = "#5f6368"
 FONT_FAMILY = "Google Sans, Noto Sans, Helvetica, Arial, sans-serif"
-FONT_FAMILY_DISPLAY = "Google Sans Display, Google Sans, Noto Sans, Helvetica, Arial, sans-serif"
+FONT_FAMILY_DISPLAY = (
+    "Google Sans Display, Google Sans, Noto Sans, Helvetica, Arial, sans-serif"
+)
 
 # DNA helix path inspired by https://uxwing.com/dna-icon/
 HELIX_PATH = (
