@@ -19,6 +19,7 @@ import logging
 import os
 import pickle
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
 
@@ -86,7 +87,23 @@ def _safe_reconstruct_jax_array(fun, args, arr_state, aval_state=None):
             f"Expected ndarray from JAX array reconstruction, got {type(np_value).__name__}"
         )
     np_value.__setstate__(arr_state)
+    if getattr(np_value.dtype, "hasobject", False):
+        raise pickle.UnpicklingError("Object-dtype NumPy arrays are forbidden")
     return np_value
+
+
+def _reject_object_dtype_arrays(obj) -> None:
+    """Recursively ensure no object-dtype NumPy arrays exist in deserialized payload."""
+    if isinstance(obj, np.ndarray):
+        if getattr(obj.dtype, "hasobject", False):
+            raise pickle.UnpicklingError("Object-dtype NumPy arrays are forbidden")
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            _reject_object_dtype_arrays(k)
+            _reject_object_dtype_arrays(v)
+    elif isinstance(obj, (list, tuple, set, frozenset)):
+        for item in obj:
+            _reject_object_dtype_arrays(item)
 
 
 class _RestrictedPredictionUnpickler(pickle.Unpickler):
@@ -102,6 +119,27 @@ class _RestrictedPredictionUnpickler(pickle.Unpickler):
         )
 
 
+def _validate_task_gcs_uri(gcs_uri: str, expected_bucket: str | None = None) -> None:
+    """Validate that a task GCS URI targets the expected bucket and contains no path traversal."""
+    if not gcs_uri or "\x00" in gcs_uri or not gcs_uri.startswith("gs://"):
+        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
+
+    parts = gcs_uri[5:].split("/", 1)
+    bucket = parts[0]
+    blob_path = parts[1] if len(parts) > 1 else ""
+
+    if not bucket or not blob_path:
+        raise ValueError(f"Invalid GCS URI (missing bucket or object path): {gcs_uri}")
+
+    if ".." in blob_path.split("/"):
+        raise ValueError(f"Path traversal detected in GCS URI: {gcs_uri}")
+
+    if expected_bucket and bucket != expected_bucket:
+        raise ValueError(
+            f"Unauthorized GCS bucket '{bucket}'. Expected '{expected_bucket}'."
+        )
+
+
 def load_raw_prediction(pickle_path: str) -> dict:
     """Load raw prediction pickle file using restricted unpickler."""
     with open(pickle_path, "rb") as f:
@@ -110,6 +148,7 @@ def load_raw_prediction(pickle_path: str) -> dict:
         raise pickle.UnpicklingError(
             f"Expected prediction payload to be a dict, got {type(raw_prediction).__name__}"
         )
+    _reject_object_dtype_arrays(raw_prediction)
     return raw_prediction
 
 
@@ -457,73 +496,81 @@ def run_task(
     logger.info(f"Starting analysis for prediction {prediction_index}: {model_name}")
 
     try:
-        local_pickle = f"/tmp/raw_prediction_{prediction_index}.pkl"
-        download_from_gcs(prediction_uri, local_pickle)
+        _validate_task_gcs_uri(prediction_uri, expected_bucket=bucket_name)
+        _validate_task_gcs_uri(output_uri, expected_bucket=bucket_name)
 
-        raw_prediction = load_raw_prediction(local_pickle)
-        plddt_stats = calculate_plddt_stats(raw_prediction["plddt"].tolist())
-        pae_stats = calculate_pae_stats(raw_prediction)
+        with tempfile.TemporaryDirectory(
+            prefix=f"af2_analysis_{prediction_index}_"
+        ) as tmp_dir:
+            local_pickle = os.path.join(tmp_dir, "raw_prediction.pkl")
+            download_from_gcs(prediction_uri, local_pickle)
 
-        quality = get_quality_assessment(plddt_stats["mean"])
+            raw_prediction = load_raw_prediction(local_pickle)
+            plddt_stats = calculate_plddt_stats(raw_prediction["plddt"].tolist())
+            pae_stats = calculate_pae_stats(raw_prediction)
 
-        # Generate plots
-        plot_files = {}
-        output_base = output_uri.rsplit("/", 1)[0]
+            quality = get_quality_assessment(plddt_stats["mean"])
 
-        plddt_plot_path = f"/tmp/plddt_plot_{prediction_index}.png"
-        plot_plddt_distribution(raw_prediction["plddt"], model_name, plddt_plot_path)
+            # Generate plots
+            plot_files = {}
+            output_base = output_uri.rsplit("/", 1)[0]
 
-        plddt_plot_uri = f"{output_base}/plddt_plot_{prediction_index}.png"
-        upload_to_gcs(plddt_plot_path, plddt_plot_uri)
-        plot_files["plddt_plot"] = plddt_plot_uri
-        os.remove(plddt_plot_path)
-
-        if pae_stats is not None:
-            pae_plot_path = f"/tmp/pae_plot_{prediction_index}.png"
-            max_pae = raw_prediction.get("max_predicted_aligned_error", 31.0)
-            plot_error_matrix(
-                raw_prediction["predicted_aligned_error"],
-                model_name,
-                "Expected Position Error (Å)",
-                pae_plot_path,
-                max_value=max_pae,
+            plddt_plot_path = os.path.join(
+                tmp_dir, f"plddt_plot_{prediction_index}.png"
+            )
+            plot_plddt_distribution(
+                raw_prediction["plddt"], model_name, plddt_plot_path
             )
 
-            pae_plot_uri = f"{output_base}/pae_plot_{prediction_index}.png"
-            upload_to_gcs(pae_plot_path, pae_plot_uri)
-            plot_files["pae_plot"] = pae_plot_uri
-            os.remove(pae_plot_path)
+            plddt_plot_uri = f"{output_base}/plddt_plot_{prediction_index}.png"
+            upload_to_gcs(plddt_plot_path, plddt_plot_uri)
+            plot_files["plddt_plot"] = plddt_plot_uri
 
-        analysis = {
-            "prediction_index": prediction_index,
-            "model_name": model_name,
-            "rank": prediction_index + 1,
-            "ranking_confidence": ranking_confidence,
-            "plddt_mean": plddt_stats["mean"],
-            "plddt_median": plddt_stats["median"],
-            "plddt_min": plddt_stats["min"],
-            "plddt_max": plddt_stats["max"],
-            "plddt_std": plddt_stats["std"],
-            "plddt_distribution": plddt_stats["distribution"],
-            "plddt_scores": plddt_stats["per_residue"],
-            "pae_mean": pae_stats["mean"] if pae_stats else None,
-            "pae_median": pae_stats["median"] if pae_stats else None,
-            "pae_min": pae_stats["min"] if pae_stats else None,
-            "pae_max": pae_stats["max"] if pae_stats else None,
-            "quality_assessment": quality,
-            "has_pae": pae_stats is not None,
-            "uri": prediction_uri,
-            "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
-            "plots": plot_files,
-        }
+            if pae_stats is not None:
+                pae_plot_path = os.path.join(
+                    tmp_dir, f"pae_plot_{prediction_index}.png"
+                )
+                max_pae = raw_prediction.get("max_predicted_aligned_error", 31.0)
+                plot_error_matrix(
+                    raw_prediction["predicted_aligned_error"],
+                    model_name,
+                    "Expected Position Error (Å)",
+                    pae_plot_path,
+                    max_value=max_pae,
+                )
 
-        local_json = f"/tmp/analysis_{prediction_index}.json"
-        with open(local_json, "w") as f:
-            json.dump(analysis, f, indent=2)
+                pae_plot_uri = f"{output_base}/pae_plot_{prediction_index}.png"
+                upload_to_gcs(pae_plot_path, pae_plot_uri)
+                plot_files["pae_plot"] = pae_plot_uri
 
-        upload_to_gcs(local_json, output_uri)
-        os.remove(local_pickle)
-        os.remove(local_json)
+            analysis = {
+                "prediction_index": prediction_index,
+                "model_name": model_name,
+                "rank": prediction_index + 1,
+                "ranking_confidence": ranking_confidence,
+                "plddt_mean": plddt_stats["mean"],
+                "plddt_median": plddt_stats["median"],
+                "plddt_min": plddt_stats["min"],
+                "plddt_max": plddt_stats["max"],
+                "plddt_std": plddt_stats["std"],
+                "plddt_distribution": plddt_stats["distribution"],
+                "plddt_scores": plddt_stats["per_residue"],
+                "pae_mean": pae_stats["mean"] if pae_stats else None,
+                "pae_median": pae_stats["median"] if pae_stats else None,
+                "pae_min": pae_stats["min"] if pae_stats else None,
+                "pae_max": pae_stats["max"] if pae_stats else None,
+                "quality_assessment": quality,
+                "has_pae": pae_stats is not None,
+                "uri": prediction_uri,
+                "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
+                "plots": plot_files,
+            }
+
+            local_json = os.path.join(tmp_dir, f"analysis_{prediction_index}.json")
+            with open(local_json, "w") as f:
+                json.dump(analysis, f, indent=2)
+
+            upload_to_gcs(local_json, output_uri)
 
         logger.info(f"✅ Completed analysis for prediction {prediction_index}")
 

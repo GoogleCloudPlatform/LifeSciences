@@ -38,9 +38,7 @@ class AF2AnalysisTool(AF2Tool):
         """Get file size in bytes from GCS URI."""
         from google.cloud import storage
 
-        # Parse GCS URI
-        if not gcs_uri.startswith("gs://"):
-            raise ValueError(f"Invalid GCS URI: {gcs_uri}")
+        self._validate_gcs_uri(gcs_uri)
 
         parts = gcs_uri[5:].split("/", 1)
         bucket_name = parts[0]
@@ -164,12 +162,18 @@ class AF2AnalysisTool(AF2Tool):
 
     def _validate_gcs_uri(self, gcs_uri: str) -> None:
         """Validate that a GCS URI targets an authorized project bucket."""
-        if not gcs_uri.startswith("gs://"):
+        if not gcs_uri or "\x00" in gcs_uri or not gcs_uri.startswith("gs://"):
             raise ValueError(f"Invalid GCS URI: {gcs_uri}")
 
         parts = gcs_uri[5:].split("/", 1)
         bucket_name = parts[0]
         blob_path = parts[1] if len(parts) > 1 else ""
+
+        if not bucket_name or not blob_path:
+            raise ValueError(f"Invalid GCS URI (missing bucket or object path): {gcs_uri}")
+
+        if ".." in blob_path.split("/"):
+            raise ValueError(f"Path traversal detected in GCS URI: {gcs_uri}")
 
         allowed_buckets = {
             b
@@ -177,15 +181,14 @@ class AF2AnalysisTool(AF2Tool):
                 getattr(self.config, "bucket_name", None),
                 getattr(self.config, "databases_bucket_name", None),
             )
-            if b
+            if b and isinstance(b, str)
         }
-        if allowed_buckets and bucket_name not in allowed_buckets:
+        if not allowed_buckets:
+            raise ValueError("No authorized GCS buckets configured")
+        if bucket_name not in allowed_buckets:
             raise ValueError(
                 f"Unauthorized GCS bucket '{bucket_name}'. Expected one of: {sorted(allowed_buckets)}"
             )
-
-        if ".." in blob_path.split("/"):
-            raise ValueError(f"Path traversal detected in GCS URI: {gcs_uri}")
 
     def _validate_local_path(self, local_path: str) -> str:
         """Validate and canonicalize a local file path to prevent path traversal."""

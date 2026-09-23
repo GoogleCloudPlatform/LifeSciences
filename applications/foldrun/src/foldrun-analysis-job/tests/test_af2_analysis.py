@@ -23,6 +23,9 @@ _stubs = {
     "google.cloud.aiplatform_v1": MagicMock(),
     "google.genai": MagicMock(),
     "google.genai.types": MagicMock(),
+    "matplotlib": MagicMock(),
+    "matplotlib.pyplot": MagicMock(),
+    "seaborn": MagicMock(),
 }
 for name, stub in _stubs.items():
     sys.modules.setdefault(name, stub)
@@ -156,3 +159,41 @@ class TestAF2Analysis:
             match="Forbidden constructor in JAX array reconstruction",
         ):
             af2_analyzer._safe_reconstruct_jax_array(dict, (), {}, {})
+
+    def test_load_raw_prediction_blocks_object_dtype_array(self, tmp_path):
+        """Object-dtype NumPy arrays inside prediction dicts are rejected."""
+        import pickle
+
+        import numpy as np
+        import pytest
+
+        pkl_file = tmp_path / "obj_dtype.pkl"
+        with open(pkl_file, "wb") as f:
+            pickle.dump({"plddt": np.array([{"a": 1}], dtype=object)}, f)
+
+        with pytest.raises(
+            pickle.UnpicklingError,
+            match="Object-dtype NumPy arrays are forbidden",
+        ):
+            af2_analyzer.load_raw_prediction(str(pkl_file))
+
+    def test_validate_task_gcs_uri_enforces_bucket_and_blocks_traversal(self):
+        """_validate_task_gcs_uri enforces bucket allowlist and rejects traversal."""
+        import pytest
+
+        af2_analyzer._validate_task_gcs_uri(
+            "gs://valid-bucket/pipeline_runs/job1/raw_prediction.pkl",
+            expected_bucket="valid-bucket",
+        )
+
+        with pytest.raises(ValueError, match="Unauthorized GCS bucket"):
+            af2_analyzer._validate_task_gcs_uri(
+                "gs://attacker-bucket/exploit.pkl",
+                expected_bucket="valid-bucket",
+            )
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            af2_analyzer._validate_task_gcs_uri(
+                "gs://valid-bucket/pipeline_runs/../exploit.pkl",
+                expected_bucket="valid-bucket",
+            )

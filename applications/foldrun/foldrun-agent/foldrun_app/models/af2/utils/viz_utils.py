@@ -56,11 +56,50 @@ _ALLOWED_NUMPY_NAMES = {
     "_frombuffer",
 }
 
+_ALLOWED_NUMPY_RECONSTRUCTORS = {
+    getattr(getattr(np, "_core", np.core).multiarray, "_reconstruct", None),
+} - {None}
+
+
+def _safe_reconstruct_jax_array(
+    fun: Any, args: Any, arr_state: Any, aval_state: Any = None
+) -> np.ndarray:
+    """Safely reconstruct a pickled JAX ArrayImpl into a NumPy ndarray."""
+    if fun not in _ALLOWED_NUMPY_RECONSTRUCTORS:
+        raise pickle.UnpicklingError(f"Forbidden constructor in JAX array reconstruction: {fun!r}")
+    np_value = fun(*args)
+    if not isinstance(np_value, np.ndarray):
+        raise pickle.UnpicklingError(
+            f"Expected ndarray from JAX array reconstruction, got {type(np_value).__name__}"
+        )
+    np_value.__setstate__(arr_state)
+    if getattr(np_value.dtype, "hasobject", False):
+        raise pickle.UnpicklingError("Object-dtype NumPy arrays are forbidden")
+    return np_value
+
+
+def _reject_object_dtype_arrays(obj: Any) -> None:
+    """Recursively ensure no object-dtype NumPy arrays exist in deserialized payload."""
+    if isinstance(obj, np.ndarray):
+        if getattr(obj.dtype, "hasobject", False):
+            raise pickle.UnpicklingError("Object-dtype NumPy arrays are forbidden")
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            _reject_object_dtype_arrays(k)
+            _reject_object_dtype_arrays(v)
+    elif isinstance(obj, (list, tuple, set, frozenset)):
+        for item in obj:
+            _reject_object_dtype_arrays(item)
+
 
 class _RestrictedUnpickler(pickle.Unpickler):
-    """Restricted unpickler allowing only safe builtins and NumPy array primitives."""
+    """Restricted unpickler allowing only safe builtins and NumPy/JAX array primitives."""
 
     def find_class(self, module: str, name: str) -> Any:
+        if (module, name) == ("jax._src.array", "_reconstruct_array"):
+            return _safe_reconstruct_jax_array
+        if (module, name) == ("ml_dtypes", "bfloat16"):
+            return super().find_class(module, name)
         if module == "builtins" and name in _ALLOWED_BUILTINS:
             return super().find_class(module, name)
         if module in _ALLOWED_NUMPY_MODULES and name in _ALLOWED_NUMPY_NAMES:
@@ -113,6 +152,13 @@ def load_raw_prediction(pickle_path: str) -> dict[str, Any]:
     """
     with open(pickle_path, "rb") as f:
         raw_prediction = _RestrictedUnpickler(f).load()
+
+    if not isinstance(raw_prediction, dict):
+        raise pickle.UnpicklingError(
+            f"Expected prediction payload to be a dict, got {type(raw_prediction).__name__}"
+        )
+
+    _reject_object_dtype_arrays(raw_prediction)
 
     logger.info(f"Loaded raw prediction from {pickle_path}")
     return raw_prediction

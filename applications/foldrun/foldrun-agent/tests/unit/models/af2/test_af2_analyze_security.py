@@ -132,3 +132,65 @@ class TestAF2AnalyzeSecurity:
             analysis_tool.run(
                 {"raw_prediction_path": os.path.join(tempfile.gettempdir(), "../../etc/passwd")}
             )
+
+    def test_fails_closed_when_allowed_buckets_unconfigured(self, analysis_tool):
+        """_validate_gcs_uri must fail closed when no buckets are configured."""
+        analysis_tool.config.bucket_name = None
+        analysis_tool.config.databases_bucket_name = None
+
+        with pytest.raises(ValueError, match="No authorized GCS buckets configured"):
+            analysis_tool.run({"raw_prediction_path": "gs://attacker-bucket/exploit.pkl"})
+
+    def test_get_gcs_file_size_validates_bucket(self, analysis_tool):
+        """_get_gcs_file_size must validate bucket authorization before querying GCS."""
+        with pytest.raises(ValueError, match="Unauthorized GCS bucket"):
+            analysis_tool._get_gcs_file_size("gs://attacker-bucket/exploit.pkl")
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            analysis_tool._get_gcs_file_size(
+                "gs://authorized-pipeline-bucket/job1/../../exploit.pkl"
+            )
+
+    def test_rejects_non_dict_and_object_dtype_pickles(self, analysis_tool):
+        """Non-dict top-level payloads and object-dtype NumPy arrays must be rejected."""
+        # 1. Top-level non-dict (e.g. int/list)
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as tmp_file:
+            pickle.dump([1, 2, 3], tmp_file)
+            non_dict_path = tmp_file.name
+
+        try:
+            with pytest.raises(
+                pickle.UnpicklingError, match="Expected prediction payload to be a dict"
+            ):
+                analysis_tool.run({"raw_prediction_path": non_dict_path})
+        finally:
+            if os.path.exists(non_dict_path):
+                os.remove(non_dict_path)
+
+        # 2. Dict containing an object-dtype NumPy array
+        obj_array_payload = {
+            "plddt": np.array([{"nested": "object"}, 90.0], dtype=object),
+        }
+        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as tmp_file:
+            pickle.dump(obj_array_payload, tmp_file)
+            obj_array_path = tmp_file.name
+
+        try:
+            with pytest.raises(
+                pickle.UnpicklingError, match="Object-dtype NumPy arrays are forbidden"
+            ):
+                analysis_tool.run({"raw_prediction_path": obj_array_path})
+        finally:
+            if os.path.exists(obj_array_path):
+                os.remove(obj_array_path)
+
+    def test_skill_entrypoint_blocks_attacker_gcs_pickle(self, analysis_tool):
+        """End-to-end taint chain from analyze_prediction_quality blocks unauthorized GCS URI."""
+        from foldrun_app.skills.results_analysis.tools import analyze_prediction_quality
+
+        with patch(
+            "foldrun_app.skills.results_analysis.tools.get_tool",
+            return_value=analysis_tool,
+        ):
+            with pytest.raises(ValueError, match="Unauthorized GCS bucket"):
+                analyze_prediction_quality(raw_prediction_path="gs://attacker-bucket/exploit.pkl")
