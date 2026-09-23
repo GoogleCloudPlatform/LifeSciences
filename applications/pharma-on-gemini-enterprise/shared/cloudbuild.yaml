@@ -69,7 +69,7 @@ steps:
 
   # 3. Deploy Agent
   - id: 'deploy-agent'
-    name: 'python:3.13-slim'
+    name: 'ghcr.io/astral-sh/uv:python3.13-bookworm-slim'
     dir: '${_AGENT_DIR}'
     entrypoint: 'bash'
     env:
@@ -81,9 +81,7 @@ steps:
       - '-c'
       - |
         set -e
-        apt-get update && apt-get install -y curl git
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        export PATH="$$HOME/.local/bin:$$PATH"
+        apt-get update && apt-get install -y git
 
         # Read the reasoning engine ID from the previous step
         ENGINE_ID=$(cat /workspace/reasoning_engine_id.txt)
@@ -132,7 +130,7 @@ steps:
 
   # 4. [Optional] Register Agent with Gemini Enterprise
   - id: 'register-agent'
-    name: 'python:3.13-slim'
+    name: 'ghcr.io/astral-sh/uv:python3.13-bookworm-slim'
     dir: '${_AGENT_DIR}'
     entrypoint: 'bash'
     env:
@@ -146,10 +144,6 @@ steps:
           echo "Skipping Gemini Enterprise registration (APP_ID not provided)."
           exit 0
         fi
-
-        apt-get update && apt-get install -y curl
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        export PATH="$$HOME/.local/bin:$$PATH"
 
         ENGINE_ID=$(cat /workspace/reasoning_engine_id.txt)
         AGENT_DISPLAY_NAME=$(cat /workspace/agent_display_name.txt)

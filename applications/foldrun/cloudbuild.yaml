@@ -227,7 +227,7 @@ steps:
   # Skipped only for analysis-job-only targets.
   # ============================================================================
   - id: 'deploy-agent-runtime'
-    name: 'python:3.12-slim'
+    name: 'ghcr.io/astral-sh/uv:python3.12-bookworm-slim'
     dir: 'foldrun-agent'
     entrypoint: bash
     env:
@@ -263,10 +263,6 @@ steps:
           echo "Skipping agent deploy (BUILD_TARGET=$$BUILD_TARGET)"
           exit 0
         fi
-
-        apt-get update && apt-get install -y curl
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        export PATH="$$HOME/.local/bin:$$PATH"
 
         # Create deployment_metadata.json to target the existing engine
         echo "{\"remote_agent_runtime_id\": \"$$AGENT_RUNTIME_ID\", \"deployment_target\": \"agent_runtime\"}" > deployment_metadata.json
@@ -309,7 +305,7 @@ steps:
   # 5. [Optional] Register Agent with Gemini Enterprise
   # ============================================================================
   - id: 'register-agent'
-    name: 'python:3.13-slim'
+    name: 'ghcr.io/astral-sh/uv:python3.13-bookworm-slim'
     dir: 'foldrun-agent'
     entrypoint: 'bash'
     env:
@@ -324,10 +320,6 @@ steps:
           echo "Skipping Gemini Enterprise registration (APP_ID not provided)."
           exit 0
         fi
-
-        apt-get update && apt-get install -y curl
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        export PATH="$$HOME/.local/bin:$$PATH"
 
         # Run publish command
         export GOOGLE_CLOUD_PROJECT="$$PROJECT_ID"
