@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "review.schema.json",
+  "title": "Review",
+  "description": "A structured review of a hypothesis with scored axes and verdict.",
+  "type": "object",
+  "required": [
+    "id",
+    "hypothesis_id",
+    "review_type",
+    "scores",
+    "verdict",
+    "key_criticisms",
+    "verified_citations",
+    "contradicting_evidence",
+    "reviewer",
+    "epoch"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^H-[0-9]{4}\\.R-[0-9]{2}$",
+      "description": "Review identifier, e.g. H-0042.R-01."
+    },
+    "hypothesis_id": {
+      "type": "string",
+      "pattern": "^H-[0-9]{4}$",
+      "description": "ID of the hypothesis being reviewed."
+    },
+    "review_type": {
+      "type": "string",
+      "enum": ["initial", "full", "deep", "safety", "recurrent"],
+      "description": "Type of review performed."
+    },
+    "scores": {
+      "type": "object",
+      "required": ["correctness", "novelty", "testability", "safety"],
+      "properties": {
+        "correctness": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Correctness/plausibility score (1-5)."
+        },
+        "novelty": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Novelty score (1-5)."
+        },
+        "testability": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Testability score (1-5)."
+        },
+        "safety": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Safety score (1-5). Low scores trigger quarantine review."
+        },
+        "goal_alignment": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Optional. How directly the hypothesis addresses run.yaml's research goal (1-5). Omit when not assessed; consumers treat absence as neutral. Feeds S_goal in composite Elo."
+        },
+        "constraint_compliance": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Optional. Whether the hypothesis satisfies the hard constraints in run.yaml.constraints (1-5). Omit when the run declares no constraints or the axis was not assessed. Feeds S_comp in composite Elo."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Scored review axes."
+    },
+    "verdict": {
+      "type": "string",
+      "description": "Summary verdict of the review."
+    },
+    "key_criticisms": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of key criticisms or concerns."
+    },
+    "verified_citations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Literature record IDs that were independently verified."
+    },
+    "phantom_citations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Literature record IDs identified as non-existent or fabricated."
+    },
+    "citation_manifest": {
+      "type": "string",
+      "description": "Relative path to the immutable citation manifest (e.g. citations/H-0001.json)."
+    },
+    "contradicting_evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Literature record IDs of contradicting evidence found during review."
+    },
+    "reviewer": {
+      "type": "string",
+      "description": "Name of the reviewing agent."
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Epoch in which this review was produced."
+    },
+    "recurrent_notes": {
+      "type": "object",
+      "required": [
+        "parent_id",
+        "operator",
+        "criticisms_addressed",
+        "criticisms_unaddressed",
+        "new_weaknesses",
+        "net_quality_delta"
+      ],
+      "properties": {
+        "parent_id": {
+          "type": "string",
+          "pattern": "^H-[0-9]{4}$",
+          "description": "Parent hypothesis ID that this variant evolved from."
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["combine", "ground", "simplify", "oob"],
+          "description": "Evolutionary operator applied to create this variant."
+        },
+        "criticisms_addressed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Prior review criticisms that were addressed in this variant."
+        },
+        "criticisms_unaddressed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Prior review criticisms that remain unaddressed."
+        },
+        "new_weaknesses": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "New weaknesses introduced by the evolution."
+        },
+        "net_quality_delta": {
+          "type": "string",
+          "enum": ["improved", "unchanged", "degraded"],
+          "description": "Overall assessment of whether the evolved variant is better than its parent."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Evaluation of how an evolved variant addresses parent criticisms."
+    }
+  },
+  "additionalProperties": false
+}

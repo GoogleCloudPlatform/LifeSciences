@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Expression Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a1a; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; }
+    #viewer-container { width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>Tissue Expression</h1>
+  <div class="filename" id="filename"></div>
+  <div id="viewer-container"></div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    function barColor(v) {
+      if (v > 10) return '#dc2626';  // High expression - red
+      if (v > 2)  return '#d97706';  // Moderate - amber
+      return '#3b82f6';              // Low - blue
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file.tissue.json');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(function(jsonData) {
+          /* Support formats:
+             - Array of objects (HPA format): [{"Gene": "...", "Tissue RNA - Brain [nTPM]": 5.2, ...}]
+             - Object wrapper: {"data": [...]}
+             - Plain object with tissue keys */
+          var entry;
+          if (Array.isArray(jsonData)) {
+            entry = jsonData[0];
+          } else if (jsonData.data && Array.isArray(jsonData.data)) {
+            entry = jsonData.data[0];
+          } else if (typeof jsonData === 'object') {
+            entry = jsonData;
+          }
+
+          if (!entry || typeof entry !== 'object') {
+            throw new Error('No expression data found in file');
+          }
+
+          // Extract gene name
+          var fileName = filePath.split('/').pop();
+          var geneName = entry['Gene'] || entry['gene'] || fileName.replace(/\.tissue\.json$/i, '');
+          document.title = 'Expression: ' + escapeHtml(geneName);
+
+          // Parse HPA tissue-key format: "Tissue RNA - <name> [nTPM]"
+          var tissues = [];
+          var values = [];
+          var hpaPattern = /^Tissue RNA - (.+) \[nTPM\]$/;
+          var hasHpaKeys = false;
+
+          Object.keys(entry).forEach(function(key) {
+            var match = key.match(hpaPattern);
+            if (match) {
+              hasHpaKeys = true;
+              tissues.push(match[1]);
+              values.push(parseFloat(entry[key]) || 0);
+            }
+          });
+
+          // Fallback: if no HPA keys, try generic formats
+          if (!hasHpaKeys) {
+            if (Array.isArray(jsonData)) {
+              jsonData.forEach(function(d) {
+                var tissue = d.tissue || d.name || d.organ || '';
+                var val = d.value || d.tpm || d.nTPM || d.nTpm || 0;
+                if (tissue) {
+                  tissues.push(tissue);
+                  values.push(typeof val === 'number' ? val : parseFloat(val) || 0);
+                }
+              });
+            } else {
+              Object.keys(entry).forEach(function(k) {
+                // Skip known metadata fields
+                if (k === 'Gene' || k === 'gene' || k === 'gene_id' || k === 'ensembl_id') return;
+                var val = entry[k];
+                if (typeof val === 'number' || (typeof val === 'string' && !isNaN(parseFloat(val)))) {
+                  tissues.push(k);
+                  values.push(typeof val === 'number' ? val : parseFloat(val) || 0);
+                }
+              });
+            }
+          }
+
+          if (tissues.length === 0) {
+            throw new Error('No expression data found in file');
+          }
+
+          // Sort by value descending
+          var sorted = tissues.map(function(t, i) { return { tissue: t, value: values[i] }; })
+            .sort(function(a, b) { return b.value - a.value; });
+
+          // Reverse for Plotly horizontal bar (bottom-to-top for highest at top)
+          var plotTissues = sorted.map(function(s) { return escapeHtml(s.tissue); }).reverse();
+          var plotValues = sorted.map(function(s) { return s.value; }).reverse();
+          var plotColors = sorted.map(function(s) { return barColor(s.value); }).reverse();
+
+          var chartHeight = Math.max(400, sorted.length * 22);
+
+          Plotly.newPlot('viewer-container', [{
+            y: plotTissues,
+            x: plotValues,
+            type: 'bar',
+            orientation: 'h',
+            marker: { color: plotColors },
+            hovertemplate: '%{y}: %{x:.1f} nTPM<extra></extra>'
+          }], {
+            title: { text: 'Tissue Expression — ' + escapeHtml(geneName), font: { size: 16 } },
+            xaxis: { title: { text: 'nTPM' } },
+            yaxis: { automargin: true },
+            height: chartHeight,
+            margin: { t: 50, l: 180, r: 30, b: 50 }
+          }, { responsive: true });
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

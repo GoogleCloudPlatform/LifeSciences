@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Pockets Viewer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; color: #1a1a2e; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; margin: 1rem; }
+    .filename { color: #555; font-size: 0.9rem; padding: 1rem 1rem 0.5rem; }
+    h1 { font-size: 1.25rem; margin: 0; padding: 1rem 1rem 0; }
+    .info-bar { padding: 0.25rem 1rem 0.75rem; font-size: 0.8rem; color: #64748b; }
+    .table-container { padding: 0 1rem 1rem; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+    thead { background: #f6f8fa; }
+    th {
+      padding: 0.5rem 0.75rem; text-align: left; font-weight: 600;
+      color: #24292f; border-bottom: 2px solid #d0d7de;
+      cursor: pointer; user-select: none; white-space: nowrap;
+    }
+    th:hover { background: #eaeef2; }
+    th .sort-arrow { font-size: 10px; margin-left: 4px; color: #8b949e; }
+    th.sorted-asc .sort-arrow::after { content: '\25B2'; color: #1a1a2e; }
+    th.sorted-desc .sort-arrow::after { content: '\25BC'; color: #1a1a2e; }
+    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #eaeef2; }
+    tr:hover { background: #f6f8fa; }
+    tr.top-pocket { background: #eff6ff; font-weight: 500; }
+    tr.top-pocket:hover { background: #dbeafe; }
+    .score-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .score-green { background: #dcfce7; color: #166534; }
+    .score-amber { background: #fef3c7; color: #92400e; }
+    .score-red { background: #fef2f2; color: #991b1b; }
+  </style>
+</head>
+<body>
+  <h1>Binding Site Pockets</h1>
+  <div class="filename" id="filename"></div>
+  <div class="info-bar" id="info-bar"></div>
+  <div class="table-container">
+    <div id="viewer-container"></div>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    var COLUMNS = [
+      { key: 'rank', label: 'Rank', format: function(v) { return v; } },
+      { key: 'score', label: 'Score', format: function(v) { return v.toFixed(3); }, badge: true },
+      { key: 'druggability_score', label: 'Druggability', format: function(v) { return v.toFixed(3); }, badge: true },
+      { key: 'volume', label: 'Volume (Å³)', format: function(v) { return v.toFixed(1); } },
+      { key: 'total_sasa', label: 'Total SASA (Å²)', format: function(v) { return v.toFixed(1); } },
+      { key: 'n_alpha_spheres', label: 'Alpha Spheres', format: function(v) { return Math.round(v); } },
+      { key: 'polar_sasa_proportion', label: 'Polar SASA %', format: function(v) {
+        return typeof v === 'number' ? (v * 100).toFixed(1) + '%' : '—';
+      }}
+    ];
+
+    var pockets = [];
+    var sortCol = 'rank';
+    var sortDir = 'asc';
+
+    function scoreColor(score) {
+      if (score > 0.5) return 'score-green';
+      if (score >= 0.3) return 'score-amber';
+      return 'score-red';
+    }
+
+    function renderTable() {
+      var sorted = pockets.slice().sort(function(a, b) {
+        var va = a[sortCol], vb = b[sortCol];
+        if (typeof va === 'string') va = va.toLowerCase();
+        if (typeof vb === 'string') vb = vb.toLowerCase();
+        if (va == null && vb != null) return 1;
+        if (vb == null && va != null) return -1;
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      var topRank = Math.min.apply(null, pockets.map(function(p) { return p.rank; }));
+
+      var html = '<table><thead><tr>';
+      COLUMNS.forEach(function(col) {
+        var isSorted = sortCol === col.key;
+        var cls = isSorted ? (sortDir === 'asc' ? 'sorted-asc' : 'sorted-desc') : '';
+        html += '<th class="' + cls + '" data-col="' + col.key + '">' + col.label + '<span class="sort-arrow"></span></th>';
+      });
+      html += '</tr></thead><tbody>';
+
+      sorted.forEach(function(pocket) {
+        var isTop = pocket.rank === topRank;
+        html += '<tr class="' + (isTop ? 'top-pocket' : '') + '">';
+        COLUMNS.forEach(function(col) {
+          var val = pocket[col.key];
+          // Compute polar_sasa_proportion if not present
+          if (col.key === 'polar_sasa_proportion' && val === undefined) {
+            val = (pocket.polar_sasa && pocket.total_sasa) ? pocket.polar_sasa / pocket.total_sasa : undefined;
+          }
+          var formatted = (val !== undefined && val !== null) ? col.format(val) : '—';
+          var safeFormatted = escapeHtml(String(formatted));
+
+          // Add color badge for score columns
+          if (col.badge) {
+            var numVal = typeof val === 'number' ? val : 0;
+            safeFormatted = '<span class="score-badge ' + scoreColor(numVal) + '">' + safeFormatted + '</span>';
+          }
+          html += '<td>' + safeFormatted + '</td>';
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('viewer-container').innerHTML = html;
+
+      // Attach sort handlers
+      document.querySelectorAll('th[data-col]').forEach(function(th) {
+        th.addEventListener('click', function() {
+          var col = th.dataset.col;
+          if (sortCol === col) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortCol = col;
+            sortDir = 'asc';
+          }
+          renderTable();
+        });
+      });
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+      document.title = filePath.split('/').pop() + ' — Pockets Viewer';
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(function(data) {
+          pockets = Array.isArray(data) ? data : (data.pockets || [data]);
+
+          if (pockets.length === 0) {
+            document.getElementById('viewer-container').textContent = 'No pockets found in data.';
+            return;
+          }
+
+          // Info bar
+          var topScore = Math.max.apply(null, pockets.map(function(p) { return p.score || 0; }));
+          var topDrug = Math.max.apply(null, pockets.map(function(p) { return p.druggability_score || 0; }));
+          document.getElementById('info-bar').textContent =
+            pockets.length + ' pockets detected | Top score: ' + topScore.toFixed(3) +
+            ' | Top druggability: ' + topDrug.toFixed(3);
+
+          renderTable();
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

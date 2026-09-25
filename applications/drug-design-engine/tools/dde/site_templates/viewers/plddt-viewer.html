@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>pLDDT Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a1a; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; }
+    #viewer-container { width: 100%; }
+    .legend-info { font-size: 0.85rem; color: #555; margin-top: 0.5rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+    .legend-info span { display: flex; align-items: center; gap: 0.3rem; }
+    .legend-info .swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <h1>pLDDT Confidence Scores</h1>
+  <div class="filename" id="filename"></div>
+  <div id="viewer-container"></div>
+  <div class="legend-info">
+    <span><span class="swatch" style="background:rgba(0,83,214,0.3)"></span> Very high (&gt;90)</span>
+    <span><span class="swatch" style="background:rgba(101,203,243,0.3)"></span> Confident (70&ndash;90)</span>
+    <span><span class="swatch" style="background:rgba(255,219,19,0.3)"></span> Low (50&ndash;70)</span>
+    <span><span class="swatch" style="background:rgba(255,125,69,0.3)"></span> Very low (&lt;50)</span>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    /* D3 category10 palette for per-chain traces */
+    var CHAIN_COLORS = [
+      '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+      '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+    ];
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    function plddtColor(score) {
+      if (score > 90) return '#0d47a1';
+      if (score > 70) return '#00bcd4';
+      if (score > 50) return '#fbc02d';
+      return '#e65100';
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file.afdb.json');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(function(data) {
+          var traces = [];
+          var totalResidues = 0;
+
+          if (Array.isArray(data)) {
+            /* Case 1: flat array of scores */
+            totalResidues = data.length;
+            traces.push({
+              x: data.map(function(_, i) { return i + 1; }),
+              y: data,
+              type: 'scatter',
+              mode: 'lines',
+              line: { width: 1.5, color: '#1a1a2e' },
+              name: 'pLDDT',
+              hovertemplate: 'Residue %{x}<br>pLDDT: %{y:.1f}<extra></extra>'
+            });
+
+          } else if (data.residue_plddt) {
+            /* Case 2: per-chain format (AlphaFold standard, PRIMARY) */
+            if (Array.isArray(data.residue_plddt)) {
+              /* Single flat array under residue_plddt */
+              totalResidues = data.residue_plddt.length;
+              traces.push({
+                x: data.residue_plddt.map(function(_, i) { return i + 1; }),
+                y: data.residue_plddt,
+                type: 'scatter',
+                mode: 'lines',
+                line: { width: 1.5, color: '#1a1a2e' },
+                name: 'pLDDT',
+                hovertemplate: 'Residue %{x}<br>pLDDT: %{y:.1f}<extra></extra>'
+              });
+            } else {
+              /* Object with chain keys: { "A": [...], "B": [...] } */
+              var chains = Object.keys(data.residue_plddt);
+              var offset = 0;
+              chains.forEach(function(chain, ci) {
+                var scores = data.residue_plddt[chain];
+                totalResidues += scores.length;
+                traces.push({
+                  x: scores.map(function(_, i) { return i + 1 + offset; }),
+                  y: scores,
+                  type: 'scatter',
+                  mode: 'lines',
+                  line: { width: 1.5, color: CHAIN_COLORS[ci % CHAIN_COLORS.length] },
+                  name: 'Chain ' + escapeHtml(chain),
+                  hovertemplate: 'Chain ' + escapeHtml(chain) + ' residue %{x}<br>pLDDT: %{y:.1f}<extra></extra>'
+                });
+                offset += scores.length;
+              });
+            }
+
+          } else if (data.atom_plddt) {
+            /* Case 3: per-atom format */
+            var atomScores = Array.isArray(data.atom_plddt) ? data.atom_plddt : [];
+            totalResidues = atomScores.length;
+            traces.push({
+              x: atomScores.map(function(_, i) { return i + 1; }),
+              y: atomScores,
+              type: 'scatter',
+              mode: 'lines',
+              line: { width: 1.5, color: '#1a1a2e' },
+              name: 'pLDDT',
+              hovertemplate: 'Atom %{x}<br>pLDDT: %{y:.1f}<extra></extra>'
+            });
+
+          } else if (data.plddt) {
+            /* Case 4: shipped fallback key */
+            var plddtScores = Array.isArray(data.plddt) ? data.plddt : [];
+            totalResidues = plddtScores.length;
+            traces.push({
+              x: plddtScores.map(function(_, i) { return i + 1; }),
+              y: plddtScores,
+              type: 'scatter',
+              mode: 'lines',
+              line: { width: 1.5, color: '#1a1a2e' },
+              name: 'pLDDT',
+              hovertemplate: 'Residue %{x}<br>pLDDT: %{y:.1f}<extra></extra>'
+            });
+
+          } else if (data.confidenceScore) {
+            /* Case 5: shipped fallback key */
+            var confScores = Array.isArray(data.confidenceScore) ? data.confidenceScore : [];
+            totalResidues = confScores.length;
+            traces.push({
+              x: confScores.map(function(_, i) { return i + 1; }),
+              y: confScores,
+              type: 'scatter',
+              mode: 'lines',
+              line: { width: 1.5, color: '#1a1a2e' },
+              name: 'pLDDT',
+              hovertemplate: 'Residue %{x}<br>pLDDT: %{y:.1f}<extra></extra>'
+            });
+
+          } else {
+            throw new Error('Unrecognised pLDDT JSON format');
+          }
+
+          /* Confidence band background shapes (AlphaFold standard) */
+          var shapes = [
+            { type: 'rect', y0: 90, y1: 100, x0: 0, x1: totalResidues + 1,
+              fillcolor: 'rgba(0,83,214,0.15)', line: { width: 0 }, layer: 'below' },
+            { type: 'rect', y0: 70, y1: 90, x0: 0, x1: totalResidues + 1,
+              fillcolor: 'rgba(101,203,243,0.15)', line: { width: 0 }, layer: 'below' },
+            { type: 'rect', y0: 50, y1: 70, x0: 0, x1: totalResidues + 1,
+              fillcolor: 'rgba(255,219,19,0.15)', line: { width: 0 }, layer: 'below' },
+            { type: 'rect', y0: 0, y1: 50, x0: 0, x1: totalResidues + 1,
+              fillcolor: 'rgba(255,125,69,0.15)', line: { width: 0 }, layer: 'below' }
+          ];
+
+          Plotly.newPlot('viewer-container', traces, {
+            title: { text: 'Per-Residue pLDDT Confidence' },
+            xaxis: { title: { text: 'Residue number' }, range: [0, totalResidues + 1] },
+            yaxis: { title: { text: 'pLDDT score' }, range: [0, 100] },
+            shapes: shapes,
+            showlegend: traces.length > 1,
+            legend: { x: 1, xanchor: 'right', y: 1 },
+            margin: { t: 50, l: 60, r: 30, b: 50 },
+            hovermode: 'x unified'
+          }, { responsive: true });
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

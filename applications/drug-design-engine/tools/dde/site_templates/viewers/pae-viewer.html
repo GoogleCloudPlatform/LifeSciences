@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>PAE Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a1a; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; }
+    #viewer-container { width: 100%; display: flex; justify-content: center; }
+  </style>
+</head>
+<body>
+  <h1>Predicted Aligned Error (PAE)</h1>
+  <div class="filename" id="filename"></div>
+  <div id="viewer-container"></div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file.pae.json');
+    } else {
+      var fileName = filePath.split('/').pop();
+      var baseName = fileName.replace(/\.pae\.json$/i, '');
+      document.getElementById('filename').textContent = fileName;
+      document.title = 'PAE: ' + escapeHtml(baseName);
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(function(paeData) {
+          /* Support three formats:
+             1. Raw 2D array: [[...], ...]
+             2. AlphaFold DB wrapped: [{"predicted_aligned_error": [[...]], "max_predicted_aligned_error": N}]
+             3. Object wrapped: {"predicted_aligned_error": [[...]]} */
+          var matrix, maxPAE;
+
+          if (Array.isArray(paeData) && paeData.length > 0) {
+            if (Array.isArray(paeData[0]) && typeof paeData[0][0] === 'number') {
+              // Raw 2D array
+              matrix = paeData;
+              maxPAE = 31.75;
+            } else if (typeof paeData[0] === 'object' && paeData[0].predicted_aligned_error) {
+              // AlphaFold DB format: array of objects
+              matrix = paeData[0].predicted_aligned_error;
+              maxPAE = paeData[0].max_predicted_aligned_error || 31.75;
+            }
+          } else if (paeData && paeData.predicted_aligned_error) {
+            // Object wrapped
+            matrix = paeData.predicted_aligned_error;
+            maxPAE = paeData.max_predicted_aligned_error || 31.75;
+          }
+
+          if (!matrix) throw new Error('Unrecognised PAE JSON format');
+
+          // AlphaFold-standard colorscale: green (low PAE = good) to red (high PAE = bad)
+          var colorscale = [
+            [0,    '#00441b'],
+            [0.05, '#006d2c'],
+            [0.1,  '#238b45'],
+            [0.2,  '#41ae76'],
+            [0.3,  '#66c2a4'],
+            [0.4,  '#99d8c9'],
+            [0.5,  '#ccece6'],
+            [0.6,  '#e5f5e0'],
+            [0.7,  '#fee8c8'],
+            [0.8,  '#fdbb84'],
+            [0.9,  '#e34a33'],
+            [1,    '#b30000']
+          ];
+
+          var plotSize = Math.min(800, window.innerWidth - 60);
+
+          Plotly.newPlot('viewer-container', [{
+            z: matrix,
+            type: 'heatmap',
+            colorscale: colorscale,
+            zmin: 0,
+            zmax: maxPAE,
+            hoverongaps: false,
+            hovertemplate: 'Scored residue: %{x}<br>Aligned residue: %{y}<br>PAE: %{z:.1f} Å<extra></extra>',
+            colorbar: {
+              title: { text: 'PAE (Å)', side: 'right' },
+              ticksuffix: ' Å'
+            }
+          }], {
+            title: { text: 'Predicted Aligned Error — ' + escapeHtml(baseName), font: { size: 16 } },
+            xaxis: {
+              title: { text: 'Scored Residue' },
+              constrain: 'domain'
+            },
+            yaxis: {
+              title: { text: 'Aligned Residue' },
+              autorange: 'reversed',
+              scaleanchor: 'x',
+              constrain: 'domain'
+            },
+            width: plotSize,
+            height: plotSize,
+            margin: { l: 70, r: 30, t: 50, b: 70 }
+          }, { responsive: true });
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+{
+  "title": "Beta Tournament",
+  "goal": "Identify novel targets for haematology",
+  "state": "COMPLETED",
+  "stage": "FINISHED",
+  "sessionId": "sess-beta-002",
+  "createTime": "2026-02-01T00:00:00Z",
+  "dateEnded": "2026-02-02T00:00:00Z",
+  "stats": {
+    "numIdeas": 8,
+    "numCategories": 2,
+    "highestEloRating": 1700.0,
+    "inputTokenCount": 80000,
+    "outputTokenCount": 40000
+  },
+  "config": {
+    "preferences": ["haematology"]
+  },
+  "Yp": [
+    {
+      "id": "idea-beta-1",
+      "eloRating": 1700.0,
+      "ranking": 1,
+      "title": "KRAS G12C inhibition strategy",
+      "category": "Targeted Therapy",
+      "attributes": [
+        {"name": "Gene Symbol", "value": "KRAS"},
+        {"name": "Modality", "value": "Covalent inhibitor"}
+      ],
+      "matchResult": {
+        "numTotalMatches": 8,
+        "numMatchesWon": 7,
+        "numMatchesLost": 1,
+        "winRate": 0.875
+      },
+      "reviews": [
+        {
+          "references": [
+            {"title": "KRAS G12C Clinical Data", "source": "https://example.com/kras-clinical"}
+          ]
+        }
+      ],
+      "deepVerification": {
+        "verificationSummary": {"markdown": "Claims verified."},
+        "claims": [
+          {
+            "claim": "KRAS G12C mutation is druggable",
+            "verdict": "ACCURATE",
+            "sourceSentence": "Recent covalent inhibitors have shown clinical efficacy.",
+            "reasoning": "Sotorasib approval provides clinical validation.",
+            "references": [
+              {"title": "KRAS Druggability Review", "source": "https://example.com/kras-drug"}
+            ]
+          }
+        ]
+      },
+      "summary": {"markdown": "Targeting KRAS G12C with covalent inhibitor."},
+      "description": {"markdown": "Detailed KRAS targeting approach."},
+      "reviewsSummary": {"markdown": "Strong clinical evidence base."}
+    },
+    {
+      "id": "idea-beta-2",
+      "eloRating": 1580.0,
+      "ranking": 2,
+      "title": "TP53 restoration via MDM2 inhibition",
+      "category": "Gene Therapy",
+      "attributes": [
+        {"name": "Gene Symbol", "value": "TP53"},
+        {"name": "Modality", "value": "MDM2 inhibitor"}
+      ],
+      "matchResult": {
+        "numTotalMatches": 8,
+        "numMatchesWon": 5,
+        "numMatchesLost": 3,
+        "winRate": 0.625
+      },
+      "reviews": [
+        {
+          "references": [
+            {"title": "MDM2-TP53 Axis", "source": "https://example.com/mdm2-tp53"}
+          ]
+        }
+      ],
+      "deepVerification": {
+        "verificationSummary": {"markdown": "Mixed results."},
+        "claims": [
+          {
+            "claim": "MDM2 inhibition restores TP53 function",
+            "verdict": "LEANING_ACCURATE",
+            "sourceSentence": "MDM2 inhibitors can reactivate wild-type TP53.",
+            "reasoning": "Mechanism is established but clinical efficacy limited.",
+            "references": [
+              {"title": "MDM2 Inhibitor Trials", "source": "https://example.com/mdm2-trials"}
+            ]
+          }
+        ]
+      },
+      "summary": {"markdown": "Restoring TP53 function via MDM2 inhibition."},
+      "description": {"markdown": "Detailed MDM2 inhibition approach."},
+      "reviewsSummary": {"markdown": "Promising preclinical data but clinical challenges."}
+    }
+  ],
+  "Cw": {
+    "overview": {"markdown": "## Executive Overview\n\nBeta tournament focused on novel targets."},
+    "topRankingIdeasSummary": {"markdown": "## Top Ranking Ideas\n\nKRAS emerged as the clear leader."},
+    "reviewsOverview": {"markdown": "## Reviews Overview\n\nReviewers noted strong KRAS evidence."},
+    "Kn": [
+      {"title": "Novel Target Compendium", "source": "https://example.com/novel-targets"}
+    ]
+  },
+  "knowledgeBase": {
+    "knowledgeSummary": {"markdown": "## Knowledge Summary\n\nKey literature on KRAS and MDM2."},
+    "references": [
+      {"title": "KRAS Biology Review", "source": "https://example.com/kras-bio"}
+    ],
+    "learnedClaims": [],
+    "Wm": {
+      "summary": {"markdown": "## Connections Summary\n\nLinks between RAS signaling and apoptosis."},
+      "connections": [
+        {"title": "RAS-Apoptosis Axis", "description": "KRAS signaling influences apoptotic pathways regulated by TP53."}
+      ]
+    }
+  }
+}

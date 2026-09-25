@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Docking Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a1a; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; }
+    #viewer-container { width: 100%; height: 600px; position: relative; border: 1px solid #ddd; border-radius: 4px; }
+    .controls { display: flex; gap: 1rem; padding: 0.5rem 0; flex-wrap: wrap; align-items: center; margin-bottom: 0.5rem; }
+    .control-group { display: flex; align-items: center; gap: 0.4rem; }
+    .control-group label { font-size: 0.85rem; font-weight: 500; color: #475569; }
+    .control-group select { font-size: 0.85rem; padding: 3px 6px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; }
+    .control-group button { font-size: 0.85rem; padding: 3px 8px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; cursor: pointer; color: #1a1a1a; }
+    .control-group button:hover { background: #e2e8f0; }
+    .control-group button.active { background: #2c3e50; color: #fff; border-color: #2c3e50; }
+    .pose-label { font-size: 0.85rem; font-weight: 600; min-width: 50px; text-align: center; }
+    .score-bar { display: flex; gap: 0.5rem; padding: 0.5rem 0; align-items: center; font-size: 0.85rem; color: #475569; }
+    .score-value { font-weight: 700; color: #1a1a1a; font-size: 1rem; }
+    .legend { margin-top: 0.75rem; font-size: 0.85rem; color: #555; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <h1>Docking Viewer</h1>
+  <div class="filename" id="filename"></div>
+  <div class="controls" id="controls" style="display:none">
+    <div class="control-group" id="receptor-controls" style="display:none">
+      <label for="receptor-style">Receptor:</label>
+      <select id="receptor-style">
+        <option value="cartoon" selected>Cartoon</option>
+        <option value="surface">Surface</option>
+      </select>
+    </div>
+    <div class="control-group" id="pocket-controls" style="display:none">
+      <label>Pocket:</label>
+      <button id="toggle-pocket" type="button">Show Pocket</button>
+    </div>
+    <div class="control-group" id="pose-controls" style="display:none">
+      <label>Pose:</label>
+      <button id="prev-pose" type="button">&#9664; Prev</button>
+      <span class="pose-label" id="pose-label">1 / 1</span>
+      <button id="next-pose" type="button">Next &#9654;</button>
+    </div>
+  </div>
+  <div id="viewer-container"></div>
+  <div class="score-bar" id="score-bar" style="display:none">
+    <span>Docking Score:</span>
+    <span class="score-value" id="score-value">--</span>
+    <span>kcal/mol</span>
+  </div>
+  <div class="legend" id="legend" style="display:none">
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#8899aa; opacity:0.6"></span>
+      <span>Receptor (cartoon)</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#33cc33"></span>
+      <span>Ligand (sticks)</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#ff6600"></span>
+      <span>Pocket residues</span>
+    </div>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      var receptorPath = params.get('receptor');
+      var posesPath = params.get('poses');
+      /* Fallback: if ?file= used instead (from VIEWER_MAP routing), detect by extension */
+      var filePath = params.get('file');
+      if (!receptorPath && !posesPath && filePath) {
+        if (filePath.endsWith('.receptor.pdbqt')) {
+          receptorPath = filePath;
+        } else if (filePath.endsWith('.poses.pdbqt')) {
+          posesPath = filePath;
+        }
+      }
+
+      function showError(msg) {
+        document.getElementById('error').style.display = 'block';
+        document.getElementById('error').textContent = msg;
+      }
+
+      if (!receptorPath && !posesPath) {
+        showError('No file specified. Use ?receptor=path/to/receptor.pdbqt&poses=path/to/poses.pdbqt or ?file=path/to/file.pdbqt');
+        return;
+      }
+
+      /* Auto-discovery: try to fetch the paired file by naming convention */
+      function tryFetchPaired(knownPath, knownType) {
+        var dir = knownPath.substring(0, knownPath.lastIndexOf('/') + 1);
+        var basename = knownPath.split('/').pop();
+        var pairedPath = null;
+
+        if (knownType === 'poses') {
+          var stem = basename.replace(/\.poses\.pdbqt$/i, '');
+          pairedPath = dir + stem + '.receptor.pdbqt';
+        } else if (knownType === 'receptor') {
+          var stem = basename.replace(/\.receptor\.pdbqt$/i, '');
+          pairedPath = dir + stem + '.poses.pdbqt';
+        }
+
+        if (!pairedPath) return Promise.resolve(null);
+
+        return fetch(pairedPath)
+          .then(function(r) {
+            if (!r.ok) return null;
+            return r.text().then(function(text) {
+              return { path: pairedPath, text: text };
+            });
+          })
+          .catch(function() { return null; });
+      }
+
+      var viewer = null;
+      var receptorModel = null;
+      var poseModels = [];
+      var poseScores = [];
+      var poseData = [];
+      var currentPose = 0;
+      var currentReceptorStyle = 'cartoon';
+      var showPocketFlag = false;
+      var pocketResidues = [];
+
+      /* Parse PDBQT poses into individual MODEL blocks and extract VINA scores */
+      function parsePoses(text) {
+        var models = [];
+        var scores = [];
+        var lines = text.split('\n');
+        var current = [];
+        var inModel = false;
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i];
+          if (line.indexOf('MODEL') === 0 && line.trim().match(/^MODEL\s+\d+/)) {
+            inModel = true;
+            current = [];
+          } else if (line.indexOf('ENDMDL') === 0) {
+            if (current.length > 0) {
+              models.push(current.join('\n'));
+            }
+            inModel = false;
+          } else if (inModel) {
+            current.push(line);
+            if (line.indexOf('REMARK VINA RESULT') === 0) {
+              var parts = line.replace('REMARK VINA RESULT:', '').trim().split(/\s+/);
+              scores.push(parseFloat(parts[0]));
+            }
+          }
+        }
+
+        /* If no MODEL blocks found, treat entire text as a single model */
+        if (models.length === 0 && lines.length > 0) {
+          models.push(text);
+        }
+
+        return { models: models, scores: scores };
+      }
+
+      /* Find receptor residues within cutoff angstroms of the best pose (pose 0) */
+      function findPocketResidues(cutoff) {
+        if (!viewer || poseModels.length === 0 || receptorModel === null) return [];
+
+        var ligandAtoms = viewer.selectedAtoms({ model: poseModels[0] });
+        var receptorAtoms = viewer.selectedAtoms({ model: receptorModel });
+        var cutoffSq = cutoff * cutoff;
+        var residueSet = {};
+
+        for (var li = 0; li < ligandAtoms.length; li++) {
+          var la = ligandAtoms[li];
+          for (var ri = 0; ri < receptorAtoms.length; ri++) {
+            var ra = receptorAtoms[ri];
+            var dx = la.x - ra.x;
+            var dy = la.y - ra.y;
+            var dz = la.z - ra.z;
+            var distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq <= cutoffSq) {
+              var key = ra.chain + ':' + ra.resi;
+              residueSet[key] = { chain: ra.chain, resi: ra.resi };
+            }
+          }
+        }
+
+        return Object.values(residueSet);
+      }
+
+      function applyReceptorStyle() {
+        if (!viewer || receptorModel === null) return;
+
+        if (currentReceptorStyle === 'cartoon') {
+          viewer.setStyle({ model: receptorModel }, {
+            cartoon: { color: '#8899aa', opacity: 0.6 }
+          });
+        } else if (currentReceptorStyle === 'surface') {
+          viewer.setStyle({ model: receptorModel }, {
+            cartoon: { color: '#8899aa', opacity: 0.3, hidden: true }
+          });
+          viewer.removeAllSurfaces();
+          viewer.addSurface($3Dmol.SurfaceType.VDW, {
+            opacity: 0.5,
+            color: '#8899aa'
+          }, { model: receptorModel });
+        }
+
+        if (showPocketFlag) {
+          applyPocketHighlight();
+        }
+
+        viewer.render();
+      }
+
+      function applyPocketHighlight() {
+        if (!viewer || pocketResidues.length === 0) return;
+
+        for (var i = 0; i < pocketResidues.length; i++) {
+          var res = pocketResidues[i];
+          viewer.setStyle(
+            { model: receptorModel, chain: res.chain, resi: res.resi },
+            {
+              stick: { radius: 0.12, color: '#ff6600' },
+              cartoon: { color: '#ff6600', opacity: 0.8 }
+            }
+          );
+        }
+      }
+
+      function showCurrentPose() {
+        if (!viewer || poseModels.length === 0) return;
+
+        /* Hide all poses */
+        for (var i = 0; i < poseModels.length; i++) {
+          viewer.setStyle({ model: poseModels[i] }, { stick: { hidden: true } });
+        }
+
+        /* Show current pose as sticks with default coloring */
+        viewer.setStyle({ model: poseModels[currentPose] }, {
+          stick: { radius: 0.15, colorscheme: 'default' }
+        });
+
+        /* Update pose label */
+        document.getElementById('pose-label').textContent = (currentPose + 1) + ' / ' + poseModels.length;
+
+        /* Update score display */
+        var scoreEl = document.getElementById('score-value');
+        if (currentPose < poseScores.length) {
+          scoreEl.textContent = poseScores[currentPose].toFixed(3);
+        } else {
+          scoreEl.textContent = '--';
+        }
+
+        /* Re-apply receptor style so pocket highlights are maintained */
+        applyReceptorStyle();
+      }
+
+      /* Control event handlers */
+      document.getElementById('receptor-style').addEventListener('change', function(e) {
+        currentReceptorStyle = e.target.value;
+        if (currentReceptorStyle !== 'surface') {
+          viewer.removeAllSurfaces();
+        }
+        applyReceptorStyle();
+        showCurrentPose();
+      });
+
+      document.getElementById('toggle-pocket').addEventListener('click', function() {
+        showPocketFlag = !showPocketFlag;
+        var btn = document.getElementById('toggle-pocket');
+        if (showPocketFlag) {
+          btn.classList.add('active');
+          btn.textContent = 'Hide Pocket';
+        } else {
+          btn.classList.remove('active');
+          btn.textContent = 'Show Pocket';
+        }
+        if (currentReceptorStyle !== 'surface') {
+          viewer.removeAllSurfaces();
+        }
+        applyReceptorStyle();
+        if (!showPocketFlag) {
+          /* Clear pocket highlights by re-applying base receptor style */
+          if (currentReceptorStyle === 'cartoon') {
+            viewer.setStyle({ model: receptorModel }, {
+              cartoon: { color: '#8899aa', opacity: 0.6 }
+            });
+          }
+          viewer.render();
+        }
+      });
+
+      document.getElementById('prev-pose').addEventListener('click', function() {
+        if (poseModels.length === 0) return;
+        currentPose = (currentPose - 1 + poseModels.length) % poseModels.length;
+        showCurrentPose();
+      });
+
+      document.getElementById('next-pose').addEventListener('click', function() {
+        if (poseModels.length === 0) return;
+        currentPose = (currentPose + 1) % poseModels.length;
+        showCurrentPose();
+      });
+
+      /* Main loading function */
+      async function loadDocking() {
+        try {
+          var receptorText = null;
+          var posesText = null;
+
+          /* Auto-discover paired file if only one file specified */
+          if (posesPath && !receptorPath) {
+            var paired = await tryFetchPaired(posesPath, 'poses');
+            if (paired) {
+              receptorPath = paired.path;
+              receptorText = paired.text;
+            }
+          } else if (receptorPath && !posesPath) {
+            var paired = await tryFetchPaired(receptorPath, 'receptor');
+            if (paired) {
+              posesPath = paired.path;
+              posesText = paired.text;
+            }
+          }
+
+          /* Update filename display */
+          var labels = [];
+          if (receptorPath) labels.push('Receptor: ' + receptorPath.split('/').pop());
+          if (posesPath) labels.push('Poses: ' + posesPath.split('/').pop());
+          document.getElementById('filename').textContent = labels.join(' | ');
+
+          /* Create 3Dmol viewer */
+          viewer = $3Dmol.createViewer('viewer-container', {
+            backgroundColor: 'white',
+            antialias: true
+          });
+
+          /* Load receptor if we have a path but haven't fetched yet */
+          if (receptorPath && !receptorText) {
+            var receptorResp = await fetch(receptorPath);
+            if (!receptorResp.ok) throw new Error('Receptor: HTTP ' + receptorResp.status + ': ' + receptorResp.statusText);
+            receptorText = await receptorResp.text();
+          }
+
+          if (receptorText) {
+            receptorModel = viewer.addModel(receptorText, 'pdb');
+            document.getElementById('controls').style.display = 'flex';
+            document.getElementById('receptor-controls').style.display = 'flex';
+          }
+
+          /* Load and parse poses if we have a path but haven't fetched yet */
+          if (posesPath && !posesText) {
+            var posesResp = await fetch(posesPath);
+            if (!posesResp.ok) throw new Error('Poses: HTTP ' + posesResp.status + ': ' + posesResp.statusText);
+            posesText = await posesResp.text();
+          }
+
+          if (posesText) {
+            var parsed = parsePoses(posesText);
+            poseData = parsed.models;
+            poseScores = parsed.scores;
+
+            /* Add each pose as a separate model */
+            for (var i = 0; i < poseData.length; i++) {
+              var m = viewer.addModel(poseData[i], 'pdb');
+              poseModels.push(m);
+            }
+
+            document.getElementById('controls').style.display = 'flex';
+
+            /* Show pose navigation if multiple poses */
+            if (poseModels.length > 1) {
+              document.getElementById('pose-controls').style.display = 'flex';
+            }
+
+            /* Show score bar if scores were extracted */
+            if (poseScores.length > 0) {
+              document.getElementById('score-bar').style.display = 'flex';
+            }
+          }
+
+          /* Show pocket toggle only when both receptor and poses are loaded */
+          if (receptorModel !== null && poseModels.length > 0) {
+            document.getElementById('pocket-controls').style.display = 'flex';
+            document.getElementById('legend').style.display = 'flex';
+          }
+
+          /* Receptor-only mode */
+          if (receptorModel !== null && poseModels.length === 0) {
+            viewer.setStyle({ model: receptorModel }, { cartoon: { color: '#8899aa', opacity: 0.7 } });
+            viewer.zoomTo();
+            viewer.render();
+            return;
+          }
+
+          /* Poses-only mode */
+          if (receptorModel === null && poseModels.length > 0) {
+            currentPose = 0;
+            /* Show current pose */
+            for (var i = 0; i < poseModels.length; i++) {
+              viewer.setStyle({ model: poseModels[i] }, { stick: { hidden: true } });
+            }
+            viewer.setStyle({ model: poseModels[currentPose] }, {
+              stick: { radius: 0.15, colorscheme: 'default' }
+            });
+            document.getElementById('pose-label').textContent = (currentPose + 1) + ' / ' + poseModels.length;
+            if (currentPose < poseScores.length) {
+              document.getElementById('score-value').textContent = poseScores[currentPose].toFixed(3);
+            }
+            viewer.zoomTo();
+            viewer.render();
+            return;
+          }
+
+          /* Full mode: receptor + poses */
+          /* Initial render to establish atom coordinates */
+          viewer.setStyle({}, {});
+          viewer.render();
+
+          /* Compute pocket residues from best pose (pose 0) */
+          pocketResidues = findPocketResidues(5.0);
+
+          /* Show initial state */
+          currentPose = 0;
+          showCurrentPose();
+          viewer.zoomTo();
+          viewer.render();
+
+        } catch (err) {
+          showError('Failed to load file: ' + err.message);
+        }
+      }
+
+      loadDocking();
+    })();
+  </script>
+</body>
+</html>

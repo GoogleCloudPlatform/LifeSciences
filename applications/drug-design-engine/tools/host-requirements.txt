@@ -1,0 +1,28 @@
+# Host requirements for the dde tools environment.
+# Read by `dde env plan` and `bootstrap-preflight.sh`.
+# One requirement per line: category, name, and why.
+#
+# Categories: toolchain, library, binary, python, network
+#
+# These are what the host container must provide for install.sh to
+# succeed. They do not appear in env-manifest.txt and do not change
+# ENV_VERSION — they affect the cost of bootstrapping, not what the
+# tools compute.
+
+toolchain  gcc          fpocket builds from source
+toolchain  g++          fpocket molfile plugin (C++)
+toolchain  make         fpocket build system
+binary     ldd          static-link verification
+library    libc.a       fpocket static link
+library    libstdc++.a  fpocket molfile plugin static link
+python     python3      >= 3.10
+python     python3-venv   venv creation with ensurepip
+python     python3-dev    science stack C extensions (Python.h)
+binary     curl         downloads
+binary     tar          archive extraction
+binary     sha256sum    checksum verification
+binary     install      file installation
+binary     git          provenance tracking (ENV_SOURCE)
+network    pypi.org     pip packages
+network    files.pythonhosted.org  wheel downloads
+network    github.com   vina release, fpocket source

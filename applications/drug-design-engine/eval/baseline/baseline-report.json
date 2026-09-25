@@ -1,0 +1,501 @@
+{
+  "eval_version": "1.0",
+  "run_timestamp": "2026-09-08T15:07:57Z",
+  "summary": {
+    "fixtures_completed": {
+      "value": 8,
+      "denominator": 8,
+      "rate": 1.0
+    },
+    "cli_success_rate": {
+      "value": 4,
+      "denominator": 4,
+      "rate": 1.0
+    },
+    "cli_failure_rate": {
+      "value": 0,
+      "denominator": 4,
+      "rate": 0.0
+    },
+    "total_state_transitions": 48,
+    "total_relay_codes_fired": 4,
+    "total_artifacts_produced": 8,
+    "total_wall_clock_seconds": 0.0398,
+    "repeated_operations": {
+      "value": 0,
+      "denominator": 4,
+      "rate": 0.0
+    },
+    "unsupported_claims_accepted": {
+      "value": "N/A",
+      "denominator": "N/A",
+      "note": "Requires LLM agent workflow execution with scientific review"
+    },
+    "mistaken_rejections": {
+      "value": "N/A",
+      "denominator": "N/A",
+      "note": "Requires LLM agent workflow execution with review of declined candidates"
+    },
+    "decision_reversals": {
+      "value": "N/A",
+      "denominator": "N/A",
+      "note": "Requires multi-cycle workflow execution tracking"
+    },
+    "expensive_work_avoided": {
+      "value": "N/A",
+      "denominator": "N/A",
+      "note": "Requires cost-instrumented workflow with early-termination tracking"
+    }
+  },
+  "fixture_results": [
+    {
+      "fixture_id": "EVAL-001",
+      "fixture_label": "No genetic support \u2014 target lacks GWAS/genetic evidence",
+      "scenario_category": "no_genetic_support",
+      "wall_clock_seconds": 0.009,
+      "state_transitions": [
+        {
+          "from": null,
+          "to": "proposed"
+        },
+        {
+          "from": "proposed",
+          "to": "committed"
+        },
+        {
+          "from": "committed",
+          "to": "queued"
+        },
+        {
+          "from": "queued",
+          "to": "in_progress"
+        },
+        {
+          "from": "in_progress",
+          "to": "submitted"
+        }
+      ],
+      "transition_count": 5,
+      "cli_invocations": [
+        {
+          "command": "hypothesis adopt",
+          "exit_code": 0,
+          "output_length": 156
+        },
+        {
+          "command": "validate check WO-001",
+          "exit_code": 0,
+          "output_length": 1654
+        }
+      ],
+      "invocation_count": 2,
+      "success_count": 2,
+      "failure_count": 0,
+      "validation_checks": {
+        "deliverables_exist": "fail",
+        "report_headings": "pass",
+        "paths_resolve": "pass",
+        "provenance_valid": "pass",
+        "analysis_citations": "pass",
+        "relay_coverage": "pass",
+        "version_policy": "skip",
+        "findings_integrity": "pass"
+      },
+      "relay_codes_fired": [
+        "hypothesis.adopted_not_generated"
+      ],
+      "artifacts_produced": [
+        {
+          "path": "raw/hypotheses/eval-001-hypotheses.adopted.meta.json",
+          "schema": "provenance-sidecar"
+        },
+        {
+          "path": "raw/hypotheses/eval-001-hypotheses.adopted.json",
+          "schema": "dde.hypothesis-set.v1"
+        }
+      ],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "Hypothesis adopted successfully",
+        "Work order WO-001 created in state 'proposed'",
+        "Final work order state: submitted. No genomics artifacts exist \u2014 this is the expected baseline behavior for no-genetic-support scenarios."
+      ]
+    },
+    {
+      "fixture_id": "EVAL-002",
+      "fixture_label": "Negative pocket conformation \u2014 unfavorable druggability",
+      "scenario_category": "negative_pocket_conformation",
+      "wall_clock_seconds": 0.0046,
+      "state_transitions": [
+        {
+          "from": null,
+          "to": "proposed"
+        },
+        {
+          "from": "proposed",
+          "to": "committed"
+        },
+        {
+          "from": "committed",
+          "to": "queued"
+        },
+        {
+          "from": "queued",
+          "to": "in_progress"
+        },
+        {
+          "from": "in_progress",
+          "to": "submitted"
+        }
+      ],
+      "transition_count": 5,
+      "cli_invocations": [],
+      "invocation_count": 0,
+      "success_count": 0,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [
+        "fpocket.single_conformation"
+      ],
+      "artifacts_produced": [
+        {
+          "path": "raw/pocket/synthetic-kinase-Y.fpocket.json",
+          "schema": "dde.pocket-druggability.v1"
+        },
+        {
+          "path": "raw/pocket/synthetic-kinase-Y.fpocket.meta.json",
+          "schema": "provenance-sidecar"
+        }
+      ],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "Relay code 'fpocket.single_conformation' present in pocket sidecar",
+        "Pocket druggability score 0.12 (unfavorable). Single conformation relay fired. Work order state: submitted."
+      ]
+    },
+    {
+      "fixture_id": "EVAL-003",
+      "fixture_label": "Positive model geometry \u2014 favorable structural confidence",
+      "scenario_category": "positive_model_geometry",
+      "wall_clock_seconds": 0.0038,
+      "state_transitions": [
+        {
+          "from": null,
+          "to": "proposed"
+        },
+        {
+          "from": "proposed",
+          "to": "committed"
+        },
+        {
+          "from": "committed",
+          "to": "queued"
+        },
+        {
+          "from": "queued",
+          "to": "in_progress"
+        },
+        {
+          "from": "in_progress",
+          "to": "submitted"
+        }
+      ],
+      "transition_count": 5,
+      "cli_invocations": [],
+      "invocation_count": 0,
+      "success_count": 0,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [
+        {
+          "path": "raw/structures/synthetic-enzyme-Z.alphafold.json",
+          "schema": "dde.structure-confidence.v1"
+        },
+        {
+          "path": "raw/structures/synthetic-enzyme-Z.alphafold.meta.json",
+          "schema": "provenance-sidecar"
+        }
+      ],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "Structure confidence: binding region pLDDT=91.7 (>70 = high confidence)",
+        "Work order state: submitted. Favorable geometry baseline."
+      ]
+    },
+    {
+      "fixture_id": "EVAL-004",
+      "fixture_label": "Modality mismatch \u2014 antibody target with small-molecule deliverables",
+      "scenario_category": "modality_mismatch",
+      "wall_clock_seconds": 0.0035,
+      "state_transitions": [
+        {
+          "from": null,
+          "to": "proposed"
+        },
+        {
+          "from": "proposed",
+          "to": "committed"
+        },
+        {
+          "from": "committed",
+          "to": "queued"
+        },
+        {
+          "from": "queued",
+          "to": "in_progress"
+        },
+        {
+          "from": "in_progress",
+          "to": "submitted"
+        }
+      ],
+      "transition_count": 5,
+      "cli_invocations": [],
+      "invocation_count": 0,
+      "success_count": 0,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "Modality mismatch caught: False. Work order state: submitted. Context modality='antibody', deliverables target small-molecule artifact classes (docking, compounds, descriptors). Current workflow has no modality-consistency gate."
+      ]
+    },
+    {
+      "fixture_id": "EVAL-005",
+      "fixture_label": "Absent entity inputs \u2014 missing required compound and target identifiers",
+      "scenario_category": "absent_entity_inputs",
+      "wall_clock_seconds": 0.0031,
+      "state_transitions": [
+        {
+          "from": null,
+          "to": "proposed"
+        },
+        {
+          "from": "proposed",
+          "to": "committed"
+        },
+        {
+          "from": "committed",
+          "to": "queued"
+        },
+        {
+          "from": "queued",
+          "to": "in_progress"
+        }
+      ],
+      "transition_count": 4,
+      "cli_invocations": [],
+      "invocation_count": 0,
+      "success_count": 0,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "Work order accepted with 4 empty entity fields: ['target', 'compound_smiles', 'compound_inchikey', 'pubchem_cid']. Current workflow has no context-content validation. Work order state: in_progress."
+      ]
+    },
+    {
+      "fixture_id": "EVAL-006",
+      "fixture_label": "Tool failure \u2014 run fails with infrastructure error",
+      "scenario_category": "tool_failure",
+      "wall_clock_seconds": 0.004,
+      "state_transitions": [
+        {
+          "from": null,
+          "to": "proposed"
+        },
+        {
+          "from": "proposed",
+          "to": "committed"
+        },
+        {
+          "from": "committed",
+          "to": "queued"
+        },
+        {
+          "from": "queued",
+          "to": "in_progress"
+        },
+        {
+          "from": null,
+          "to": "queued"
+        },
+        {
+          "from": "queued",
+          "to": "starting"
+        },
+        {
+          "from": "starting",
+          "to": "running"
+        },
+        {
+          "from": "running",
+          "to": "failed"
+        },
+        {
+          "from": null,
+          "to": "queued"
+        }
+      ],
+      "transition_count": 9,
+      "cli_invocations": [],
+      "invocation_count": 0,
+      "success_count": 0,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "Run RUN-006 state: failed. Failure class: transient_infrastructure. Work order state: in_progress. Recovery path available: WO can accept a new run.",
+        "Recovery run RUN-007 created (attempt 2). State machine allows retry after infrastructure failure."
+      ]
+    },
+    {
+      "fixture_id": "EVAL-007",
+      "fixture_label": "Disputed citation \u2014 finding references retracted paper",
+      "scenario_category": "disputed_citation",
+      "wall_clock_seconds": 0.0056,
+      "state_transitions": [
+        {
+          "from": null,
+          "to": "proposed"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "hypothesis adopt --origin publication --cite ...",
+          "exit_code": 0,
+          "output_length": 156
+        },
+        {
+          "command": "hypothesis analyze",
+          "exit_code": 0,
+          "output_length": 123
+        }
+      ],
+      "invocation_count": 2,
+      "success_count": 2,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [
+        "hypothesis.adopted_not_generated",
+        "hypothesis.unranked_set"
+      ],
+      "artifacts_produced": [
+        {
+          "path": "raw/hypotheses/eval-007-hypotheses.adopted.meta.json",
+          "schema": "provenance-sidecar"
+        },
+        {
+          "path": "raw/hypotheses/eval-007-hypotheses.analysis.json",
+          "schema": "dde.hypothesis-assessment.v1"
+        }
+      ],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "Hypothesis with disputed citation adopted successfully",
+        "Analysis completed. Relay codes from adoption should carry forward to analysis.",
+        "Disputed citation scenario: current workflow does not have a retraction-check gate.  The citation passes through unchanged.  Future workflow improvements may add citation verification."
+      ]
+    },
+    {
+      "fixture_id": "EVAL-008",
+      "fixture_label": "Bounded-review exhaustion \u2014 work order cycles through revision requests",
+      "scenario_category": "bounded_review_exhaustion",
+      "wall_clock_seconds": 0.0062,
+      "state_transitions": [
+        {
+          "from": null,
+          "to": "proposed"
+        },
+        {
+          "from": "proposed",
+          "to": "committed"
+        },
+        {
+          "from": "committed",
+          "to": "queued"
+        },
+        {
+          "from": "queued",
+          "to": "in_progress"
+        },
+        {
+          "from": "in_progress",
+          "to": "submitted"
+        },
+        {
+          "from": "submitted",
+          "to": "validation_failed"
+        },
+        {
+          "from": "validation_failed",
+          "to": "in_progress"
+        },
+        {
+          "from": "in_progress",
+          "to": "submitted"
+        },
+        {
+          "from": "submitted",
+          "to": "validation_failed"
+        },
+        {
+          "from": "validation_failed",
+          "to": "in_progress"
+        },
+        {
+          "from": "in_progress",
+          "to": "submitted"
+        },
+        {
+          "from": "submitted",
+          "to": "validation_failed"
+        },
+        {
+          "from": "validation_failed",
+          "to": "in_progress"
+        },
+        {
+          "from": "in_progress",
+          "to": "submitted"
+        }
+      ],
+      "transition_count": 14,
+      "cli_invocations": [],
+      "invocation_count": 0,
+      "success_count": 0,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "Completed 3 validation-failure recovery cycles. State machine allows unlimited cycles (no circuit breaker). Final state: submitted. Transitions per cycle: 3 (submitted->validation_failed->in_progress->submitted)."
+      ]
+    }
+  ]
+}

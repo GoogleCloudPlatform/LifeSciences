@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "match.schema.json",
+  "title": "Match",
+  "description": "An append-only tournament match record between two hypotheses.",
+  "type": "object",
+  "required": [
+    "id",
+    "epoch",
+    "a",
+    "b",
+    "format",
+    "winner",
+    "margin",
+    "criterion_scores",
+    "rationale",
+    "judge",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^M-[0-9]{4}$",
+      "description": "Match identifier, e.g. M-0001."
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Epoch in which this match occurred."
+    },
+    "a": {
+      "type": "string",
+      "pattern": "^H-[0-9]{4}$",
+      "description": "First contestant hypothesis ID."
+    },
+    "b": {
+      "type": "string",
+      "pattern": "^H-[0-9]{4}$",
+      "description": "Second contestant hypothesis ID."
+    },
+    "format": {
+      "type": "string",
+      "enum": ["single-turn", "multi-turn-debate"],
+      "description": "Match format used."
+    },
+    "winner": {
+      "type": "string",
+      "pattern": "^(H-[0-9]{4}|draw)$",
+      "description": "ID of the winning hypothesis, or 'draw' if the match ended in a tie."
+    },
+    "margin": {
+      "type": "string",
+      "enum": ["decisive", "narrow"],
+      "description": "Victory margin (for draws, use 'narrow')."
+    },
+    "criterion_scores": {
+      "type": "object",
+      "required": ["novelty", "plausibility", "testability"],
+      "properties": {
+        "novelty": {
+          "type": "object",
+          "required": ["a", "b"],
+          "properties": {
+            "a": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "b": { "type": "integer", "minimum": 1, "maximum": 5 }
+          },
+          "additionalProperties": false
+        },
+        "plausibility": {
+          "type": "object",
+          "required": ["a", "b"],
+          "properties": {
+            "a": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "b": { "type": "integer", "minimum": 1, "maximum": 5 }
+          },
+          "additionalProperties": false
+        },
+        "testability": {
+          "type": "object",
+          "required": ["a", "b"],
+          "properties": {
+            "a": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "b": { "type": "integer", "minimum": 1, "maximum": 5 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "Per-criterion scores for each contestant."
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Judge's rationale for the outcome."
+    },
+    "transcript_path": {
+      "type": "string",
+      "description": "Path to the debate transcript (Tier 2 matches only)."
+    },
+    "judge": {
+      "type": "string",
+      "description": "Name of the judging agent."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of match completion."
+    }
+  },
+  "additionalProperties": false
+}

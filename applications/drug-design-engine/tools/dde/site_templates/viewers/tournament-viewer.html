@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tournament Viewer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
+
+    .tournament-summary { padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 1rem; }
+    .tournament-title { font-size: 18px; font-weight: 600; color: #1e293b; margin-bottom: 8px; }
+    .tournament-meta { display: flex; gap: 24px; flex-wrap: wrap; }
+    .meta-item { font-size: 13px; color: #64748b; }
+    .meta-item strong { color: #334155; }
+
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    thead { background: #f1f5f9; }
+    th { padding: 10px 12px; text-align: left; font-weight: 600; color: #334155; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background: #e2e8f0; }
+    th .sort-arrow { font-size: 10px; margin-left: 4px; color: #94a3b8; }
+    th.sorted-asc .sort-arrow { color: #1a1a2e; }
+    th.sorted-desc .sort-arrow { color: #1a1a2e; }
+    td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    tr.data-row:hover { background: #f8fafc; cursor: pointer; }
+    tr.top-idea { background: #eff6ff; }
+    tr.top-idea:hover { background: #dbeafe; }
+
+    /* Medal-style rank coloring (shipped feature) */
+    .rank { font-weight: 700; color: #24292f; text-align: center; }
+    .rank-1 { color: #d4a017; }
+    .rank-2 { color: #888; }
+    .rank-3 { color: #a0522d; }
+
+    .idea-title { font-weight: 500; color: #1e293b; max-width: 400px; }
+    .expand-icon { color: #94a3b8; font-size: 12px; margin-right: 6px; transition: transform 0.2s; display: inline-block; }
+    tr.expanded .expand-icon { transform: rotate(90deg); }
+
+    .detail-row { display: none; }
+    .detail-row.visible { display: table-row; }
+    .detail-row td { padding: 16px 24px; background: #fafbfc; border-bottom: 2px solid #e2e8f0; }
+    .detail-content { max-width: 800px; }
+    .detail-content h4 { font-size: 14px; color: #1e293b; margin: 12px 0 6px; }
+    .detail-content h4:first-child { margin-top: 0; }
+    .detail-content p { font-size: 13px; color: #475569; line-height: 1.6; margin-bottom: 8px; }
+    .detail-content .category { font-size: 12px; color: #64748b; background: #f1f5f9; display: inline-block; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+
+    .elo-badge { font-weight: 700; font-size: 14px; }
+    .elo-high { color: #16a34a; }
+    .elo-mid { color: #d97706; }
+    .elo-low { color: #64748b; }
+
+    .win-rate { font-size: 13px; }
+    .win-rate-high { color: #16a34a; }
+    .win-rate-mid { color: #d97706; }
+    .win-rate-low { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <h1>Hypothesis Tournament Rankings</h1>
+  <div class="filename" id="filename"></div>
+  <div id="tournament-summary" style="display:none;">
+    <div class="tournament-summary">
+      <div class="tournament-title" id="tournament-title"></div>
+      <div class="tournament-meta" id="tournament-meta"></div>
+    </div>
+  </div>
+  <div id="viewer-container"></div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    /* ===== ELO/win-rate color coding ===== */
+    function eloClass(elo, highest) {
+      if (elo >= highest * 0.95) return 'elo-high';
+      if (elo >= highest * 0.85) return 'elo-mid';
+      return 'elo-low';
+    }
+
+    function winRateClass(rate) {
+      if (rate >= 0.6) return 'win-rate-high';
+      if (rate >= 0.4) return 'win-rate-mid';
+      return 'win-rate-low';
+    }
+
+    /* ===== Sorting state ===== */
+    let ideas = [];
+    let sortCol = 'ranking';
+    let sortDir = 'asc';
+    let highestElo = 0;
+
+    const COLUMNS = [
+      { key: 'ranking', label: '#', sortable: true },
+      { key: 'title', label: 'Hypothesis', sortable: false },
+      { key: 'elo_rating', label: 'ELO', sortable: true },
+      { key: 'wl', label: 'W-L', sortable: false },
+      { key: 'win_rate', label: 'Win %', sortable: true },
+      { key: 'gene', label: 'Target Gene', sortable: true }
+    ];
+
+    function renderTournamentTable() {
+      const sorted = [...ideas].sort((a, b) => {
+        let va, vb;
+        if (sortCol === 'win_rate') {
+          va = (a.match && a.match.win_rate) || 0;
+          vb = (b.match && b.match.win_rate) || 0;
+        } else if (sortCol === 'gene') {
+          va = ((a.attributes && a.attributes['Target Gene']) || a.gene || '').toLowerCase();
+          vb = ((b.attributes && b.attributes['Target Gene']) || b.gene || '').toLowerCase();
+        } else {
+          va = a[sortCol];
+          vb = b[sortCol];
+        }
+        if (typeof va === 'string') va = va.toLowerCase();
+        if (typeof vb === 'string') vb = vb.toLowerCase();
+        if (va < vb) return sortDir === 'asc' ? -1 : 1;
+        if (va > vb) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      let html = '<table><thead><tr>';
+      COLUMNS.forEach(col => {
+        const isSorted = sortCol === col.key;
+        let cls = col.sortable ? 'sortable' : '';
+        if (isSorted) cls += sortDir === 'asc' ? ' sorted-asc' : ' sorted-desc';
+        const sortAttr = col.sortable ? ' data-col="' + col.key + '"' : '';
+        const arrow = col.sortable
+          ? '<span class="sort-arrow">' + (isSorted ? (sortDir === 'asc' ? '&#9650;' : '&#9660;') : '&#9650;') + '</span>'
+          : '';
+        html += '<th class="' + cls + '"' + sortAttr + '>' + col.label + arrow + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+
+      sorted.forEach(idea => {
+        const ranking = idea.ranking || 0;
+        const isTop = ranking <= 5;
+        const won = (idea.match && idea.match.won) || 0;
+        const lost = (idea.match && idea.match.lost) || 0;
+        const winRate = (idea.match && idea.match.win_rate) || 0;
+        const gene = (idea.attributes && idea.attributes['Target Gene']) || idea.gene || '';
+        const elo = idea.elo_rating || 0;
+
+        /* Medal-style rank class (shipped feature) */
+        let rankCls = 'rank';
+        if (ranking === 1) rankCls += ' rank-1';
+        else if (ranking === 2) rankCls += ' rank-2';
+        else if (ranking === 3) rankCls += ' rank-3';
+
+        html += '<tr class="data-row' + (isTop ? ' top-idea' : '') + '" data-idea-id="' + escapeHtml(String(idea.id || '')) + '">';
+        html += '<td class="' + rankCls + '">' + escapeHtml(String(ranking)) + '</td>';
+        html += '<td class="idea-title"><span class="expand-icon">&#9654;</span>' + escapeHtml(idea.title || '') + '</td>';
+        html += '<td><span class="elo-badge ' + eloClass(elo, highestElo) + '">' + escapeHtml(String(Math.round(elo))) + '</span></td>';
+        html += '<td>' + escapeHtml(String(won)) + '-' + escapeHtml(String(lost)) + '</td>';
+        html += '<td><span class="win-rate ' + winRateClass(winRate) + '">' + escapeHtml(String((winRate * 100).toFixed(1))) + '%</span></td>';
+        html += '<td>' + escapeHtml(gene) + '</td>';
+        html += '</tr>';
+
+        /* Detail row */
+        const summary = (idea.prose && idea.prose.summary) || '';
+        const category = idea.category || '';
+        html += '<tr class="detail-row" data-detail-for="' + escapeHtml(String(idea.id || '')) + '"><td colspan="6"><div class="detail-content">';
+        if (category) html += '<span class="category">' + escapeHtml(category) + '</span>';
+        if (summary) html += '<h4>Summary</h4><p>' + escapeHtml(summary) + '</p>';
+        if (idea.n_reviews) html += '<h4>Reviews</h4><p>' + escapeHtml(String(idea.n_reviews)) + ' expert reviews completed</p>';
+        html += '</div></td></tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('viewer-container').innerHTML = html;
+
+      /* Sort handlers */
+      document.querySelectorAll('th[data-col]').forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.col;
+          if (sortCol === col) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortCol = col;
+            sortDir = col === 'ranking' ? 'asc' : 'desc';
+          }
+          renderTournamentTable();
+        });
+      });
+
+      /* Expand/collapse handlers */
+      document.querySelectorAll('tr[data-idea-id]').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const id = tr.dataset.ideaId;
+          const detailRow = document.querySelector('tr[data-detail-for="' + id + '"]');
+          if (detailRow) {
+            tr.classList.toggle('expanded');
+            detailRow.classList.toggle('visible');
+          }
+        });
+      });
+    }
+
+    /* ===== Generic table fallback (shipped behavior) ===== */
+    function renderGenericTable(entries, container) {
+      /* Auto score-field detection (shipped feature) */
+      const scoreKey = ['score', 'total_score', 'elo', 'elo_rating', 'rating', 'points']
+        .find(k => typeof entries[0][k] === 'number') || null;
+
+      if (scoreKey) {
+        entries = entries.slice().sort((a, b) => (b[scoreKey] || 0) - (a[scoreKey] || 0));
+      }
+
+      const allKeys = [...new Set(entries.flatMap(e => Object.keys(e)))];
+
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      const rankTh = document.createElement('th');
+      rankTh.textContent = 'Rank';
+      headerRow.appendChild(rankTh);
+      allKeys.forEach(k => {
+        const th = document.createElement('th');
+        th.textContent = k;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      entries.forEach((entry, idx) => {
+        const tr = document.createElement('tr');
+        const rankTd = document.createElement('td');
+        rankTd.className = 'rank' + (idx < 3 ? ' rank-' + (idx + 1) : '');
+        rankTd.textContent = idx + 1;
+        tr.appendChild(rankTd);
+        allKeys.forEach(k => {
+          const td = document.createElement('td');
+          const val = entry[k];
+          td.textContent = val === undefined ? '' :
+            (typeof val === 'object' ? JSON.stringify(val) : String(val));
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      container.appendChild(table);
+    }
+
+    /* ===== Main loader ===== */
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+      document.title = filePath.split('/').pop() + ' — Tournament Viewer';
+
+      fetch(filePath)
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(data => {
+          const container = document.getElementById('viewer-container');
+
+          /* Broader data wrapper support (shipped feature) */
+          let entries = Array.isArray(data) ? data
+            : (data.ideas || data.hypotheses || data.results || data.rankings || []);
+
+          if (!Array.isArray(entries) || entries.length === 0) {
+            container.textContent = 'No ranking entries found in data.';
+            return;
+          }
+
+          /* Detect tournament-specific data format */
+          const isTournamentFormat = entries[0] &&
+            (entries[0].elo_rating !== undefined || entries[0].match !== undefined || entries[0].ranking !== undefined);
+
+          if (isTournamentFormat) {
+            /* Show tournament metadata header if available */
+            const t = data.tournament || {};
+            const stats = data.stats || {};
+
+            if (t.title || t.stage || t.state || stats.n_ideas_generated) {
+              const summaryDiv = document.getElementById('tournament-summary');
+              summaryDiv.style.display = 'block';
+              document.getElementById('tournament-title').textContent = t.title || 'Tournament';
+              document.title = (t.title || filePath.split('/').pop()) + ' — Tournament Viewer';
+
+              const metaItems = [];
+              if (t.stage) metaItems.push('<span class="meta-item"><strong>Stage:</strong> ' + escapeHtml(String(t.stage)) + '</span>');
+              if (t.state) metaItems.push('<span class="meta-item"><strong>Status:</strong> ' + escapeHtml(String(t.state)) + '</span>');
+              if (stats.n_ideas_generated) metaItems.push('<span class="meta-item"><strong>Ideas Generated:</strong> ' + escapeHtml(String(stats.n_ideas_generated)) + '</span>');
+              if (stats.highest_elo) metaItems.push('<span class="meta-item"><strong>Highest ELO:</strong> ' + escapeHtml(String(Math.round(stats.highest_elo))) + '</span>');
+              if (t.created) metaItems.push('<span class="meta-item"><strong>Date:</strong> ' + escapeHtml(String(new Date(t.created).toLocaleDateString())) + '</span>');
+
+              document.getElementById('tournament-meta').innerHTML = metaItems.join('');
+            }
+
+            ideas = entries;
+            highestElo = Math.max(...ideas.map(i => i.elo_rating || 0));
+            renderTournamentTable();
+          } else {
+            /* Generic table fallback (shipped behavior) */
+            renderGenericTable(entries, container);
+          }
+        })
+        .catch(err => showError('Failed to load file: ' + err.message));
+    }
+  </script>
+</body>
+</html>

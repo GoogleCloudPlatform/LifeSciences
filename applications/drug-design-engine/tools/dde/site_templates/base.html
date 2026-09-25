@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self';">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="dde {{ cli_version }}">
+<title>{% block title %}DDE Program{% endblock %}</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; color: #1a1a1a; background: #fafafa; }
+  nav { background: #2c3e50; color: #ecf0f1; padding: 0.75rem 2rem; }
+  nav a { color: #ecf0f1; text-decoration: none; margin-right: 1.5rem; }
+  nav a:hover { text-decoration: underline; }
+  nav .nav-title { font-weight: bold; margin-right: 2rem; }
+  h1, h2, h3 { color: #2c3e50; }
+  .meta { background: #eee; padding: 0.75rem 1rem; border-radius: 4px; margin: 1rem 0; font-size: 0.85rem; color: #555; }
+  .meta dt { font-weight: bold; display: inline; }
+  .meta dd { display: inline; margin: 0 1rem 0 0; }
+  a { color: #2980b9; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #ddd; }
+  th { background: #ecf0f1; font-weight: 600; }
+  pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+  footer { margin-top: 3rem; padding: 1rem 0; border-top: 1px solid #ddd; font-size: 0.8rem; color: #888; }
+
+  /* Sidebar layout */
+  .site-layout { display: flex; min-height: calc(100vh - 50px); }
+  .sidebar { width: 240px; min-width: 240px; background: #2c3e50; color: #ecf0f1; padding: 1rem 0; overflow-y: auto; }
+  .sidebar details { margin: 0; }
+  .sidebar summary { padding: 0.6rem 1rem; font-weight: 600; font-size: 0.9rem; cursor: pointer; color: #ecf0f1; list-style: none; background: #243342; border-bottom: 1px solid #1a252f; }
+  .sidebar summary::-webkit-details-marker { display: none; }
+  .sidebar summary::before { content: "\25b6"; display: inline-block; margin-right: 0.5rem; font-size: 0.7rem; transition: transform 0.15s; }
+  .sidebar details[open] > summary::before { transform: rotate(90deg); }
+  .sidebar ul { list-style: none; margin: 0; padding: 0; }
+  .sidebar li a { display: block; padding: 0.4rem 1rem 0.4rem 1.5rem; color: #bdc3c7; text-decoration: none; font-size: 0.85rem; border-left: 3px solid transparent; }
+  .sidebar li a:hover { background: #34495e; color: #ecf0f1; }
+  .sidebar li a.active { background: #34495e; color: #ecf0f1; border-left-color: #3498db; font-weight: 600; }
+  .main-content { flex: 1; min-width: 0; }
+  .main-content .container { max-width: 960px; margin: 0 auto; padding: 1rem 2rem; }
+
+  /* Breadcrumbs */
+  .breadcrumbs { padding: 0.5rem 2rem; background: #ecf0f1; font-size: 0.85rem; color: #555; }
+  .breadcrumbs a { color: #2980b9; text-decoration: none; }
+  .breadcrumbs a:hover { text-decoration: underline; }
+
+  /* Responsive: collapse sidebar on narrow screens */
+  @media (max-width: 768px) {
+    .site-layout { flex-direction: column; }
+    .sidebar { width: 100%; min-width: 100%; }
+    .sidebar details { border-bottom: 1px solid #1a252f; }
+    .sidebar details:not([open]) > summary { border-bottom: none; }
+  }
+
+  /* Security: blocked external content markers (#170) */
+  .blocked-image { background: #fff3cd; border: 1px solid #ffc107; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.85rem; color: #856404; }
+  .blocked-link { color: #dc3545; text-decoration: line-through; }
+</style>
+<link rel="stylesheet" href="katex/katex.min.css">
+<script defer src="katex/katex.min.js"></script>
+<script defer src="katex/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body, {delimiters: [
+    {left: '$$', right: '$$', display: true},
+    {left: '\\(', right: '\\)', display: false},
+    {left: '\\[', right: '\\]', display: true}
+  ]});"></script>
+</head>
+<body>
+<nav>
+  <span class="nav-title">DDE Program</span>
+  <a href="index.html">Home</a>
+</nav>
+<div class="site-layout">
+  <aside class="sidebar">
+  {% if nav_sections is defined and nav_sections %}
+    {% for section in nav_sections %}
+    <details open>
+      <summary>{{ section.title }}</summary>
+      <ul>
+      {% for item in section.links %}
+        {% if item.is_group_header is defined and item.is_group_header %}
+        <li style="padding: 0.4rem 1rem 0.2rem 1rem; font-size: 0.75rem; color: #95a5a6; text-transform: uppercase; letter-spacing: 0.05em;">{{ item.label }}</li>
+        {% else %}
+        <li><a href="{{ item.url }}"{% if item.active %} class="active"{% endif %}>{{ item.label }}</a></li>
+        {% endif %}
+      {% endfor %}
+      </ul>
+    </details>
+    {% endfor %}
+  {% endif %}
+  </aside>
+  <div class="main-content">
+    {% block breadcrumbs %}{% endblock %}
+    <div class="container">
+    {% block content %}{% endblock %}
+    <footer>
+      <p>Generated by dde {{ cli_version }}</p>
+    </footer>
+    </div>
+  </div>
+</div>
+</body>
+</html>

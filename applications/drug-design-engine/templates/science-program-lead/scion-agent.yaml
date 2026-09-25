@@ -1,0 +1,31 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+schema_version: "1"
+description: "Science Program Lead — user-facing orchestrator and sole owner of scientific direction; sets decision questions, accepts or rejects findings, maintains Layer 2 program state, and authorizes stage gates"
+agent_instructions: agents.md
+system_prompt: system-prompt.md
+
+# DDE_PROJECT is resolved by .dde/ walk-up discovery by default.
+# Set it explicitly only when the agent's workspace is not the program
+# directory — e.g. when /workspace is the dde repo:
+#   env:
+#     DDE_PROJECT: /workspace/program-hr-mbc
+
+skills:
+  - uri: "gh://scion-frontiers/agent-team/artifact-durability"
+  - uri: "gh://scion-frontiers/agent-team/agent-state-continuity"
+  - uri: "https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications/drug-design-engine/skills/artifact-conventions"
+  - uri: "https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications/drug-design-engine/skills/program-state-management"
+  - uri: "https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications/drug-design-engine/skills/hypothesis-entry"

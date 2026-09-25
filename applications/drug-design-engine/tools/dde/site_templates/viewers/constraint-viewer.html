@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Constraint Viewer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; color: #1a1a2e; background: #fff; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; margin: 1rem; }
+    .gene-header { padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+    .gene-header h2 { font-size: 22px; color: #1e293b; margin: 0; }
+    .gene-header .gene-info { font-size: 13px; color: #64748b; margin-top: 4px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; padding: 24px; }
+    .metric-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; background: #fff; transition: box-shadow 0.2s; }
+    .metric-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .metric-card.constrained { border-left: 4px solid #dc2626; }
+    .metric-card.tolerant { border-left: 4px solid #16a34a; }
+    .metric-card.borderline { border-left: 4px solid #d97706; }
+    .metric-value { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+    .metric-card.constrained .metric-value { color: #dc2626; }
+    .metric-card.tolerant .metric-value { color: #16a34a; }
+    .metric-card.borderline .metric-value { color: #d97706; }
+    .metric-label { font-size: 14px; font-weight: 600; color: #334155; margin-bottom: 4px; }
+    .metric-desc { font-size: 12px; color: #64748b; line-height: 1.5; }
+    .metric-counts { font-size: 12px; color: #94a3b8; margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9; }
+    .interpretation { margin: 0 24px 24px; padding: 16px; background: #eff6ff; border-radius: 8px; border: 1px solid #bfdbfe; }
+    .interpretation h3 { font-size: 14px; color: #1e40af; margin: 0 0 8px; }
+    .interpretation p { font-size: 13px; color: #1e3a5f; line-height: 1.6; margin: 0; }
+    h1 { font-size: 1.25rem; margin: 0; padding: 1rem 1.5rem; }
+    .filename { color: #555; font-size: 0.9rem; padding: 0 1.5rem 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>gnomAD Constraint Metrics</h1>
+  <div class="filename" id="filename"></div>
+  <div class="gene-header" id="gene-header" style="display:none;">
+    <h2 id="gene-name"></h2>
+    <div class="gene-info" id="gene-info"></div>
+  </div>
+  <div class="metric-grid" id="viewer-container"></div>
+  <div class="interpretation" id="interpretation" style="display:none;">
+    <h3>Interpretation</h3>
+    <p id="interpretation-text"></p>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    function classify(metric, value) {
+      if (typeof value !== 'number' || isNaN(value)) return '';
+      switch (metric) {
+        case 'pLI':
+          if (value > 0.9) return 'constrained';
+          if (value > 0.5) return 'borderline';
+          return 'tolerant';
+        case 'LOEUF':
+          if (value < 0.35) return 'constrained';
+          if (value < 1.0) return 'borderline';
+          return 'tolerant';
+        case 'oe_lof':
+          if (value < 0.35) return 'constrained';
+          if (value < 0.8) return 'borderline';
+          return 'tolerant';
+        case 'oe_mis':
+          if (value < 0.6) return 'constrained';
+          if (value < 0.8) return 'borderline';
+          return 'tolerant';
+        case 'lof_z':
+          if (value > 3.09) return 'constrained';
+          if (value > 1.96) return 'borderline';
+          return 'tolerant';
+        case 'mis_z':
+          if (value > 3.09) return 'constrained';
+          if (value > 1.96) return 'borderline';
+          return 'tolerant';
+        default:
+          return '';
+      }
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+      document.title = filePath.split('/').pop() + ' — Constraint Viewer';
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(function(data) {
+          // Navigate nested data: data.data.gene.gnomad_constraint, data.gene, or direct
+          var gene = (data.data && data.data.gene) ? data.data.gene : (data.gene || data);
+          var c = gene.gnomad_constraint || gene;
+          var fileName = filePath.split('/').pop();
+          var symbol = gene.symbol || fileName.replace(/\.gnomad-constraint\.json$/i, '');
+          var geneName = gene.name || '';
+
+          document.title = 'Constraint: ' + symbol;
+
+          // Show gene header
+          var geneHeader = document.getElementById('gene-header');
+          geneHeader.style.display = 'block';
+          document.getElementById('gene-name').textContent = symbol;
+          var geneInfo = [];
+          if (geneName) geneInfo.push(geneName);
+          if (gene.gene_id) geneInfo.push('Ensembl: ' + gene.gene_id);
+          if (gene.chrom) {
+            var start = gene.start ? gene.start.toLocaleString() : '';
+            var stop = gene.stop ? gene.stop.toLocaleString() : '';
+            geneInfo.push('chr' + gene.chrom + ':' + start + '-' + stop);
+          }
+          document.getElementById('gene-info').textContent = geneInfo.join(' | ');
+
+          // Define metrics to display
+          var metrics = [
+            {
+              key: 'pLI', value: c.pLI, format: function(v) { return v.toFixed(4); },
+              label: 'pLI',
+              desc: 'Probability of being Loss-of-function Intolerant',
+              threshold: 'Constrained >0.9 | Tolerant <0.1'
+            },
+            {
+              key: 'LOEUF', value: c.oe_lof_upper, format: function(v) { return v.toFixed(3); },
+              label: 'LOEUF',
+              desc: 'Loss-of-function Observed/Expected Upper bound Fraction',
+              threshold: 'Constrained <0.35 | Tolerant >1.0',
+              counts: 'Percentile: ' + (c.oe_lof_percentile !== undefined ? c.oe_lof_percentile + '%' : '—')
+            },
+            {
+              key: 'oe_lof', value: c.oe_lof, format: function(v) { return v.toFixed(3); },
+              label: 'o/e Loss-of-Function',
+              desc: 'Ratio of observed to expected LoF variants',
+              counts: (c.obs_lof || 0) + ' observed / ' + (c.exp_lof ? c.exp_lof.toFixed(1) : '—') + ' expected',
+              ci: (c.oe_lof_lower !== undefined && c.oe_lof_upper !== undefined)
+                ? '(' + c.oe_lof_lower.toFixed(3) + ' – ' + c.oe_lof_upper.toFixed(3) + ')'
+                : ''
+            },
+            {
+              key: 'oe_mis', value: c.oe_mis, format: function(v) { return v.toFixed(3); },
+              label: 'o/e Missense',
+              desc: 'Ratio of observed to expected missense variants',
+              counts: (c.obs_mis || 0) + ' observed / ' + (c.exp_mis ? c.exp_mis.toFixed(1) : '—') + ' expected',
+              ci: (c.oe_mis_lower !== undefined && c.oe_mis_upper !== undefined)
+                ? '(' + c.oe_mis_lower.toFixed(3) + ' – ' + c.oe_mis_upper.toFixed(3) + ')'
+                : ''
+            },
+            {
+              key: 'lof_z', value: c.lof_z, format: function(v) { return v.toFixed(2); },
+              label: 'LoF Z-score',
+              desc: 'Deviation of observed LoF from expected',
+              threshold: 'Significant if |Z| > 3.09 (p<0.001)'
+            },
+            {
+              key: 'mis_z', value: c.mis_z, format: function(v) { return v.toFixed(2); },
+              label: 'Missense Z-score',
+              desc: 'Deviation of observed missense from expected',
+              threshold: 'Significant if |Z| > 3.09 (p<0.001)'
+            }
+          ];
+
+          // Also add synonymous as a reference if present
+          if (c.oe_syn !== undefined) {
+            metrics.push({
+              key: 'oe_syn', value: c.oe_syn, format: function(v) { return v.toFixed(3); },
+              label: 'o/e Synonymous',
+              desc: 'Ratio of observed to expected synonymous variants (control)',
+              counts: (c.obs_syn || 0) + ' observed / ' + (c.exp_syn ? c.exp_syn.toFixed(1) : '—') + ' expected'
+            });
+          }
+
+          // Render metric cards
+          var container = document.getElementById('viewer-container');
+          container.innerHTML = metrics.map(function(m) {
+            var cls = classify(m.key, m.value);
+            var displayVal = (m.value !== undefined && m.value !== null && !isNaN(m.value))
+              ? m.format(m.value) : '—';
+            var ciStr = m.ci
+              ? '<span style="font-size:12px;color:#94a3b8;margin-left:6px;">' + escapeHtml(m.ci) + '</span>'
+              : '';
+
+            return '<div class="metric-card ' + cls + '">' +
+              '<div class="metric-value">' + escapeHtml(String(displayVal)) + ciStr + '</div>' +
+              '<div class="metric-label">' + m.label + '</div>' +
+              '<div class="metric-desc">' + m.desc + '</div>' +
+              (m.threshold ? '<div class="metric-counts">' + m.threshold + '</div>' : '') +
+              (m.counts ? '<div class="metric-counts">' + escapeHtml(m.counts) + '</div>' : '') +
+            '</div>';
+          }).join('');
+
+          // Generate interpretation
+          var pli = c.pLI;
+          var loeuf = c.oe_lof_upper;
+          if (typeof pli === 'number' && typeof loeuf === 'number') {
+            var interpDiv = document.getElementById('interpretation');
+            interpDiv.style.display = 'block';
+            var interpText = '';
+            if (pli > 0.9 && loeuf < 0.35) {
+              interpText = symbol + ' is highly constrained against loss-of-function variants (pLI=' + pli.toFixed(3) + ', LOEUF=' + loeuf.toFixed(3) + '). This gene is strongly intolerant to LoF mutations, suggesting haploinsufficiency. LoF variants in this gene are likely to be pathogenic.';
+            } else if (pli > 0.9) {
+              interpText = symbol + ' shows strong evidence of LoF intolerance (pLI=' + pli.toFixed(3) + '), though the LOEUF (' + loeuf.toFixed(3) + ') suggests some tolerance. LoF variants should be treated with caution.';
+            } else if (pli > 0.5) {
+              interpText = symbol + ' shows moderate evidence of constraint (pLI=' + pli.toFixed(3) + ', LOEUF=' + loeuf.toFixed(3) + '). This gene may be partially intolerant to LoF variants.';
+            } else {
+              interpText = symbol + ' appears tolerant to loss-of-function variants (pLI=' + pli.toFixed(3) + ', LOEUF=' + loeuf.toFixed(3) + '). LoF variants in this gene are less likely to be pathogenic.';
+            }
+            if (typeof c.mis_z === 'number' && c.mis_z > 3.09) {
+              interpText += ' The gene is also significantly constrained against missense variants (Z=' + c.mis_z.toFixed(2) + ').';
+            }
+            document.getElementById('interpretation-text').textContent = interpText;
+          }
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

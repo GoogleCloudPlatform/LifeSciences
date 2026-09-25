@@ -1,0 +1,454 @@
+{
+  "eval_version": "1.0-comparison",
+  "baseline_timestamp": "2026-09-08T15:07:57Z",
+  "stage0_timestamp": "2026-09-08T18:01:30Z",
+  "comparison_timestamp": "2026-09-08T18:01:30Z",
+  "scope_and_limitations": [
+    "This comparison covers baseline (pre-Stage 0) vs. Stage 0 bounded triage workflows only.",
+    "Evidence reuse (#77) is P2 and explicitly out of scope for this tracker phase \u2014 it has not been implemented and is not measured in this comparison.",
+    "#82's acceptance criteria requests comparison with 'bounded Stage 0 and evidence reuse.'  Only the bounded Stage 0 portion is covered here.  The evidence-reuse comparison will be addressed when #77 is implemented in a future tracker phase.",
+    "This harness exercises the control-plane and CLI layers.  The four LLM-dependent metrics (unsupported_claims_accepted, mistaken_rejections, decision_reversals, expensive_work_avoided) remain N/A in both workflows because this harness does not include a live LLM agent in the loop.  These metrics require full workflow execution with scientific review, which this evaluation harness does not provide.",
+    "Stage 0 workstreams invoke real CLI commands (dde manufacturing assess-stage0, etc.) \u2014 no mocked results."
+  ],
+  "metric_comparisons": [
+    {
+      "metric": "fixtures_completed",
+      "baseline": {
+        "value": 8,
+        "denominator": 8,
+        "rate": 1.0,
+        "note": ""
+      },
+      "stage0": {
+        "value": 8,
+        "denominator": 8,
+        "rate": 1.0,
+        "note": ""
+      },
+      "comparison_note": "No change"
+    },
+    {
+      "metric": "cli_success_rate",
+      "baseline": {
+        "value": 4,
+        "denominator": 4,
+        "rate": 1.0,
+        "note": ""
+      },
+      "stage0": {
+        "value": 8,
+        "denominator": 8,
+        "rate": 1.0,
+        "note": ""
+      },
+      "comparison_note": "Delta: +4"
+    },
+    {
+      "metric": "cli_failure_rate",
+      "baseline": {
+        "value": 0,
+        "denominator": 4,
+        "rate": 0.0,
+        "note": ""
+      },
+      "stage0": {
+        "value": 0,
+        "denominator": 8,
+        "rate": 0.0,
+        "note": ""
+      },
+      "comparison_note": "No change"
+    },
+    {
+      "metric": "total_state_transitions",
+      "baseline": {
+        "value": 48,
+        "denominator": null,
+        "rate": null,
+        "note": ""
+      },
+      "stage0": {
+        "value": 8,
+        "denominator": null,
+        "rate": null,
+        "note": ""
+      },
+      "comparison_note": "Delta: -40"
+    },
+    {
+      "metric": "total_relay_codes_fired",
+      "baseline": {
+        "value": 4,
+        "denominator": null,
+        "rate": null,
+        "note": ""
+      },
+      "stage0": {
+        "value": 1,
+        "denominator": null,
+        "rate": null,
+        "note": ""
+      },
+      "comparison_note": "Delta: -3"
+    },
+    {
+      "metric": "total_artifacts_produced",
+      "baseline": {
+        "value": 8,
+        "denominator": null,
+        "rate": null,
+        "note": ""
+      },
+      "stage0": {
+        "value": 4,
+        "denominator": null,
+        "rate": null,
+        "note": ""
+      },
+      "comparison_note": "Delta: -4"
+    },
+    {
+      "metric": "total_wall_clock_seconds",
+      "baseline": {
+        "value": 0.0398,
+        "denominator": null,
+        "rate": null,
+        "note": ""
+      },
+      "stage0": {
+        "value": 0.0314,
+        "denominator": null,
+        "rate": null,
+        "note": ""
+      },
+      "comparison_note": "Delta: -0.0084"
+    },
+    {
+      "metric": "repeated_operations",
+      "baseline": {
+        "value": 0,
+        "denominator": 4,
+        "rate": 0.0,
+        "note": ""
+      },
+      "stage0": {
+        "value": 0,
+        "denominator": 8,
+        "rate": 0.0,
+        "note": ""
+      },
+      "comparison_note": "No change"
+    },
+    {
+      "metric": "unsupported_claims_accepted",
+      "baseline": {
+        "value": "N/A",
+        "denominator": "N/A",
+        "rate": null,
+        "note": "Requires LLM agent workflow execution with scientific review"
+      },
+      "stage0": {
+        "value": "N/A",
+        "denominator": "N/A",
+        "rate": null,
+        "note": "Requires LLM agent workflow execution with scientific review"
+      },
+      "comparison_note": "Both N/A \u2014 requires LLM agent workflow execution, not measured by this control-plane harness"
+    },
+    {
+      "metric": "mistaken_rejections",
+      "baseline": {
+        "value": "N/A",
+        "denominator": "N/A",
+        "rate": null,
+        "note": "Requires LLM agent workflow execution with review of declined candidates"
+      },
+      "stage0": {
+        "value": "N/A",
+        "denominator": "N/A",
+        "rate": null,
+        "note": "Requires LLM agent workflow execution with review of declined candidates"
+      },
+      "comparison_note": "Both N/A \u2014 requires LLM agent workflow execution, not measured by this control-plane harness"
+    },
+    {
+      "metric": "decision_reversals",
+      "baseline": {
+        "value": "N/A",
+        "denominator": "N/A",
+        "rate": null,
+        "note": "Requires multi-cycle workflow execution tracking"
+      },
+      "stage0": {
+        "value": "N/A",
+        "denominator": "N/A",
+        "rate": null,
+        "note": "Requires multi-cycle workflow execution tracking"
+      },
+      "comparison_note": "Both N/A \u2014 requires LLM agent workflow execution, not measured by this control-plane harness"
+    },
+    {
+      "metric": "expensive_work_avoided",
+      "baseline": {
+        "value": "N/A",
+        "denominator": "N/A",
+        "rate": null,
+        "note": "Requires cost-instrumented workflow with early-termination tracking"
+      },
+      "stage0": {
+        "value": "N/A",
+        "denominator": "N/A",
+        "rate": null,
+        "note": "Requires cost-instrumented workflow with early-termination tracking"
+      },
+      "comparison_note": "Both N/A \u2014 requires LLM agent workflow execution, not measured by this control-plane harness"
+    }
+  ],
+  "fixture_comparisons": [
+    {
+      "fixture_id": "EVAL-001",
+      "fixture_label": "No genetic support \u2014 target lacks GWAS/genetic evidence",
+      "category": "no_genetic_support",
+      "baseline_completed": true,
+      "stage0_completed": true,
+      "baseline_wall_clock": 0.009,
+      "stage0_wall_clock": 0.005,
+      "baseline_invocations": 2,
+      "stage0_invocations": 1,
+      "baseline_transitions": 5,
+      "stage0_transitions": 1,
+      "baseline_observations": [
+        "Hypothesis adopted successfully",
+        "Work order WO-001 created in state 'proposed'",
+        "Final work order state: submitted. No genomics artifacts exist \u2014 this is the expected baseline behavior for no-genetic-support scenarios."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-001-r1'])"
+      ],
+      "behavioral_differences": [
+        "Stage 0 adds triage evaluation with manufacturing feasibility assessment (not present in baseline)",
+        "Different CLI command paths: baseline uses control-plane commands (hypothesis adopt, validate check); Stage 0 uses triage workstream commands (manufacturing assess-stage0)"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-002",
+      "fixture_label": "Negative pocket conformation \u2014 unfavorable druggability",
+      "category": "negative_pocket_conformation",
+      "baseline_completed": true,
+      "stage0_completed": true,
+      "baseline_wall_clock": 0.0046,
+      "stage0_wall_clock": 0.0039,
+      "baseline_invocations": 0,
+      "stage0_invocations": 1,
+      "baseline_transitions": 5,
+      "stage0_transitions": 1,
+      "baseline_observations": [
+        "Relay code 'fpocket.single_conformation' present in pocket sidecar",
+        "Pocket druggability score 0.12 (unfavorable). Single conformation relay fired. Work order state: submitted."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-002-r1'])"
+      ],
+      "behavioral_differences": [
+        "Stage 0 adds triage evaluation with manufacturing feasibility assessment (not present in baseline)"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-003",
+      "fixture_label": "Positive model geometry \u2014 favorable structural confidence",
+      "category": "positive_model_geometry",
+      "baseline_completed": true,
+      "stage0_completed": true,
+      "baseline_wall_clock": 0.0038,
+      "stage0_wall_clock": 0.0039,
+      "baseline_invocations": 0,
+      "stage0_invocations": 1,
+      "baseline_transitions": 5,
+      "stage0_transitions": 1,
+      "baseline_observations": [
+        "Structure confidence: binding region pLDDT=91.7 (>70 = high confidence)",
+        "Work order state: submitted. Favorable geometry baseline."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-003-r1'])"
+      ],
+      "behavioral_differences": [
+        "Stage 0 adds triage evaluation with manufacturing feasibility assessment (not present in baseline)"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-004",
+      "fixture_label": "Modality mismatch \u2014 antibody target with small-molecule deliverables",
+      "category": "modality_mismatch",
+      "baseline_completed": true,
+      "stage0_completed": true,
+      "baseline_wall_clock": 0.0035,
+      "stage0_wall_clock": 0.0036,
+      "baseline_invocations": 0,
+      "stage0_invocations": 1,
+      "baseline_transitions": 5,
+      "stage0_transitions": 1,
+      "baseline_observations": [
+        "Modality mismatch caught: False. Work order state: submitted. Context modality='antibody', deliverables target small-molecule artifact classes (docking, compounds, descriptors). Current workflow has no modality-consistency gate."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-004-r1'])"
+      ],
+      "behavioral_differences": [
+        "Stage 0 adds triage evaluation with manufacturing feasibility assessment (not present in baseline)"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-005",
+      "fixture_label": "Absent entity inputs \u2014 missing required compound and target identifiers",
+      "category": "absent_entity_inputs",
+      "baseline_completed": true,
+      "stage0_completed": true,
+      "baseline_wall_clock": 0.0031,
+      "stage0_wall_clock": 0.0035,
+      "baseline_invocations": 0,
+      "stage0_invocations": 1,
+      "baseline_transitions": 4,
+      "stage0_transitions": 1,
+      "baseline_observations": [
+        "Work order accepted with 4 empty entity fields: ['target', 'compound_smiles', 'compound_inchikey', 'pubchem_cid']. Current workflow has no context-content validation. Work order state: in_progress."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-005-r1'])"
+      ],
+      "behavioral_differences": [
+        "Stage 0 adds triage evaluation with manufacturing feasibility assessment (not present in baseline)"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-006",
+      "fixture_label": "Tool failure \u2014 run fails with infrastructure error",
+      "category": "tool_failure",
+      "baseline_completed": true,
+      "stage0_completed": true,
+      "baseline_wall_clock": 0.004,
+      "stage0_wall_clock": 0.0038,
+      "baseline_invocations": 0,
+      "stage0_invocations": 1,
+      "baseline_transitions": 9,
+      "stage0_transitions": 1,
+      "baseline_observations": [
+        "Run RUN-006 state: failed. Failure class: transient_infrastructure. Work order state: in_progress. Recovery path available: WO can accept a new run.",
+        "Recovery run RUN-007 created (attempt 2). State machine allows retry after infrastructure failure."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-006-r1'])"
+      ],
+      "behavioral_differences": [
+        "Stage 0 adds triage evaluation with manufacturing feasibility assessment (not present in baseline)"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-007",
+      "fixture_label": "Disputed citation \u2014 finding references retracted paper",
+      "category": "disputed_citation",
+      "baseline_completed": true,
+      "stage0_completed": true,
+      "baseline_wall_clock": 0.0056,
+      "stage0_wall_clock": 0.0039,
+      "baseline_invocations": 2,
+      "stage0_invocations": 1,
+      "baseline_transitions": 1,
+      "stage0_transitions": 1,
+      "baseline_observations": [
+        "Hypothesis with disputed citation adopted successfully",
+        "Analysis completed. Relay codes from adoption should carry forward to analysis.",
+        "Disputed citation scenario: current workflow does not have a retraction-check gate.  The citation passes through unchanged.  Future workflow improvements may add citation verification."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-007-r1'])"
+      ],
+      "behavioral_differences": [
+        "Stage 0 adds triage evaluation with manufacturing feasibility assessment (not present in baseline)",
+        "Different CLI command paths: baseline uses control-plane commands (hypothesis adopt, validate check); Stage 0 uses triage workstream commands (manufacturing assess-stage0)"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-008",
+      "fixture_label": "Bounded-review exhaustion \u2014 work order cycles through revision requests",
+      "category": "bounded_review_exhaustion",
+      "baseline_completed": true,
+      "stage0_completed": true,
+      "baseline_wall_clock": 0.0062,
+      "stage0_wall_clock": 0.0038,
+      "baseline_invocations": 0,
+      "stage0_invocations": 1,
+      "baseline_transitions": 14,
+      "stage0_transitions": 1,
+      "baseline_observations": [
+        "Completed 3 validation-failure recovery cycles. State machine allows unlimited cycles (no circuit breaker). Final state: submitted. Transitions per cycle: 3 (submitted->validation_failed->in_progress->submitted)."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_assessed, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-008-r1'])"
+      ],
+      "behavioral_differences": [
+        "Stage 0 adds triage evaluation with manufacturing feasibility assessment (not present in baseline)"
+      ]
+    }
+  ],
+  "declined_candidate_comparisons": [
+    {
+      "fixture_id": "EVAL-001",
+      "baseline_observations": [
+        "Hypothesis adopted successfully",
+        "Work order WO-001 created in state 'proposed'",
+        "Final work order state: submitted. No genomics artifacts exist \u2014 this is the expected baseline behavior for no-genetic-support scenarios."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-001-r1'])"
+      ],
+      "stage0_disposition": "(pending lead review)",
+      "stage0_evidence_statuses": [
+        "not_yet_applicable"
+      ],
+      "comparison_note": "Baseline: work order reaches submitted state; validation fails on deliverables_exist because no genomics artifacts exist.  Stage 0: concept is evaluated through triage (disposition: (pending lead review)).  Stage 0 evaluates the concept's manufacturing feasibility rather than checking for pre-existing artifacts \u2014 a structurally different assessment path that does not auto-terminate the concept for lacking genetic evidence."
+    },
+    {
+      "fixture_id": "EVAL-002",
+      "baseline_observations": [
+        "Relay code 'fpocket.single_conformation' present in pocket sidecar",
+        "Pocket druggability score 0.12 (unfavorable). Single conformation relay fired. Work order state: submitted."
+      ],
+      "stage0_observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-002-r1'])"
+      ],
+      "stage0_disposition": "(pending lead review)",
+      "stage0_evidence_statuses": [
+        "not_yet_applicable"
+      ],
+      "comparison_note": "Baseline: pocket analysis artifact has unfavorable metrics (druggability score 0.12); fpocket.single_conformation relay fires.  Stage 0: concept is evaluated through triage (disposition: (pending lead review)).  Stage 0 assesses manufacturing feasibility independently of the pocket druggability findings \u2014 the unfavorable pocket score does not auto-terminate the concept, consistent with the no-automatic-veto design principle."
+    }
+  ],
+  "stage0_resource_characteristics": {
+    "total_wall_clock_seconds": 0.0314,
+    "total_workstream_invocations": 8,
+    "total_state_transitions": 8,
+    "workstreams_per_concept": "1 (manufacturing) \u2014 differentiation and structure screening require additional configuration not present in the evaluation fixtures",
+    "budget_controls_available": "max_wall_clock_seconds, max_concepts, max_workstream_invocations (all unbounded in this run)"
+  }
+}

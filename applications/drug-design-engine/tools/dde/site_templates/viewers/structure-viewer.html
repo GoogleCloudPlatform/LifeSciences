@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Structure Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a1a; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; }
+    #viewer-container { width: 100%; height: 600px; position: relative; border: 1px solid #ddd; border-radius: 4px; }
+    .controls { margin: 0.75rem 0; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .controls label { font-size: 0.9rem; color: #555; }
+    .controls select, .controls button {
+      padding: 0.3rem 0.6rem; border: 1px solid #ccc; border-radius: 4px;
+      background: #fff; font-size: 0.85rem; cursor: pointer;
+    }
+    .controls button.active { background: #2c3e50; color: #fff; border-color: #2c3e50; }
+    .legend { margin-top: 0.75rem; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #555; }
+    .legend-swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); display: inline-block; }
+  </style>
+</head>
+<body>
+  <h1>Structure Viewer</h1>
+  <div class="filename" id="filename"></div>
+  <div class="controls">
+    <label for="style-select">Style:</label>
+    <select id="style-select">
+      <option value="cartoon" selected>Cartoon</option>
+      <option value="stick">Stick</option>
+      <option value="sphere">Sphere</option>
+    </select>
+    <label for="color-select">Color:</label>
+    <select id="color-select">
+      <option value="plddt" selected>pLDDT Confidence</option>
+      <option value="chain">By Chain</option>
+      <option value="uniform">Uniform</option>
+    </select>
+    <button id="spin-toggle">Spin: Off</button>
+  </div>
+  <div id="viewer-container"></div>
+  <div class="legend" id="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#0053D6"></div> Very High (&gt;90)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#65CBF3"></div> Confident (70–90)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#FFDB13"></div> Low (50–70)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#FF7D45"></div> Very Low (&lt;50)</div>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file.cif');
+      document.getElementById('legend').style.display = 'none';
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+
+      // pLDDT color bands (AlphaFold standard)
+      var PLDDT_COLORS = {
+        veryHigh:  0x0053D6,  // >90
+        confident: 0x65CBF3,  // 70-90
+        low:       0xFFDB13,  // 50-70
+        veryLow:   0xFF7D45   // <50
+      };
+
+      // Chain colors (D3 category10 palette)
+      var CHAIN_COLORS = [
+        0x1f77b4, 0xff7f0e, 0x2ca02c, 0xd62728, 0x9467bd,
+        0x8c564b, 0xe377c2, 0x7f7f7f, 0xbcbd22, 0x17becf
+      ];
+
+      function plddtColor(b) {
+        if (b >= 90) return PLDDT_COLORS.veryHigh;
+        if (b >= 70) return PLDDT_COLORS.confident;
+        if (b >= 50) return PLDDT_COLORS.low;
+        return PLDDT_COLORS.veryLow;
+      }
+
+      var viewer = $3Dmol.createViewer('viewer-container', {backgroundColor: 'white'});
+      var spinning = false;
+      var currentStyle = 'cartoon';
+      var currentColor = 'plddt';
+
+      function applyStyle() {
+        if (!viewer) return;
+
+        if (currentColor === 'chain') {
+          // Per-chain coloring
+          var atoms = viewer.selectedAtoms({});
+          var seen = {};
+          var chains = [];
+          for (var i = 0; i < atoms.length; i++) {
+            if (!seen[atoms[i].chain]) {
+              seen[atoms[i].chain] = true;
+              chains.push(atoms[i].chain);
+            }
+          }
+          for (var c = 0; c < chains.length; c++) {
+            var spec = {};
+            spec[currentStyle] = {color: CHAIN_COLORS[c % CHAIN_COLORS.length]};
+            viewer.setStyle({chain: chains[c], hetflag: false}, spec);
+          }
+        } else if (currentColor === 'plddt') {
+          var spec = {};
+          spec[currentStyle] = {
+            colorfunc: function(atom) {
+              return plddtColor(atom.b || 0);
+            }
+          };
+          viewer.setStyle({hetflag: false}, spec);
+        } else {
+          // Uniform
+          var spec = {};
+          spec[currentStyle] = {color: 0x3b82f6};
+          viewer.setStyle({hetflag: false}, spec);
+        }
+
+        // Ligands always as ball-and-stick
+        viewer.setStyle({hetflag: true}, {
+          stick: {radius: 0.15},
+          sphere: {radius: 0.4}
+        });
+
+        viewer.render();
+
+        // Update legend visibility
+        document.getElementById('legend').style.display = currentColor === 'plddt' ? 'flex' : 'none';
+      }
+
+      document.getElementById('style-select').addEventListener('change', function() {
+        currentStyle = this.value;
+        applyStyle();
+      });
+
+      document.getElementById('color-select').addEventListener('change', function() {
+        currentColor = this.value;
+        applyStyle();
+      });
+
+      document.getElementById('spin-toggle').addEventListener('click', function() {
+        spinning = !spinning;
+        this.textContent = spinning ? 'Spin: On' : 'Spin: Off';
+        if (spinning) {
+          this.classList.add('active');
+        } else {
+          this.classList.remove('active');
+        }
+        viewer.spin(spinning);
+      });
+
+      // Try to load pLDDT sidecar
+      var plddtPath = filePath.replace(/\.cif$/i, '.plddt.json');
+      var plddtData = null;
+
+      fetch(plddtPath)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .catch(function() { return null; })
+        .then(function(sidecar) {
+          plddtData = sidecar;
+
+          // Load the structure file
+          return fetch(filePath)
+            .then(function(r) {
+              if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+              return r.text();
+            });
+        })
+        .then(function(data) {
+          viewer.addModel(data, 'cif');
+
+          // B-factor heuristic: check if B-factors already contain pLDDT-like values
+          var atoms = viewer.selectedAtoms({});
+          var bSum = 0;
+          for (var i = 0; i < atoms.length; i++) {
+            bSum += (atoms[i].b || 0);
+          }
+          var avgB = atoms.length > 0 ? bSum / atoms.length : 0;
+          var hasPlddtInBfactor = avgB > 20 && avgB < 100;
+
+          // If B-factors don't look like pLDDT and we have sidecar data, apply it
+          if (!hasPlddtInBfactor && plddtData) {
+            if (Array.isArray(plddtData)) {
+              // Flat array of per-atom pLDDT scores
+              for (var i = 0; i < atoms.length && i < plddtData.length; i++) {
+                atoms[i].b = plddtData[i];
+              }
+            } else if (plddtData.residue_plddt) {
+              // Per-chain residue pLDDT
+              var chainScores = plddtData.residue_plddt;
+              for (var i = 0; i < atoms.length; i++) {
+                var atom = atoms[i];
+                var chain = atom.chain;
+                var resi = atom.resi;
+                if (chainScores[chain] && resi > 0 && resi <= chainScores[chain].length) {
+                  atom.b = chainScores[chain][resi - 1];
+                }
+              }
+            }
+          }
+
+          applyStyle();
+          viewer.zoomTo();
+          viewer.render();
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ADMET Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a1a; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; }
+    #viewer-container { width: 100%; }
+    .details-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
+    .details-table th, .details-table td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
+    .details-table th { background: #f8f9fa; font-weight: 600; }
+    .pass { color: #27ae60; font-weight: 600; }
+    .fail { color: #c0392b; font-weight: 600; }
+    .status-acceptable { color: #16a34a; font-weight: 600; }
+    .status-marginal { color: #d97706; font-weight: 600; }
+    .status-unacceptable { color: #dc2626; font-weight: 600; }
+    .verdict-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+    .verdict-passed { background: #dcfce7; color: #16a34a; }
+    .verdict-flagged { background: #fef9c3; color: #a16207; }
+    .verdict-failed { background: #fef2f2; color: #dc2626; }
+    .legend { margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: #555; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 0.3rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  </style>
+</head>
+<body>
+  <h1>ADMET Predictions</h1>
+  <div class="filename" id="filename"></div>
+  <div id="verdict-container"></div>
+  <div id="viewer-container"></div>
+  <div id="details"></div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    /* Domain-specific ADMET endpoint definitions */
+    var ENDPOINTS = ['metabolic_stability', 'cyp_inhibition', 'permeability', 'herg_liability', 'solubility'];
+    var ENDPOINT_LABELS = {
+      metabolic_stability: 'Metabolic Stability',
+      cyp_inhibition: 'CYP Inhibition',
+      permeability: 'Permeability',
+      herg_liability: 'hERG Liability',
+      solubility: 'Solubility'
+    };
+
+    /* 3-level scoring thresholds */
+    var STATUS_SCORE = { acceptable: 3, marginal: 2, unacceptable: 1 };
+    var STATUS_COLORS = { acceptable: '#16a34a', marginal: '#d97706', unacceptable: '#dc2626' };
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function statusColor(status) {
+      return STATUS_COLORS[status] || '#94a3b8';
+    }
+
+    function statusClass(status) {
+      if (status === 'acceptable') return 'status-acceptable';
+      if (status === 'marginal') return 'status-marginal';
+      return 'status-unacceptable';
+    }
+
+    function verdictClass(verdict) {
+      if (verdict === 'passed') return 'verdict-passed';
+      if (verdict === 'flagged') return 'verdict-flagged';
+      return 'verdict-failed';
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    /* Detect if data is in the domain-specific ADMET format */
+    function isAdmetFormat(data) {
+      return data && data.metrics && data.metrics.endpoint_results &&
+        typeof data.metrics.endpoint_results === 'object';
+    }
+
+    /* Render domain-specific ADMET view */
+    function renderAdmet(data) {
+      var metrics = data.metrics || {};
+      var endpointResults = metrics.endpoint_results || {};
+      var assessment = data.assessment || {};
+      var verdict = assessment.verdict || 'unknown';
+
+      /* Verdict badge */
+      var verdictDiv = document.getElementById('verdict-container');
+      var verdictHtml = '<div style="margin-bottom: 0.75rem;">';
+      verdictHtml += '<span style="font-weight: 600; font-size: 0.9rem; margin-right: 0.5rem;">Assessment:</span>';
+      verdictHtml += '<span class="verdict-badge ' + verdictClass(verdict) + '">' + escapeHtml(verdict) + '</span>';
+      if (metrics.n_liabilities != null) {
+        verdictHtml += '<span style="margin-left: 1rem; font-size: 0.85rem; color: #555;">Liabilities: ' + escapeHtml(String(metrics.n_liabilities)) + '</span>';
+      }
+      if (metrics.n_marginals != null) {
+        verdictHtml += '<span style="margin-left: 0.75rem; font-size: 0.85rem; color: #555;">Marginals: ' + escapeHtml(String(metrics.n_marginals)) + '</span>';
+      }
+      verdictHtml += '</div>';
+
+      /* Legend */
+      verdictHtml += '<div class="legend">';
+      verdictHtml += '<span class="legend-item"><span class="legend-dot" style="background:#16a34a;"></span> Acceptable (3)</span>';
+      verdictHtml += '<span class="legend-item"><span class="legend-dot" style="background:#d97706;"></span> Marginal (2)</span>';
+      verdictHtml += '<span class="legend-item"><span class="legend-dot" style="background:#dc2626;"></span> Unacceptable (1)</span>';
+      verdictHtml += '</div>';
+      verdictDiv.innerHTML = verdictHtml;
+
+      /* Build radar chart data */
+      var axisLabels = ENDPOINTS.map(function(e) { return ENDPOINT_LABELS[e]; });
+      var scores = ENDPOINTS.map(function(ep) {
+        var result = endpointResults[ep];
+        return result ? (STATUS_SCORE[result.status] || 1) : 0;
+      });
+      var markerColors = ENDPOINTS.map(function(ep) {
+        var result = endpointResults[ep];
+        return result ? statusColor(result.status) : '#94a3b8';
+      });
+      var hoverTexts = ENDPOINTS.map(function(ep) {
+        var result = endpointResults[ep];
+        if (!result) return ENDPOINT_LABELS[ep] + ': no data';
+        return ENDPOINT_LABELS[ep] + ': ' + escapeHtml(result.status) + ' (' + (STATUS_SCORE[result.status] || 0) + ')';
+      });
+
+      /* Close the radar polygon */
+      var radarLabels = axisLabels.concat([axisLabels[0]]);
+      var radarScores = scores.concat([scores[0]]);
+      var radarHover = hoverTexts.concat([hoverTexts[0]]);
+      var radarColors = markerColors.concat([markerColors[0]]);
+
+      Plotly.newPlot('viewer-container', [{
+        type: 'scatterpolar',
+        r: radarScores,
+        theta: radarLabels,
+        fill: 'toself',
+        fillcolor: 'rgba(59, 130, 246, 0.1)',
+        line: { color: '#3b82f6', width: 2 },
+        marker: { size: 8, color: radarColors },
+        hovertext: radarHover,
+        hoverinfo: 'text'
+      }], {
+        polar: {
+          radialaxis: {
+            visible: true,
+            range: [0, 3.5],
+            tickvals: [1, 2, 3],
+            ticktext: ['Unacceptable', 'Marginal', 'Acceptable'],
+            tickfont: { size: 11 }
+          },
+          angularaxis: {
+            tickfont: { size: 12 }
+          }
+        },
+        title: { text: 'ADMET Endpoint Profile' },
+        showlegend: false,
+        margin: { t: 50, l: 60, r: 60, b: 50 },
+        height: 450
+      }, { responsive: true });
+
+      /* Details table with per-endpoint status */
+      var table = document.createElement('table');
+      table.className = 'details-table';
+      var thead = document.createElement('thead');
+      var headerRow = document.createElement('tr');
+      ['Endpoint', 'Status', 'Score'].forEach(function(h) {
+        var th = document.createElement('th');
+        th.textContent = h;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement('tbody');
+      ENDPOINTS.forEach(function(ep) {
+        var result = endpointResults[ep];
+        var row = document.createElement('tr');
+
+        var tdName = document.createElement('td');
+        tdName.textContent = ENDPOINT_LABELS[ep];
+        row.appendChild(tdName);
+
+        var tdStatus = document.createElement('td');
+        if (result) {
+          tdStatus.textContent = result.status;
+          tdStatus.className = statusClass(result.status);
+        } else {
+          tdStatus.textContent = '-';
+        }
+        row.appendChild(tdStatus);
+
+        var tdScore = document.createElement('td');
+        tdScore.textContent = result ? (STATUS_SCORE[result.status] || '-') : '-';
+        row.appendChild(tdScore);
+
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      document.getElementById('details').appendChild(table);
+    }
+
+    /* Render generic ADMET view (shipped fallback) */
+    function renderGeneric(entries) {
+      var names = entries.map(function(e) { return escapeHtml(e.property || e.name || e.endpoint || ''); });
+      var values = entries.map(function(e) {
+        var v = e.value || e.score || e.prediction || 0;
+        return typeof v === 'number' ? v : parseFloat(v) || 0;
+      });
+
+      /* Color-code by pass/fail where thresholds exist */
+      var colors = entries.map(function(e, i) {
+        if (e.status) {
+          return statusColor(e.status);
+        }
+        if (e.threshold !== undefined && e.threshold !== null) {
+          return values[i] >= e.threshold ? '#27ae60' : '#c0392b';
+        }
+        if (e.pass !== undefined) {
+          return e.pass ? '#27ae60' : '#c0392b';
+        }
+        return '#3498db';
+      });
+
+      /* Radar chart if 3+ properties, otherwise bar chart */
+      if (entries.length >= 3) {
+        var maxVal = Math.max.apply(null, values.map(function(v) { return Math.abs(v); })) || 1;
+        var normValues = values.map(function(v) { return Math.abs(v) / maxVal; });
+
+        var radarNames = names.slice();
+        radarNames.push(radarNames[0]);
+        var radarValues = normValues.slice();
+        radarValues.push(radarValues[0]);
+
+        Plotly.newPlot('viewer-container', [{
+          type: 'scatterpolar',
+          r: radarValues,
+          theta: radarNames,
+          fill: 'toself',
+          fillcolor: 'rgba(52, 152, 219, 0.2)',
+          line: { color: '#3498db' },
+          marker: { color: colors }
+        }], {
+          polar: { radialaxis: { visible: true, range: [0, 1] } },
+          title: { text: 'ADMET Property Profile' },
+          showlegend: false,
+          margin: { t: 50, l: 60, r: 60, b: 50 }
+        }, { responsive: true });
+      } else {
+        Plotly.newPlot('viewer-container', [{
+          x: names,
+          y: values,
+          type: 'bar',
+          marker: { color: colors }
+        }], {
+          title: { text: 'ADMET Predictions' },
+          xaxis: { title: { text: 'Property' } },
+          yaxis: { title: { text: 'Value' } },
+          margin: { t: 50, l: 60, r: 30, b: 80 }
+        }, { responsive: true });
+      }
+
+      /* Details table */
+      var table = document.createElement('table');
+      table.className = 'details-table';
+      var thead = document.createElement('thead');
+      var headerRow = document.createElement('tr');
+      ['Property', 'Value', 'Unit', 'Status'].forEach(function(h) {
+        var th = document.createElement('th');
+        th.textContent = h;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement('tbody');
+      entries.forEach(function(e, i) {
+        var row = document.createElement('tr');
+        var tdName = document.createElement('td');
+        tdName.textContent = names[i];
+        row.appendChild(tdName);
+
+        var tdVal = document.createElement('td');
+        tdVal.textContent = values[i].toFixed(3);
+        row.appendChild(tdVal);
+
+        var tdUnit = document.createElement('td');
+        tdUnit.textContent = e.unit || '';
+        row.appendChild(tdUnit);
+
+        var tdStatus = document.createElement('td');
+        if (e.status) {
+          tdStatus.textContent = e.status;
+          tdStatus.className = statusClass(e.status);
+        } else if (e.threshold !== undefined && e.threshold !== null) {
+          var passed = values[i] >= e.threshold;
+          tdStatus.textContent = passed ? 'Pass' : 'Fail';
+          tdStatus.className = passed ? 'pass' : 'fail';
+        } else if (e.pass !== undefined) {
+          tdStatus.textContent = e.pass ? 'Pass' : 'Fail';
+          tdStatus.className = e.pass ? 'pass' : 'fail';
+        } else {
+          tdStatus.textContent = '-';
+        }
+        row.appendChild(tdStatus);
+
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      document.getElementById('details').appendChild(table);
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file.predict.json');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(function(jsonData) {
+          /* Check for domain-specific ADMET format first */
+          if (isAdmetFormat(jsonData)) {
+            renderAdmet(jsonData);
+            return;
+          }
+
+          /* Fallback: generic format support
+             - Array of {property, value, unit?, threshold?} objects
+             - Object with property names as keys
+             - {predictions: [...]} wrapper */
+          var entries = [];
+
+          if (Array.isArray(jsonData)) {
+            entries = jsonData;
+          } else if (jsonData.predictions && Array.isArray(jsonData.predictions)) {
+            entries = jsonData.predictions;
+          } else if (typeof jsonData === 'object') {
+            var keys = Object.keys(jsonData);
+            entries = keys.map(function(k) {
+              var v = jsonData[k];
+              if (typeof v === 'object' && v !== null) {
+                return { property: k, value: v.value || v.score || 0, unit: v.unit || '', threshold: v.threshold, status: v.status };
+              }
+              return { property: k, value: typeof v === 'number' ? v : parseFloat(v) || 0, unit: '' };
+            });
+          }
+
+          if (entries.length === 0) {
+            throw new Error('No ADMET prediction data found');
+          }
+
+          renderGeneric(entries);
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

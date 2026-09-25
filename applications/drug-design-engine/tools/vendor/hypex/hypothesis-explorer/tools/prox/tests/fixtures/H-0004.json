@@ -1,0 +1,15 @@
+{
+  "id": "H-0004",
+  "title": "Exercise promotes neurogenesis in the hippocampus",
+  "statement": "Regular aerobic exercise stimulates the production of new neurons in the adult hippocampus, improving learning and memory.",
+  "mechanism": "Exercise increases brain-derived neurotrophic factor (BDNF) levels, which promotes neuronal survival, growth, and differentiation in the dentate gyrus.",
+  "predictions": ["Higher BDNF after exercise correlates with improved spatial memory"],
+  "experiments": [{"design": "Controlled exercise intervention with MRI", "readout": "Hippocampal volume and memory test scores", "est_difficulty": "high"}],
+  "evidence": [{"lit_id": "PMID:37005678", "role": "supports", "note": "Exercise and BDNF review"}],
+  "focus_area": "neuroscience",
+  "lineage": {"parents": [], "operator": "null"},
+  "status": "proposed",
+  "created_by": "gen-agent",
+  "epoch": 1,
+  "created_at": "2026-09-01T10:03:00Z"
+}

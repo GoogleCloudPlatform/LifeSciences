@@ -1,0 +1,72 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Foundational Claim Check — fast-fail work order template
+#
+# Purpose: Test ONE foundational claim before committing a full validation
+# cohort.  If the claim is refuted, the cohort is skipped and the pipeline
+# pivots to the next candidate — saving compute and wall-clock time.
+#
+# Usage:
+#   1. Copy this file and fill in every [PLACEHOLDER].
+#   2. Run:  dde workorder create --from <this-file>.yaml --commit
+#   3. If the outcome is REFUTED, skip the full cohort and pivot.
+#      If SUPPORTED, proceed with the full validation cohort.
+#
+# When to use:
+#   After `dde coscientist analyze` flags contradicted claims on the
+#   recommended idea.  Instead of dispatching 5 parallel work orders
+#   immediately, dispatch this single claim-check first.
+
+decision_question: "Is [SPECIFIC CLAIM] supported or refuted by [EVIDENCE TYPE]?"
+
+requested_role: "[RELEVANT SPECIALIST ROLE]"
+
+stage: "[CURRENT STAGE]"
+cycle: "[CURRENT CYCLE]"
+
+context:
+  target: "[TARGET GENE/PROTEIN]"
+  claim_under_test: "[THE SPECIFIC CLAIM TO VERIFY]"
+  claim_source: "[WHERE THE CLAIM ORIGINATED — e.g. co-scientist tournament]"
+  contradiction_evidence: "[WHAT EVIDENCE CONTRADICTS THE CLAIM]"
+  fast_fail_rationale: >-
+    This claim was identified as contradicted during tournament analysis.
+    Testing it before committing a full validation cohort avoids wasting
+    compute if the foundational claim is refuted.
+
+dependencies: []
+
+capabilities:
+  - "[REQUIRED CAPABILITY — e.g. literature-search, statistical-analysis]"
+
+deliverables:
+  layer_1:
+    - "findings/[SUBDOMAIN]/[TARGET]-foundational-claim-check.md"
+  layer_0_classes:
+    - "[RELEVANT ARTIFACT CLASS — e.g. literature, hypotheses]"
+
+acceptance_criteria:
+  binary_outcome: "SUPPORTED or REFUTED — no intermediate verdict"
+  required_evidence: "Direct experimental or database evidence for/against the specific claim"
+  fast_fail_rule: "If REFUTED, recommend halting full cohort dispatch and pivoting to next candidate"
+
+alert_policy:
+  critical_refutation:
+    condition: "claim is directly refuted by the evidence"
+    action: "Emit CRITICAL alert immediately — do not wait for full analysis"
+
+priority: "high"
+resource_class: "standard"
+report_to: "[COORDINATOR OR SCIENCE LEAD]"

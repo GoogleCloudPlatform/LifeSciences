@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Docking Scores Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a1a; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; }
+    #viewer-container { width: 100%; }
+    .legend { margin-top: 0.75rem; font-size: 0.85rem; color: #555; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <h1>Docking Scores</h1>
+  <div class="filename" id="filename"></div>
+  <div id="viewer-container"></div>
+  <div class="legend">
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#16a34a"></span>
+      <span>Strong (&lt; -8.0 kcal/mol)</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#3b82f6"></span>
+      <span>Moderate (-8.0 to -6.0 kcal/mol)</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#94a3b8"></span>
+      <span>Weak (&gt; -6.0 kcal/mol)</span>
+    </div>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    /* Score banding: semantic colors for docking score ranges */
+    function bandColor(score) {
+      if (score < -8.0) return '#16a34a';  /* Strong: green */
+      if (score < -6.0) return '#3b82f6';  /* Moderate: blue */
+      return '#94a3b8';                     /* Weak: gray */
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file.docking_result.json');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(function(jsonData) {
+          /* Support formats:
+             - Array of pose objects {pose_id/mode, affinity, rmsd_lb?, rmsd_ub?}
+             - {poses: [...]} or {results: [...]} wrapper
+             - Autodock Vina output style */
+          var poses = [];
+
+          if (Array.isArray(jsonData)) {
+            poses = jsonData;
+          } else if (jsonData.poses && Array.isArray(jsonData.poses)) {
+            poses = jsonData.poses;
+          } else if (jsonData.results && Array.isArray(jsonData.results)) {
+            poses = jsonData.results;
+          } else if (jsonData.modes && Array.isArray(jsonData.modes)) {
+            poses = jsonData.modes;
+          } else {
+            throw new Error('Unrecognised docking result format');
+          }
+
+          if (poses.length === 0) {
+            throw new Error('No docking poses found in file');
+          }
+
+          /* Extract fields */
+          var labels = poses.map(function(p, i) {
+            return escapeHtml(p.pose_id || p.id || p.mode || ('Pose ' + (i + 1)));
+          });
+          var affinities = poses.map(function(p) {
+            var a = p.affinity || p.binding_affinity || p.score || p.energy || 0;
+            return typeof a === 'number' ? a : parseFloat(a) || 0;
+          });
+
+          /* Sort by affinity (most negative = best) */
+          var indices = affinities.map(function(_, i) { return i; });
+          indices.sort(function(a, b) { return affinities[a] - affinities[b]; });
+
+          var sortedLabels = indices.map(function(i) { return String(labels[i]); });
+          var sortedAffinities = indices.map(function(i) { return affinities[i]; });
+
+          /* Apply score banding colors */
+          var barColors = sortedAffinities.map(function(a) {
+            return bandColor(a);
+          });
+
+          var traces = [{
+            x: sortedLabels,
+            y: sortedAffinities,
+            type: 'bar',
+            name: 'Binding Affinity',
+            marker: { color: barColors },
+            text: sortedAffinities.map(function(a) { return a.toFixed(2); }),
+            textposition: 'outside',
+            textfont: { size: 10 },
+            hovertemplate: '%{x}<br>Affinity: %{y:.2f} kcal/mol<extra></extra>'
+          }];
+
+          /* If RMSD data available, add scatter overlay on secondary axis */
+          var hasRmsd = poses.some(function(p) {
+            return p.rmsd_lb !== undefined || p.rmsd !== undefined;
+          });
+
+          if (hasRmsd) {
+            var sortedRmsd = indices.map(function(i) {
+              return poses[i].rmsd_lb || poses[i].rmsd || poses[i].rmsd_ub || null;
+            });
+
+            traces.push({
+              x: sortedLabels,
+              y: sortedRmsd,
+              type: 'scatter',
+              mode: 'markers+lines',
+              name: 'RMSD',
+              yaxis: 'y2',
+              marker: { color: '#e67e22', size: 8 },
+              line: { color: '#e67e22', dash: 'dot' },
+              hovertemplate: '%{x}<br>RMSD: %{y:.2f}<extra></extra>'
+            });
+          }
+
+          var layout = {
+            title: { text: 'Docking Scores by Pose' },
+            xaxis: { title: { text: 'Pose' }, type: 'category' },
+            yaxis: { title: { text: 'Binding Affinity (kcal/mol)' } },
+            margin: { t: 50, l: 70, r: 80, b: 50 },
+            /* Threshold reference lines */
+            shapes: [
+              {
+                type: 'line',
+                xref: 'paper',
+                x0: 0,
+                x1: 1,
+                yref: 'y',
+                y0: -8.0,
+                y1: -8.0,
+                line: { color: '#16a34a', width: 2, dash: 'dash' }
+              },
+              {
+                type: 'line',
+                xref: 'paper',
+                x0: 0,
+                x1: 1,
+                yref: 'y',
+                y0: -6.0,
+                y1: -6.0,
+                line: { color: '#d97706', width: 2, dash: 'dash' }
+              }
+            ],
+            /* Threshold annotations */
+            annotations: [
+              {
+                xref: 'paper',
+                yref: 'y',
+                x: 1.0,
+                y: -8.0,
+                xanchor: 'left',
+                text: ' Strong',
+                showarrow: false,
+                font: { size: 11, color: '#16a34a' }
+              },
+              {
+                xref: 'paper',
+                yref: 'y',
+                x: 1.0,
+                y: -6.0,
+                xanchor: 'left',
+                text: ' Moderate',
+                showarrow: false,
+                font: { size: 11, color: '#d97706' }
+              }
+            ]
+          };
+
+          if (hasRmsd) {
+            layout.yaxis2 = {
+              title: { text: 'RMSD' },
+              overlaying: 'y',
+              side: 'right'
+            };
+            layout.legend = { x: 0.02, y: 0.98 };
+          }
+
+          Plotly.newPlot('viewer-container', traces, layout, { responsive: true });
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+# Scion orchestration state
+.scion/
+
+# Shared volumes
+shared-dirs/
+.scion-volumes/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Build-time artifact observed from `pip install -e .` in this checkout
+# (setuptools writes a same-named console-script wrapper into the source
+# tree as a side effect during the editable build; harmless, but it must
+# never be re-tracked now that #215 replaced the real tools/dde-cli
+# shim with a pip-managed entry point).
+tools/dde-cli
+
+# Downloaded tool binaries
+tools/bin/
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

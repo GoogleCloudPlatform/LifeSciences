@@ -1,0 +1,145 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base.html" %}
+{% block title %}DDE Program — Index{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <span>Home</span>
+</div>
+{% endblock %}
+{% block content %}
+<h1>Program Overview</h1>
+
+<div class="meta">
+  <dl>
+    <dt>Accepted Revisions:</dt>
+    <dd>{{ accepted_revisions | length }}</dd>
+    <dt>Pages Rendered:</dt>
+    <dd>{{ pages_rendered }}</dd>
+    <dt>CLI Version:</dt>
+    <dd>{{ cli_version }}</dd>
+  </dl>
+</div>
+
+<h2 id="executive">Executive Summary (Layer 4)</h2>
+{% if executive_content is defined and executive_content %}
+<div class="executive-excerpt">
+{{ executive_content | markdown }}
+</div>
+<p><a href="executive.html">Read more &rarr;</a></p>
+{% else %}
+<p>High-level program status derived from accepted work-order outcomes.</p>
+{% endif %}
+{% if work_orders %}
+<table>
+  <thead>
+    <tr><th>Work Order</th><th>Revision</th><th>Role</th><th>Stage</th><th>Decision Question</th></tr>
+  </thead>
+  <tbody>
+  {% for wo in work_orders %}
+    <tr>
+      <td>{{ wo.id }}</td>
+      <td>r{{ wo.revision }}</td>
+      <td>{{ wo.requested_role }}</td>
+      <td>{{ wo.stage }}</td>
+      <td>{{ wo.decision_question }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No accepted work orders.</p>
+{% endif %}
+
+<h2 id="program-state">Program State (Layer 2)</h2>
+{% if program_state_docs is defined and program_state_docs %}
+<p>Program state documents describing current system status.</p>
+<ul>
+{% for doc in program_state_docs %}
+  <li><a href="{{ doc.html_filename }}">{{ doc.title }}</a></li>
+{% endfor %}
+</ul>
+{% else %}
+<p>Current state of accepted work orders in the control plane.</p>
+{% if work_orders %}
+<table>
+  <thead>
+    <tr><th>Work Order</th><th>State</th><th>Cycle</th><th>Priority</th><th>Created</th></tr>
+  </thead>
+  <tbody>
+  {% for wo in work_orders %}
+    <tr>
+      <td>{{ wo.id }}-r{{ wo.revision }}</td>
+      <td>{{ wo.state }}</td>
+      <td>{{ wo.cycle }}</td>
+      <td>{{ wo.priority }}</td>
+      <td>{{ wo.created_at }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endif %}
+
+<h2 id="findings">Specialist Findings (Layer 1)</h2>
+<p>Findings from accepted work-order deliverables, organized by work order.</p>
+{% if findings %}
+<ul>
+{% for finding in findings %}
+  <li><a href="{{ finding.html_filename }}">{{ finding.title }}</a> — {{ finding.work_order_id }}-r{{ finding.revision }}</li>
+{% endfor %}
+</ul>
+{% else %}
+<p>No Layer 1 findings available.</p>
+{% endif %}
+
+{% if work_order_pages is defined and work_order_pages %}
+<h2 id="operations">Operations</h2>
+<p>Per-work-order operations pages with full metadata and cross-references.</p>
+<ul>
+{% for wo_page in work_order_pages %}
+  <li><a href="{{ wo_page.html_filename }}">{{ wo_page.id }}-r{{ wo_page.revision }}</a> — {{ wo_page.requested_role }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if gates is defined and gates %}
+<h2 id="gates">Gate Documents</h2>
+<ul>
+{% for gate in gates %}
+  <li><a href="{{ gate.html_filename }}">{{ gate.title }}</a> — {{ gate.stage_name }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2 id="raw-data">Raw Data (Layer 0)</h2>
+<p>Layer 0 artifacts referenced by accepted work orders, organized by class.</p>
+{% if artifact_classes %}
+<ul>
+{% for ac in artifact_classes %}
+  <li><a href="{{ ac.html_filename }}">{{ ac.name }}</a> — {{ ac.count }} artifact(s)</li>
+{% endfor %}
+</ul>
+{% else %}
+<p>No Layer 0 artifact classes referenced.</p>
+{% endif %}
+
+{% if has_retrospectives is defined and has_retrospectives %}
+<h2 id="retrospectives">Retrospectives</h2>
+<p><a href="retrospectives.html">View retrospectives &rarr;</a></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,34 @@
+{
+  "eval_version": "1.0-comparison",
+  "comparison_timestamp": "2026-09-08T18:01:30Z",
+  "baseline_timestamp": "2026-09-08T15:07:57Z",
+  "stage0_timestamp": "2026-09-08T18:01:30Z",
+  "python_version": "3.11.2 (main, May 12 2026, 05:17:27) [GCC 12.2.0]",
+  "platform": "linux",
+  "fixture_count": 8,
+  "fixture_ids": [
+    "EVAL-001",
+    "EVAL-002",
+    "EVAL-003",
+    "EVAL-004",
+    "EVAL-005",
+    "EVAL-006",
+    "EVAL-007",
+    "EVAL-008"
+  ],
+  "declined_candidate_sample": [
+    "EVAL-001",
+    "EVAL-002"
+  ],
+  "baseline_source": "eval/baseline/baseline-report.json",
+  "stage0_completed": 8,
+  "stage0_total": 8,
+  "scope_limitation": "Evidence reuse (#77) is P2 and out of scope \u2014 only baseline vs. Stage 0 bounded triage is compared.",
+  "command": "PYTHONPATH=tools python3 -m eval.run_comparison",
+  "working_directory": "/workspace/applications/DDE",
+  "outputs": [
+    "eval/comparison/stage0-report.json",
+    "eval/comparison/comparison-report.json",
+    "eval/comparison/comparison-report.md"
+  ]
+}
