@@ -19,6 +19,7 @@ For general prerequisites and setup instructions common to all applications, you
 
 | Application | Description |
 | --- | --- |
+| [Drug Design Engine (DDE)](applications/drug-design-engine) | An agentic pre-clinical pharmaceutical R&D system built on Scion for orchestrating multi-agent drug discovery programs. |
 | [FoldRun](applications/foldrun) | An agentic interface for protein structure prediction. |
 | [Pharma on Gemini Enterprise](applications/pharma-on-gemini-enterprise) | Custom Gemini Enterprise agents for pharma/healthcare/life-sciences workflows, including a Claude (via Agent Platform Model Garden) example with file analysis and grounded web search. |
 | [Sentinel](applications/sentinel) | Evaluate whether documents and videos are compliant with medical regulations. |

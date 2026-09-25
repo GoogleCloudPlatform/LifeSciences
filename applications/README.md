@@ -19,6 +19,7 @@ Each folder in this directory contains a different sample application.
 
 | Application | Description |
 | --- | --- |
+| [Drug Design Engine (DDE)](drug-design-engine) | An agentic pre-clinical pharmaceutical R&D system built on Scion for orchestrating multi-agent drug discovery programs. |
 | [FoldRun](foldrun) | An agentic interface for protein structure prediction. |
 | [Pharma on Gemini Enterprise](pharma-on-gemini-enterprise) | Custom Gemini Enterprise agents for pharma/healthcare/life-sciences workflows, including a Claude (via Agent Platform Model Garden) example with file analysis and grounded web search. |
 | [Sentinel](sentinel) | Evaluate whether documents and videos are compliant with medical regulations. |
