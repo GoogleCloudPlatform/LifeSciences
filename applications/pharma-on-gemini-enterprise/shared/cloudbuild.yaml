@@ -15,7 +15,7 @@
 steps:
   # 0. Get Agent ID from pyproject.toml
   - id: 'get-agent-id'
-    name: 'python:3.13-slim'
+    name: 'python:3.14-slim'
     dir: '${_AGENT_DIR}'
     entrypoint: 'python3'
     args:
@@ -29,7 +29,7 @@ steps:
 
   # 1. Terraform Init
   - id: 'tf-init'
-    name: 'hashicorp/terraform:1.15.6'
+    name: 'hashicorp/terraform:1.16.4'
     dir: '${_AGENT_DIR}/terraform'
     entrypoint: 'sh'
     env:
@@ -47,7 +47,7 @@ steps:
 
   # 2. Terraform Apply
   - id: 'tf-apply'
-    name: 'hashicorp/terraform:1.15.6'
+    name: 'hashicorp/terraform:1.16.4'
     dir: '${_AGENT_DIR}/terraform'
     entrypoint: 'sh'
     env:
