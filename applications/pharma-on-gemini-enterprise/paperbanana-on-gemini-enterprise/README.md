@@ -10,7 +10,7 @@ A user attaches a paper PDF in the GE composer and chats about what figure they 
 
 ## Attribution & credits
 
-This agent is a derivative work of Google Research's [PaperVizAgent](https://github.com/google-research/papervizagent) (Apache-2.0). All four system prompts in [`prompts.py`](prompts.py) are adapted verbatim from the corresponding PaperVizAgent files (with attribution headers in-file calling out the modifications), and [`style_guide.md`](style_guide.md) is a verbatim copy of PaperVizAgent's `neurips2025_diagram_style_guide.md`. See [`NOTICE`](NOTICE) for the full Apache-2.0 attribution.
+This agent is a derivative work of Google Research's [PaperVizAgent](https://github.com/google-research/papervizagent) (Apache-2.0). All four system prompts in [`prompts.py`](app/prompts.py) are adapted verbatim from the corresponding PaperVizAgent files (with attribution headers in-file calling out the modifications), and [`style_guide.md`](app/style_guide.md) is a verbatim copy of PaperVizAgent's `neurips2025_diagram_style_guide.md`. See [`NOTICE`](NOTICE) for the full Apache-2.0 attribution.
 
 **Authors of the PaperBanana paper / PaperVizAgent framework:** Dawei Zhu, Rui Meng, Yale Song, Xiyu Wei, Sujian Li, Tomas Pfister, Jinsung Yoon.
 
@@ -199,7 +199,7 @@ Open Gemini Enterprise, pick **PaperBanana on Gemini Enterprise** from the sideb
 A few principled next steps if you want to push this beyond a lite demo:
 
 - **Re-add the Retriever.** Download [PaperBananaBench](https://huggingface.co/datasets/dwzhu/PaperBananaBench) (or curate your own reference figure pool), index it with embeddings, and add a `retrieve_examples` `FunctionTool` invoked before the Planner. PaperVizAgent's [`agents/retriever_agent.py`](https://github.com/google-research/papervizagent/blob/main/agents/retriever_agent.py) is the reference implementation.
-- **Add statistical-plot mode.** PaperVizAgent's plot path generates matplotlib code instead of an image; mount the optional code-execution sandbox from the [model_garden_agent](../../model-garden-on-gemini-enterprise/model_garden_agent/README.md#optional-code-execution) to run that code inside the Agent Platform sandbox.
+- **Add statistical-plot mode.** PaperVizAgent's plot path generates matplotlib code instead of an image; mount the optional code-execution sandbox from the [model_garden_agent](../model-garden-on-gemini-enterprise/README.md#optional-code-execution) to run that code inside the Agent Platform sandbox.
 - **Tweak the resolution / aspect ratio.** Visualizer renders at 4K by default (`IMAGE_SIZE=4K`); pass `2K` or `1K` for faster iteration. To pin an aspect ratio, add `aspect_ratio="16:9"` (or `"4:3"`, `"1:1"`, etc.) to the `ImageConfig` in `_build_visualizer_request` — Nano Banana Pro will respect it.
 - **Parallel candidates.** PaperVizAgent fans out 5–20 candidates per query and lets the user pick. Wrap `paperbanana_pipeline` in a `ParallelAgent` and emit a gallery in the Finalize step.
 

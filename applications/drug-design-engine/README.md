@@ -493,8 +493,8 @@ adopted by whoever commits next.
 
 ## Contributing
 
-See [docs/contributing.md](docs/contributing.md).
+See [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0 — see [LICENSE](../../LICENSE).

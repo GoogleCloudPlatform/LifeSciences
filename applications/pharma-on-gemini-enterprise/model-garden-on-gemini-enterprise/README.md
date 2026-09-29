@@ -4,7 +4,7 @@ Deploy AI agents powered by third-party models (Anthropic Claude) and open-sourc
 
 This guide walks through the end-to-end flow:
 1. [Enable third-party models](#enable-claude-models-in-model-garden) in Model Garden
-2. [Build and deploy](#deploy-to-agent-engine) an agent to Agent Runtime using ADK
+2. [Build and deploy](#deploy-to-agent-runtime) an agent to Agent Runtime using ADK
 3. [Add the agent to Gemini Enterprise](#add-the-agent-to-gemini-enterprise) so users in your organization can interact with it
 
 ## Prerequisites
@@ -289,7 +289,7 @@ The instruction addendum asks the model to inline citations as numbered referenc
 
 ### Step 1 — uncomment the web search blocks in `agent.py`
 
-Search for `=== OPTIONAL: Web search` / `=== OPTIONAL: Web Grounding for Enterprise` in [`agent.py`](agent.py). There are four contiguous blocks to uncomment (labeled in order): the imports, the `enterprise_web_search` function, the instruction addendum, and the `tools=[enterprise_web_search]` argument on `root_agent`.
+Search for `=== OPTIONAL: Web search` / `=== OPTIONAL: Web Grounding for Enterprise` in [`agent.py`](app/agent.py). There are four contiguous blocks to uncomment (labeled in order): the imports, the `enterprise_web_search` function, the instruction addendum, and the `tools=[enterprise_web_search]` argument on `root_agent`.
 
 ### Step 2 — test
 
@@ -380,7 +380,7 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
 
 ### Step 3 — uncomment the code execution blocks in `agent.py`
 
-Search for the marker `=== OPTIONAL: Code execution` in [`agent.py`](agent.py). There are five contiguous blocks to uncomment (they're labeled in order): the imports, the helpers + `_PatchedSandboxExecutor` class, the sandbox-routing pass inside the callback, the instruction addendum, and the `code_executor=` argument on `root_agent`.
+Search for the marker `=== OPTIONAL: Code execution` in [`agent.py`](app/agent.py). There are five contiguous blocks to uncomment (they're labeled in order): the imports, the helpers + `_PatchedSandboxExecutor` class, the sandbox-routing pass inside the callback, the instruction addendum, and the `code_executor=` argument on `root_agent`.
 
 > **Why patched?** ADK 1.32's `AgentEngineSandboxCodeExecutor` has two bugs in its input-file passthrough — wrong dict key (`contents` vs `content`) and base64-encoding bytes that the SDK forwards verbatim — so attached files arrive empty. The subclass fixes both.
 >
