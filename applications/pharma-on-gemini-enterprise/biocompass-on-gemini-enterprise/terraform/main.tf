@@ -94,7 +94,7 @@ EOF
 }
 
 resource "google_bigquery_job" "create_embedding_model" {
-  job_id   = "create_text_embedding_model_job_${md5(local.create_model_query)}"
+  job_id   = "create_text_embedding_model_biocompass_${md5(local.create_model_query)}"
   project  = var.project_id
   location = var.region
   query {
