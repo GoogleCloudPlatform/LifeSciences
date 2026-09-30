@@ -251,7 +251,7 @@ def render_whitepaper_pdf(markdown_text: str, title: str, subtitle: str = "") ->
 
     buf = io.BytesIO()
     result = pisa.CreatePDF(
-        io.StringIO(html),
+        html,
         dest=buf,
         encoding="utf-8",
         link_callback=_safe_link_callback,
