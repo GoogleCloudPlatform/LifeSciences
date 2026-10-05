@@ -6,16 +6,31 @@ This directory contains evaluation datasets for testing agent behavior.
 
 ### Default Dataset
 ```bash
-# Generate traces using the default dataset
-agents-cli eval generate
-agents-cli eval grade
+# Run the agent over the default dataset and grade the traces
+agents-cli eval run
 ```
 
 ### Custom Dataset
 ```bash
-# Generate traces for a custom dataset
+agents-cli eval run --dataset tests/eval/datasets/custom-dataset.json --metrics general_quality
+```
+
+### Decoupled Runs
+
+Split the run when you want traces in a custom location, or want to re-grade
+existing traces without re-running the agent:
+
+```bash
 agents-cli eval generate --dataset tests/eval/datasets/custom-dataset.json --output custom_traces/
 agents-cli eval grade --metrics general_quality --traces custom_traces/
+```
+
+### Deployed Agent
+
+By default, `eval generate` starts a local HTTP server to run your agent in, dispatches each case in parallel and then tears the server down. Pass `--url <base_url> --app-name <name>` to target an already-running or deployed agent instead.
+
+```bash
+agents-cli eval generate --url https://my-agent.run.app --app-name app
 ```
 
 ## Dataset Format

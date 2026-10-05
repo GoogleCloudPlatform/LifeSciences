@@ -118,7 +118,7 @@ steps:
         fi
 
         # Deploy the agent using agents-cli
-        uvx google-agents-cli@1.2.1 deploy \
+        uvx google-agents-cli@1.8.0 deploy \
             --project="$$PROJECT_ID" \
             --region="$$REGION" \
             --deployment-target=agent_runtime \
@@ -151,7 +151,7 @@ steps:
 
         # Run publish command
         export GOOGLE_CLOUD_PROJECT="$$PROJECT_ID"
-        uvx google-agents-cli@1.2.1 publish gemini-enterprise \
+        uvx google-agents-cli@1.8.0 publish gemini-enterprise \
           --agent-runtime-id="$$ENGINE_ID" \
           --gemini-enterprise-app-id="$$GEMINI_ENTERPRISE_APP_ID" \
           --display-name="$$AGENT_DISPLAY_NAME" \

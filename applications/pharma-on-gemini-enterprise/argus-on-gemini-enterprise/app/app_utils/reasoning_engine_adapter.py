@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +24,7 @@ packaged Agent Engine.
 
 import inspect
 import json
+from collections.abc import AsyncIterable
 
 from fastapi import FastAPI, HTTPException, Request, encoders, responses
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
@@ -80,15 +81,15 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
     async def stream_query(request: Request) -> responses.StreamingResponse:
         body = await request.json()
         method = resolve_method(body["class_method"], streaming=True)
-        kwargs = body.get("input") or {}
-        stream = (
-            method(**kwargs)
-            if inspect.isasyncgenfunction(method)
-            else iterate_in_threadpool(method(**kwargs))
-        )
 
         async def generator():
-            async for event in stream:
+            stream = method(**(body.get("input") or {}))
+            events = (
+                stream
+                if isinstance(stream, AsyncIterable)
+                else iterate_in_threadpool(stream)
+            )
+            async for event in events:
                 yield json.dumps(encoders.jsonable_encoder(event)) + "\n"
 
         return responses.StreamingResponse(

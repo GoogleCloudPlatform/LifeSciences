@@ -24,9 +24,10 @@ packaged Agent Engine.
 
 import inspect
 import json
+from collections.abc import AsyncIterable
 
 from fastapi import FastAPI, HTTPException, Request, encoders, responses
-from fastapi.concurrency import run_in_threadpool
+from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 from vertexai.agent_engines.templates.adk import AdkApp
 
 from app.app_utils import services
@@ -82,7 +83,13 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
         method = resolve_method(body["class_method"], streaming=True)
 
         async def generator():
-            async for event in method(**(body.get("input") or {})):
+            stream = method(**(body.get("input") or {}))
+            events = (
+                stream
+                if isinstance(stream, AsyncIterable)
+                else iterate_in_threadpool(stream)
+            )
+            async for event in events:
                 yield json.dumps(encoders.jsonable_encoder(event)) + "\n"
 
         return responses.StreamingResponse(

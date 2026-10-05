@@ -29,21 +29,18 @@ from app.app_utils.reasoning_engine_adapter import (
 )
 
 load_dotenv()
-otel_to_cloud = os.environ.get(
-    "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", ""
-).lower() in ("true", "1")
 allow_origins = (
     os.getenv("ALLOW_ORIGINS", "").split(",") if os.getenv("ALLOW_ORIGINS") else None
 )
+otel_to_cloud = os.environ.get(
+    "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", ""
+).lower() in ("true", "1")
 
 AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Runner for the A2A path, sharing the same session/artifact services as the
-    # adk_api and reasoning_engine paths (see services.py). Imported here so the
-    # agent is built after env/telemetry setup.
     from app.agent import app as adk_app
     from app.agent import root_agent
 
@@ -53,7 +50,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         artifact_service=services.get_artifact_service(),
         auto_create_session=True,
     )
-    # Shared by the A2A path and the reasoning_engine adapter routes.
     app.state.runner = runner
     app.state.agent_app_name = adk_app.name
     await attach_a2a_routes(
@@ -77,7 +73,6 @@ app: FastAPI = get_fast_api_app(
 )
 app.title = "sentinel-agent"
 app.description = "API for interacting with the Agent sentinel-agent"
-
 
 # Proxy routes so the Vertex AI Console Playground (reasoning_engine SDK) can
 # talk to this agent alongside the native adk_api routes.

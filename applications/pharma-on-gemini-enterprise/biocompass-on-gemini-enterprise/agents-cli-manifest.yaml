@@ -13,7 +13,7 @@
 # limitations under the License.
 
 name: biocompass-agent
-acli_version: 1.2.1
+acli_version: 1.8.0
 agent_directory: app
 create_params:
   deployment_target: agent_runtime

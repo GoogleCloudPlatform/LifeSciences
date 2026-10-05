@@ -19,11 +19,11 @@ description = "ADK agent for Argus Life Sciences M&A Diligence"
 readme = "README.md"
 requires-python = "~=3.13.0"
 dependencies = [
-    "a2a-sdk[http-server]~=0.3.22",
+    "a2a-sdk[http-server]>=1.0,<2",
     "aiohttp>=3.13.4",
     "gcsfs>=2024.11.0",
-    "google-adk[gcp,otel-gcp]>=2.2.0,<3.0.0",
-    "google-cloud-aiplatform[agent-engines]>=1.156.0",
+    "google-adk[gcp,otel-gcp]>=2.9.2,<3.0.0",
+    "google-cloud-aiplatform[agent-engines]>=1.156.0,<2.0.0",
     "google-cloud-logging>=3.12.0,<4.0.0",
     "httpx>=0.28.1",
     "markdown>=3.10.2",
