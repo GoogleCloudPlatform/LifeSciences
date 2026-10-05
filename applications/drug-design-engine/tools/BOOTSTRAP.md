@@ -10,18 +10,17 @@ Read the rest if the preflight says it is not, or if anything fails.
 
 ---
 
-> **The DDE tools live on the `DDE` branch, not `main`.**
-> After cloning, you must check out `DDE` — the `main` branch does not
-> contain DDE tools content.
+> **The DDE tools live on `main` in the `applications/drug-design-engine` directory.**
 >
 > ```bash
-> git clone -b DDE https://github.com/GoogleCloudPlatform/LifeSciences.git
+> git clone https://github.com/GoogleCloudPlatform/LifeSciences.git
+> cd LifeSciences/applications/drug-design-engine/tools
 > ```
 >
-> Or, if you have already cloned:
+> Or, if you have already cloned the repository:
 >
 > ```bash
-> git checkout DDE
+> cd applications/drug-design-engine/tools
 > ```
 
 ---
