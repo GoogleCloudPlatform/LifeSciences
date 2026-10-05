@@ -273,3 +273,40 @@ def get_af3_results(job_id: str) -> dict:
         job_id: AlphaFold 3 job ID.
     """
     return get_tool("af3_get_results").run({"job_id": job_id})
+
+
+def download_job_artifacts(
+    job_id: str,
+    include_raw: bool = False,
+    expiration_minutes: int = 60,
+) -> dict:
+    """Generate secure, time-limited HTTPS download links (V4 Signed URLs) for a FoldRun job.
+
+    Packages and signs a compact ZIP archive (`artifacts_bundle.zip`) containing the
+    job's predicted structures (.cif / .pdb), diagnostic plots (.png), Gemini expert
+    analysis report (.md), input sequence/query, and summary metrics, as well as
+    individual signed download URLs for the top-ranked structure and plots.
+    Supports AlphaFold2, OpenFold3, Boltz-2, and AlphaFold 3 jobs without requiring
+    end-user GCS bucket permissions.
+
+    Args:
+        job_id: Pipeline job ID or AlphaFold 3 job ID (required).
+        include_raw: Include signed URLs for large raw matrices (.pkl, _confidences.json) (default: False).
+        expiration_minutes: Signed URL validity duration in minutes (default: 60).
+
+    Returns:
+        Dictionary with `downloads` containing `artifacts_bundle_signed_url`,
+        `best_structure_signed_url`, `summary_json_signed_url`, and `top_predictions`.
+    """
+    from foldrun_app.core.download_utils import download_job_artifacts_for_job
+    from foldrun_app.models.af2.startup import get_config
+
+    cfg = get_config()
+    return download_job_artifacts_for_job(
+        job_id=job_id,
+        project_id=cfg.project_id,
+        region=cfg.region,
+        bucket_name=cfg.bucket_name,
+        include_raw=include_raw,
+        expiration_minutes=expiration_minutes,
+    )

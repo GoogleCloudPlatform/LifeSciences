@@ -22,6 +22,11 @@ from urllib.parse import quote_plus
 
 from google.cloud import run_v2, storage
 
+from foldrun_app.core.download_utils import (
+    build_agent_downloads_dict,
+    generate_signed_download_url,
+)
+
 from ..base import AF2Tool
 
 logger = logging.getLogger(__name__)
@@ -515,14 +520,33 @@ class AF2GetAnalysisResultsTool(AF2Tool):
 
         # Best model PDB (ranked)
         if "uri" in best_analysis:
-            downloads["best_model_pdb"] = best_analysis["uri"]
+            raw_uri = best_analysis["uri"]
+            pdb_uri = (
+                raw_uri.replace("/raw_prediction.pkl", "/unrelaxed_protein.pdb")
+                if str(raw_uri).endswith("/raw_prediction.pkl")
+                else raw_uri
+            )
+            downloads["best_model_pdb"] = pdb_uri
+            signed_pdb = generate_signed_download_url(pdb_uri, project_id=self.config.project_id)
+            if signed_pdb:
+                downloads["best_model_pdb_signed_url"] = signed_pdb
 
         # Plots (if available)
         plots = best_analysis.get("plots", {})
         if plots.get("plddt_plot"):
             downloads["plddt_plot"] = plots["plddt_plot"]
+            signed_plddt = generate_signed_download_url(
+                plots["plddt_plot"], project_id=self.config.project_id
+            )
+            if signed_plddt:
+                downloads["plddt_plot_signed_url"] = signed_plddt
         if plots.get("pae_plot"):
             downloads["pae_plot"] = plots["pae_plot"]
+            signed_pae = generate_signed_download_url(
+                plots["pae_plot"], project_id=self.config.project_id
+            )
+            if signed_pae:
+                downloads["pae_plot_signed_url"] = signed_pae
 
         # Only add path-based downloads if we resolved the pipeline root
         if pipeline_root:
@@ -531,6 +555,15 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             downloads["raw_prediction"] = f"{pipeline_root}/predict/{model_name}.pkl"
             downloads["features"] = f"{pipeline_root}/data_pipeline/features.pkl"
             downloads["analysis_summary"] = f"{pipeline_root}/analysis/summary.json"
+            downloads["artifacts_bundle"] = f"{pipeline_root}/analysis/artifacts_bundle.zip"
+            signed_bundle = generate_signed_download_url(
+                downloads["artifacts_bundle"],
+                download_filename=f"{job_id}_artifacts.zip",
+                project_id=self.config.project_id,
+                content_type="application/zip",
+            )
+            if signed_bundle:
+                downloads["artifacts_bundle_signed_url"] = signed_bundle
             downloads["gcs_console_url"] = self.gcs_console_url(pipeline_root)
 
         return downloads
@@ -730,12 +763,20 @@ class AF2GetAnalysisResultsTool(AF2Tool):
 
             # Build viewer URL so the agent can present it directly
             viewer_url = self._build_viewer_url(job_id, summary_uri, cloud_run_summary)
+            downloads = build_agent_downloads_dict(
+                job_id=job_id,
+                analysis_path=analysis_path,
+                summary_data=cloud_run_summary,
+                project_id=self.config.project_id,
+                ensure_bundle=False,
+            )
 
             result = {
                 "status": "complete",
                 "job_id": job_id,
                 "analysis_path": analysis_path,
                 "gcs_console_url": self.gcs_console_url(analysis_path),
+                "downloads": downloads,
                 **cloud_run_summary,
             }
             if viewer_url:
@@ -824,10 +865,18 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             try:
                 cloud_run_summary = self._read_from_gcs(summary_uri)
                 viewer_url = self._build_viewer_url(job_id, summary_uri, cloud_run_summary)
+                downloads = build_agent_downloads_dict(
+                    job_id=job_id,
+                    analysis_path=analysis_path,
+                    summary_data=cloud_run_summary,
+                    project_id=self.config.project_id,
+                    ensure_bundle=False,
+                )
                 result = {
                     "status": "complete",
                     "job_id": job_id,
                     "analysis_path": analysis_path,
+                    "downloads": downloads,
                     **cloud_run_summary,
                 }
                 if viewer_url:

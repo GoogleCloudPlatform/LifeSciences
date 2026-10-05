@@ -82,6 +82,7 @@ class TestCrossInstanceParity:
                 "get_actual_job_costs",
                 # Results & Quality Analysis
                 "get_prediction_results",
+                "download_job_artifacts",
                 "analyze_prediction_quality",
                 "analyze_job_parallel",
                 "get_analysis_results",
@@ -97,7 +98,7 @@ class TestCrossInstanceParity:
                 "open_structure_viewer",
             }
 
-            assert len(tool_names) == 30, f"Expected exactly 30 tools, got {len(tool_names)}"
+            assert len(tool_names) == 31, f"Expected exactly 31 tools, got {len(tool_names)}"
             assert tool_names == expected_v1_tools, (
                 f"Tool set mismatch: missing={expected_v1_tools - tool_names}, "
                 f"extra={tool_names - expected_v1_tools}"
@@ -194,7 +195,7 @@ class TestCrossInstanceParity:
 
             assert agent_v1.name == "foldrun_app"
             assert agent_v2.name == "foldrun_app"
-            assert len(agent_v1.tools) == 30
+            assert len(agent_v1.tools) == 31
 
             # V2 uses native ADK SkillToolset with progressive disclosure
             assert len(agent_v2.tools) == 1

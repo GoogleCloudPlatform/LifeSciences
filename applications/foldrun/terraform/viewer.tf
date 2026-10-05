@@ -57,6 +57,13 @@ resource "google_service_account_iam_member" "foldrun_viewer_actas_analysis" {
   member             = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
+# Allow the viewer SA to sign GCS V4 Signed URLs via IAM signBlob
+resource "google_service_account_iam_member" "viewer_self_token_creator" {
+  service_account_id = google_service_account.foldrun_viewer.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
 resource "google_cloud_run_v2_service" "foldrun_viewer" {
   name        = "foldrun-viewer"
   project     = var.project_id
@@ -84,7 +91,7 @@ resource "google_cloud_run_v2_service" "foldrun_viewer" {
       resources {
         limits = {
           cpu    = "1"
-          memory = "512Mi"
+          memory = "1Gi"
         }
       }
     }

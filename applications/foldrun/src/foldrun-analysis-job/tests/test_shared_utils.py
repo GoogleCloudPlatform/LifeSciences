@@ -139,3 +139,122 @@ class TestGetJobMetadata:
         """Verify that get_job_metadata returns empty metadata if PIPELINE_JOB_LOCATION is not set."""
         metadata = shared_utils.get_job_metadata("test-job-id")
         assert metadata == {"labels": {}, "parameters": {}}
+
+
+class TestBuildAndUploadRunArchive:
+    """Unit tests for compact ZIP archive creation in shared_utils.py."""
+
+    def test_build_expert_analysis_markdown(self):
+        """Verify standalone Markdown report includes job metadata, metrics, and Gemini analysis."""
+        summary = {
+            "job_id": "alphafold-inference-pipeline-20261002120000",
+            "model_type": "alphafold2",
+            "analyzed_at": "2026-10-02T12:00:00Z",
+            "best_prediction": {
+                "quality_assessment": "very_high_confidence",
+                "model_name": "model_1_pred_0",
+                "plddt_mean": 94.2,
+            },
+            "expert_analysis": {
+                "model": "gemini-3.1-pro-preview",
+                "analysis": "### Fold Quality\nHigh confidence alpha-helical bundle.",
+            },
+        }
+        md = shared_utils.build_expert_analysis_markdown(summary)
+        assert "# FoldRun Analysis Report:" in md
+        assert "alphafold-inference-pipeline-20261002120000" in md
+        assert "very_high_confidence" in md
+        assert "High confidence alpha-helical bundle." in md
+
+    @patch.object(shared_utils, "upload_to_gcs")
+    @patch.object(shared_utils.storage, "Client")
+    def test_build_and_upload_run_archive_creates_compact_zip(
+        self, mock_storage_cls, mock_upload_to_gcs
+    ):
+        """Verify build_and_upload_run_archive packages structures, plots, metrics, and report into a compact zip."""
+        import io
+        import zipfile
+
+        uploaded_files = {}
+
+        def fake_upload_to_gcs(local_path, gcs_uri):
+            with open(local_path, "rb") as f:
+                uploaded_files[gcs_uri] = f.read()
+
+        mock_upload_to_gcs.side_effect = fake_upload_to_gcs
+
+        def fake_blob(blob_path):
+            b = MagicMock()
+            b.name = blob_path
+            if blob_path.endswith("unrelaxed_protein.pdb"):
+                b.exists.return_value = True
+                b.download_as_bytes.return_value = b"HEADER MOCK PDB\nEND\n"
+            elif blob_path.endswith(".png"):
+                b.exists.return_value = True
+                b.download_as_bytes.return_value = b"\x89PNG\r\n\x1a\n"
+            else:
+                b.exists.return_value = False
+            return b
+
+        mock_bucket = MagicMock()
+        mock_bucket.blob.side_effect = fake_blob
+        mock_client = MagicMock()
+        mock_client.bucket.return_value = mock_bucket
+        mock_storage_cls.return_value = mock_client
+
+        summary = {
+            "job_id": "alphafold-inference-pipeline-20261002120000",
+            "model_type": "alphafold2",
+            "analyzed_at": "2026-10-02T12:00:00Z",
+            "summary": {
+                "protein_info": {
+                    "fasta_header": "1FLD_A",
+                    "fasta_sequence": "AELKVRDIFSYQ",
+                },
+                "quality_metrics": {
+                    "quality_assessment": "very_high_confidence",
+                    "best_model": "model_1_pred_0",
+                    "best_model_plddt": 93.5,
+                },
+            },
+            "all_predictions_summary": [
+                {
+                    "rank": 1,
+                    "model_name": "model_1_pred_0",
+                    "uri": "gs://test-bucket/pipeline_runs/20261002_120000/predict/model_1_pred_0/raw_prediction.pkl",
+                    "plots": {
+                        "plddt_plot": "gs://test-bucket/pipeline_runs/20261002_120000/analysis/plddt_plot_0.png",
+                        "pae_plot": "gs://test-bucket/pipeline_runs/20261002_120000/analysis/pae_plot_0.png",
+                    },
+                }
+            ],
+            "expert_analysis": {
+                "status": "success",
+                "model": "gemini-3.1-pro-preview",
+                "analysis": "Well-folded monomer.",
+            },
+        }
+
+        bundle_uri = "gs://test-bucket/pipeline_runs/20261002_120000/analysis/artifacts_bundle.zip"
+        meta = shared_utils.build_and_upload_run_archive(
+            analysis_path="gs://test-bucket/pipeline_runs/20261002_120000/analysis/",
+            bucket_name="test-bucket",
+            summary_data=summary,
+        )
+
+        assert meta["artifacts_bundle_uri"] == bundle_uri
+        assert meta["artifacts_bundle_size_bytes"] > 0
+        assert bundle_uri in uploaded_files
+
+        zip_bytes = uploaded_files[bundle_uri]
+        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+            names = set(zf.namelist())
+            assert "README.md" in names
+            assert "report/expert_analysis.md" in names
+            assert "metrics/summary.json" in names
+            assert "input/sequence.fasta" in names
+            assert "structures/rank_01_model_1_pred_0_unrelaxed.pdb" in names
+            assert "plots/rank_01_model_1_pred_0_plddt.png" in names
+            assert "plots/rank_01_model_1_pred_0_pae.png" in names
+            # Ensure raw matrices (.pkl/.npz) are excluded from the compact bundle
+            assert not any(n.endswith((".pkl", ".npz")) for n in names)

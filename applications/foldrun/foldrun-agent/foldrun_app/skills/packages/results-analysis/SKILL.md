@@ -3,6 +3,7 @@ name: results-analysis
 description: Quality assessment, confidence scoring (pLDDT, PAE, ipTM), and parallel evaluation of predicted protein structures
 metadata:
   adk_additional_tools:
+    - download_job_artifacts
     - af2_analyze_job_parallel
     - af2_get_analysis_results
     - of3_analyze_job_parallel
@@ -14,6 +15,7 @@ metadata:
 
 # Results Analysis & Quality Assessment
 
+- **Download artifacts & ZIP bundle**: Use `download_job_artifacts` to generate 60-minute GCS V4 Signed URLs for the complete job archive (`artifacts_bundle.zip`, containing ranked structures, plots, Gemini expert report `.md`, inputs, and `summary.json`) as well as individual structures and plots. Always present signed HTTPS URLs (`artifacts_bundle_signed_url`, `best_structure_signed_url`) instead of raw `gs://` or GCS Console links so isolated end users can download directly in their browser.
 - **Download results**: Use get_prediction_results to retrieve PDB files
 - **Analyze quality**: Use analyze_prediction_quality for pLDDT and PAE metrics
 - **AF3 results**: Use get_af3_results to retrieve completed AlphaFold 3 prediction results from GCS (ranking_score, pTM, ipTM, mean pLDDT, and mmCIF path)

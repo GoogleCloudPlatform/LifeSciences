@@ -88,7 +88,7 @@ class TestCreateAgent:
             from foldrun_app.agent import create_alphafold_agent
 
             agent = create_alphafold_agent()
-            assert len(agent.tools) == 30
+            assert len(agent.tools) == 31
 
     def test_agent_tool_names_complete(self, mock_env_vars):
         """Every expected tool function is present by name."""
@@ -128,6 +128,7 @@ class TestCreateAgent:
                 "get_actual_job_costs",
                 # Results & Analysis
                 "get_prediction_results",
+                "download_job_artifacts",
                 "analyze_prediction_quality",
                 "analyze_job_parallel",
                 "get_analysis_results",

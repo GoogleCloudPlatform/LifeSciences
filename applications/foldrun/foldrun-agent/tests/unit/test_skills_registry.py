@@ -113,7 +113,7 @@ class TestSkillRegistry:
         assert "Response Guidelines" not in instruction
 
     def test_compile_tools_baseline_count(self):
-        """Compilation produces all 30 baseline tools without duplicates."""
+        """Compilation produces all 31 baseline tools without duplicates."""
         tools = skill_registry.compile_tools()
         tool_names = [
             getattr(t, "name", None)
@@ -121,11 +121,12 @@ class TestSkillRegistry:
             or str(t)
             for t in tools
         ]
-        assert len(tool_names) == 30
+        assert len(tool_names) == 31
         assert len(tool_names) == len(set(tool_names))
         assert "submit_af2_monomer_prediction" in tool_names
         assert "submit_of3_prediction" in tool_names
         assert "submit_boltz2_prediction" in tool_names
+        assert "download_job_artifacts" in tool_names
 
     def test_compile_instruction_dynamic_custom_skill_asymmetry_fix(self):
         """Registering a custom skill automatically includes it in compile_instruction."""
@@ -152,7 +153,7 @@ class TestSkillRegistry:
         assert "### Smart Retry Guidance for Failed Jobs" not in progressive_instruction
 
     def test_conditional_tools_without_images(self, monkeypatch):
-        """When OF3, Boltz-2, and AF3 endpoint are missing, only AF2 tools (22 tools) are registered."""
+        """When OF3, Boltz-2, and AF3 endpoint are missing, only AF2 tools (23 tools) are registered."""
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("BOLTZ2_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("AF3_VERTEX_ENDPOINT", raising=False)
@@ -166,11 +167,12 @@ class TestSkillRegistry:
             or str(t)
             for t in tools
         }
-        assert len(tools) == 22
+        assert len(tools) == 23
         assert "submit_of3_prediction" not in tool_names
         assert "submit_boltz2_prediction" not in tool_names
         assert "submit_af3_endpoint_prediction" not in tool_names
         assert "submit_af2_monomer_prediction" in tool_names
+        assert "download_job_artifacts" in tool_names
 
     def test_conditional_af3_tools(self, monkeypatch):
         """When AF3_VERTEX_ENDPOINT is configured, all 6 AF3 tools are registered."""
@@ -188,8 +190,8 @@ class TestSkillRegistry:
             or str(t)
             for t in tools
         }
-        # 22 baseline AF2 + 6 AF3 = 28
-        assert len(tools) == 28
+        # 23 baseline AF2 + 6 AF3 = 29
+        assert len(tools) == 29
         assert "submit_af3_endpoint_prediction" in tool_names
         assert "check_af3_endpoint" in tool_names
         assert "deploy_af3_endpoint" in tool_names

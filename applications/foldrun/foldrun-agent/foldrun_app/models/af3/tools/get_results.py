@@ -96,11 +96,53 @@ class AF3GetResultsTool(AF3Tool):
                 else self.gcs_console_url(cif_uri)
             )
 
+            from foldrun_app.core.download_utils import (
+                generate_signed_download_url,
+                prepare_signing_context,
+            )
+
+            signing_client, signing_creds = prepare_signing_context(
+                project_id=self.config.project_id
+            )
+
+            cif_signed_url = (
+                generate_signed_download_url(
+                    cif_uri,
+                    download_filename=cif_filename,
+                    project_id=self.config.project_id,
+                    storage_client=signing_client,
+                    credentials=signing_creds,
+                )
+                if cif_uri
+                else None
+            )
+            conf_uri = (
+                f"gs://{bucket_name}/{self.get_conf_blob_path(job_id)}" if conf_exists else None
+            )
+            conf_signed_url = (
+                generate_signed_download_url(
+                    conf_uri,
+                    download_filename=f"{job_id}_summary_confidences.json",
+                    project_id=self.config.project_id,
+                    content_type="application/json",
+                    storage_client=signing_client,
+                    credentials=signing_creds,
+                )
+                if conf_uri
+                else None
+            )
+
             return {
                 "status": "succeeded",
                 "job_id": job_id,
                 "model": "AlphaFold 3",
                 "cif_uri": cif_uri,
+                "cif_signed_url": cif_signed_url,
+                "downloads": {
+                    "best_structure_signed_url": cif_signed_url,
+                    "summary_json_signed_url": conf_signed_url,
+                    "expires_in_minutes": 60,
+                },
                 "metrics": {
                     "ranking_score": round(float(ranking_score), 4)
                     if ranking_score is not None

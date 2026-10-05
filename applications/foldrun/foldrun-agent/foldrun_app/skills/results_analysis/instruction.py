@@ -15,7 +15,8 @@
 """Modular instructions for results analysis skill."""
 
 RESULTS_ANALYSIS_INSTRUCTION = """### Results & Analysis
-- **Download results**: Use get_prediction_results to retrieve PDB files
+- **Download artifacts & ZIP bundle**: Use `download_job_artifacts` to generate 60-minute GCS V4 Signed URLs for the complete job archive (`artifacts_bundle.zip`, containing ranked structures, plots, Gemini expert report `.md`, inputs, and `summary.json`) as well as individual structures and plots. Always present the signed HTTPS URLs (`artifacts_bundle_signed_url`, `best_structure_signed_url`) instead of raw `gs://` or GCS Console links so isolated end users can download directly in their browser.
+- **Download results**: Use `get_prediction_results` to retrieve AF2 PDB structures and signed download links
 - **Analyze quality**: Use analyze_prediction_quality for pLDDT and PAE metrics
 - **Parallel analysis**: Use analyze_job_parallel for fast batch analysis (25 predictions in ~60s)
   - **IMPORTANT**: After starting analysis, DO NOT automatically check for results

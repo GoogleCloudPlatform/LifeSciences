@@ -482,17 +482,107 @@
             color: #666;
             font-style: italic;
         }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .header-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .primary-download-btn {
+            background: white;
+            color: #1a73e8;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        .primary-download-btn:hover {
+            background: #e8f0fe;
+            transform: translateY(-1px);
+        }
+
+        .secondary-download-btn {
+            background: rgba(255, 255, 255, 0.18);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.45);
+        }
+
+        .secondary-download-btn:hover {
+            background: rgba(255, 255, 255, 0.28);
+        }
+
+        .download-structure-btn {
+            background: #1e8e3e;
+            color: white;
+            font-weight: 600;
+            margin-left: auto;
+        }
+
+        .download-structure-btn:hover {
+            background: #137333;
+        }
+
+        .card-download-link {
+            margin-left: auto;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #1a73e8;
+            background: #e8f0fe;
+            padding: 4px 10px;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .card-download-link:hover {
+            background: #d2e3fc;
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1><a href="/" style="color: inherit; text-decoration: none;">🧬 FoldRun Structure & Analysis</a></h1>
-        {% if job_id %}
-        <p class="subtitle">Job: <a href="https://console.cloud.google.com/vertex-ai/pipelines/locations/{{ region }}/runs/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link">{{ job_id }}</a>{% if gcs_console_url %} &middot; <a href="{{ gcs_console_url }}" target="_blank" class="job-link">View files in GCS</a>{% endif %}</p>
+        <div class="header-top">
+            <div>
+                <h1><a href="/" style="color: inherit; text-decoration: none;">🧬 FoldRun Structure & Analysis</a></h1>
+                {% if job_id %}
+                <p class="subtitle" id="header-subtitle">Job: <a href="https://console.cloud.google.com/vertex-ai/pipelines/locations/{{ region }}/runs/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link">{{ job_id }}</a></p>
+                {% else %}
+                <p class="subtitle" id="header-subtitle">Job: Loading...</p>
+                {% endif %}
+            </div>
+            <div class="header-actions">
+                <a id="download-bundle-btn"
+                   href="/api/download/bundle?{% if summary_uri %}summary_uri={{ summary_uri | urlencode }}{% elif job_id %}job_id={{ job_id | urlencode }}{% endif %}"
+                   class="header-btn primary-download-btn"
+                   title="Download compact ZIP archive (inputs, all ranked structures, plots, metrics, and Gemini report)">⬇ Download All (.zip)</a>
+                <a id="download-report-btn"
+                   href="/api/download/file?{% if summary_uri %}summary_uri={{ summary_uri | urlencode }}{% elif job_id %}job_id={{ job_id | urlencode }}{% endif %}&amp;type=report"
+                   class="header-btn secondary-download-btn"
+                   title="Download standalone Gemini Expert Analysis Markdown report">⬇ Report (.md)</a>
+            </div>
+        </div>
         <div id="job-info-summary" class="job-info-summary"></div>
-        {% else %}
-        <p class="subtitle">Job: N/A</p>
-        {% endif %}
     </div>
 
     <div class="main-container">
@@ -530,6 +620,7 @@
                 </div>
                 <button onclick="resetView()">Reset View</button>
                 <button onclick="toggleSpin()">Toggle Rotation</button>
+                <button id="download-structure-btn" class="download-structure-btn" onclick="downloadCurrentStructure()">⬇ Download Structure</button>
             </div>
 
             <div class="legend">
@@ -573,6 +664,22 @@
         let modelType = 'af2';  // 'af2', 'openfold3', or 'boltz2'
         let isOF3 = false;
         let isBoltz2 = false;
+        const initialJobId = {{ (job_id or '') | tojson }};
+        const initialSummaryUri = {{ (summary_uri or '') | tojson }};
+
+        function getDownloadBaseQuery() {
+            if (initialSummaryUri) {
+                return `summary_uri=${encodeURIComponent(initialSummaryUri)}`;
+            }
+            const jid = initialJobId || (analysisData && analysisData.job_id) || '';
+            return `job_id=${encodeURIComponent(jid)}`;
+        }
+
+        function downloadCurrentStructure() {
+            const pred = predictions[currentPredictionIndex];
+            const rank = (pred && Number.isInteger(pred.rank)) ? pred.rank : (currentPredictionIndex + 1);
+            window.location.href = `/api/download/file?${getDownloadBaseQuery()}&type=structure&rank=${encodeURIComponent(rank)}`;
+        }
 
         // Escape HTML special characters for safe insertion into HTML strings
         function escapeHtml(str) {
@@ -662,6 +769,11 @@
 
         // Populate job info summary in header
         function populateJobInfo() {
+            const subtitleEl = document.getElementById('header-subtitle');
+            if (!initialJobId && subtitleEl && analysisData && analysisData.job_id) {
+                subtitleEl.textContent = `Job: ${analysisData.job_id}`;
+            }
+
             const jobInfoDiv = document.getElementById('job-info-summary');
             if (!jobInfoDiv || !analysisData.summary) return;
 
@@ -736,6 +848,13 @@
 
             if (!prediction) return;
 
+            const dlBtn = document.getElementById('download-structure-btn');
+            if (dlBtn) {
+                const extLabel = prediction.cif_uri ? '.cif' : '.pdb';
+                const rankLabel = prediction.rank || (currentPredictionIndex + 1);
+                dlBtn.textContent = `⬇ Structure (${extLabel} #${rankLabel})`;
+            }
+
             // Show loading
             document.querySelector('#viewer-3d .loading').style.display = 'block';
 
@@ -797,6 +916,8 @@
         function renderAnalysis(prediction) {
             const container = document.getElementById('analysis-content');
             const isOF3 = prediction.cif_uri !== undefined;
+            const baseQuery = getDownloadBaseQuery();
+            const rankNum = Number.isInteger(prediction.rank) ? prediction.rank : escapeHtml(prediction.rank || 1);
             let html = '';
 
             // Prediction Summary
@@ -808,14 +929,14 @@
                 const clash = prediction.has_clash ? 'Yes' : 'No';
                 const qualityAssessment = escapeHtml((prediction.quality_assessment || '').replace(/_/g, ' ').toUpperCase());
                 const modelLabel = isBoltz2 ? 'Boltz-2' : 'OpenFold3';
-                const rankNum = Number.isInteger(prediction.rank) ? prediction.rank : escapeHtml(prediction.rank);
 
                 html += `
                     <div class="info-card">
-                        <h3>
+                        <h3 style="display: flex; align-items: center;">
                             Prediction Summary
                             <span class="rank-badge rank-${rankNum}">#${rankNum}</span>
                             <span style="font-size: 0.75em; color: #666; margin-left: 8px;">${modelLabel}</span>
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=structure&amp;rank=${rankNum}">⬇ CIF</a>
                         </h3>
                         <div class="info-row">
                             <span class="info-label">Sample</span>
@@ -847,13 +968,13 @@
                 const modelName = escapeHtml(prediction.model_name || '');
                 const rankingConf = prediction.ranking_confidence !== undefined ? escapeHtml(prediction.ranking_confidence.toFixed(2)) : 'N/A';
                 const qualityAssessment = escapeHtml((prediction.quality_assessment || '').replace(/_/g, ' ').toUpperCase());
-                const rankNum = Number.isInteger(prediction.rank) ? prediction.rank : escapeHtml(prediction.rank);
 
                 html += `
                     <div class="info-card">
-                        <h3>
+                        <h3 style="display: flex; align-items: center;">
                             Prediction Summary
                             <span class="rank-badge rank-${rankNum}">#${rankNum}</span>
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=structure&amp;rank=${rankNum}">⬇ PDB</a>
                         </h3>
                         <div class="info-row">
                             <span class="info-label">Model</span>
@@ -978,7 +1099,10 @@
             if (prediction.plots && prediction.plots.plddt_plot) {
                 html += `
                     <div class="info-card">
-                        <h3>Per-Residue pLDDT Plot</h3>
+                        <h3 style="display: flex; align-items: center;">
+                            Per-Residue pLDDT Plot
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=plddt_plot&amp;rank=${rankNum}">⬇ PNG</a>
+                        </h3>
                         <img src="/api/image?uri=${encodeURIComponent(prediction.plots.plddt_plot)}"
                              class="plot-image"
                              alt="pLDDT plot">
@@ -990,7 +1114,10 @@
             if (prediction.plots && prediction.plots.pae_plot) {
                 html += `
                     <div class="info-card">
-                        <h3>Predicted Aligned Error (PAE) Plot</h3>
+                        <h3 style="display: flex; align-items: center;">
+                            Predicted Aligned Error (PAE) Plot
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=pae_plot&amp;rank=${rankNum}">⬇ PNG</a>
+                        </h3>
                         <img src="/api/image?uri=${encodeURIComponent(prediction.plots.pae_plot)}"
                              class="plot-image"
                              alt="PAE plot">
@@ -1001,7 +1128,10 @@
             if (prediction.plots && prediction.plots.pde_plot) {
                 html += `
                     <div class="info-card">
-                        <h3>Predicted Distance Error (PDE) Plot</h3>
+                        <h3 style="display: flex; align-items: center;">
+                            Predicted Distance Error (PDE) Plot
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=pde_plot&amp;rank=${rankNum}">⬇ PNG</a>
+                        </h3>
                         <img src="/api/image?uri=${encodeURIComponent(prediction.plots.pde_plot)}"
                              class="plot-image"
                              alt="PDE plot">
@@ -1013,7 +1143,10 @@
             if (prediction.plots && prediction.plots.iptm_matrix_plot) {
                 html += `
                     <div class="info-card">
-                        <h3>Chain-Pair ipTM Matrix</h3>
+                        <h3 style="display: flex; align-items: center;">
+                            Chain-Pair ipTM Matrix
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=iptm_matrix_plot&amp;rank=${rankNum}">⬇ PNG</a>
+                        </h3>
                         <img src="/api/image?uri=${encodeURIComponent(prediction.plots.iptm_matrix_plot)}"
                              class="plot-image"
                              alt="ipTM matrix plot">
@@ -1039,6 +1172,7 @@
                             <span style="font-size: 0.7rem; font-weight: normal; color: #888; background: white; padding: 3px 8px; border-radius: 12px;">
                                 ${expertModel}
                             </span>
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=report">⬇ Markdown (.md)</a>
                         </h3>
                         <div class="markdown-content">
                             ${analysisHtml}

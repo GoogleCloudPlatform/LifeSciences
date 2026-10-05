@@ -22,6 +22,8 @@ from urllib.parse import quote_plus
 
 from google.cloud import run_v2, storage
 
+from foldrun_app.core.download_utils import build_agent_downloads_dict
+
 from ..base import OF3Tool
 
 logger = logging.getLogger(__name__)
@@ -169,12 +171,20 @@ class OF3GetAnalysisResultsTool(OF3Tool):
         try:
             cloud_run_summary = self._read_from_gcs(summary_uri)
             viewer_url = self._build_viewer_url(job_id, summary_uri)
+            downloads = build_agent_downloads_dict(
+                job_id=job_id,
+                analysis_path=analysis_path,
+                summary_data=cloud_run_summary,
+                project_id=self.config.project_id,
+                ensure_bundle=False,
+            )
 
             result = {
                 "status": "complete",
                 "job_id": job_id,
                 "analysis_path": analysis_path,
                 "gcs_console_url": self.gcs_console_url(analysis_path),
+                "downloads": downloads,
                 **cloud_run_summary,
             }
             if viewer_url:
@@ -227,10 +237,18 @@ class OF3GetAnalysisResultsTool(OF3Tool):
             try:
                 cloud_run_summary = self._read_from_gcs(summary_uri)
                 viewer_url = self._build_viewer_url(job_id, summary_uri)
+                downloads = build_agent_downloads_dict(
+                    job_id=job_id,
+                    analysis_path=analysis_path,
+                    summary_data=cloud_run_summary,
+                    project_id=self.config.project_id,
+                    ensure_bundle=False,
+                )
                 result = {
                     "status": "complete",
                     "job_id": job_id,
                     "analysis_path": analysis_path,
+                    "downloads": downloads,
                     **cloud_run_summary,
                 }
                 if viewer_url:

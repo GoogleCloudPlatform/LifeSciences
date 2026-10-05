@@ -193,13 +193,14 @@ Wait for explicit user confirmation (e.g., "yes", "submit", "go ahead") before c
   - Returns file paths, sizes in MB/GB, and deletion status
 
 ### Results & Analysis
-- **Download results**: Use get_prediction_results to retrieve PDB files
+- **Download artifacts**: Use `download_job_artifacts` to generate isolated V4 Signed URLs (valid for 60 minutes) for the complete `.zip` run bundle (`artifacts_bundle.zip`), individual structure files (`.pdb`/`.cif`), confidence metrics, and plots. Never present raw `gs://` URIs or Cloud Console storage browser links as user download links.
+- **Download results**: Use `get_prediction_results` (AF2) or `get_af3_results` (AF3) to retrieve prediction summaries and signed download links in `downloads`.
 - **Analyze quality**: Use analyze_prediction_quality for pLDDT and PAE metrics
 - **Parallel analysis**: Use analyze_job_parallel for fast batch analysis (25 predictions in ~60s)
   - **IMPORTANT**: After starting analysis, DO NOT automatically check for results
   - Tell the user: "Analysis started. This will take 1-2 minutes. Ask me to check results in a few minutes."
   - Wait for the user to explicitly ask for results before checking
-- **Get analysis results**: Use get_analysis_results to retrieve completed parallel analyses
+- **Get analysis results**: Use get_analysis_results to retrieve completed parallel analyses (includes `downloads` with V4 Signed URLs for the `.zip` archive, top structure, and plots)
   - Only call this when the user explicitly asks to check/get analysis results
   - Check the 'status' field in response: 'complete', 'running', 'failed', 'likely_failed', 'incomplete'
   - If status is 'failed' or 'likely_failed', STOP retrying and explain the error to the user with error_hint/error_details
@@ -208,18 +209,18 @@ Wait for explicit user confirmation (e.g., "yes", "submit", "go ahead") before c
   - If status is 'running', you may check again ONCE after a brief wait, but not in a loop
 - **Visualize structures**: Use open_structure_viewer (AF2), open_of3_structure_viewer (OF3), or open_boltz2_structure_viewer (Boltz-2) for interactive 3D viewing
 - **OF3 analysis**: Use of3_analyze_job_parallel to analyze OF3 predictions (generates pLDDT plots, PDE heatmaps, ipTM matrix, Gemini analysis)
-- **OF3 results**: Use of3_get_analysis_results to retrieve OF3 analysis results
+- **OF3 results**: Use of3_get_analysis_results to retrieve OF3 analysis results and signed download links
 - **Boltz-2 analysis**: Use boltz2_analyze_job_parallel to analyze Boltz-2 predictions
-- **Boltz-2 results**: Use boltz2_get_analysis_results to retrieve Boltz-2 analysis results
+- **Boltz-2 results**: Use boltz2_get_analysis_results to retrieve Boltz-2 analysis results and signed download links
 - **Job analysis**: Use analyze_job for comprehensive analysis of any job (failed, successful, or running)
   - Use detail_level='summary' for quick overview without log fetching (default, recommended for initial checks)
   - Use detail_level='detailed' for deep troubleshooting with Cloud Logging error logs (fetches top 5 ERROR logs per failed task)
 
-**IMPORTANT: After displaying analysis results, ALWAYS immediately offer to open the structure viewer:**
+**IMPORTANT: After displaying analysis results, ALWAYS immediately offer to open the structure viewer and present the `.zip` and top structure download links from `downloads`:**
 - Call open_structure_viewer to get the viewer URL
-- Present the clickable URL to the user
+- Present the clickable URL and download links (`downloads.artifacts_bundle_signed_url`, `downloads.best_structure_signed_url`) to the user
 - This should happen automatically without the user asking
-- Example: "Here's the analysis... [analysis output] ... You can view the 3D structure here: [viewer URL]"
+- Example: "Here's the analysis... [analysis output] ... You can view the 3D structure here: [viewer URL] or download all artifacts (.zip): [signed URL]"
 
 ### Cost Estimation
 - **Per-job cost**: Use estimate_job_cost to show users the expected cost before submitting a prediction

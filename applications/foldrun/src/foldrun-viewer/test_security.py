@@ -163,5 +163,131 @@ class TestGenerateSvgsDefusedXml(unittest.TestCase):
         self.assertNotIn("xml.etree.ElementTree", source)
 
 
+class TestArtifactDownloadEndpoints(unittest.TestCase):
+    """Tests for isolated artifact download endpoints (/api/download/bundle and /api/download/file)."""
+
+    def setUp(self):
+        self.client = viewer_app.app.test_client()
+        self.sample_summary = {
+            "job_id": "alphafold-inference-pipeline-20260215153755",
+            "model_type": "alphafold2",
+            "analyzed_at": "2026-02-15T15:40:00Z",
+            "artifacts_bundle_uri": "gs://allowed-foldrun-bucket/pipeline_runs/20260215_153755/analysis/artifacts_bundle.zip",
+            "summary": {
+                "quality_metrics": {
+                    "quality_assessment": "very_high_confidence",
+                    "best_model": "model_1_pred_0",
+                    "best_model_plddt": 93.1,
+                }
+            },
+            "all_predictions_summary": [
+                {
+                    "rank": 1,
+                    "model_name": "model_1_pred_0",
+                    "uri": "gs://allowed-foldrun-bucket/pipeline_runs/20260215_153755/predict/model_1_pred_0/raw_prediction.pkl",
+                    "plots": {
+                        "plddt_plot": "gs://allowed-foldrun-bucket/pipeline_runs/20260215_153755/analysis/plddt_plot_0.png",
+                    },
+                }
+            ],
+            "expert_analysis": {
+                "status": "success",
+                "model": "gemini-3.1-pro-preview",
+                "analysis": "High confidence prediction.",
+            },
+        }
+
+    def test_download_endpoints_reject_malicious_inputs(self):
+        """/api/download/bundle and /api/download/file must reject foreign buckets, path traversal, and bad job_ids."""
+        for endpoint in ("/api/download/bundle", "/api/download/file"):
+            resp_missing = self.client.get(endpoint)
+            self.assertEqual(resp_missing.status_code, 400)
+
+            for bad_uri in (
+                "gs://foreign-bucket/pipeline_runs/run1/analysis/summary.json",
+                "gs://allowed-foldrun-bucket/pipeline_runs/../../secret.json",
+                "gs://allowed-foldrun-bucket/etc/summary.json",
+            ):
+                resp = self.client.get(f"{endpoint}?summary_uri={bad_uri}")
+                self.assertEqual(resp.status_code, 400)
+
+            for bad_id in ("../traversal", "job 123", "job?foo=bar"):
+                resp = self.client.get(f"{endpoint}?job_id={bad_id}")
+                self.assertEqual(resp.status_code, 400)
+
+    def test_download_bundle_redirects_to_signed_url_when_available(self):
+        """/api/download/bundle redirects (302) to https://storage.googleapis.com/... when V4 signing succeeds."""
+        summary_uri = "gs://allowed-foldrun-bucket/pipeline_runs/20260215_153755/analysis/summary.json"
+        signed = "https://storage.googleapis.com/allowed-foldrun-bucket/pipeline_runs/20260215_153755/analysis/artifacts_bundle.zip?X-Goog-Expires=3600"
+        with (
+            patch.object(
+                viewer_app,
+                "_resolve_summary_and_uri",
+                return_value=(self.sample_summary, summary_uri),
+            ),
+            patch.object(
+                viewer_app,
+                "_ensure_bundle_in_gcs",
+                return_value=self.sample_summary["artifacts_bundle_uri"],
+            ),
+            patch.object(
+                viewer_app, "_generate_signed_url_or_none", return_value=signed
+            ),
+        ):
+            resp = self.client.get(f"/api/download/bundle?summary_uri={summary_uri}")
+            self.assertEqual(resp.status_code, 302)
+            self.assertEqual(resp.headers["Location"], signed)
+
+    def test_download_file_report_returns_markdown_attachment(self):
+        """/api/download/file?type=report returns standalone Markdown attachment."""
+        summary_uri = "gs://allowed-foldrun-bucket/pipeline_runs/20260215_153755/analysis/summary.json"
+        with patch.object(
+            viewer_app,
+            "_resolve_summary_and_uri",
+            return_value=(self.sample_summary, summary_uri),
+        ):
+            resp = self.client.get(
+                f"/api/download/file?summary_uri={summary_uri}&type=report"
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn("attachment;", resp.headers.get("Content-Disposition", ""))
+            self.assertIn(
+                "alphafold-inference-pipeline-20260215153755_expert_analysis.md",
+                resp.headers.get("Content-Disposition", ""),
+            )
+            body = resp.get_data(as_text=True)
+            self.assertIn("# FoldRun Structure & Analysis Report", body)
+            self.assertIn("High confidence prediction.", body)
+
+    def test_download_file_structure_streams_when_local_adc_cannot_sign(self):
+        """/api/download/file?type=structure&rank=1 streams PDB with attachment header when V4 signing returns None."""
+        summary_uri = "gs://allowed-foldrun-bucket/pipeline_runs/20260215_153755/analysis/summary.json"
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = True
+        mock_blob.download_as_bytes.return_value = b"HEADER MOCK PDB\nEND\n"
+        mock_bucket = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+
+        with (
+            patch.object(
+                viewer_app,
+                "_resolve_summary_and_uri",
+                return_value=(self.sample_summary, summary_uri),
+            ),
+            patch.object(viewer_app, "_generate_signed_url_or_none", return_value=None),
+            patch.object(viewer_app.storage_client, "bucket", return_value=mock_bucket),
+        ):
+            resp = self.client.get(
+                f"/api/download/file?summary_uri={summary_uri}&type=structure&rank=1"
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn("attachment;", resp.headers.get("Content-Disposition", ""))
+            self.assertIn(
+                "_rank_01_model_1_pred_0.pdb",
+                resp.headers.get("Content-Disposition", ""),
+            )
+            self.assertEqual(resp.get_data(), b"HEADER MOCK PDB\nEND\n")
+
+
 if __name__ == "__main__":
     unittest.main()

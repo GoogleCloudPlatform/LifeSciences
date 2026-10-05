@@ -670,3 +670,297 @@ def get_job_metadata(job_id: str) -> dict:
         logger.error(f"Could not get job metadata: {e}", exc_info=True)
 
     return job_metadata
+
+
+def build_expert_analysis_markdown(summary_data: dict) -> str:
+    """Format a standalone Markdown report from consolidated summary_data."""
+    job_id = summary_data.get("job_id", "unknown")
+    model_type = summary_data.get("model_type", "unknown")
+    analyzed_at = summary_data.get("analyzed_at", "")
+    protein_info = summary_data.get("summary", {}).get("protein_info", {})
+    job_meta = protein_info.get("job_metadata", {})
+    display_name = job_meta.get("display_name") or job_id
+
+    lines = [
+        f"# FoldRun Analysis Report: {display_name}",
+        "",
+        f"- **Job ID**: `{job_id}`",
+        f"- **Model**: `{model_type}`",
+        f"- **Analyzed At**: `{analyzed_at}`",
+    ]
+    if protein_info.get("sequence_length"):
+        lines.append(
+            f"- **Sequence / Token Length**: `{protein_info['sequence_length']}`"
+        )
+    if job_meta.get("duration_formatted"):
+        lines.append(f"- **Pipeline Duration**: `{job_meta['duration_formatted']}`")
+
+    best = summary_data.get("best_prediction") or {}
+    if best:
+        lines.extend(["", "## Top-Ranked Prediction Summary", ""])
+        name = best.get("sample_name") or best.get("model_name") or "Rank 1"
+        lines.append(f"- **Prediction**: `{name}`")
+        if best.get("plddt_mean") is not None:
+            lines.append(f"- **Mean pLDDT**: `{best['plddt_mean']:.2f}`")
+        if best.get("ranking_score") is not None:
+            lines.append(f"- **Ranking Score**: `{best['ranking_score']:.4f}`")
+        if best.get("ranking_confidence") is not None:
+            lines.append(
+                f"- **Ranking Confidence**: `{best['ranking_confidence']:.4f}`"
+            )
+        if best.get("ptm") is not None:
+            lines.append(f"- **pTM**: `{best['ptm']:.4f}`")
+        if best.get("iptm") is not None:
+            lines.append(f"- **ipTM**: `{best['iptm']:.4f}`")
+        if best.get("pae_mean") is not None:
+            lines.append(f"- **Mean PAE**: `{best['pae_mean']:.2f} Å`")
+        if best.get("quality_assessment"):
+            lines.append(f"- **Quality Assessment**: `{best['quality_assessment']}`")
+
+    expert = summary_data.get("expert_analysis") or {}
+    expert_text = expert.get("analysis") if isinstance(expert, dict) else None
+    if expert_text:
+        lines.extend(
+            ["", "## Gemini Expert Analysis", "", str(expert_text).strip(), ""]
+        )
+
+    return "\n".join(lines) + "\n"
+
+
+def _build_archive_readme(summary_data: dict, included_files: list[str]) -> str:
+    """Create a human-readable README.md describing the contents of the ZIP bundle."""
+    job_id = summary_data.get("job_id", "unknown")
+    model_type = summary_data.get("model_type", "unknown")
+    analyzed_at = summary_data.get("analyzed_at", "")
+    protein_info = summary_data.get("summary", {}).get("protein_info", {})
+    display_name = protein_info.get("job_metadata", {}).get("display_name") or job_id
+
+    lines = [
+        f"# FoldRun Artifact Bundle — {display_name}",
+        "",
+        f"- **Job ID**: `{job_id}`",
+        f"- **Model Type**: `{model_type}`",
+        f"- **Generated At**: `{analyzed_at}`",
+        f"- **Total Files in Bundle**: `{len(included_files)}`",
+        "",
+        "## Directory Layout",
+        "",
+        "- `report/expert_analysis.md` — Standalone Gemini expert structural analysis report",
+        "- `input/` — Pipeline input sequence or query specification (`.fasta`, `.json`, or `.yaml`)",
+        "- `structures/` — Ranked 3D structure predictions (`.cif` or `.pdb`)",
+        "- `plots/` — Ranked confidence & error plots (`_plddt.png`, `_pae.png` / `_pde.png`, `_iptm_matrix.png`)",
+        "- `metrics/summary.json` — Consolidated rankings, confidence statistics, and metadata",
+        "",
+        "> Note: Large intermediate matrices (such as raw `.pkl`, `.npz`, full per-token JSONs, and MSA alignments) are excluded to keep this archive compact.",
+        "",
+        "## Ranked Predictions",
+        "",
+        "| Rank | Prediction | Mean pLDDT | Score / Confidence | Quality |",
+        "| :--- | :--- | :--- | :--- | :--- |",
+    ]
+
+    for idx, pred in enumerate(summary_data.get("all_predictions_summary", [])):
+        rank = pred.get("plddt_rank") or pred.get("rank") or (idx + 1)
+        name = pred.get("sample_name") or pred.get("model_name") or f"pred_{rank}"
+        plddt = (
+            f"{pred['plddt_mean']:.1f}"
+            if isinstance(pred.get("plddt_mean"), (int, float))
+            else "N/A"
+        )
+        score_val = pred.get("ranking_score", pred.get("ranking_confidence"))
+        score_str = f"{score_val:.4f}" if isinstance(score_val, (int, float)) else "N/A"
+        qual = pred.get("quality_assessment", "N/A")
+        lines.append(f"| {rank} | `{name}` | {plddt} | {score_str} | `{qual}` |")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def build_and_upload_run_archive(
+    analysis_path: str,
+    bucket_name: str,
+    summary_data: dict,
+) -> dict:
+    """Build a compact, ranked ZIP archive of run artifacts and upload to GCS.
+
+    Includes:
+      - report/expert_analysis.md
+      - input/ (FASTA, OpenFold3 query.json, or Boltz-2 query.yaml)
+      - metrics/summary.json (and metrics/affinity.json if present)
+      - structures/rank_XX_<name>.cif or .pdb
+      - plots/rank_XX_<name>_<plot_type>.png
+      - README.md
+
+    Excludes raw .pkl, .npz, full token-pair _confidences.json, and MSA files.
+    """
+    import concurrent.futures
+    import os
+    import re
+    import tempfile
+    import zipfile
+
+    if not analysis_path.endswith("/"):
+        analysis_path += "/"
+
+    bundle_uri = f"{analysis_path}artifacts_bundle.zip"
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+
+    def _safe_name(val: str) -> str:
+        cleaned = re.sub(r"[^a-zA-Z0-9._-]", "_", str(val or "prediction")).strip("._-")
+        return cleaned or "prediction"
+
+    def _uri_to_blob_name(gcs_uri: str) -> str | None:
+        prefix = f"gs://{bucket_name}/"
+        if not isinstance(gcs_uri, str) or not gcs_uri.startswith(prefix):
+            return None
+        blob_name = gcs_uri[len(prefix) :]
+        if not blob_name or ".." in blob_name.split("/"):
+            return None
+        return blob_name
+
+    # Collect (archive_path, gcs_uri) pairs to download in parallel
+    download_tasks: list[tuple[str, str]] = []
+    all_preds = list(summary_data.get("all_predictions_summary", []))
+    all_preds.sort(key=lambda p: p.get("plddt_rank") or p.get("rank") or 999)
+
+    for idx, pred in enumerate(all_preds):
+        rank = int(pred.get("plddt_rank") or pred.get("rank") or (idx + 1))
+        label = _safe_name(
+            pred.get("sample_name") or pred.get("model_name") or f"model_{rank}"
+        )
+        rank_prefix = f"rank_{rank:02d}_{label}"
+
+        if pred.get("cif_uri"):
+            download_tasks.append((f"structures/{rank_prefix}.cif", pred["cif_uri"]))
+        elif pred.get("uri"):
+            raw_uri = str(pred["uri"])
+            if raw_uri.endswith("/raw_prediction.pkl"):
+                unrelaxed_uri = raw_uri.replace(
+                    "/raw_prediction.pkl", "/unrelaxed_protein.pdb"
+                )
+                relaxed_uri = raw_uri.replace(
+                    "/raw_prediction.pkl", "/relaxed_protein.pdb"
+                )
+                download_tasks.append(
+                    (f"structures/{rank_prefix}_unrelaxed.pdb", unrelaxed_uri)
+                )
+                download_tasks.append(
+                    (f"structures/{rank_prefix}_relaxed.pdb", relaxed_uri)
+                )
+            elif raw_uri.endswith(".pdb"):
+                download_tasks.append((f"structures/{rank_prefix}.pdb", raw_uri))
+
+        plots = pred.get("plots") or {}
+        for plot_key, plot_uri in plots.items():
+            if not plot_uri:
+                continue
+            clean_key = _safe_name(plot_key.replace("_plot", ""))
+            download_tasks.append((f"plots/{rank_prefix}_{clean_key}.png", plot_uri))
+
+    def _fetch_blob_bytes(item: tuple[str, str]) -> tuple[str, bytes | None]:
+        arc_path, uri = item
+        blob_name = _uri_to_blob_name(uri)
+        if not blob_name:
+            return arc_path, None
+        try:
+            blob = bucket.blob(blob_name)
+            if not blob.exists():
+                return arc_path, None
+            return arc_path, blob.download_as_bytes()
+        except Exception as e:
+            logger.debug(f"Skipping optional archive member {uri}: {e}")
+            return arc_path, None
+
+    fetched_items: list[tuple[str, bytes]] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        for arc_path, data in pool.map(_fetch_blob_bytes, download_tasks):
+            if data is not None:
+                fetched_items.append((arc_path, data))
+
+    protein_info = summary_data.get("summary", {}).get("protein_info", {})
+    included_files: list[str] = []
+
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_zip:
+        tmp_zip_path = tmp_zip.name
+
+    try:
+        with zipfile.ZipFile(
+            tmp_zip_path, mode="w", compression=zipfile.ZIP_DEFLATED
+        ) as zf:
+            # 1. Expert analysis report (.md)
+            report_md = build_expert_analysis_markdown(summary_data)
+            zf.writestr("report/expert_analysis.md", report_md.encode("utf-8"))
+            included_files.append("report/expert_analysis.md")
+
+            # 2. Input files (FASTA / JSON / YAML)
+            fasta_seq = protein_info.get("fasta_sequence")
+            if fasta_seq:
+                header = protein_info.get("fasta_header") or summary_data.get(
+                    "job_id", "sequence"
+                )
+                fasta_content = f">{header}\n{fasta_seq}\n"
+                zf.writestr("input/sequence.fasta", fasta_content.encode("utf-8"))
+                included_files.append("input/sequence.fasta")
+
+            if protein_info.get("input_query_json"):
+                zf.writestr(
+                    "input/query.json",
+                    json.dumps(protein_info["input_query_json"], indent=2).encode(
+                        "utf-8"
+                    ),
+                )
+                included_files.append("input/query.json")
+
+            if protein_info.get("input_query_yaml"):
+                yaml_val = protein_info["input_query_yaml"]
+                yaml_str = (
+                    yaml_val
+                    if isinstance(yaml_val, str)
+                    else json.dumps(yaml_val, indent=2)
+                )
+                zf.writestr("input/query.yaml", yaml_str.encode("utf-8"))
+                included_files.append("input/query.yaml")
+
+            # 3. Affinity metrics if present (Boltz-2)
+            affinity = summary_data.get("summary", {}).get("affinity")
+            if affinity:
+                zf.writestr(
+                    "metrics/affinity.json",
+                    json.dumps(affinity, indent=2).encode("utf-8"),
+                )
+                included_files.append("metrics/affinity.json")
+
+            # 4. Structures and plots downloaded from GCS
+            for arc_path, content_bytes in fetched_items:
+                zf.writestr(arc_path, content_bytes)
+                included_files.append(arc_path)
+
+            # 5. Consolidated summary.json
+            summary_copy = dict(summary_data)
+            summary_copy["artifacts_bundle_uri"] = bundle_uri
+            zf.writestr(
+                "metrics/summary.json",
+                json.dumps(summary_copy, indent=2).encode("utf-8"),
+            )
+            included_files.append("metrics/summary.json")
+
+            # 6. Root README.md
+            readme_md = _build_archive_readme(summary_data, included_files)
+            zf.writestr("README.md", readme_md.encode("utf-8"))
+            included_files.append("README.md")
+
+        bundle_size_bytes = os.path.getsize(tmp_zip_path)
+        upload_to_gcs(tmp_zip_path, bundle_uri)
+        logger.info(
+            f"Built and uploaded artifact bundle {bundle_uri} "
+            f"({bundle_size_bytes / 1024 / 1024:.2f} MB, {len(included_files)} files)"
+        )
+        return {
+            "artifacts_bundle_uri": bundle_uri,
+            "artifacts_bundle_size_bytes": bundle_size_bytes,
+            "artifacts_bundle_file_count": len(included_files),
+        }
+    finally:
+        if os.path.exists(tmp_zip_path):
+            os.remove(tmp_zip_path)

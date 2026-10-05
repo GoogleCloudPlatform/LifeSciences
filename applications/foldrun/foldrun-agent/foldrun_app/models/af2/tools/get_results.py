@@ -109,6 +109,12 @@ class AF2GetResultsTool(AF2Tool):
         # Process predictions
         all_models = []
         best_model = None
+        from foldrun_app.core.download_utils import (
+            generate_signed_download_url,
+            prepare_signing_context,
+        )
+
+        signing_client, signing_creds = prepare_signing_context(project_id=self.config.project_id)
 
         for idx, pred in enumerate(predictions):
             safe_model_name = os.path.basename(str(pred["model_name"]))
@@ -137,11 +143,23 @@ class AF2GetResultsTool(AF2Tool):
                     except Exception as e:
                         logger.warning(f"Failed to download unrelaxed protein: {e}")
 
-                # Try to find and download relaxed protein
-                # This would require finding the relaxed protein task output
-                # For now, we'll include the GCS URIs
-
-            model_info["unrelaxed_pdb_uri"] = pred.get("uri")
+            raw_uri = pred.get("uri")
+            pdb_uri = (
+                raw_uri.replace("/raw_prediction.pkl", "/unrelaxed_protein.pdb")
+                if str(raw_uri).endswith("/raw_prediction.pkl")
+                else raw_uri
+            )
+            model_info["unrelaxed_pdb_uri"] = pdb_uri
+            if pdb_uri:
+                signed_url = generate_signed_download_url(
+                    pdb_uri,
+                    download_filename=f"unrelaxed_{safe_model_name}.pdb",
+                    project_id=self.config.project_id,
+                    storage_client=signing_client,
+                    credentials=signing_creds,
+                )
+                if signed_url:
+                    model_info["unrelaxed_pdb_signed_url"] = signed_url
 
             all_models.append(model_info)
 

@@ -46,6 +46,13 @@ resource "google_service_account_iam_member" "build_sa_actas_agent" {
   member             = "serviceAccount:${google_service_account.foldrun_build.email}"
 }
 
+# Allow the agent SA to sign GCS V4 Signed URLs via IAM signBlob
+resource "google_service_account_iam_member" "agent_self_token_creator" {
+  service_account_id = google_service_account.agent_sa.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.agent_sa.email}"
+}
+
 resource "google_storage_bucket_iam_member" "foldrun_agent_bucket_access" {
   bucket = google_storage_bucket.foldrun_bucket.name
   role   = "roles/storage.objectAdmin"

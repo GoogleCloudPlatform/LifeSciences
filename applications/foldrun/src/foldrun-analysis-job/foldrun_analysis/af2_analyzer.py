@@ -32,6 +32,7 @@ from google.genai import types
 matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
 
 from .shared_utils import (
+    build_and_upload_run_archive,
     calculate_plddt_stats,
     download_from_gcs,
     download_json_from_gcs,
@@ -456,6 +457,16 @@ def consolidate_results(
 
     expert_analysis = generate_gemini_expert_analysis(summary_data)
     summary_data["expert_analysis"] = expert_analysis
+
+    try:
+        archive_meta = build_and_upload_run_archive(
+            analysis_path=analysis_path,
+            bucket_name=bucket_name,
+            summary_data=summary_data,
+        )
+        summary_data.update(archive_meta)
+    except Exception as e:
+        logger.warning(f"Could not build run archive bundle: {e}")
 
     summary_uri = f"{analysis_path}summary.json"
     local_summary = "/tmp/summary.json"

@@ -62,6 +62,7 @@ from foldrun_app.skills.results_analysis.tools import (
     analyze_prediction_quality,
     boltz2_analyze_job_parallel,
     boltz2_get_analysis_results,
+    download_job_artifacts,
     get_af3_results,
     get_analysis_results,
     get_prediction_results,
@@ -228,6 +229,7 @@ class SkillRegistry:
         # 4. Results & Analysis
         analysis_tools = [
             get_prediction_results,
+            download_job_artifacts,
             analyze_prediction_quality,
             analyze_job_parallel,
             get_analysis_results,

@@ -256,6 +256,22 @@
             cursor: default;
         }
 
+        .download-zip-btn {
+            background: #e6f4ea;
+            color: #1e8e3e;
+            border: 1px solid #1e8e3e;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            flex-shrink: 0;
+            display: inline-block;
+        }
+
+        .download-zip-btn:hover { background: #ceead6; }
+
         /* ── Feature grid ── */
         .feature-grid {
             display: grid;
@@ -502,7 +518,8 @@
 
                 let actionBtn;
                 if (canView(j)) {
-                    actionBtn = `<a class="view-btn" href="/job/${encodeURIComponent(j.job_id)}">View</a>`;
+                    actionBtn = `<a class="view-btn" href="/job/${encodeURIComponent(j.job_id)}">View</a>
+                                 <a class="download-zip-btn" href="/api/download/bundle?job_id=${encodeURIComponent(j.job_id)}" title="Download compact ZIP archive of job artifacts">⬇ ZIP</a>`;
                 } else if (j.analysis_running) {
                     actionBtn = `<a class="view-btn disabled" href="#" title="Analysis in progress">View</a>
                                  <button class="analyze-btn" disabled title="Analysis already running">Analyzing…</button>`;
