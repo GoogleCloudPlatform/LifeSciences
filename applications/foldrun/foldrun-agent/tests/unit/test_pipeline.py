@@ -32,7 +32,7 @@ def mock_env_vars():
         "GCS_DATABASES_BUCKET": "test-databases-bucket",
         "FILESTORE_ID": "test-nfs",
         "ALPHAFOLD_COMPONENTS_IMAGE": "test-image:latest",
-        "GEMINI_MODEL": "gemini-3.5-flash",
+        "GEMINI_MODEL": "gemini-3.8-flash",
         "GOOGLE_CLOUD_PROJECT": "test-project",
         "GOOGLE_CLOUD_LOCATION": "global",
     }

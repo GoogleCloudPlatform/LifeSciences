@@ -170,7 +170,7 @@ Skill count depends on which models are configured:
 | `GCS_BUCKET_NAME` | GCS bucket for pipeline artifacts and results |
 | `FILESTORE_ID` | Filestore instance ID (NFS for databases) |
 | `ALPHAFOLD_COMPONENTS_IMAGE` | AF2 pipeline container image |
-| `GEMINI_MODEL` | Gemini model (default: `gemini-3.5-flash`) |
+| `GEMINI_MODEL` | Gemini model (default: `gemini-3.8-flash`) |
 
 ### Optional — OpenFold3
 

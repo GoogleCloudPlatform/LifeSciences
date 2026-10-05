@@ -47,7 +47,7 @@ Pipeline shape (ADK v2 Workflow DAG)::
                                     ├── route="iterate" ──► reviewer_panel (up to _MAX_REVIEW_ITERATIONS)
                                     └── route="synthesize" ──► synthesizer (LlmAgent: FinalReport)
 
-Each stage uses ``gemini-3.7-flash`` with structured
+Each stage uses ``gemini-3.8-flash`` with structured
 ``output_schema`` and writes to session state via ``output_key``. The
 workflow iterates the reviewer panel + critic panel + merger up
 to twice; the loop router directs execution based on the merger's
@@ -103,7 +103,7 @@ _MODEL_RETRY_OPTIONS = types.HttpRetryOptions(
 
 # All sub-agents share the same model configured with automatic retries.
 _MODEL = Gemini(
-    model=os.getenv("SENTINEL_MODEL", "gemini-3.7-flash"),
+    model=os.getenv("SENTINEL_MODEL", "gemini-3.8-flash"),
     retry_options=_MODEL_RETRY_OPTIONS,
 )
 

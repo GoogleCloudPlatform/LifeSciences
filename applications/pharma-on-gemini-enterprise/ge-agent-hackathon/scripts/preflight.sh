@@ -52,7 +52,7 @@ done
 
 hdr "Models answer from this project"
 TOK=$(gcloud auth application-default print-access-token 2>/dev/null)
-for M in gemini-3.7-flash gemini-3-pro-image; do
+for M in gemini-3.8-flash gemini-3-pro-image; do
   CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
     -H "Authorization: Bearer $TOK" -H "x-goog-user-project: $PROJECT" -H "Content-Type: application/json" \
     "https://aiplatform.googleapis.com/v1/projects/$PROJECT/locations/global/publishers/google/models/$M:generateContent" \

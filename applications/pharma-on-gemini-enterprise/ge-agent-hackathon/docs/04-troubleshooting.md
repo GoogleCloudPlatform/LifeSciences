@@ -85,7 +85,7 @@ you.
 
 **ADK does not retry by default.** `google.adk.models.google_llm.Gemini` accepts
 a `retry_options` field, which it passes to the google-genai client. If you give
-an agent a model as a plain string — `model="gemini-3.5-flash"` — that field is
+an agent a model as a plain string — `model="gemini-3.8-flash"` — that field is
 `None`, and google-genai then uses:
 
 ```python
@@ -106,11 +106,11 @@ from google.adk.models.google_llm import Gemini
 from google.genai import types
 
 WORKER = Gemini(
-    model="gemini-3.5-flash",
+    model="gemini-3.8-flash",
     retry_options=types.HttpRetryOptions(
         attempts=5, initial_delay=1.0, max_delay=30.0, exp_base=2.0),
 )
-LlmAgent(model=WORKER, ...)      # not model="gemini-3.5-flash"
+LlmAgent(model=WORKER, ...)      # not model="gemini-3.8-flash"
 ```
 
 **Then cap concurrency.** Retry alone makes contention worse when many people
@@ -165,7 +165,7 @@ fix it.
 ### A turn in `adk web` hangs forever
 
 There is **no client-side timeout** in the dev UI. We saw a single
-`gemini-3.5-flash` call never return and sit for 15 minutes. It will not recover.
+`gemini-3.8-flash` call never return and sit for 15 minutes. It will not recover.
 Watch the server log — if model calls have stopped appearing, abandon the turn and
 resubmit. A fresh turn typically works immediately.
 

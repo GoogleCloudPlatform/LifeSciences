@@ -82,7 +82,7 @@ from .tools.infographic import generate_slide, make_infographic
 from .tools.whitepaper import generate_whitepaper_pdf
 
 MODEL = Gemini(
-    model=os.environ.get("ARGUS_MODEL", "gemini-3.7-flash"),
+    model=os.environ.get("ARGUS_MODEL", "gemini-3.8-flash"),
     retry_options=types.HttpRetryOptions(
         attempts=3,
         http_status_codes=[429, 500, 503],

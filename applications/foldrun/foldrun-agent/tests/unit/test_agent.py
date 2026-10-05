@@ -43,7 +43,7 @@ class TestCreateAgent:
             assert agent is not None
 
     def test_create_agent_default_model(self, mock_env_vars):
-        """Default model is gemini-3.5-flash."""
+        """Default model is gemini-3.8-flash."""
         with (
             _mock_startup(),
             patch("google.cloud.aiplatform.init"),
@@ -52,7 +52,7 @@ class TestCreateAgent:
             from foldrun_app.agent import create_alphafold_agent
 
             agent = create_alphafold_agent()
-            assert agent.model == "gemini-3.5-flash"
+            assert agent.model == "gemini-3.8-flash"
 
     def test_create_agent_custom_model(self, mock_env_vars):
         """Accepts gemini-3.1-pro-preview as a model."""

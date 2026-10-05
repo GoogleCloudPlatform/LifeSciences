@@ -30,8 +30,8 @@ class Settings(BaseSettings):
         google_cloud_project: Google Cloud Project ID for Agent Platform (optional)
         google_cloud_location: Google Cloud Location for Agent Platform (default: global)
         gemini_api_key: Google Gemini API key for video analysis (optional if using Agent Platform)
-        gemini_model_fast: Model name for fast processing (default: gemini-3.5-flash)
-        gemini_model_powerful: Model name for complex processing (default: gemini-3.5-flash)
+        gemini_model_fast: Model name for fast processing (default: gemini-3.8-flash)
+        gemini_model_powerful: Model name for complex processing (default: gemini-3.8-flash)
         google_genai_use_enterprise: Whether to explicitly use Agent Platform (default: False)
         api_host: Host address for the API server
         api_port: Port number for the API server
@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     google_cloud_project: str | None = None
     google_cloud_location: str = "global"
     gemini_api_key: str | None = None
-    gemini_model_fast: str = "gemini-3.5-flash"
-    gemini_model_powerful: str = "gemini-3.5-flash"
+    gemini_model_fast: str = "gemini-3.8-flash"
+    gemini_model_powerful: str = "gemini-3.8-flash"
     google_genai_use_enterprise: bool = False
     gcs_bucket_name: str | None = None
     gcs_media_folder: str = "dev"

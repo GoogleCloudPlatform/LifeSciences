@@ -64,7 +64,7 @@ GOOGLE_CLOUD_LOCATION=us-central1
 MODEL_LOCATION=global
 
 COORDINATOR_MODEL_NAME=gemini-3.1-pro-preview
-WORKER_MODEL_NAME=gemini-3.7-flash
+WORKER_MODEL_NAME=gemini-3.8-flash
 IMAGE_MODEL_NAME=gemini-3-pro-image
 IMAGE_SIZE=2K
 MAX_CRITIC_ROUNDS=2
@@ -96,7 +96,7 @@ takes two seconds and saves a lot of confusion:
 curl -s -X POST \
   -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
   -H "x-goog-user-project: $PROJECT" -H "Content-Type: application/json" \
-  "https://aiplatform.googleapis.com/v1/projects/$PROJECT/locations/global/publishers/google/models/gemini-3.7-flash:generateContent" \
+  "https://aiplatform.googleapis.com/v1/projects/$PROJECT/locations/global/publishers/google/models/gemini-3.8-flash:generateContent" \
   -d '{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"maxOutputTokens":8}}'
 ```
 

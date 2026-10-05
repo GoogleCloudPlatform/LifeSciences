@@ -37,7 +37,7 @@ from video_source import default_project, explain_api_error, resolve_video
 load_dotenv()
 
 _TTS_MODEL = os.getenv("VIDEO_TTS_MODEL", "gemini-3.1-flash-tts-preview")
-_VISION_MODEL = os.getenv("VIDEO_VISION_MODEL", "gemini-3.6-flash")
+_VISION_MODEL = os.getenv("VIDEO_VISION_MODEL", "gemini-3.8-flash")
 _TTS_SAMPLE_RATE = 24000
 _TTS_CHANNELS = 1
 _TTS_SAMPLE_WIDTH = 2  # 16-bit PCM

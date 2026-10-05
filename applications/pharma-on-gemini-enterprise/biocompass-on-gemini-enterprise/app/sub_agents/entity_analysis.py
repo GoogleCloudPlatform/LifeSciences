@@ -25,7 +25,7 @@ from ..tools.pubtator import (
     lookup_entity_id,
 )
 
-_MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.6-flash")
+_MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.8-flash")
 
 entity_analysis_agent = Agent(
     model=get_gemini_model(_MODEL),

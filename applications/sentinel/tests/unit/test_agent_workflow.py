@@ -108,7 +108,7 @@ def test_agent_model_configuration() -> None:
     from app.agent import _MODEL, intake_agent, synthesizer_agent
 
     assert isinstance(_MODEL, Gemini)
-    assert _MODEL.model == "gemini-3.7-flash"
+    assert _MODEL.model == "gemini-3.8-flash"
     retry_options = _MODEL.retry_options
     assert retry_options is not None
     assert retry_options.attempts is not None

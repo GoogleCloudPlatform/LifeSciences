@@ -43,7 +43,7 @@ from video_source import default_project, explain_api_error, resolve_video
 # Model IDs and auth live in .env — load it before any os.getenv default below.
 load_dotenv()
 
-_VISION_MODEL = os.getenv("VIDEO_VISION_MODEL", "gemini-3.6-flash")
+_VISION_MODEL = os.getenv("VIDEO_VISION_MODEL", "gemini-3.8-flash")
 
 PROMPT = """Watch this rendered video carefully and evaluate it.
 

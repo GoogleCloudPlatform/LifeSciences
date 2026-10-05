@@ -204,7 +204,7 @@ def create_alphafold_agent(model: str | None = None) -> Agent:
 
     Retained as the rollback/fallback path and for backward compatibility.
     """
-    gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+    gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
     # Validate model choice
     allowed_models = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-pro-preview"]

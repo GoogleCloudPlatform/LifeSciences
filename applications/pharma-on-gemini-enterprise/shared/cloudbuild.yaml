@@ -165,7 +165,7 @@ substitutions:
   _REGION: us-central1  
   _TF_STATE_BUCKET: ""
   _LOGS_BUCKET_NAME: "" # Optional: Bring your own bucket
-  _ENV_VARS: "" # Optional: Extra env vars (semicolon-separated, e.g. "MODEL_NAME=gemini-3.6-flash;MODEL_LOCATION=global")
+  _ENV_VARS: "" # Optional: Extra env vars (semicolon-separated, e.g. "MODEL_NAME=gemini-3.8-flash;MODEL_LOCATION=global")
   _SECRETS: "" # Optional: Secrets to inject (semicolon-separated, e.g. "SOME_API_KEY=some-api-key")
 
 options:

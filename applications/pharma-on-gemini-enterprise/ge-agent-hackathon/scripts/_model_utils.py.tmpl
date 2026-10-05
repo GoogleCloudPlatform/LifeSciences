@@ -17,7 +17,7 @@ Why this exists
 ---------------
 ADK's `Gemini` wrapper accepts `retry_options`, which it passes through to the
 google-genai client. When an agent is given a model as a plain *string*
-(`model="gemini-3.5-flash"`), `retry_options` is None — and google-genai then
+(`model="gemini-3.8-flash"`), `retry_options` is None — and google-genai then
 uses `stop_after_attempt(1)`, i.e. **no retries at all**. A single transient
 429 from dynamic shared quota is therefore fatal, and because ADK surfaces it
 as an ExceptionGroup out of a parallel fan-out, it takes the whole invocation

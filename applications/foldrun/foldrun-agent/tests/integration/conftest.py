@@ -130,7 +130,7 @@ def mock_env_vars(mock_env_vars, monkeypatch):
     monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "global")
     # GCP_REGION must be a valid Compute Engine region (used by GPU quota checks)
     monkeypatch.setenv("GCP_REGION", "us-central1")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
     return mock_env_vars
 
 

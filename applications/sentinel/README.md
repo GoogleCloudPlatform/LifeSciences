@@ -113,8 +113,8 @@ GOOGLE_CLOUD_LOCATION=global
 GOOGLE_GENAI_USE_ENTERPRISE=True
 
 # Models
-GEMINI_MODEL_FAST=gemini-3.7-flash
-GEMINI_MODEL_POWERFUL=gemini-3.7-flash
+GEMINI_MODEL_FAST=gemini-3.8-flash
+GEMINI_MODEL_POWERFUL=gemini-3.8-flash
 
 # GCS Storage (for image/video storage)
 GCS_BUCKET_NAME=YOUR_BUCKET_NAME
