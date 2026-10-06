@@ -544,6 +544,12 @@ def list_jobs():
             labels = pj.get("labels", {})
             resource_name = pj.get("name", "")
             job_id = resource_name.split("/")[-1]
+            if (
+                labels.get("job_type") == "af3_idle_drain"
+                or labels.get("model_type") == "af3_system"
+                or job_id.startswith("alphafold3-idle-drain-")
+            ):
+                continue
             # Extract exact GCS timestamp from gcsOutputDirectory (e.g.
             # "gs://bucket/pipeline_runs/20260504_224020" → "20260504224020").
             # This is more reliable than parsing the job ID timestamp, which can

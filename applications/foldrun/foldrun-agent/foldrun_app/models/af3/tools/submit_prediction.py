@@ -152,6 +152,7 @@ class AF3SubmitPredictionTool(AF3Tool):
         total_tokens: int,
         num_chains: int,
         collected_warnings: list[str],
+        idle_shutdown_minutes: int = 20,
     ) -> dict[str, Any]:
         """Submit an asynchronous KFP PipelineJob that wraps the synchronous AF3 endpoint call."""
         deployed_models = self.get_deployed_models(endpoint)
@@ -184,10 +185,35 @@ class AF3SubmitPredictionTool(AF3Tool):
         pipeline_job_id = f"alphafold3-inference-pipeline-{ts_id}"
         pipeline_root = f"gs://{bucket_name}/pipeline_runs/{ts_dir}"
 
+        # Stamp activity in GCS so any running idle-drain watchdog immediately resets its timer
+        endpoint_short_id = str(getattr(endpoint, "resource_name", endpoint)).rstrip("/").split("/")[-1]
+        try:
+            activity_blob = bucket.blob(
+                f"af3_predictions/.locks/{endpoint_short_id}_activity.json"
+            )
+            activity_blob.upload_from_string(
+                json.dumps(
+                    {
+                        "endpoint_id": getattr(endpoint, "resource_name", str(endpoint)),
+                        "last_activity_epoch": time.time(),
+                        "last_activity_iso": datetime.now(timezone.utc)
+                        .isoformat()
+                        .replace("+00:00", "Z"),
+                        "last_event": f"submitted:{job_name}",
+                        "last_pipeline_job_id": pipeline_job_id,
+                        "idle_shutdown_minutes": int(idle_shutdown_minutes),
+                    },
+                    indent=2,
+                ),
+                content_type="application/json",
+            )
+        except Exception as act_exc:
+            logger.debug(f"Could not write activity file: {act_exc}")
+
         with _COMPILE_LOCK:
             from kfp import compiler
 
-            from ..pipeline import create_af3_inference_pipeline
+            from ..pipeline import create_af3_idle_drain_pipeline, create_af3_inference_pipeline
 
             pipeline_func = create_af3_inference_pipeline()
             fd, pipeline_path = tempfile.mkstemp(
@@ -198,6 +224,27 @@ class AF3SubmitPredictionTool(AF3Tool):
                 pipeline_func=pipeline_func,
                 package_path=pipeline_path,
             )
+
+            # Also ensure the idle-drain pipeline template is uploaded to GCS for post-job auto-drain
+            try:
+                drain_func = create_af3_idle_drain_pipeline()
+                fd_d, drain_path = tempfile.mkstemp(suffix=".json", prefix="af3_idle_drain_")
+                os.close(fd_d)
+                try:
+                    compiler.Compiler().compile(
+                        pipeline_func=drain_func,
+                        package_path=drain_path,
+                    )
+                    with open(drain_path, encoding="utf-8") as df:
+                        drain_spec_json = df.read()
+                    bucket.blob(
+                        "af3_predictions/.locks/af3_idle_drain_pipeline.json"
+                    ).upload_from_string(drain_spec_json, content_type="application/json")
+                finally:
+                    if os.path.exists(drain_path):
+                        os.remove(drain_path)
+            except Exception as drain_compile_exc:
+                logger.warning(f"Could not compile/upload AF3 idle drain spec: {drain_compile_exc}")
 
         labels = {
             "model_type": "alphafold3",
@@ -231,6 +278,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                     "msa_free": msa_free,
                     "num_diffusion_samples": num_diffusion_samples,
                     "timeout_seconds": self.config.timeout_seconds,
+                    "idle_shutdown_minutes": int(idle_shutdown_minutes),
                 },
                 enable_caching=False,
                 labels=labels,
@@ -266,6 +314,7 @@ class AF3SubmitPredictionTool(AF3Tool):
             "model": "AlphaFold 3",
             "mode": "msa-free" if msa_free else "standard",
             "execution_mode": "kfp_pipeline",
+            "idle_shutdown_minutes": int(idle_shutdown_minutes),
             "total_tokens": total_tokens,
             "num_chains": num_chains,
             "endpoint": endpoint.resource_name,
@@ -282,7 +331,9 @@ class AF3SubmitPredictionTool(AF3Tool):
                 f"mode={'Zero-MSA' if msa_free else 'Full 630 GB MSA + Templates'}). "
                 f"The KFP worker coordinates replica slots ({active_replicas} active H100 replica(s)), "
                 f"executes the synchronous endpoint prediction, streams container logs into KFP + GCS, "
-                f"and generates FoldRun Viewer artifacts. Monitor progress via `check_job_status(job_id='{run_id}')`."
+                f"generates FoldRun Viewer artifacts, and auto-undeploys the H100 endpoint after "
+                f"{idle_shutdown_minutes} minutes of inactivity once the queue drains. "
+                f"Monitor progress via `check_job_status(job_id='{run_id}')`."
             ),
         }
 
@@ -327,6 +378,7 @@ class AF3SubmitPredictionTool(AF3Tool):
             model_seeds = [model_seeds]
         num_diffusion_samples = int(arguments.get("num_diffusion_samples", 5))
         sync = bool(arguments.get("sync", True))
+        idle_shutdown_minutes = int(arguments.get("idle_shutdown_minutes", 20))
 
         endpoint_id = arguments.get("endpoint_id")
         collected_warnings: list[str] = []
@@ -462,6 +514,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                     total_tokens=total_tokens,
                     num_chains=num_chains,
                     collected_warnings=collected_warnings,
+                    idle_shutdown_minutes=idle_shutdown_minutes,
                 )
 
             logger.info(

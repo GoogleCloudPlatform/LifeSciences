@@ -55,6 +55,7 @@ def predict_af3_endpoint_task(
     msa_free: bool = False,
     num_diffusion_samples: int = 5,
     timeout_seconds: int = 1800,
+    idle_shutdown_minutes: int = 20,
 ) -> NamedTuple(
     "AF3PredictOutputs",
     [
@@ -736,13 +737,137 @@ def predict_af3_endpoint_task(
             except Exception as rel_exc:
                 log.warning(f"[AF3 KFP] Slot release warning: {rel_exc}")
 
+        # Stamp endpoint activity record and check if we should trigger / refresh idle auto-drain
+        try:
+            now_ts = time.time()
+            now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            activity_blob = bucket.blob(
+                f"af3_predictions/.locks/{endpoint_short_id}_activity.json"
+            )
+            activity_payload = {
+                "endpoint_id": endpoint.resource_name,
+                "last_activity_epoch": now_ts,
+                "last_activity_iso": now_iso,
+                "last_event": f"completed:{job_name}",
+                "last_pipeline_job_id": pipeline_job_id,
+                "idle_shutdown_minutes": int(idle_shutdown_minutes),
+            }
+            activity_blob.upload_from_string(
+                json.dumps(activity_payload, indent=2), content_type="application/json"
+            )
+
+            if idle_shutdown_minutes >= 0:
+                import google.auth
+                from google.auth.transport.requests import AuthorizedSession
+
+                creds, _ = google.auth.default()
+                authed = AuthorizedSession(creds)
+                list_url = (
+                    f"https://{region}-aiplatform.googleapis.com/v1/"
+                    f"projects/{project_id}/locations/{region}/pipelineJobs?pageSize=50"
+                )
+                resp = authed.get(list_url, timeout=15)
+                pjobs = resp.json().get("pipelineJobs", []) if resp.ok else []
+                active_states = {
+                    "PIPELINE_STATE_PENDING",
+                    "PIPELINE_STATE_RUNNING",
+                    "PIPELINE_STATE_QUEUED",
+                    "PIPELINE_STATE_CANCELLING",
+                }
+                other_af3_jobs = []
+                active_drain_jobs = []
+                for pj in pjobs:
+                    pj_id = pj.get("name", "").split("/")[-1]
+                    st = pj.get("state", "")
+                    if st not in active_states or pj_id == pipeline_job_id:
+                        continue
+                    if pj_id.startswith("alphafold3-inference-pipeline-"):
+                        other_af3_jobs.append(pj_id)
+                    elif pj_id.startswith("alphafold3-idle-drain-"):
+                        active_drain_jobs.append(pj_id)
+
+                # Also check if any slot lock is still held
+                active_slots = 0
+                for b in bucket.list_blobs(
+                    prefix=f"af3_predictions/.locks/{endpoint_short_id}_slot_"
+                ):
+                    try:
+                        ld = json.loads(b.download_as_text())
+                        if now_ts - float(ld.get("heartbeat_epoch", 0)) < stale_heartbeat_sec:
+                            active_slots += 1
+                    except Exception:
+                        pass
+
+                if other_af3_jobs or active_slots > 0:
+                    log.info(
+                        f"[AF3 Auto-Drain] {len(other_af3_jobs)} other AF3 pipeline job(s) "
+                        f"and {active_slots} slot lock(s) still active; deferring endpoint "
+                        "idle-drain to the last job in the queue."
+                    )
+                elif idle_shutdown_minutes == 0:
+                    log.info(
+                        "[AF3 Auto-Drain] Queue is empty and idle_shutdown_minutes=0 -> "
+                        "undeploying H100 endpoint immediately ($0.00/hr)."
+                    )
+                    endpoint.undeploy_all(sync=False)
+                    activity_payload["state"] = "auto_undeployed"
+                    activity_blob.upload_from_string(
+                        json.dumps(activity_payload, indent=2), content_type="application/json"
+                    )
+                elif active_drain_jobs:
+                    log.info(
+                        f"[AF3 Auto-Drain] Existing idle-drain watchdog '{active_drain_jobs[0]}' "
+                        f"is active; refreshed activity timestamp to reset its {idle_shutdown_minutes}m countdown."
+                    )
+                else:
+                    drain_template_uri = (
+                        f"gs://{bucket_name}/af3_predictions/.locks/af3_idle_drain_pipeline.json"
+                    )
+                    if bucket.blob(
+                        "af3_predictions/.locks/af3_idle_drain_pipeline.json"
+                    ).exists():
+                        drain_ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+                        drain_job_id = f"alphafold3-idle-drain-{drain_ts}"
+                        drain_job = aiplatform.PipelineJob(
+                            display_name="af3-endpoint-idle-drain",
+                            template_path=drain_template_uri,
+                            job_id=drain_job_id,
+                            pipeline_root=f"gs://{bucket_name}/pipeline_runs/idle_drain_{drain_ts}",
+                            parameter_values={
+                                "project_id": project_id,
+                                "region": region,
+                                "endpoint_location": endpoint_location,
+                                "endpoint_id": endpoint.resource_name,
+                                "bucket_name": bucket_name,
+                                "idle_shutdown_minutes": int(idle_shutdown_minutes),
+                            },
+                            enable_caching=False,
+                            project=project_id,
+                            location=region,
+                            labels={
+                                "model_type": "af3_system",
+                                "job_type": "af3_idle_drain",
+                                "submitted_by": "foldrun-agent",
+                            },
+                        )
+                        drain_job.submit(
+                            service_account=f"pipelines-sa@{project_id}.iam.gserviceaccount.com"
+                        )
+                        log.info(
+                            f"[AF3 Auto-Drain] Queue empty -> launched {idle_shutdown_minutes}m "
+                            f"idle-drain watchdog '{drain_job_id}'."
+                        )
+        except Exception as drain_exc:
+            log.warning(f"[AF3 Auto-Drain] Post-job idle drain check warning: {drain_exc}")
+
+
 
 def create_af3_inference_pipeline():
     """Create the KFP v2 pipeline for AlphaFold 3 Endpoint predictions."""
 
     @dsl.pipeline(
         name="alphafold3-inference-pipeline",
-        description="AlphaFold 3 structure prediction on Vertex AI Dedicated H100 Endpoint with replica-aware queueing.",
+        description="AlphaFold 3 structure prediction on Vertex AI Dedicated H100 Endpoint with replica-aware queueing and idle auto-drain.",
     )
     def af3_inference_pipeline(
         project_id: str,
@@ -758,6 +883,7 @@ def create_af3_inference_pipeline():
         msa_free: bool = False,
         num_diffusion_samples: int = 5,
         timeout_seconds: int = 1800,
+        idle_shutdown_minutes: int = 20,
     ):
         task = predict_af3_endpoint_task(
             project_id=project_id,
@@ -773,8 +899,248 @@ def create_af3_inference_pipeline():
             msa_free=msa_free,
             num_diffusion_samples=num_diffusion_samples,
             timeout_seconds=timeout_seconds,
+            idle_shutdown_minutes=idle_shutdown_minutes,
         )
         task.set_display_name("AF3 Endpoint Predict (H100)")
         task.set_caching_options(False)
 
     return af3_inference_pipeline
+
+
+@dsl.component(
+    base_image="python:3.12-slim",
+    packages_to_install=[
+        "google-cloud-aiplatform>=1.50.0",
+        "google-cloud-storage>=2.10.0",
+    ],
+)
+def af3_idle_drain_task(
+    project_id: str,
+    region: str,
+    endpoint_location: str,
+    endpoint_id: str,
+    bucket_name: str,
+    idle_shutdown_minutes: int = 20,
+) -> str:
+    """Monitor the AF3 H100 Endpoint after a job/batch completes and auto-undeploy after idle_shutdown_minutes of inactivity."""
+    import json
+    import logging
+    import time
+    from datetime import datetime, timezone
+
+    import google.auth
+    from google.auth.transport.requests import AuthorizedSession
+    from google.cloud import aiplatform, storage
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    log = logging.getLogger("af3_idle_drain")
+
+    if idle_shutdown_minutes < 0:
+        log.info("[AF3 Auto-Drain] idle_shutdown_minutes < 0; auto-undeploy disabled.")
+        return "disabled"
+
+    storage_client = storage.Client(project=project_id)
+    bucket = storage_client.bucket(bucket_name)
+
+    aiplatform.init(project=project_id, location=endpoint_location)
+    endpoint = aiplatform.Endpoint(
+        endpoint_name=endpoint_id,
+        project=project_id,
+        location=endpoint_location,
+    )
+    endpoint_short_id = endpoint.resource_name.split("/")[-1]
+    activity_blob_path = f"af3_predictions/.locks/{endpoint_short_id}_activity.json"
+
+    creds, _ = google.auth.default()
+    authed = AuthorizedSession(creds)
+
+    def _get_deployed_models(ep):
+        try:
+            return list(ep.list_models())
+        except Exception:
+            gca = getattr(ep, "_gca_resource", None)
+            return list(getattr(gca, "deployed_models", None) or [])
+
+    def _has_active_deploy_op() -> bool:
+        try:
+            op_url = (
+                f"https://{endpoint_location}-aiplatform.googleapis.com/v1/"
+                f"{endpoint.resource_name}/operations"
+            )
+            r = authed.get(op_url, timeout=10)
+            if not r.ok:
+                return False
+            for op in r.json().get("operations", []):
+                if not op.get("done") and "DeployModel" in op.get("metadata", {}).get("@type", ""):
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _get_active_af3_jobs() -> list[str]:
+        active = []
+        try:
+            list_url = (
+                f"https://{region}-aiplatform.googleapis.com/v1/"
+                f"projects/{project_id}/locations/{region}/pipelineJobs?pageSize=50"
+            )
+            r = authed.get(list_url, timeout=15)
+            if r.ok:
+                active_states = {
+                    "PIPELINE_STATE_PENDING",
+                    "PIPELINE_STATE_RUNNING",
+                    "PIPELINE_STATE_QUEUED",
+                    "PIPELINE_STATE_CANCELLING",
+                }
+                for pj in r.json().get("pipelineJobs", []):
+                    pj_id = pj.get("name", "").split("/")[-1]
+                    if (
+                        pj.get("state") in active_states
+                        and pj_id.startswith("alphafold3-inference-pipeline-")
+                    ):
+                        active.append(pj_id)
+        except Exception:
+            pass
+        return active
+
+    def _get_active_slot_locks() -> int:
+        count = 0
+        now_t = time.time()
+        try:
+            for b in bucket.list_blobs(
+                prefix=f"af3_predictions/.locks/{endpoint_short_id}_slot_"
+            ):
+                ld = json.loads(b.download_as_text())
+                if now_t - float(ld.get("heartbeat_epoch", 0)) < 210.0:
+                    count += 1
+        except Exception:
+            pass
+        return count
+
+    last_activity_epoch = time.time()
+    effective_idle_minutes = int(idle_shutdown_minutes)
+    last_log_time = 0.0
+
+    log.info(
+        f"[AF3 Auto-Drain] Started idle watchdog for endpoint '{endpoint.resource_name}' "
+        f"(grace window: {effective_idle_minutes} minutes)."
+    )
+
+    while True:
+        now_ts = time.time()
+        deployed = _get_deployed_models(endpoint)
+        deploying = _has_active_deploy_op()
+
+        if not deployed and not deploying:
+            log.info(
+                "[AF3 Auto-Drain] Endpoint already has 0 deployed models and no active DeployModel operation. Exiting ($0.00/hr)."
+            )
+            return "already_undeployed"
+
+        if deploying and not deployed:
+            # Reset idle timer while initial H100 + 630 GB NVMe unpack is still provisioning
+            last_activity_epoch = now_ts
+
+        # Check activity file in GCS
+        try:
+            act_blob = bucket.blob(activity_blob_path)
+            if act_blob.exists():
+                act_data = json.loads(act_blob.download_as_text())
+                file_epoch = float(act_data.get("last_activity_epoch", 0))
+                if file_epoch > last_activity_epoch:
+                    last_activity_epoch = file_epoch
+                if "idle_shutdown_minutes" in act_data:
+                    effective_idle_minutes = int(act_data["idle_shutdown_minutes"])
+                    if effective_idle_minutes < 0:
+                        log.info(
+                            "[AF3 Auto-Drain] idle_shutdown_minutes set to < 0 in activity config; exiting."
+                        )
+                        return "disabled"
+        except Exception:
+            pass
+
+        # Check if any AF3 prediction jobs or slot locks are active right now
+        active_jobs = _get_active_af3_jobs()
+        active_slots = _get_active_slot_locks()
+        if active_jobs or active_slots > 0:
+            last_activity_epoch = now_ts
+            if now_ts - last_log_time >= 120.0:
+                log.info(
+                    f"[AF3 Auto-Drain] {len(active_jobs)} AF3 job(s) ({active_jobs}) / "
+                    f"{active_slots} slot(s) currently active; resetting {effective_idle_minutes}m idle timer."
+                )
+                last_log_time = now_ts
+            time.sleep(30)
+            continue
+
+        idle_sec = now_ts - last_activity_epoch
+        target_sec = max(0, effective_idle_minutes * 60)
+
+        if idle_sec >= target_sec:
+            # Final double-check before undeploying
+            if not _get_active_af3_jobs() and _get_active_slot_locks() == 0:
+                log.info(
+                    f"[AF3 Auto-Drain] Endpoint '{endpoint.resource_name}' has been idle for "
+                    f"{idle_sec / 60:.1f} minutes (threshold: {effective_idle_minutes}m) with 0 active jobs. "
+                    "Undeploying all models to revert GPU cost to $0.00/hr..."
+                )
+                endpoint.undeploy_all(sync=False)
+                try:
+                    act_blob = bucket.blob(activity_blob_path)
+                    act_blob.upload_from_string(
+                        json.dumps(
+                            {
+                                "endpoint_id": endpoint.resource_name,
+                                "state": "auto_undeployed",
+                                "undeployed_at_iso": datetime.now(timezone.utc)
+                                .isoformat()
+                                .replace("+00:00", "Z"),
+                                "idle_minutes_before_undeploy": round(idle_sec / 60.0, 2),
+                                "idle_shutdown_minutes": effective_idle_minutes,
+                            },
+                            indent=2,
+                        ),
+                        content_type="application/json",
+                    )
+                except Exception:
+                    pass
+                return "auto_undeployed"
+
+        if now_ts - last_log_time >= 120.0:
+            log.info(
+                f"[AF3 Auto-Drain] Endpoint idle for {idle_sec / 60:.1f} / {effective_idle_minutes} min "
+                "(0 active AF3 jobs). Waiting before auto-undeploy..."
+            )
+            last_log_time = now_ts
+
+        time.sleep(30)
+
+
+def create_af3_idle_drain_pipeline():
+    """Create the KFP v2 pipeline for auto-undeploying the AF3 H100 Endpoint after an idle grace window."""
+
+    @dsl.pipeline(
+        name="alphafold3-idle-drain-pipeline",
+        description="Auto-undeploys the AlphaFold 3 Dedicated H100 Endpoint after idle_shutdown_minutes of inactivity ($0.00/hr).",
+    )
+    def af3_idle_drain_pipeline(
+        project_id: str,
+        region: str,
+        endpoint_location: str,
+        endpoint_id: str,
+        bucket_name: str,
+        idle_shutdown_minutes: int = 20,
+    ):
+        task = af3_idle_drain_task(
+            project_id=project_id,
+            region=region,
+            endpoint_location=endpoint_location,
+            endpoint_id=endpoint_id,
+            bucket_name=bucket_name,
+            idle_shutdown_minutes=idle_shutdown_minutes,
+        )
+        task.set_display_name("AF3 Endpoint Idle Auto-Undeploy Watchdog")
+        task.set_caching_options(False)
+
+    return af3_idle_drain_pipeline
+

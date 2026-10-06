@@ -252,6 +252,7 @@ def submit_af3_endpoint_prediction(
     model_seeds: list[int] | None = None,
     endpoint_id: str | None = None,
     sync: bool = False,
+    idle_shutdown_minutes: int = 20,
 ) -> dict:
     """Submit AlphaFold 3 all-atom structure prediction via a Vertex AI PipelineJob calling the AF3 Endpoint.
 
@@ -261,7 +262,8 @@ def submit_af3_endpoint_prediction(
     By default (`sync=False`), submits an asynchronous Vertex AI PipelineJob (`alphafold3-inference-pipeline-...`)
     that returns immediately so the agent never blocks or times out, while a lightweight CPU worker
     coordinates H100 replica access via GCS slot locks, calls the AF3 Endpoint, harvests Cloud Logging
-    container logs, and generates all 3D viewer analysis artifacts.
+    container logs, generates all 3D viewer analysis artifacts, and automatically undeploys the H100
+    endpoint after `idle_shutdown_minutes` (default: 20 minutes) of inactivity once the queue drains.
 
     Args:
         input: Input sequence in FASTA format, AF3 JSON format, or path to input file / GCS URI.
@@ -274,12 +276,16 @@ def submit_af3_endpoint_prediction(
         endpoint_id: Optional Agent Platform Endpoint ID override.
         sync: If False (default), submits an async Vertex AI PipelineJob and returns immediately.
             Only set True for unit tests or short in-process debugging.
+        idle_shutdown_minutes: Minutes of endpoint inactivity after the last AF3 job finishes
+            before automatically undeploying the H100 endpoint (default: 20; 0 = immediate undeploy;
+            -1 = disable auto-undeploy).
     """
     validated_input = _validate_input_source(input, "input")
     args = {
         "input": validated_input,
         "msa_free": msa_free,
         "sync": sync,
+        "idle_shutdown_minutes": idle_shutdown_minutes,
     }
     if job_name is not None:
         args["job_name"] = job_name
@@ -290,13 +296,18 @@ def submit_af3_endpoint_prediction(
     return get_tool("af3_submit_prediction").run(args)
 
 
-def submit_af3_batch_predictions(batch_config: list[dict]) -> dict:
+def submit_af3_batch_predictions(
+    batch_config: list[dict],
+    idle_shutdown_minutes: int = 20,
+) -> dict:
     """Submit multiple AlphaFold 3 prediction jobs in batch as asynchronous Vertex AI PipelineJobs.
 
     Each item in `batch_config` is submitted as its own non-blocking KFP PipelineJob
     (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`) that coordinates H100 replica access
     via GCS slot locks (`R` concurrent jobs per `R` deployed H100 replicas), harvests
-    container logs into Cloud Logging / KFP, and populates the 3D viewer upon completion.
+    container logs into Cloud Logging / KFP, populates the 3D viewer upon completion,
+    and automatically undeploys the H100 endpoint after `idle_shutdown_minutes` (default: 20)
+    of inactivity once the last job in the batch finishes.
 
     Args:
         batch_config: List of job configuration dicts, each containing:
@@ -305,6 +316,8 @@ def submit_af3_batch_predictions(batch_config: list[dict]) -> dict:
             - `msa_free`: Boolean (default: False for full 630 GB MSA; True for zero-MSA)
             - `model_seeds`: Optional list of integer random seeds (default: [1])
             - `endpoint_id`: Optional endpoint ID override
+        idle_shutdown_minutes: Minutes of endpoint inactivity after the last job in the batch
+            completes before automatically undeploying the H100 endpoint (default: 20).
     """
     sanitized_batch = []
     for item in batch_config:
@@ -316,6 +329,12 @@ def submit_af3_batch_predictions(batch_config: list[dict]) -> dict:
         if "job_name" in entry and entry["job_name"] is None:
             del entry["job_name"]
         entry["sync"] = False
+        entry.setdefault("idle_shutdown_minutes", idle_shutdown_minutes)
         sanitized_batch.append(entry)
-    return get_tool("af3_submit_batch").run({"batch_config": sanitized_batch})
+    return get_tool("af3_submit_batch").run(
+        {
+            "batch_config": sanitized_batch,
+            "idle_shutdown_minutes": idle_shutdown_minutes,
+        }
+    )
 
