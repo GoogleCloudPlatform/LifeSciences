@@ -563,3 +563,61 @@ class TestAF3Tools:
         # Monomer with None iptm
         score_monomer_none = compute_ranking_score({"ptm": 0.85, "iptm": None})
         assert score_monomer_none == pytest.approx(0.85)
+
+    def test_check_endpoint_list_models_sdk_compat(self, mock_af3_env):
+        config = AF3Config()
+        tool = AF3CheckEndpointTool(tool_config={"name": "af3_check_endpoint"}, config=config)
+
+        class FakeSdkEndpoint:
+            resource_name = (
+                "projects/test-project/locations/us-central1/endpoints/mg-endpoint-12345"
+            )
+            display_name = "AlphaFold 3 Dedicated Endpoint"
+
+            def list_models(self):
+                dm = MagicMock()
+                dm.id = "3746287354239778816"
+                dm.model = "projects/test-project/locations/us-central1/models/af3-h100"
+                dm.display_name = "alphafold3-v3_0_4-h100"
+                dm.dedicated_resources.machine_spec.machine_type = "a3-highgpu-1g"
+                dm.dedicated_resources.machine_spec.accelerator_type = "NVIDIA_H100_80GB"
+                dm.dedicated_resources.machine_spec.accelerator_count = 1
+                dm.dedicated_resources.min_replica_count = 1
+                dm.dedicated_resources.max_replica_count = 1
+                return [dm]
+
+        with (
+            patch.object(tool, "get_endpoint", return_value=FakeSdkEndpoint()),
+            patch.object(tool, "get_active_deploy_operations", return_value=[]),
+        ):
+            result = tool.run({})
+
+        assert result["status"] == "ready"
+        assert result["deployed_models_count"] == 1
+        assert "/locations/us-central1/endpoints/mg-endpoint-12345" in result["console_url"]
+
+    def test_deploy_endpoint_skips_when_active_operation_in_progress(self, mock_af3_env):
+        config = AF3Config()
+        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
+        mock_endpoint = MagicMock()
+        mock_endpoint.resource_name = (
+            "projects/test-project/locations/us-central1/endpoints/mg-endpoint-12345"
+        )
+        mock_endpoint.deployed_models = []
+
+        active_ops = [
+            {
+                "operation_name": "projects/test-project/locations/us-central1/endpoints/mg-endpoint-12345/operations/999",
+                "deployment_stage": "GETTING_CONTAINER_IMAGE",
+                "create_time": "2026-10-06T04:52:00Z",
+            }
+        ]
+        with (
+            patch.object(tool, "get_endpoint", return_value=mock_endpoint),
+            patch.object(tool, "get_active_deploy_operations", return_value=active_ops),
+        ):
+            result = tool.run({"sync": False})
+
+        assert result["status"] == "deploying"
+        assert "Skipping duplicate deployment" in result["message"]
+        mock_endpoint.deploy.assert_not_called()

@@ -41,7 +41,7 @@ class AF3CheckEndpointTool(AF3Tool):
             endpoint = self.get_endpoint(endpoint_id)
 
             deployed_models_info = []
-            for dm in getattr(endpoint, "deployed_models", []):
+            for dm in self.get_deployed_models(endpoint):
                 dedicated = getattr(dm, "dedicated_resources", None)
                 machine_spec = getattr(dedicated, "machine_spec", None)
                 machine_type = getattr(machine_spec, "machine_type", None) if machine_spec else None
@@ -72,8 +72,12 @@ class AF3CheckEndpointTool(AF3Tool):
                 )
 
             is_ready = len(deployed_models_info) > 0
+            active_deploy_ops = self.get_active_deploy_operations(endpoint)
+            console_url = self.get_endpoint_console_url(endpoint.resource_name)
+            logs_url = self.get_endpoint_logs_url(endpoint.resource_name)
 
             if is_ready:
+                status_str = "ready"
                 first_model = deployed_models_info[0]
                 m_type = first_model.get("machine_type") or "GPU"
                 acc_str = str(first_model.get("accelerator_type") or "")
@@ -103,11 +107,24 @@ class AF3CheckEndpointTool(AF3Tool):
                     f"with {len(deployed_models_info)} deployed model(s) ({m_type}, "
                     f"min_replicas={replicas}, max_replicas={max_rep}). "
                     f"Dedicated GPU billing is active ({cost_estimate}). "
+                    f"Console: {console_url} | Logs: {logs_url}. "
                     "To scale replicas for a large backlog (>30 min queue), call deploy_af3_endpoint "
                     "with min_replica_count/max_replica_count. Run undeploy_af3_endpoint when your "
                     "session is finished to return to $0.00/hr."
                 )
+            elif active_deploy_ops:
+                status_str = "deploying"
+                stage = active_deploy_ops[0].get("deployment_stage", "DEPLOYING")
+                started = active_deploy_ops[0].get("create_time", "recently")
+                cost_estimate = "provisioning (~$11.06/hr once active)"
+                msg = (
+                    f"AlphaFold 3 endpoint '{endpoint.display_name or endpoint.resource_name}' is currently "
+                    f"deploying (stage: {stage}, started: {started}). "
+                    "Do NOT call deploy_af3_endpoint again while deployment is in progress. "
+                    f"Monitor at {console_url} or {logs_url}."
+                )
             else:
+                status_str = "dormant"
                 cost_estimate = "$0.00/hr"
                 msg = (
                     f"AlphaFold 3 endpoint '{endpoint.display_name or endpoint.resource_name}' is dormant "
@@ -115,20 +132,23 @@ class AF3CheckEndpointTool(AF3Tool):
                     "Call deploy_af3_endpoint to allocate GPU resources before submitting predictions."
                 )
 
-            return {
-                "status": "ready" if is_ready else "dormant",
+            result: dict[str, Any] = {
+                "status": status_str,
                 "endpoint_name": endpoint.resource_name,
                 "display_name": endpoint.display_name,
                 "location": self.config.endpoint_location,
                 "project_id": self.config.project_id,
-                "console_url": self.get_endpoint_console_url(endpoint.resource_name),
-                "logs_url": self.get_endpoint_logs_url(endpoint.resource_name),
+                "console_url": console_url,
+                "logs_url": logs_url,
                 "deployed_models_count": len(deployed_models_info),
                 "deployed_models": deployed_models_info,
                 "idle_cost": cost_estimate,
                 "msa_free_supported": True,
                 "message": msg,
             }
+            if active_deploy_ops:
+                result["active_deploy_operations"] = active_deploy_ops
+            return result
         except Exception as e:
             logger.exception(f"Failed to check AF3 endpoint: {e}")
             return {

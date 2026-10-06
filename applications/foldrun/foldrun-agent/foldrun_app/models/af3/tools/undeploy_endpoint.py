@@ -47,7 +47,7 @@ class AF3UndeployEndpointTool(AF3Tool):
 
         try:
             endpoint = self.get_endpoint(endpoint_id)
-            deployed_models = getattr(endpoint, "deployed_models", [])
+            deployed_models = self.get_deployed_models(endpoint)
 
             if not deployed_models:
                 return {

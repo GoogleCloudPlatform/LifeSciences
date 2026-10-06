@@ -80,7 +80,7 @@ class AF3DeployEndpointTool(AF3Tool):
             endpoint = self.get_endpoint(endpoint_id)
 
             # Check if a model is already deployed
-            deployed_models = getattr(endpoint, "deployed_models", [])
+            deployed_models = self.get_deployed_models(endpoint)
             if deployed_models:
                 dm = deployed_models[0]
                 dedicated = getattr(dm, "dedicated_resources", None)
@@ -161,8 +161,28 @@ class AF3DeployEndpointTool(AF3Tool):
                     "message": (
                         f"Endpoint already has {len(deployed_models)} active deployed model(s) "
                         f"(min_replicas={cur_min}, max_replicas={cur_max}). "
+                        f"Console: {self.get_endpoint_console_url(endpoint.resource_name)}. "
                         "AF3 is ready for predictions. Pass min_replica_count / max_replica_count "
                         "to scale replicas up or down on this endpoint."
+                    ),
+                }
+
+            active_deploy_ops = self.get_active_deploy_operations(endpoint)
+            if active_deploy_ops:
+                stage = active_deploy_ops[0].get("deployment_stage", "DEPLOYING")
+                started = active_deploy_ops[0].get("create_time", "recently")
+                console_url = self.get_endpoint_console_url(endpoint.resource_name)
+                logs_url = self.get_endpoint_logs_url(endpoint.resource_name)
+                return {
+                    "status": "deploying",
+                    "endpoint_name": endpoint.resource_name,
+                    "console_url": console_url,
+                    "logs_url": logs_url,
+                    "active_deploy_operations": active_deploy_ops,
+                    "message": (
+                        f"A deployment is already in progress on '{endpoint.resource_name}' "
+                        f"(stage: {stage}, started: {started}). Skipping duplicate deployment. "
+                        f"Monitor at {console_url} or check_af3_endpoint."
                     ),
                 }
 

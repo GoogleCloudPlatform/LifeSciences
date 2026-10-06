@@ -74,7 +74,7 @@ class AF3Tool(BaseTool):
             # Prefer an endpoint with active deployed models
             candidates.sort(
                 key=lambda ep: (
-                    len(getattr(ep, "deployed_models", []) or []),
+                    len(self.get_deployed_models(ep)),
                     getattr(ep, "update_time", ""),
                 ),
                 reverse=True,
@@ -86,6 +86,68 @@ class AF3Tool(BaseTool):
             project=self.config.project_id,
             location=self.config.endpoint_location,
         )
+
+    @staticmethod
+    def get_deployed_models(endpoint: Any) -> list[Any]:
+        """Return deployed models from a Vertex AI Endpoint.
+
+        Note: `google.cloud.aiplatform.Endpoint` exposes deployed models via
+        `endpoint.list_models()` (backed by `endpoint._gca_resource.deployed_models`)
+        rather than a top-level `.deployed_models` attribute. This helper supports
+        both the real Vertex AI SDK `Endpoint` and unit test mocks.
+        """
+        if "deployed_models" in getattr(endpoint, "__dict__", {}):
+            return list(endpoint.deployed_models or [])
+        if hasattr(endpoint, "list_models") and callable(endpoint.list_models):
+            models = endpoint.list_models()
+            if not type(models).__module__.startswith("unittest.mock"):
+                try:
+                    return list(models)
+                except TypeError:
+                    pass
+        gca = getattr(endpoint, "_gca_resource", None)
+        if gca is not None and not type(gca).__module__.startswith("unittest.mock"):
+            return list(getattr(gca, "deployed_models", None) or [])
+        return []
+
+    def get_active_deploy_operations(self, endpoint: Any) -> list[dict[str, Any]]:
+        """Return in-progress DeployModel LROs on the endpoint, if any."""
+        if type(endpoint).__module__.startswith("unittest.mock"):
+            return []
+        resource_name = getattr(endpoint, "resource_name", "")
+        if not isinstance(resource_name, str) or not resource_name.startswith("projects/"):
+            return []
+        try:
+            import google.auth
+            from google.auth.transport.requests import AuthorizedSession
+
+            creds, _ = google.auth.default()
+            session = AuthorizedSession(creds)
+            url = (
+                f"https://{self.config.endpoint_location}-aiplatform.googleapis.com/"
+                f"v1/{resource_name}/operations"
+            )
+            resp = session.get(url, timeout=10)
+            if not resp.ok:
+                return []
+            operations = resp.json().get("operations", [])
+            active = []
+            for op in operations:
+                if op.get("done") is True:
+                    continue
+                meta = op.get("metadata", {})
+                if "DeployModel" in meta.get("@type", ""):
+                    active.append(
+                        {
+                            "operation_name": op.get("name"),
+                            "deployment_stage": meta.get("deploymentStage", "DEPLOYING"),
+                            "create_time": meta.get("genericMetadata", {}).get("createTime"),
+                        }
+                    )
+            return active
+        except Exception as e:
+            logger.debug(f"Could not list active endpoint operations for {resource_name}: {e}")
+            return []
 
     def get_model(self, model_id: str | None = None) -> vertex_ai.Model:
         """Resolve and instantiate an Agent Platform Model object.
