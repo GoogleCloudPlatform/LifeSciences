@@ -134,6 +134,8 @@ class AF3DeployEndpointTool(AF3Tool):
                     return {
                         "status": "scaled" if sync else "scaling",
                         "endpoint_name": endpoint.resource_name,
+                        "console_url": self.get_endpoint_console_url(endpoint.resource_name),
+                        "logs_url": self.get_endpoint_logs_url(endpoint.resource_name),
                         "deployed_model_id": dm_id,
                         "previous_min_replica_count": cur_min,
                         "previous_max_replica_count": cur_max,
@@ -151,6 +153,8 @@ class AF3DeployEndpointTool(AF3Tool):
                 return {
                     "status": "already_deployed",
                     "endpoint_name": endpoint.resource_name,
+                    "console_url": self.get_endpoint_console_url(endpoint.resource_name),
+                    "logs_url": self.get_endpoint_logs_url(endpoint.resource_name),
                     "deployed_models_count": len(deployed_models),
                     "min_replica_count": cur_min,
                     "max_replica_count": cur_max,
@@ -182,10 +186,14 @@ class AF3DeployEndpointTool(AF3Tool):
 
             unit_rate = 11.06 if "a3" in machine_type or "H100" in acc_type else 1.01
             hourly_rate = f"~${unit_rate * min_replicas:.2f}/hr"
+            console_url = self.get_endpoint_console_url(endpoint.resource_name)
+            logs_url = self.get_endpoint_logs_url(endpoint.resource_name)
             if sync:
                 return {
                     "status": "ready",
                     "endpoint_name": endpoint.resource_name,
+                    "console_url": console_url,
+                    "logs_url": logs_url,
                     "model_name": model.resource_name,
                     "machine_type": machine_type,
                     "accelerator_type": acc_type,
@@ -196,13 +204,16 @@ class AF3DeployEndpointTool(AF3Tool):
                         f"AlphaFold 3 model deployed successfully to {endpoint.resource_name}. "
                         f"Running on {machine_type} with {acc_count}x {acc_type} GPU "
                         f"({min_replicas}–{max_replicas} replica(s), {hourly_rate}). "
-                        "Endpoint is ready for predictions. Remember to run undeploy_af3_endpoint when finished."
+                        f"Endpoint Console: {console_url} | Logs: {logs_url}. "
+                        "Remember to run undeploy_af3_endpoint when finished."
                     ),
                 }
             else:
                 return {
                     "status": "deploying",
                     "endpoint_name": endpoint.resource_name,
+                    "console_url": console_url,
+                    "logs_url": logs_url,
                     "model_name": model.resource_name,
                     "machine_type": machine_type,
                     "accelerator_type": acc_type,
@@ -214,7 +225,7 @@ class AF3DeployEndpointTool(AF3Tool):
                         f"Deployment initiated for AlphaFold 3 on {machine_type} with {acc_count}x {acc_type} GPU "
                         f"({min_replicas}–{max_replicas} replica(s), {hourly_rate}). "
                         "Agent Platform takes ~5–8 minutes (inference-only) or ~10–12 minutes (with 630 GB MSA bundle on H100 NVMe SSD). "
-                        "Use check_af3_endpoint to monitor status."
+                        f"Monitor at {console_url} or check_af3_endpoint."
                     ),
                 }
 

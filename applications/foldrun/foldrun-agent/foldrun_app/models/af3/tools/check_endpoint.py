@@ -121,6 +121,8 @@ class AF3CheckEndpointTool(AF3Tool):
                 "display_name": endpoint.display_name,
                 "location": self.config.endpoint_location,
                 "project_id": self.config.project_id,
+                "console_url": self.get_endpoint_console_url(endpoint.resource_name),
+                "logs_url": self.get_endpoint_logs_url(endpoint.resource_name),
                 "deployed_models_count": len(deployed_models_info),
                 "deployed_models": deployed_models_info,
                 "idle_cost": cost_estimate,

@@ -157,3 +157,22 @@ class AF3Tool(BaseTool):
         """Return the relative GCS blob path for summary confidences JSON."""
         safe_name = self.validate_job_name(job_name)
         return f"{self.get_job_blob_prefix(safe_name)}/{SUMMARY_CONFIDENCES_FILENAME.format(job_id=safe_name)}"
+
+    def get_endpoint_console_url(self, endpoint_resource_name: str) -> str:
+        """Return the Google Cloud Console URL for the Vertex AI Online Prediction Endpoint."""
+        short_id = str(endpoint_resource_name).rstrip("/").split("/")[-1]
+        return (
+            f"https://console.cloud.google.com/vertex-ai/online-prediction/"
+            f"locations/{self.config.endpoint_location}/endpoints/{short_id}"
+            f"?project={self.config.project_id}"
+        )
+
+    def get_endpoint_logs_url(self, endpoint_resource_name: str) -> str:
+        """Return the Cloud Logging URL filtered to the Vertex AI Endpoint container logs."""
+        short_id = str(endpoint_resource_name).rstrip("/").split("/")[-1]
+        return (
+            f"https://console.cloud.google.com/logs/query;"
+            f"query=resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22"
+            f"%20resource.labels.endpoint_id%3D%22{short_id}%22;duration=PT1H"
+            f"?project={self.config.project_id}"
+        )
