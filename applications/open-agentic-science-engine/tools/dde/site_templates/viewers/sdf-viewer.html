@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SDF Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; color: #1a1a2e; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; margin: 1rem; }
+    .filename { color: #555; font-size: 0.9rem; padding: 0 1rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; padding: 1rem 1rem 0.25rem; margin: 0; }
+    .controls {
+      display: flex; gap: 12px; padding: 0.5rem 1rem;
+      border-bottom: 1px solid #e1e4e8; align-items: center;
+    }
+    .control-group { display: flex; align-items: center; gap: 6px; }
+    .control-group label { font-size: 0.8rem; font-weight: 500; color: #475569; }
+    .control-group select {
+      font-size: 0.8rem; padding: 4px 8px;
+      border: 1px solid #d0d7de; border-radius: 4px; background: #fff;
+    }
+    .main-area { display: flex; height: calc(100vh - 110px); }
+    #viewer-container { flex: 1; position: relative; min-height: 400px; border: 1px solid #ddd; border-radius: 4px; }
+    .sidebar {
+      width: 260px; background: #f6f8fa; border-left: 1px solid #e1e4e8;
+      overflow-y: auto; padding: 1rem; flex-shrink: 0;
+    }
+    .sidebar.empty { display: none; }
+    .sidebar h2 { font-size: 0.875rem; font-weight: 600; color: #1a1a2e; margin: 0 0 0.75rem; }
+    .mol-name {
+      font-size: 1rem; font-weight: 600; color: #1a1a2e;
+      margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e1e4e8;
+    }
+    .prop-table { width: 100%; border-collapse: collapse; }
+    .prop-table td { font-size: 0.75rem; padding: 4px 0; vertical-align: top; }
+    .prop-table td:first-child { font-weight: 500; color: #475569; padding-right: 8px; white-space: nowrap; }
+    .prop-table td:last-child { color: #1a1a2e; word-break: break-word; }
+    .prop-table tr + tr td { border-top: 1px solid #eaeef2; }
+    .atom-label {
+      position: absolute; z-index: 10; background: rgba(26,26,46,0.85);
+      color: #fff; padding: 3px 8px; border-radius: 4px;
+      font-size: 12px; font-family: monospace; pointer-events: none; white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>SDF Molecule Viewer</h1>
+  <div class="filename" id="filename"></div>
+  <div class="controls">
+    <div class="control-group">
+      <label for="style-select">Style:</label>
+      <select id="style-select">
+        <option value="ball-and-stick" selected>Ball &amp; Stick</option>
+        <option value="stick">Stick</option>
+        <option value="sphere">Sphere</option>
+        <option value="line">Line</option>
+      </select>
+    </div>
+  </div>
+  <div class="main-area">
+    <div id="viewer-container"></div>
+    <div class="sidebar empty" id="sidebar">
+      <div class="mol-name" id="mol-name"></div>
+      <h2>Properties</h2>
+      <table class="prop-table" id="prop-table">
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+    var viewer = null;
+    var currentStyle = 'ball-and-stick';
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    /** Parse SDF properties: lines matching "> <NAME>" followed by value lines */
+    function parseSdfProperties(text) {
+      var props = {};
+      var lines = text.split('\n');
+      var i = 0;
+      while (i < lines.length) {
+        var match = lines[i].match(/^>\s+<([^>]+)>/);
+        if (match) {
+          var key = match[1].trim();
+          var valueLines = [];
+          i++;
+          while (i < lines.length && lines[i].trim() !== '' && !lines[i].match(/^>\s+</) && lines[i].trim() !== '$$$$') {
+            valueLines.push(lines[i].trim());
+            i++;
+          }
+          props[key] = valueLines.join(' ');
+        } else {
+          i++;
+        }
+      }
+      return props;
+    }
+
+    /** Extract molecule name from first line of SDF */
+    function parseMolName(text) {
+      var firstLine = text.split('\n')[0];
+      return firstLine ? firstLine.trim() : '';
+    }
+
+    function applyStyle() {
+      if (!viewer) return;
+      if (currentStyle === 'ball-and-stick') {
+        viewer.setStyle({}, { stick: { radius: 0.15 }, sphere: { scale: 0.3 } });
+      } else if (currentStyle === 'stick') {
+        viewer.setStyle({}, { stick: { radius: 0.15, colorscheme: 'Jmol' } });
+      } else if (currentStyle === 'sphere') {
+        viewer.setStyle({}, { sphere: { scale: 0.6 } });
+      } else if (currentStyle === 'line') {
+        viewer.setStyle({}, { line: { linewidth: 2 } });
+      }
+      viewer.render();
+    }
+
+    document.getElementById('style-select').addEventListener('change', function(e) {
+      currentStyle = e.target.value;
+      applyStyle();
+    });
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file.sdf');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+      document.title = filePath.split('/').pop() + ' — SDF Viewer';
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.text();
+        })
+        .then(function(sdfData) {
+          // Parse molecule name
+          var molName = parseMolName(sdfData);
+          var baseName = filePath.split('/').pop().replace(/\.sdf$/i, '');
+
+          // Parse properties
+          var props = parseSdfProperties(sdfData);
+
+          // Populate sidebar
+          var sidebar = document.getElementById('sidebar');
+          var molNameEl = document.getElementById('mol-name');
+          var propTable = document.getElementById('prop-table').querySelector('tbody');
+
+          molNameEl.textContent = molName || baseName;
+
+          var propKeys = Object.keys(props);
+          if (propKeys.length > 0 || molName) {
+            sidebar.classList.remove('empty');
+          }
+
+          propKeys.forEach(function(key) {
+            var tr = document.createElement('tr');
+            var tdKey = document.createElement('td');
+            tdKey.textContent = key;
+            var tdVal = document.createElement('td');
+            tdVal.textContent = props[key];
+            tr.appendChild(tdKey);
+            tr.appendChild(tdVal);
+            propTable.appendChild(tr);
+          });
+
+          // If no properties parsed, hide the properties heading and table
+          if (propKeys.length === 0) {
+            var h2 = sidebar.querySelector('h2');
+            if (h2) h2.style.display = 'none';
+            document.getElementById('prop-table').style.display = 'none';
+          }
+
+          // Create 3Dmol viewer
+          var element = document.getElementById('viewer-container');
+          viewer = $3Dmol.createViewer(element, {
+            backgroundColor: 'white',
+            antialias: true
+          });
+
+          viewer.addModel(sdfData, 'sdf');
+          applyStyle();
+          viewer.zoomTo();
+          viewer.render();
+
+          // Hover labels: show element and atom index on hover
+          var labelDiv = null;
+          viewer.setHoverable({}, true,
+            function(atom, _viewer, _event, _container) {
+              if (!labelDiv) {
+                labelDiv = document.createElement('div');
+                labelDiv.className = 'atom-label';
+                element.appendChild(labelDiv);
+              }
+              var info = atom.elem;
+              if (atom.serial !== undefined) info += ' #' + atom.serial;
+              labelDiv.textContent = info;
+              labelDiv.style.display = 'block';
+              labelDiv.style.left = (atom.screenX + 15) + 'px';
+              labelDiv.style.top = (atom.screenY - 10) + 'px';
+            },
+            function(_atom) {
+              if (labelDiv) labelDiv.style.display = 'none';
+            }
+          );
+          viewer.render();
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

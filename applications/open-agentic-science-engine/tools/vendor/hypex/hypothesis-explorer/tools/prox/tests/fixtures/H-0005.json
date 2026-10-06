@@ -1,0 +1,15 @@
+{
+  "id": "H-0005",
+  "title": "Dietary fiber increases beneficial gut bacteria",
+  "statement": "A high-fiber diet selectively promotes the growth of beneficial gut bacteria that produce short-chain fatty acids.",
+  "mechanism": "Dietary fiber serves as a prebiotic substrate fermented by commensal bacteria such as Faecalibacterium and Bifidobacterium, leading to increased SCFA production and reduced gut permeability.",
+  "predictions": ["Higher fiber intake increases Faecalibacterium abundance"],
+  "experiments": [{"design": "Dietary intervention with stool sampling", "readout": "16S rRNA microbial composition", "est_difficulty": "low"}],
+  "evidence": [{"lit_id": "PMID:38023456", "role": "supports", "note": "Fiber and microbiome composition study"}],
+  "focus_area": "microbiome",
+  "lineage": {"parents": [], "operator": "null"},
+  "status": "proposed",
+  "created_by": "gen-agent",
+  "epoch": 1,
+  "created_at": "2026-09-01T10:04:00Z"
+}

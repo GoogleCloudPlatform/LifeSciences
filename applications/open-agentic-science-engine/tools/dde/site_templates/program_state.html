@@ -1,0 +1,41 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base.html" %}
+{% block title %}Program State — {{ title }}{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="index.html">Home</a> &rsaquo;
+  <span>Program State</span> &rsaquo;
+  <span>{{ title }}</span>
+</div>
+{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+
+<div class="program-state-body">
+{{ content | markdown }}
+</div>
+
+<div class="meta">
+  <dl>
+    <dt>Source:</dt>
+    <dd>{{ source_file }}</dd>
+  </dl>
+</div>
+
+<p><a href="index.html">&larr; Back to index</a></p>
+{% endblock %}

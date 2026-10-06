@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BRICS Viewer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a2e; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
+
+    .content { display: flex; flex-direction: column; gap: 32px; }
+    .section-title { font-size: 16px; font-weight: 600; color: #1a1a2e; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; }
+
+    /* Compound table */
+    .table-wrap { overflow-x: auto; }
+    table.compound-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.compound-table th {
+      background: #f8fafc; text-align: left; padding: 10px 12px;
+      border-bottom: 2px solid #e2e8f0; font-weight: 600; color: #475569;
+      cursor: pointer; user-select: none; white-space: nowrap;
+    }
+    table.compound-table th:hover { background: #e2e8f0; }
+    table.compound-table th .sort-arrow { font-size: 10px; margin-left: 4px; color: #94a3b8; }
+    table.compound-table th .sort-arrow.active { color: #1a1a2e; }
+    table.compound-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    table.compound-table tr:hover { background: #f8fafc; }
+    .compound-name { font-weight: 600; color: #1a1a2e; white-space: nowrap; }
+    .smiles-cell { font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; font-size: 12px; word-break: break-all; max-width: 360px; line-height: 1.6; }
+    .smiles-cell .frag-highlight { padding: 1px 0; border-radius: 2px; }
+
+    /* Score badges */
+    .score-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 12px; }
+    .score-strong { background: #dcfce7; color: #166534; }
+    .score-moderate { background: #fef9c3; color: #854d0e; }
+    .score-weak { background: #fee2e2; color: #991b1b; }
+
+    /* Fragment catalog */
+    .frag-catalog { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .frag-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 16px; font-size: 12px; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; border: 1px solid #e2e8f0; }
+    .frag-chip .frag-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .frag-chip .frag-count { color: #64748b; font-family: system-ui, sans-serif; }
+
+    /* Fragment matrix */
+    table.matrix-table { border-collapse: collapse; font-size: 12px; }
+    table.matrix-table th { padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; font-weight: 600; color: #475569; white-space: nowrap; }
+    table.matrix-table td { padding: 8px 10px; border: 1px solid #e2e8f0; text-align: center; font-weight: 500; }
+    table.matrix-table .matrix-self { background: #f1f5f9; color: #94a3b8; }
+
+    /* Pairwise similarity */
+    .sim-high { background: #dcfce7; color: #166534; }
+    .sim-mid { background: #fef9c3; color: #854d0e; }
+    .sim-low { background: #fee2e2; color: #991b1b; }
+
+    /* Bar chart */
+    .bar-section { display: flex; flex-wrap: wrap; gap: 24px; }
+    .bar-chart-container { flex: 1; min-width: 280px; }
+    .bar-chart-title { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px; }
+    .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .bar-label { font-size: 12px; width: 140px; text-align: right; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bar-track { flex: 1; height: 20px; background: #f1f5f9; border-radius: 4px; overflow: hidden; position: relative; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+    .bar-value { font-size: 11px; font-weight: 600; color: #475569; width: 50px; }
+
+    /* Legend */
+    .legend { display: flex; gap: 16px; padding: 12px 0; flex-wrap: wrap; margin-top: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #475569; }
+    .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); }
+
+    pre.fallback { background: #f6f8fa; padding: 1rem; border-radius: 6px;
+                   border: 1px solid #d0d7de; overflow-x: auto; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <h1>BRICS Decomposition</h1>
+  <div class="filename" id="filename"></div>
+  <div id="viewer-container"></div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    /* ===== Known BRICS-like fragment patterns ===== */
+    const FRAGMENT_CATALOG = [
+      { name: 'Amide',       pattern: 'C(=O)N',     desc: 'Amide bond' },
+      { name: 'Phenyl',      pattern: 'c1ccccc1',   desc: 'Phenyl ring' },
+      { name: 'Pyridine',    pattern: 'c1cccnc1',   desc: 'Pyridine ring' },
+      { name: 'Thiazole',    pattern: 'csc',         desc: 'Thiazole motif' },
+      { name: 'Sulfonamide', pattern: 'S(=O)(=O)N', desc: 'Sulfonamide group' },
+      { name: 'Piperazine',  pattern: 'N1CCN',       desc: 'Piperazine ring' },
+      { name: 'Methoxy',     pattern: 'COc',         desc: 'Methoxy group' },
+      { name: 'CF3',         pattern: 'C(F)(F)F',   desc: 'Trifluoromethyl' },
+      { name: 'Hydroxyl-Ar', pattern: 'c(O)',        desc: 'Phenolic OH' },
+      { name: 'Nitrile',     pattern: 'C#N',         desc: 'Nitrile group' },
+      { name: 'N-Methyl',    pattern: 'N(C)',        desc: 'N-methyl' },
+      { name: 'Pyrrolidine', pattern: 'N1CCCC1',    desc: 'Pyrrolidine ring' },
+      { name: 'Br',          pattern: 'Br',          desc: 'Bromo substituent' },
+    ];
+
+    const FRAG_COLORS = [
+      'rgba(59,130,246,0.15)', 'rgba(239,68,68,0.15)', 'rgba(34,197,94,0.15)',
+      'rgba(168,85,247,0.15)', 'rgba(249,115,22,0.15)', 'rgba(236,72,153,0.15)',
+      'rgba(20,184,166,0.15)', 'rgba(234,179,8,0.15)', 'rgba(99,102,241,0.15)',
+      'rgba(244,63,94,0.15)', 'rgba(16,185,129,0.15)', 'rgba(139,92,246,0.15)',
+      'rgba(251,146,60,0.15)',
+    ];
+
+    const FRAG_BORDER_COLORS = [
+      '#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316',
+      '#ec4899', '#14b8a6', '#eab308', '#6366f1', '#f43f5e',
+      '#10b981', '#8b5cf6', '#fb923c'
+    ];
+
+    /* ===== Helpers ===== */
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function scoreClass(score) {
+      if (score < -8.0) return 'score-strong';
+      if (score <= -6.0) return 'score-moderate';
+      return 'score-weak';
+    }
+
+    function simClass(ratio) {
+      if (ratio >= 0.6) return 'sim-high';
+      if (ratio >= 0.3) return 'sim-mid';
+      return 'sim-low';
+    }
+
+    /* Check if SMILES contains a fragment pattern (substring match) */
+    function smilesContains(smiles, pattern) {
+      return smiles.indexOf(pattern) !== -1;
+    }
+
+    /* Detect which fragments are present in each compound */
+    function analyzeFragments(compounds) {
+      return compounds.map(c => {
+        const present = [];
+        for (let f = 0; f < FRAGMENT_CATALOG.length; f++) {
+          if (smilesContains(c.smiles, FRAGMENT_CATALOG[f].pattern)) {
+            present.push(f);
+          }
+        }
+        return present;
+      });
+    }
+
+    /* Find fragments shared by 2+ compounds */
+    function findSharedFragments(fragResults) {
+      const counts = {};
+      fragResults.forEach(frags => {
+        frags.forEach(idx => { counts[idx] = (counts[idx] || 0) + 1; });
+      });
+      return Object.keys(counts).filter(k => counts[k] >= 2).map(Number);
+    }
+
+    /* Pairwise Tanimoto similarity based on fragment presence */
+    function fragmentSimilarity(a, b) {
+      const setA = new Set(a);
+      const setB = new Set(b);
+      let intersection = 0;
+      setA.forEach(v => { if (setB.has(v)) intersection++; });
+      const unionSize = new Set([...a, ...b]).size;
+      return unionSize === 0 ? 0 : intersection / unionSize;
+    }
+
+    /* Highlight fragment substrings in SMILES */
+    function highlightSmiles(smiles, presentFragIndices) {
+      const ranges = [];
+      presentFragIndices.forEach(fIdx => {
+        const pat = FRAGMENT_CATALOG[fIdx].pattern;
+        let startPos = 0;
+        while (true) {
+          const pos = smiles.indexOf(pat, startPos);
+          if (pos === -1) break;
+          ranges.push({ start: pos, end: pos + pat.length, fragIdx: fIdx });
+          startPos = pos + 1;
+        }
+      });
+      /* Sort by start position, longer ranges first for ties */
+      ranges.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+      /* Remove overlapping ranges */
+      const merged = [];
+      for (const r of ranges) {
+        if (!merged.some(m => r.start < m.end && r.end > m.start)) {
+          merged.push(r);
+        }
+      }
+      /* Build HTML */
+      let html = '';
+      let cursor = 0;
+      for (const r of merged) {
+        if (r.start > cursor) html += escapeHtml(smiles.substring(cursor, r.start));
+        const colorIdx = r.fragIdx % FRAG_COLORS.length;
+        html += '<span class="frag-highlight" style="background:' + FRAG_COLORS[colorIdx] +
+                ';border-bottom:2px solid ' + FRAG_BORDER_COLORS[colorIdx] +
+                ';" title="' + escapeHtml(FRAGMENT_CATALOG[r.fragIdx].name) + '">' +
+                escapeHtml(smiles.substring(r.start, r.end)) + '</span>';
+        cursor = r.end;
+      }
+      if (cursor < smiles.length) html += escapeHtml(smiles.substring(cursor));
+      return html;
+    }
+
+    /* ===== Sorting state ===== */
+    let sortColumn = null;
+    let sortAsc = true;
+    let currentCompounds = null;
+    let currentFragResults = null;
+
+    function renderTable(compounds, fragResults) {
+      currentCompounds = compounds;
+      currentFragResults = fragResults;
+
+      const indices = compounds.map((_, i) => i);
+      if (sortColumn !== null) {
+        indices.sort((a, b) => {
+          let va, vb;
+          if (sortColumn === 'compound_id') {
+            va = compounds[a].compound_id.toLowerCase();
+            vb = compounds[b].compound_id.toLowerCase();
+            return sortAsc ? (va < vb ? -1 : va > vb ? 1 : 0) : (vb < va ? -1 : vb > va ? 1 : 0);
+          } else if (sortColumn === 'smiles') {
+            va = compounds[a].smiles;
+            vb = compounds[b].smiles;
+            return sortAsc ? (va < vb ? -1 : va > vb ? 1 : 0) : (vb < va ? -1 : vb > va ? 1 : 0);
+          } else {
+            va = (compounds[a].properties || {})[sortColumn] || 0;
+            vb = (compounds[b].properties || {})[sortColumn] || 0;
+            return sortAsc ? va - vb : vb - va;
+          }
+        });
+      }
+
+      const cols = [
+        { key: 'compound_id', label: 'Compound' },
+        { key: 'smiles', label: 'SMILES' },
+        { key: 'docking_score', label: 'Docking Score' },
+        { key: 'MW', label: 'MW' },
+        { key: 'LogP', label: 'LogP' },
+        { key: 'TPSA', label: 'TPSA' },
+      ];
+
+      let html = '<thead><tr>';
+      cols.forEach(col => {
+        let arrow;
+        if (sortColumn === col.key) {
+          arrow = '<span class="sort-arrow active">' + (sortAsc ? '&#9650;' : '&#9660;') + '</span>';
+        } else {
+          arrow = '<span class="sort-arrow">&#9650;</span>';
+        }
+        html += '<th data-col="' + col.key + '">' + col.label + arrow + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+
+      indices.forEach(idx => {
+        const comp = compounds[idx];
+        const props = comp.properties || {};
+        const score = props.docking_score;
+        const sc = scoreClass(score);
+        html += '<tr>';
+        html += '<td class="compound-name">' + escapeHtml(comp.compound_id) + '</td>';
+        html += '<td class="smiles-cell">' + highlightSmiles(comp.smiles, fragResults[idx]) + '</td>';
+        html += '<td><span class="score-badge ' + sc + '">' + (score != null ? score.toFixed(3) : '--') + '</span></td>';
+        html += '<td>' + (props.MW != null ? props.MW.toFixed(2) : '--') + '</td>';
+        html += '<td>' + (props.LogP != null ? props.LogP.toFixed(2) : '--') + '</td>';
+        html += '<td>' + (props.TPSA != null ? props.TPSA.toFixed(2) : '--') + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody>';
+
+      document.getElementById('compound-table').innerHTML = html;
+
+      /* Re-attach click handlers */
+      document.querySelectorAll('#compound-table th').forEach(th => {
+        th.addEventListener('click', handleSort);
+      });
+    }
+
+    function handleSort(e) {
+      const col = e.currentTarget.getAttribute('data-col');
+      if (sortColumn === col) {
+        sortAsc = !sortAsc;
+      } else {
+        sortColumn = col;
+        sortAsc = true;
+      }
+      renderTable(currentCompounds, currentFragResults);
+    }
+
+    /* ===== Build fragment catalog section ===== */
+    function renderFragmentCatalog(fragResults, sharedIndices) {
+      const counts = {};
+      fragResults.forEach(frags => {
+        frags.forEach(idx => { counts[idx] = (counts[idx] || 0) + 1; });
+      });
+
+      let html = '';
+      sharedIndices.forEach(fi => {
+        const frag = FRAGMENT_CATALOG[fi];
+        const colorIdx = fi % FRAG_COLORS.length;
+        html += '<div class="frag-chip" style="background:' + FRAG_COLORS[colorIdx] + ';">';
+        html += '<span class="frag-dot" style="background:' + FRAG_BORDER_COLORS[colorIdx] + ';"></span>';
+        html += escapeHtml(frag.pattern);
+        html += ' <span class="frag-count">(' + frag.name + ', ' + (counts[fi] || 0) + '/' + fragResults.length + ')</span>';
+        html += '</div>';
+      });
+      return html;
+    }
+
+    /* ===== Build fragment presence matrix ===== */
+    function renderFragmentMatrix(compounds, fragResults, sharedIndices) {
+      let html = '<table class="matrix-table"><thead><tr><th></th>';
+      sharedIndices.forEach(fi => {
+        html += '<th title="' + escapeHtml(FRAGMENT_CATALOG[fi].desc) + '">' + escapeHtml(FRAGMENT_CATALOG[fi].name) + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+
+      compounds.forEach((comp, i) => {
+        html += '<tr><th>' + escapeHtml(comp.compound_id) + '</th>';
+        const presSet = new Set(fragResults[i]);
+        sharedIndices.forEach(fi => {
+          if (presSet.has(fi)) {
+            const colorIdx = fi % FRAG_COLORS.length;
+            html += '<td style="background:' + FRAG_COLORS[colorIdx] + '; font-weight:700; color:' + FRAG_BORDER_COLORS[colorIdx] + ';">&#10003;</td>';
+          } else {
+            html += '<td style="color:#cbd5e1;">&#8212;</td>';
+          }
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      return html;
+    }
+
+    /* ===== Build pairwise similarity matrix ===== */
+    function renderSimilarityMatrix(compounds, fragResults) {
+      const n = compounds.length;
+      let html = '<table class="matrix-table"><thead><tr><th></th>';
+      compounds.forEach(c => { html += '<th>' + escapeHtml(c.compound_id) + '</th>'; });
+      html += '</tr></thead><tbody>';
+      for (let i = 0; i < n; i++) {
+        html += '<tr><th>' + escapeHtml(compounds[i].compound_id) + '</th>';
+        for (let j = 0; j < n; j++) {
+          if (i === j) {
+            html += '<td class="matrix-self">1.00</td>';
+          } else {
+            const sim = fragmentSimilarity(fragResults[i], fragResults[j]);
+            html += '<td class="' + simClass(sim) + '">' + sim.toFixed(2) + '</td>';
+          }
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      return html;
+    }
+
+    /* ===== Build property bar charts ===== */
+    function renderBarCharts(compounds) {
+      const metrics = [
+        { key: 'docking_score', label: 'Docking Score (kcal/mol)', color: '#3b82f6', invert: true },
+        { key: 'MW', label: 'Molecular Weight', color: '#8b5cf6', invert: false },
+        { key: 'LogP', label: 'LogP', color: '#f97316', invert: false },
+        { key: 'TPSA', label: 'TPSA', color: '#22c55e', invert: false },
+      ];
+
+      let html = '';
+      metrics.forEach(metric => {
+        const absValues = compounds.map(c => Math.abs((c.properties || {})[metric.key] || 0));
+        let maxVal = Math.max(...absValues);
+        if (maxVal === 0) maxVal = 1;
+
+        html += '<div class="bar-chart-container">';
+        html += '<div class="bar-chart-title">' + escapeHtml(metric.label) + '</div>';
+
+        const sorted = compounds.map((c, i) => ({ idx: i, val: (c.properties || {})[metric.key] || 0 }));
+        sorted.sort((a, b) => metric.invert ? a.val - b.val : b.val - a.val);
+
+        sorted.forEach(item => {
+          const c = compounds[item.idx];
+          const val = item.val;
+          const pct = (Math.abs(val) / maxVal) * 100;
+          let barColor = metric.color;
+          if (metric.key === 'docking_score') {
+            barColor = val < -8.0 ? '#22c55e' : val <= -6.0 ? '#eab308' : '#ef4444';
+          }
+
+          html += '<div class="bar-row">';
+          html += '<div class="bar-label" title="' + escapeHtml(c.compound_id) + '">' + escapeHtml(c.compound_id) + '</div>';
+          html += '<div class="bar-track"><div class="bar-fill" style="width:' + pct.toFixed(1) + '%;background:' + barColor + ';"></div></div>';
+          html += '<div class="bar-value">' + val.toFixed(2) + '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      });
+      return html;
+    }
+
+    /* ===== Main loader ===== */
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+      document.title = filePath.split('/').pop() + ' — BRICS Viewer';
+
+      fetch(filePath)
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(data => {
+          const container = document.getElementById('viewer-container');
+
+          /* Try to find compounds array in the data */
+          const compounds = data.compounds || data.fragments || data.decomposition || data.results || (Array.isArray(data) ? data : null);
+
+          if (!compounds || !Array.isArray(compounds) || compounds.length === 0) {
+            /* Fallback: pretty-print JSON */
+            const pre = document.createElement('pre');
+            pre.className = 'fallback';
+            pre.textContent = JSON.stringify(data, null, 2);
+            container.appendChild(pre);
+            return;
+          }
+
+          /* Check if data has the BRICS domain format (smiles + properties) */
+          const hasBricsFormat = compounds[0] && compounds[0].smiles && compounds[0].compound_id;
+
+          if (!hasBricsFormat) {
+            /* Fallback: render as generic table */
+            const keys = [...new Set(compounds.flatMap(i => Object.keys(i)))];
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            keys.forEach(k => {
+              const th = document.createElement('th');
+              th.textContent = k;
+              headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            compounds.forEach(item => {
+              const tr = document.createElement('tr');
+              keys.forEach(k => {
+                const td = document.createElement('td');
+                const val = item[k];
+                td.textContent = val === undefined ? '' :
+                  (typeof val === 'object' ? JSON.stringify(val) : String(val));
+                tr.appendChild(td);
+              });
+              tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            container.appendChild(table);
+            return;
+          }
+
+          /* Domain-specific BRICS rendering */
+          const fragResults = analyzeFragments(compounds);
+          const sharedFragments = findSharedFragments(fragResults);
+
+          let mainHtml = '<div class="content">';
+
+          /* 1. Compound table */
+          mainHtml += '<div>';
+          mainHtml += '<div class="section-title">Compound Series</div>';
+          mainHtml += '<div class="table-wrap"><table class="compound-table" id="compound-table"></table></div>';
+          mainHtml += '</div>';
+
+          /* 2. Fragment catalog */
+          mainHtml += '<div>';
+          mainHtml += '<div class="section-title">Detected Fragments (shared by 2+ compounds)</div>';
+          mainHtml += '<div class="frag-catalog">' + renderFragmentCatalog(fragResults, sharedFragments) + '</div>';
+          mainHtml += '</div>';
+
+          /* 3. Fragment presence matrix */
+          mainHtml += '<div>';
+          mainHtml += '<div class="section-title">Fragment Presence Matrix</div>';
+          mainHtml += '<div class="table-wrap">' + renderFragmentMatrix(compounds, fragResults, sharedFragments) + '</div>';
+          mainHtml += '</div>';
+
+          /* 4. Pairwise similarity */
+          mainHtml += '<div>';
+          mainHtml += '<div class="section-title">Pairwise Fragment Similarity (Tanimoto)</div>';
+          mainHtml += '<div class="table-wrap">' + renderSimilarityMatrix(compounds, fragResults) + '</div>';
+          mainHtml += '</div>';
+
+          /* 5. Property comparison bar charts */
+          mainHtml += '<div>';
+          mainHtml += '<div class="section-title">Property Comparison</div>';
+          mainHtml += '<div class="bar-section">' + renderBarCharts(compounds) + '</div>';
+          mainHtml += '</div>';
+
+          /* Score legend */
+          mainHtml += '<div class="legend">';
+          mainHtml += '<div class="legend-item"><div class="legend-swatch" style="background:#dcfce7;"></div> Strong (&lt; -8.0)</div>';
+          mainHtml += '<div class="legend-item"><div class="legend-swatch" style="background:#fef9c3;"></div> Moderate (-8.0 to -6.0)</div>';
+          mainHtml += '<div class="legend-item"><div class="legend-swatch" style="background:#fee2e2;"></div> Weak (&gt; -6.0)</div>';
+          mainHtml += '</div>';
+
+          mainHtml += '</div>'; /* .content */
+
+          container.innerHTML = mainHtml;
+
+          /* Render sortable table */
+          renderTable(compounds, fragResults);
+        })
+        .catch(err => showError('Failed to load file: ' + err.message));
+    }
+  </script>
+</body>
+</html>

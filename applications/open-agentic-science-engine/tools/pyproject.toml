@@ -1,0 +1,85 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# DDE CLI packaging — PEP 621.
+#
+# The entry point is `dde = "dde.cli:main"`, which replaces the
+# hand-rolled dde-cli shim that install.sh used to symlink into the
+# venv.  `pip install -e .` produces a proper console_scripts wrapper
+# that works in subshells and loops without PYTHONPATH gymnastics.
+#
+# Dependencies are declared here for metadata completeness, but
+# install.sh still installs them explicitly from requirements.txt and
+# requirements-science.txt (separate transactions, core-fatal /
+# science-survivable).  install.sh uses `--no-deps` when running the
+# editable install so these declarations do not override that flow.
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dde"
+version = "0.3.0"  # Keep in sync with CLI_VERSION in dde/core/env.py
+description = "Execution surface for dde agent tooling"
+requires-python = ">=3.11"
+
+# Core CLI dependencies — mirrors tools/requirements.txt.
+dependencies = [
+    "click>=8.1",
+    "jinja2>=3.1",
+    "mistune>=3.0",
+    "PyYAML>=6.0",
+    "requests>=2.31",
+    "numpy>=1.26",
+    "zstandard>=0.22",
+    "google-cloud-aiplatform>=1.60",
+    "jsonpath-ng>=1.6",
+]
+
+[project.optional-dependencies]
+# Full optional stack: requirements-science.txt plus requirements-hypex.txt.
+# `pip install -e ".[science]"` is equivalent to install.sh's full
+# (non --core-only) install.
+science = [
+    "rdkit>=2024.3.1",
+    "meeko>=0.5",
+    "gemmi>=0.7",
+    "pubchempy>=1.0.4",
+    "biopython>=1.84",
+    "prody>=2.4",
+    "chembl-webresource-client>=0.10.9",
+    "scipy>=1.12",
+    "scikit-learn>=1.3",
+    "networkx>=3.0",
+    "pandas>=2.2",
+    "matplotlib>=3.8",
+]
+
+[project.scripts]
+dde = "dde.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["dde*"]
+
+[tool.setuptools.package-data]
+dde = ["site_templates/**/*.html"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "C4", "B", "UP", "RUF"]
+ignore = ["E501", "C901", "B006"]

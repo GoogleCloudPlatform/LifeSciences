@@ -1,0 +1,15 @@
+{
+  "id": "H-0001",
+  "title": "Gut microbiome diversity reduces inflammation",
+  "statement": "Higher gut microbiome diversity is associated with lower systemic inflammation markers in healthy adults.",
+  "mechanism": "Diverse microbial communities produce short-chain fatty acids that modulate immune cell activity and suppress pro-inflammatory cytokine release.",
+  "predictions": ["Increased SCFA levels correlate with lower CRP"],
+  "experiments": [{"design": "Cohort study with 16S sequencing", "readout": "CRP levels vs diversity index", "est_difficulty": "med"}],
+  "evidence": [{"lit_id": "PMID:38012345", "role": "supports", "note": "Meta-analysis of gut diversity and inflammation"}],
+  "focus_area": "microbiome",
+  "lineage": {"parents": [], "operator": "null"},
+  "status": "proposed",
+  "created_by": "gen-agent",
+  "epoch": 1,
+  "created_at": "2026-09-01T10:00:00Z"
+}

@@ -1,0 +1,74 @@
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base.html" %}
+{% block title %}Work Order — {{ wo.id }}-r{{ wo.revision }}{% endblock %}
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="index.html">Home</a> &rsaquo;
+  <span>Operations</span> &rsaquo;
+  <span>{{ wo.id }}-r{{ wo.revision }}</span>
+</div>
+{% endblock %}
+{% block content %}
+<h1>Work Order — {{ wo.id }}-r{{ wo.revision }}</h1>
+
+<div class="meta">
+  <dl>
+    <dt>ID:</dt>
+    <dd>{{ wo.id }}</dd>
+    <dt>Revision:</dt>
+    <dd>r{{ wo.revision }}</dd>
+    <dt>State:</dt>
+    <dd>{{ wo.state }}</dd>
+    <dt>Stage:</dt>
+    <dd>{{ wo.stage }}</dd>
+    <dt>Cycle:</dt>
+    <dd>{{ wo.cycle }}</dd>
+    <dt>Priority:</dt>
+    <dd>{{ wo.priority }}</dd>
+    <dt>Requested Role:</dt>
+    <dd>{{ wo.requested_role }}</dd>
+    <dt>Created:</dt>
+    <dd>{{ wo.created_at }}</dd>
+  </dl>
+</div>
+
+{% if wo.decision_question %}
+<h2>Decision Question</h2>
+<p>{{ wo.decision_question }}</p>
+{% endif %}
+
+{% if linked_findings %}
+<h2>Findings</h2>
+<ul>
+{% for finding in linked_findings %}
+  <li><a href="{{ finding.html_filename }}">{{ finding.title }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if linked_artifact_classes %}
+<h2>Artifact Classes</h2>
+<ul>
+{% for ac in linked_artifact_classes %}
+  <li><a href="{{ ac.html_filename }}">{{ ac.name }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<p><a href="index.html">&larr; Back to index</a></p>
+{% endblock %}

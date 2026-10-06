@@ -1,0 +1,15 @@
+{
+  "id": "H-0002",
+  "title": "Intestinal microbial richness decreases inflammatory response",
+  "statement": "Greater intestinal microbial richness leads to reduced systemic inflammation in healthy human subjects.",
+  "mechanism": "Rich microbial ecosystems in the gut generate short-chain fatty acids which regulate immune cells and reduce pro-inflammatory cytokine production.",
+  "predictions": ["Higher SCFA concentrations associated with reduced CRP"],
+  "experiments": [{"design": "Observational cohort with metagenomic analysis", "readout": "Inflammatory markers vs microbial richness", "est_difficulty": "med"}],
+  "evidence": [{"lit_id": "PMID:38012346", "role": "supports", "note": "Review of microbiome and immune modulation"}],
+  "focus_area": "microbiome",
+  "lineage": {"parents": [], "operator": "null"},
+  "status": "proposed",
+  "created_by": "gen-agent",
+  "epoch": 1,
+  "created_at": "2026-09-01T10:01:00Z"
+}

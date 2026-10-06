@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hypothesis.schema.json",
+  "title": "Hypothesis",
+  "description": "A falsifiable scientific hypothesis with evidence, experiments, and lineage.",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "statement",
+    "mechanism",
+    "predictions",
+    "experiments",
+    "evidence",
+    "focus_area",
+    "lineage",
+    "status",
+    "created_by",
+    "epoch",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^H-[0-9]{4}$",
+      "description": "Unique hypothesis identifier, e.g. H-0042."
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 120,
+      "description": "Short title, ideally 15 words or fewer."
+    },
+    "statement": {
+      "type": "string",
+      "description": "One-paragraph falsifiable claim."
+    },
+    "mechanism": {
+      "type": "string",
+      "description": "Proposed causal mechanism."
+    },
+    "predictions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Observable, testable predictions."
+    },
+    "experiments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["design", "readout", "est_difficulty"],
+        "properties": {
+          "design": {
+            "type": "string",
+            "description": "Experimental design description."
+          },
+          "readout": {
+            "type": "string",
+            "description": "Expected measurement or readout."
+          },
+          "est_difficulty": {
+            "type": "string",
+            "enum": ["low", "med", "high"],
+            "description": "Estimated difficulty of the experiment."
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "description": "Proposed experiments to test the hypothesis."
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["lit_id", "role", "note"],
+        "properties": {
+          "lit_id": {
+            "type": "string",
+            "description": "Literature record identifier, e.g. PMID:38012345."
+          },
+          "role": {
+            "type": "string",
+            "enum": ["supports", "constrains", "contradicts"],
+            "description": "Relationship of this evidence to the hypothesis."
+          },
+          "note": {
+            "type": "string",
+            "description": "Brief explanation of relevance."
+          }
+        },
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "description": "Literature evidence supporting, constraining, or contradicting the hypothesis."
+    },
+    "focus_area": {
+      "type": "string",
+      "description": "Research focus area this hypothesis belongs to."
+    },
+    "cluster": {
+      "type": "string",
+      "pattern": "^C-[0-9]{2}$",
+      "description": "Proximity cluster identifier, e.g. C-03. Assigned by the proximity agent."
+    },
+    "lineage": {
+      "type": "object",
+      "required": ["parents", "operator"],
+      "properties": {
+        "parents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^H-[0-9]{4}$"
+          },
+          "description": "Parent hypothesis IDs. Empty for original hypotheses."
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["combine", "ground", "simplify", "oob", "null"],
+          "description": "Evolution operator used to derive this hypothesis. 'null' for originals."
+        },
+        "citation_delta": {
+          "type": "object",
+          "properties": {
+            "parent_lit_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Deduplicated union of all parent evidence lit_ids."
+            },
+            "inherited": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Parent lit_ids present in this hypothesis."
+            },
+            "added": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "lit_ids in this hypothesis not in any parent."
+            },
+            "dropped": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Parent lit_ids missing from this hypothesis."
+            },
+            "rule": {
+              "type": "string",
+              "enum": ["superset", "subset", "free", "skip"]
+            },
+            "compliant": { "type": "boolean" }
+          },
+          "required": ["parent_lit_ids", "inherited", "added", "dropped", "rule", "compliant"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "Evolutionary lineage tracking."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "reviewed", "active", "merged", "retired", "quarantined"],
+      "description": "Current lifecycle status."
+    },
+    "created_by": {
+      "type": "string",
+      "description": "Name of the agent that created this hypothesis."
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Epoch in which this hypothesis was created."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of creation."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ratings.schema.json",
+  "title": "Ratings",
+  "description": "Derived Elo ratings for an epoch, computed from the match ledger. Never hand-edited.",
+  "type": "object",
+  "required": [
+    "epoch",
+    "base_rating",
+    "ratings",
+    "computed_from"
+  ],
+  "properties": {
+    "epoch": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Epoch these ratings correspond to."
+    },
+    "base_rating": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Starting Elo rating for new hypotheses (e.g. 1500)."
+    },
+    "ratings": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["elo", "matches", "wins", "draws"],
+        "properties": {
+          "elo": {
+            "type": "number",
+            "description": "Current Elo rating."
+          },
+          "matches": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total matches played."
+          },
+          "wins": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total matches won."
+          },
+          "draws": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total matches drawn."
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Map of hypothesis ID to rating record."
+    },
+    "computed_from": {
+      "type": "string",
+      "description": "Provenance: identifies the match ledger state used to derive these ratings, e.g. 'matches/ ledger @ M-0131'."
+    }
+  },
+  "additionalProperties": false
+}

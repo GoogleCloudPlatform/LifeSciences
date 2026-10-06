@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "citation-manifest.schema.json",
+  "title": "Citation Manifest",
+  "description": "Immutable verification manifest recording verified and phantom scholarly references for a document.",
+  "type": "object",
+  "required": [
+    "target_id",
+    "target_file",
+    "verified_at",
+    "verifier",
+    "summary",
+    "citations"
+  ],
+  "properties": {
+    "target_id": {
+      "type": "string",
+      "description": "Identifier of the target entity (e.g., H-0001, report, review)."
+    },
+    "target_file": {
+      "type": "string",
+      "description": "Path to the verified file relative to run directory or absolute."
+    },
+    "verified_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when verification was executed."
+    },
+    "verifier": {
+      "type": "string",
+      "description": "Name or CLI identifier of the verifying agent/tool (e.g. lit-verify/1.0, reflection-agent-1)."
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total",
+        "verified",
+        "phantom",
+        "unverified",
+        "all_verified"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "phantom": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unverified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "all_verified": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "raw_id",
+          "source",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canonical normalized ID (e.g. PMID:42297600 or 10.1101/...)."
+          },
+          "raw_id": {
+            "type": "string",
+            "description": "Raw string matched in document text."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "pubmed",
+              "europepmc",
+              "biorxiv",
+              "arxiv",
+              "unknown"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "phantom",
+              "unverified"
+            ],
+            "description": "Verification outcome."
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "not_found",
+              "title_mismatch",
+              "network_error",
+              "timeout"
+            ],
+            "description": "Diagnostic reason for status."
+          },
+          "claimed_title": {
+            "type": "string",
+            "description": "Title claimed in document, if present."
+          },
+          "resolved_title": {
+            "type": "string",
+            "description": "Canonical title returned by scholarly API."
+          },
+          "title_match": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "mismatched",
+              "suspect",
+              "unspecified"
+            ]
+          },
+          "title_similarity": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "verified_via": {
+            "type": "string",
+            "description": "API service that resolved the citation (e.g. ncbi, europepmc, cache)."
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error details if status is phantom or unverified."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

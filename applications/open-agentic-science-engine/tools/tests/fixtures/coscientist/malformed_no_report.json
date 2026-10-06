@@ -1,0 +1,36 @@
+{
+  "title": "Export Without Report",
+  "goal": "This export has ideas but no report-shaped dict",
+  "state": "COMPLETED",
+  "sessionId": "sess-noref-001",
+  "Xq": [
+    {
+      "id": "idea-noref-1",
+      "eloRating": 1400.0,
+      "ranking": 1,
+      "title": "Test idea without report context",
+      "category": "Test",
+      "attributes": [{"name": "Target Gene", "value": "TEST1"}],
+      "matchResult": {
+        "numTotalMatches": 5,
+        "numMatchesWon": 3,
+        "numMatchesLost": 2,
+        "winRate": 0.6
+      },
+      "reviews": [],
+      "deepVerification": {
+        "claims": []
+      },
+      "summary": {"markdown": "Test idea."},
+      "description": {"markdown": "Description."}
+    }
+  ],
+  "knowledgeBase": {
+    "knowledgeSummary": {"markdown": "KB content."},
+    "references": [{"title": "Test Ref", "source": "https://example.com/test"}],
+    "Vn": {
+      "summary": {"markdown": "Connections analysis."},
+      "connections": [{"title": "Test Connection", "description": "A test connection."}]
+    }
+  }
+}

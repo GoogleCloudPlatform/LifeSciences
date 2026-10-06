@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Contacts Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; color: #1a1a1a; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; }
+    .filename { color: #555; font-size: 0.9rem; margin-bottom: 1rem; }
+    h1 { color: #2c3e50; font-size: 1.3rem; }
+    #viewer-container { width: 100%; }
+    .fallback { white-space: pre-wrap; font-family: monospace; font-size: 0.85rem;
+                background: #f8f9fa; padding: 1rem; border-radius: 4px; max-height: 600px; overflow: auto; }
+    .binding-info { font-size: 0.85rem; color: #555; margin-top: 0.5rem; }
+    .binding-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; font-weight: 600; }
+    .tag-inter { background: #dbeafe; color: #1e40af; }
+    .tag-single { background: #f1f5f9; color: #64748b; }
+  </style>
+</head>
+<body>
+  <h1>Contact Map</h1>
+  <div class="filename" id="filename"></div>
+  <div id="viewer-container"></div>
+  <div id="binding-info" class="binding-info" style="display:none"></div>
+  <div id="fallback" class="fallback" style="display:none"></div>
+  <div id="error" class="error" style="display:none"></div>
+  <script>
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+    }
+
+    /* Shipped matrix fallback: convert contact list to 2D matrix */
+    function contactListToMatrix(contacts) {
+      var maxRes = 0;
+      contacts.forEach(function(c) {
+        var r1 = c.residue1 || c.res1 || c.i || 0;
+        var r2 = c.residue2 || c.res2 || c.j || 0;
+        if (r1 > maxRes) maxRes = r1;
+        if (r2 > maxRes) maxRes = r2;
+      });
+      var size = maxRes + 1;
+      var matrix = [];
+      for (var i = 0; i < size; i++) {
+        matrix.push(new Array(size).fill(0));
+      }
+      contacts.forEach(function(c) {
+        var r1 = c.residue1 || c.res1 || c.i || 0;
+        var r2 = c.residue2 || c.res2 || c.j || 0;
+        var dist = c.distance || c.dist || c.value || 1;
+        matrix[r1][r2] = dist;
+        matrix[r2][r1] = dist;
+      });
+      return matrix;
+    }
+
+    /* Detect docking contact format: {contacts: [{pose, residues}]} */
+    function isDockingContactData(data) {
+      if (!data || !data.contacts || !Array.isArray(data.contacts)) return false;
+      if (data.contacts.length === 0) return false;
+      var first = data.contacts[0];
+      return first.hasOwnProperty('pose') && first.hasOwnProperty('residues');
+    }
+
+    /* Derive compound name from filename */
+    function compoundName(fp) {
+      var fileName = fp.split('/').pop();
+      return fileName.replace(/\.contacts\.json$/i, '');
+    }
+
+    /* Render docking contacts (ported from original prototype) */
+    function renderDockingContacts(data) {
+      var contacts = data.contacts || [];
+      var name = compoundName(filePath);
+
+      /* Best-pose extraction: prefer pose 1, fall back to first entry */
+      var bestPose = null;
+      for (var p = 0; p < contacts.length; p++) {
+        if (contacts[p].pose === 1) { bestPose = contacts[p]; break; }
+      }
+      if (!bestPose && contacts.length > 0) {
+        bestPose = contacts[0];
+      }
+
+      var residues = bestPose ? bestPose.residues : [];
+      if (residues.length === 0) {
+        throw new Error('No residue contacts found in best pose');
+      }
+
+      /* Sort residues by chain then by res_num */
+      residues = residues.slice().sort(function(a, b) {
+        if (a.chain !== b.chain) return a.chain < b.chain ? -1 : 1;
+        return a.res_num - b.res_num;
+      });
+
+      /* Build X-axis labels */
+      var xLabels = residues.map(function(r) {
+        return escapeHtml(r.res_name) + escapeHtml(String(r.res_num)) + ' (' + escapeHtml(r.chain) + ')';
+      });
+
+      /* Build Z row (distances) and hover text */
+      var zRow = [];
+      var hoverRow = [];
+      var chainsContacted = {};
+
+      residues.forEach(function(res) {
+        zRow.push(res.min_distance);
+        hoverRow.push(
+          '<b>' + escapeHtml(name) + '</b><br>' +
+          escapeHtml(res.res_name) + ' ' + escapeHtml(String(res.res_num)) + ' (chain ' + escapeHtml(res.chain) + ')<br>' +
+          'Distance: ' + res.min_distance.toFixed(2) + ' Å'
+        );
+        chainsContacted[res.chain] = true;
+      });
+
+      var chainKeys = Object.keys(chainsContacted).sort();
+      var isInterChain = chainKeys.length > 1;
+
+      /* Find chain divider position */
+      var shapes = [];
+      if (isInterChain) {
+        var firstChain = residues[0].chain;
+        for (var d = 1; d < residues.length; d++) {
+          if (residues[d].chain !== firstChain) {
+            shapes.push({
+              type: 'line',
+              x0: d - 0.5,
+              x1: d - 0.5,
+              y0: -0.5,
+              y1: 0.5,
+              line: { color: '#94a3b8', width: 2, dash: 'dash' }
+            });
+            break;
+          }
+        }
+      }
+
+      /* Green-to-blue distance colorscale (domain convention) */
+      var colorscale = [
+        [0,    '#006d2c'],
+        [0.15, '#238b45'],
+        [0.3,  '#41ae76'],
+        [0.5,  '#99d8c9'],
+        [0.7,  '#c6dbef'],
+        [0.85, '#6baed6'],
+        [1,    '#2171b5']
+      ];
+
+      /* Calculate zmin/zmax from actual data */
+      var validDists = zRow.filter(function(v) { return v !== null && v !== undefined; });
+      var zMin = validDists.length > 0 ? Math.floor(Math.min.apply(null, validDists) * 10) / 10 : 0;
+      var zMax = validDists.length > 0 ? Math.ceil(Math.max.apply(null, validDists) * 10) / 10 : 5;
+
+      /* Build compound label */
+      var yLabel = escapeHtml(name);
+
+      /* Show inter-chain binding info */
+      var infoDiv = document.getElementById('binding-info');
+      infoDiv.style.display = 'block';
+      var infoText = escapeHtml(String(residues.length)) + ' pocket residues | ' +
+        escapeHtml(String(chainKeys.length)) + ' chain(s): ' + chainKeys.map(function(k) { return escapeHtml(String(k)); }).join(', ');
+      if (isInterChain) {
+        infoText += ' | ';
+        infoDiv.innerHTML = infoText +
+          '<span class="binding-tag tag-inter">inter-chain</span>';
+      } else {
+        infoText += ' | ';
+        infoDiv.innerHTML = infoText +
+          '<span class="binding-tag tag-single">single-chain</span>';
+      }
+
+      Plotly.newPlot('viewer-container', [{
+        z: [zRow],
+        x: xLabels,
+        y: [yLabel],
+        type: 'heatmap',
+        colorscale: colorscale,
+        zmin: zMin,
+        zmax: zMax,
+        hoverongaps: false,
+        hoverinfo: 'text',
+        text: [hoverRow],
+        xgap: 1,
+        ygap: 1,
+        colorbar: {
+          title: { text: 'Min Distance (Å)', side: 'right' },
+          ticksuffix: ' Å',
+          len: 0.8
+        }
+      }], {
+        title: { text: 'Per-Residue Docking Contacts — ' + escapeHtml(name) },
+        xaxis: {
+          title: { text: 'Pocket Residues', standoff: 50 },
+          tickangle: -45,
+          tickfont: { size: 11 },
+          side: 'bottom'
+        },
+        yaxis: {
+          title: 'Compound',
+          tickfont: { size: 12 },
+          autorange: 'reversed'
+        },
+        shapes: shapes,
+        margin: { l: 180, r: 80, t: 60, b: 140 },
+        plot_bgcolor: '#fafafa'
+      }, { responsive: true });
+    }
+
+    /* Render residue-residue matrix (shipped fallback) */
+    function renderMatrix(matrix) {
+      Plotly.newPlot('viewer-container', [{
+        z: matrix,
+        type: 'heatmap',
+        colorscale: 'YlOrRd',
+        colorbar: { title: { text: 'Distance / Score' } }
+      }], {
+        title: { text: 'Residue Contact Map' },
+        xaxis: { title: { text: 'Residue' } },
+        yaxis: { title: { text: 'Residue' }, autorange: 'reversed' },
+        margin: { t: 50, l: 60, r: 30, b: 50 }
+      }, { responsive: true });
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/contacts.json');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.json();
+        })
+        .then(function(jsonData) {
+          /* Primary path: docking contacts {contacts: [{pose, residues}]} */
+          if (isDockingContactData(jsonData)) {
+            renderDockingContacts(jsonData);
+            return;
+          }
+
+          /* Shipped matrix fallback paths */
+          var matrix = null;
+
+          /* Case 1: bare 2D array */
+          if (Array.isArray(jsonData) && jsonData.length > 0 && Array.isArray(jsonData[0])) {
+            matrix = jsonData;
+          }
+          /* Case 2: {matrix: [[...]]} */
+          else if (jsonData.matrix && Array.isArray(jsonData.matrix)) {
+            matrix = jsonData.matrix;
+          }
+          /* Case 3: {contacts: [...]} or {contact_list: [...]} — non-docking contact objects */
+          else if (jsonData.contacts && Array.isArray(jsonData.contacts)) {
+            matrix = contactListToMatrix(jsonData.contacts);
+          }
+          else if (jsonData.contact_list && Array.isArray(jsonData.contact_list)) {
+            matrix = contactListToMatrix(jsonData.contact_list);
+          }
+          /* Case 4: bare array of contact objects */
+          else if (Array.isArray(jsonData) && jsonData.length > 0 && typeof jsonData[0] === 'object'
+                   && !Array.isArray(jsonData[0])) {
+            matrix = contactListToMatrix(jsonData);
+          }
+          /* Case 5: {data: [[...]]} wrapper */
+          else if (jsonData.data && Array.isArray(jsonData.data) && Array.isArray(jsonData.data[0])) {
+            matrix = jsonData.data;
+          }
+
+          if (matrix) {
+            renderMatrix(matrix);
+          } else {
+            /* Fallback: show raw JSON */
+            var fb = document.getElementById('fallback');
+            fb.style.display = 'block';
+            fb.textContent = JSON.stringify(jsonData, null, 2);
+          }
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

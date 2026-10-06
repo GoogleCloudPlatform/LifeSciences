@@ -1,0 +1,39 @@
+{
+  "eval_version": "1.0",
+  "run_timestamp": "2026-09-08T15:07:57Z",
+  "python_version": "3.11.2 (main, May 12 2026, 05:17:27) [GCC 12.2.0]",
+  "platform": "linux",
+  "fixture_count": 8,
+  "fixture_ids": [
+    "EVAL-001",
+    "EVAL-002",
+    "EVAL-003",
+    "EVAL-004",
+    "EVAL-005",
+    "EVAL-006",
+    "EVAL-007",
+    "EVAL-008"
+  ],
+  "fixture_categories": [
+    "no_genetic_support",
+    "negative_pocket_conformation",
+    "positive_model_geometry",
+    "modality_mismatch",
+    "absent_entity_inputs",
+    "tool_failure",
+    "disputed_citation",
+    "bounded_review_exhaustion"
+  ],
+  "declined_candidate_sample": [
+    "EVAL-001",
+    "EVAL-002"
+  ],
+  "completed": 8,
+  "total": 8,
+  "command": "PYTHONPATH=tools python3 -m eval.run_baseline",
+  "working_directory": "/workspace/applications/DDE",
+  "outputs": [
+    "eval/baseline/baseline-report.json",
+    "eval/baseline/baseline-report.md"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "title": "Malformed Export - No Ideas",
+  "goal": "This export contains no idea-shaped list",
+  "state": "COMPLETED",
+  "knowledgeBase": {
+    "knowledgeSummary": {"markdown": "Some knowledge."},
+    "references": []
+  },
+  "config": {},
+  "someOtherKey": "not a list of ideas"
+}

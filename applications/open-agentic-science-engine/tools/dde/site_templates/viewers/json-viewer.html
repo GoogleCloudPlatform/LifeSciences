@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JSON Viewer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.12.0/styles/github.min.css">
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; color: #1a1a2e; }
+    .error { color: #c0392b; padding: 1rem; background: #fdf2f0; border-radius: 4px; margin: 1rem; }
+    .filename { color: #555; font-size: 0.9rem; padding: 1rem 1rem 0; }
+    .controls { padding: 0.5rem 1rem; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid #e1e4e8; }
+    .controls button {
+      font-size: 0.8rem; padding: 4px 12px; border: 1px solid #d0d7de;
+      border-radius: 4px; background: #fff; cursor: pointer; color: #24292f;
+    }
+    .controls button:hover { background: #f6f8fa; }
+    .controls button.active { font-weight: 600; background: #f0f4ff; border-color: #0550ae; color: #0550ae; }
+    pre { margin: 0; padding: 1rem; }
+    pre code {
+      display: block;
+      padding: 1rem;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.45;
+    }
+    /* Tree view styles */
+    .tree-container {
+      padding: 1rem;
+      font-size: 0.875rem;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      line-height: 1.8;
+    }
+    .tree-key { color: #0550ae; font-weight: 500; }
+    .tree-string { color: #0a3069; }
+    .tree-number { color: #0550ae; }
+    .tree-boolean { color: #cf222e; }
+    .tree-null { color: #6e7781; font-style: italic; }
+    .tree-toggle {
+      cursor: pointer; user-select: none; color: #57606a;
+      margin-right: 4px; display: inline-block; width: 12px; text-align: center;
+    }
+    .tree-toggle:hover { color: #0550ae; }
+    .tree-collapsed > .tree-children { display: none; }
+    .tree-bracket { color: #57606a; }
+    .tree-item { padding-left: 20px; }
+    .tree-count { color: #6e7781; font-size: 0.75rem; }
+    .view-raw { display: block; }
+    .view-tree { display: none; }
+    .mode-tree .view-raw { display: none; }
+    .mode-tree .view-tree { display: block; }
+  </style>
+</head>
+<body>
+  <div class="filename" id="filename"></div>
+  <div class="controls" id="controls" style="display:none">
+    <button id="btn-formatted" class="active" onclick="setMode('raw')">Formatted</button>
+    <button id="btn-tree" onclick="setMode('tree')">Tree View</button>
+    <button id="btn-copy" onclick="copyJSON()">Copy</button>
+  </div>
+  <div id="viewer-container">
+    <div class="view-raw" id="raw-view"></div>
+    <div class="view-tree">
+      <div class="tree-container" id="json-tree"></div>
+    </div>
+  </div>
+  <div id="error" class="error" style="display:none"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.12.0/highlight.min.js"></script>
+  <script>
+    var jsonString = '';
+
+    var params = new URLSearchParams(window.location.search);
+    var filePath = params.get('file');
+
+    function showError(msg) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = msg;
+    }
+
+    function setMode(mode) {
+      var container = document.getElementById('viewer-container');
+      var btnFormatted = document.getElementById('btn-formatted');
+      var btnTree = document.getElementById('btn-tree');
+      if (mode === 'tree') {
+        container.classList.add('mode-tree');
+        btnTree.classList.add('active');
+        btnFormatted.classList.remove('active');
+      } else {
+        container.classList.remove('mode-tree');
+        btnFormatted.classList.add('active');
+        btnTree.classList.remove('active');
+      }
+    }
+
+    function copyJSON() {
+      navigator.clipboard.writeText(jsonString).then(function() {
+        var btn = document.getElementById('btn-copy');
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function buildTree(value, key, isLast) {
+      if (value === null) {
+        return '<span class="tree-null">null</span>' + (isLast ? '' : ',');
+      }
+      if (typeof value === 'string') {
+        var escaped = escapeHtml(JSON.stringify(value));
+        return '<span class="tree-string">' + escaped + '</span>' + (isLast ? '' : ',');
+      }
+      if (typeof value === 'number') {
+        return '<span class="tree-number">' + value + '</span>' + (isLast ? '' : ',');
+      }
+      if (typeof value === 'boolean') {
+        return '<span class="tree-boolean">' + value + '</span>' + (isLast ? '' : ',');
+      }
+
+      var isArray = Array.isArray(value);
+      var entries = isArray ? value.map(function(v, i) { return [i, v]; }) : Object.entries(value);
+      var open = isArray ? '[' : '{';
+      var close = isArray ? ']' : '}';
+      var count = entries.length;
+
+      if (count === 0) {
+        return '<span class="tree-bracket">' + open + close + '</span>' + (isLast ? '' : ',');
+      }
+
+      var html = '<span class="tree-toggle" onclick="this.parentElement.classList.toggle(\'tree-collapsed\')">&#9660;</span>';
+      html += '<span class="tree-bracket">' + open + '</span> ';
+      html += '<span class="tree-count">' + count + ' ' + (isArray ? 'items' : 'keys') + '</span>';
+      html += '<div class="tree-children">';
+
+      entries.forEach(function(entry, idx) {
+        var k = entry[0], v = entry[1];
+        var last = idx === entries.length - 1;
+        var keyHtml = isArray ? '' : '<span class="tree-key">"' + escapeHtml(String(k)) + '"</span>: ';
+        html += '<div class="tree-item">' + keyHtml + buildTree(v, k, last) + '</div>';
+      });
+
+      html += '</div><span class="tree-bracket">' + close + '</span>' + (isLast ? '' : ',');
+      return html;
+    }
+
+    if (!filePath) {
+      showError('No file specified. Use ?file=path/to/file');
+    } else {
+      document.getElementById('filename').textContent = filePath.split('/').pop();
+      document.title = filePath.split('/').pop() + ' — JSON Viewer';
+
+      fetch(filePath)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+          return r.text();
+        })
+        .then(function(text) {
+          // Parse and re-stringify for consistent formatting
+          var parsed = null;
+          var formatted;
+          try {
+            parsed = JSON.parse(text);
+            formatted = JSON.stringify(parsed, null, 2);
+          } catch (e) {
+            formatted = text;
+          }
+          jsonString = formatted;
+
+          // Show controls
+          document.getElementById('controls').style.display = 'flex';
+
+          // Formatted / raw view with syntax highlighting
+          var pre = document.createElement('pre');
+          var code = document.createElement('code');
+          code.className = 'language-json';
+          code.textContent = formatted;
+          pre.appendChild(code);
+          document.getElementById('raw-view').appendChild(pre);
+          hljs.highlightElement(code);
+
+          // Tree view (only if JSON parsed successfully)
+          if (parsed !== null) {
+            var treeEl = document.getElementById('json-tree');
+            treeEl.innerHTML = '<div class="tree-item">' + buildTree(parsed, 'root', true) + '</div>';
+          } else {
+            // Disable tree view button if JSON could not be parsed
+            var btnTree = document.getElementById('btn-tree');
+            btnTree.disabled = true;
+            btnTree.style.opacity = '0.5';
+            btnTree.style.cursor = 'default';
+            btnTree.title = 'Tree view unavailable — file is not valid JSON';
+          }
+        })
+        .catch(function(err) { showError('Failed to load file: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

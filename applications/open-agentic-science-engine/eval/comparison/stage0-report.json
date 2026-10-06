@@ -1,0 +1,344 @@
+{
+  "eval_version": "1.0-stage0",
+  "run_timestamp": "2026-09-08T18:01:30Z",
+  "summary": {
+    "fixtures_completed": {
+      "value": 8,
+      "denominator": 8,
+      "rate": 1.0
+    },
+    "cli_success_rate": {
+      "value": 8,
+      "denominator": 8,
+      "rate": 1.0
+    },
+    "cli_failure_rate": {
+      "value": 0,
+      "denominator": 8,
+      "rate": 0.0
+    },
+    "total_state_transitions": 8,
+    "total_relay_codes_fired": 1,
+    "total_artifacts_produced": 4,
+    "total_wall_clock_seconds": 0.0314,
+    "repeated_operations": {
+      "value": 0,
+      "denominator": 8,
+      "rate": 0.0
+    },
+    "unsupported_claims_accepted": {
+      "value": "N/A",
+      "denominator": "N/A",
+      "note": "Requires LLM agent workflow execution with scientific review"
+    },
+    "mistaken_rejections": {
+      "value": "N/A",
+      "denominator": "N/A",
+      "note": "Requires LLM agent workflow execution with review of declined candidates"
+    },
+    "decision_reversals": {
+      "value": "N/A",
+      "denominator": "N/A",
+      "note": "Requires multi-cycle workflow execution tracking"
+    },
+    "expensive_work_avoided": {
+      "value": "N/A",
+      "denominator": "N/A",
+      "note": "Requires cost-instrumented workflow with early-termination tracking"
+    }
+  },
+  "fixture_results": [
+    {
+      "fixture_id": "EVAL-001",
+      "fixture_label": "No genetic support \u2014 target lacks GWAS/genetic evidence",
+      "scenario_category": "no_genetic_support",
+      "wall_clock_seconds": 0.005,
+      "state_transitions": [
+        {
+          "from": "active",
+          "to": "(pending lead review)"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "triage/manufacturing",
+          "exit_code": 0,
+          "output_length": 27
+        }
+      ],
+      "invocation_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-001-r1'])"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-002",
+      "fixture_label": "Negative pocket conformation \u2014 unfavorable druggability",
+      "scenario_category": "negative_pocket_conformation",
+      "wall_clock_seconds": 0.0039,
+      "state_transitions": [
+        {
+          "from": "active",
+          "to": "(pending lead review)"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "triage/manufacturing",
+          "exit_code": 0,
+          "output_length": 27
+        }
+      ],
+      "invocation_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [
+        "fpocket.single_conformation"
+      ],
+      "artifacts_produced": [
+        {
+          "path": "raw/pocket/synthetic-kinase-Y.fpocket.json",
+          "schema": "dde.pocket-druggability.v1"
+        },
+        {
+          "path": "raw/pocket/synthetic-kinase-Y.fpocket.meta.json",
+          "schema": "provenance-sidecar"
+        }
+      ],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-002-r1'])"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-003",
+      "fixture_label": "Positive model geometry \u2014 favorable structural confidence",
+      "scenario_category": "positive_model_geometry",
+      "wall_clock_seconds": 0.0039,
+      "state_transitions": [
+        {
+          "from": "active",
+          "to": "(pending lead review)"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "triage/manufacturing",
+          "exit_code": 0,
+          "output_length": 27
+        }
+      ],
+      "invocation_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [
+        {
+          "path": "raw/structures/synthetic-enzyme-Z.alphafold.json",
+          "schema": "dde.structure-confidence.v1"
+        },
+        {
+          "path": "raw/structures/synthetic-enzyme-Z.alphafold.meta.json",
+          "schema": "provenance-sidecar"
+        }
+      ],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-003-r1'])"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-004",
+      "fixture_label": "Modality mismatch \u2014 antibody target with small-molecule deliverables",
+      "scenario_category": "modality_mismatch",
+      "wall_clock_seconds": 0.0036,
+      "state_transitions": [
+        {
+          "from": "active",
+          "to": "(pending lead review)"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "triage/manufacturing",
+          "exit_code": 0,
+          "output_length": 27
+        }
+      ],
+      "invocation_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-004-r1'])"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-005",
+      "fixture_label": "Absent entity inputs \u2014 missing required compound and target identifiers",
+      "scenario_category": "absent_entity_inputs",
+      "wall_clock_seconds": 0.0035,
+      "state_transitions": [
+        {
+          "from": "active",
+          "to": "(pending lead review)"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "triage/manufacturing",
+          "exit_code": 0,
+          "output_length": 27
+        }
+      ],
+      "invocation_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-005-r1'])"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-006",
+      "fixture_label": "Tool failure \u2014 run fails with infrastructure error",
+      "scenario_category": "tool_failure",
+      "wall_clock_seconds": 0.0038,
+      "state_transitions": [
+        {
+          "from": "active",
+          "to": "(pending lead review)"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "triage/manufacturing",
+          "exit_code": 0,
+          "output_length": 27
+        }
+      ],
+      "invocation_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-006-r1'])"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-007",
+      "fixture_label": "Disputed citation \u2014 finding references retracted paper",
+      "scenario_category": "disputed_citation",
+      "wall_clock_seconds": 0.0039,
+      "state_transitions": [
+        {
+          "from": "active",
+          "to": "(pending lead review)"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "triage/manufacturing",
+          "exit_code": 0,
+          "output_length": 27
+        }
+      ],
+      "invocation_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "[manufacturing] evidence_status=not_yet_applicable, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-007-r1'])"
+      ]
+    },
+    {
+      "fixture_id": "EVAL-008",
+      "fixture_label": "Bounded-review exhaustion \u2014 work order cycles through revision requests",
+      "scenario_category": "bounded_review_exhaustion",
+      "wall_clock_seconds": 0.0038,
+      "state_transitions": [
+        {
+          "from": "active",
+          "to": "(pending lead review)"
+        }
+      ],
+      "transition_count": 1,
+      "cli_invocations": [
+        {
+          "command": "triage/manufacturing",
+          "exit_code": 0,
+          "output_length": 27
+        }
+      ],
+      "invocation_count": 1,
+      "success_count": 1,
+      "failure_count": 0,
+      "validation_checks": {},
+      "relay_codes_fired": [],
+      "artifacts_produced": [],
+      "repeated_operations": 0,
+      "error_messages": [],
+      "completed": true,
+      "observations": [
+        "[manufacturing] evidence_status=not_assessed, execution_outcome=unknown",
+        "Stage 0 disposition: (pending lead review)",
+        "Shortlisted: True (shortlist: ['IC-EVAL-008-r1'])"
+      ]
+    }
+  ]
+}

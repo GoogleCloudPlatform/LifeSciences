@@ -1,0 +1,127 @@
+{
+  "title": "Alpha Tournament",
+  "goal": "Identify therapeutic targets for oncology",
+  "state": "COMPLETED",
+  "stage": "FINISHED",
+  "sessionId": "sess-alpha-001",
+  "createTime": "2026-01-01T00:00:00Z",
+  "dateEnded": "2026-01-02T00:00:00Z",
+  "stats": {
+    "numIdeas": 10,
+    "numCategories": 3,
+    "highestEloRating": 1650.5,
+    "inputTokenCount": 100000,
+    "outputTokenCount": 50000
+  },
+  "config": {
+    "preferences": ["oncology"]
+  },
+  "Xr": [
+    {
+      "id": "idea-alpha-1",
+      "eloRating": 1650.5,
+      "ranking": 1,
+      "title": "Targeting TP53 for tumor suppression",
+      "category": "Gene Therapy",
+      "attributes": [
+        {"name": "Target Gene", "value": "TP53"},
+        {"name": "Modality", "value": "Small molecule"}
+      ],
+      "matchResult": {
+        "numTotalMatches": 10,
+        "numMatchesWon": 8,
+        "numMatchesLost": 2,
+        "winRate": 0.8
+      },
+      "reviews": [
+        {
+          "references": [
+            {"title": "TP53 in Cancer Therapy", "source": "https://example.com/tp53-review"}
+          ]
+        }
+      ],
+      "deepVerification": {
+        "verificationSummary": {"markdown": "All claims verified."},
+        "claims": [
+          {
+            "claim": "TP53 mutations are found in over 50% of cancers",
+            "verdict": "ACCURATE",
+            "sourceSentence": "Mutations in TP53 are present in approximately 50% of all human cancers.",
+            "reasoning": "Supported by extensive literature.",
+            "references": [
+              {"title": "TP53 Mutation Frequency", "source": "https://example.com/tp53-freq"}
+            ]
+          }
+        ]
+      },
+      "summary": {"markdown": "A therapeutic approach targeting TP53."},
+      "description": {"markdown": "Detailed description of TP53 targeting strategy."},
+      "reviewsSummary": {"markdown": "Reviews are generally positive."}
+    },
+    {
+      "id": "idea-alpha-2",
+      "eloRating": 1520.3,
+      "ranking": 2,
+      "title": "BRCA1 synthetic lethality approach",
+      "category": "Synthetic Lethality",
+      "attributes": [
+        {"name": "Target Gene", "value": "BRCA1"},
+        {"name": "Modality", "value": "PARP inhibitor"}
+      ],
+      "matchResult": {
+        "numTotalMatches": 10,
+        "numMatchesWon": 6,
+        "numMatchesLost": 4,
+        "winRate": 0.6
+      },
+      "reviews": [
+        {
+          "references": [
+            {"title": "BRCA1 and PARP Inhibition", "source": "https://example.com/brca1-parp"}
+          ]
+        }
+      ],
+      "deepVerification": {
+        "verificationSummary": {"markdown": "Most claims verified with caveats."},
+        "claims": [
+          {
+            "claim": "BRCA1 deficiency sensitizes cells to PARP inhibitors",
+            "verdict": "ACCURATE",
+            "sourceSentence": "BRCA1-deficient cells show increased sensitivity to PARP inhibition.",
+            "reasoning": "Well-established mechanism.",
+            "references": [
+              {"title": "Synthetic Lethality Review", "source": "https://example.com/synth-lethality"}
+            ]
+          }
+        ]
+      },
+      "summary": {"markdown": "Exploiting BRCA1 deficiency through synthetic lethality."},
+      "description": {"markdown": "Detailed description of BRCA1 synthetic lethality."},
+      "reviewsSummary": {"markdown": "Promising but limited patient population."}
+    }
+  ],
+  "Bq": {
+    "overview": {"markdown": "## Executive Overview\n\nThis tournament evaluated 10 therapeutic targets."},
+    "topRankingIdeasSummary": {"markdown": "## Top Ranking Ideas\n\nTP53 emerged as the leader.\n\n## Recommendation\n\nProceed with TP53 validation studies."},
+    "reviewsOverview": {"markdown": "## Reviews Overview\n\nReviewers highlighted the strength of TP53 evidence."},
+    "Jm": [
+      {"title": "Comprehensive Cancer Genomics", "source": "https://example.com/cancer-genomics"},
+      {"title": "Therapeutic Target Selection Guide", "source": "https://example.com/target-guide"}
+    ]
+  },
+  "knowledgeBase": {
+    "knowledgeSummary": {"markdown": "## Knowledge Summary\n\nKey findings from literature review."},
+    "references": [
+      {"title": "Cancer Biology Textbook", "source": "https://example.com/cancer-bio"},
+      {"title": "Drug Target Database", "source": "https://example.com/drug-targets"}
+    ],
+    "learnedClaims": ["claim1"],
+    "Zk": {
+      "summary": {"markdown": "## Connections Summary\n\nUnexpected links between targets."},
+      "connections": [
+        {"title": "TP53-BRCA1 Crosstalk", "description": "Both genes interact in DNA damage response pathways."},
+        {"title": "Immune Evasion Link", "description": "Both targets influence immune checkpoint regulation."}
+      ]
+    }
+  }
+}

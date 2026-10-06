@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lit-record.schema.json",
+  "title": "Literature Record",
+  "description": "Unified output record for all literature sources (Section 3.1).",
+  "type": "object",
+  "required": [
+    "source",
+    "id",
+    "title",
+    "abstract",
+    "authors",
+    "date",
+    "url",
+    "type"
+  ],
+  "properties": {
+    "source": {
+      "type": "string",
+      "enum": [
+        "pubmed",
+        "pmc",
+        "arxiv",
+        "biorxiv",
+        "chembl",
+        "ctgov",
+        "geo",
+        "cbioportal",
+        "cellxgene"
+      ],
+      "description": "Data source identifier."
+    },
+    "id": {
+      "type": "string",
+      "description": "Source-specific identifier, e.g. PMID:38012345."
+    },
+    "title": {
+      "type": "string",
+      "description": "Title of the record."
+    },
+    "abstract": {
+      "type": "string",
+      "description": "Abstract or summary text."
+    },
+    "authors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of authors."
+    },
+    "date": {
+      "type": "string",
+      "description": "Publication or release date (YYYY-MM-DD preferred)."
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Canonical URL for the record."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["article", "preprint", "compound", "assay", "trial", "dataset"],
+      "description": "Record type."
+    },
+    "extra": {
+      "type": "object",
+      "description": "Source-specific additional fields.",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
