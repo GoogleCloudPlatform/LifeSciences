@@ -775,29 +775,12 @@ def trigger_analysis():
             "predictions": predictions_cfg,
         }
 
-        # Write task_config.json and analysis_metadata.json to GCS
+        # Write task_config.json to GCS before triggering the job (tasks read it on startup)
         tc_bucket_name, tc_blob_path = parse_gcs_uri(f"{analysis_path}task_config.json")
         tc_bucket = storage_client.bucket(tc_bucket_name)
 
         tc_bucket.blob(tc_blob_path).upload_from_string(
             json.dumps(task_config, indent=2), content_type="application/json"
-        )
-        tc_bucket.blob(
-            tc_blob_path.replace("task_config.json", "analysis_metadata.json")
-        ).upload_from_string(
-            json.dumps(
-                {
-                    "job_id": job_id,
-                    "total_predictions": len(raw_predictions),
-                    "started_at": datetime.utcnow().isoformat() + "Z",
-                    "status": "running",
-                    "model_type": model_type,
-                    "execution_method": "cloud_run_job",
-                    "triggered_by": "foldrun-viewer",
-                },
-                indent=2,
-            ),
-            content_type="application/json",
         )
 
         # Trigger the Cloud Run analysis job via REST API
@@ -822,6 +805,26 @@ def trigger_analysis():
         }
         cr_resp = authed.post(cr_url, json=cr_body, timeout=30)
         cr_resp.raise_for_status()
+
+        # Write analysis_metadata.json only after Cloud Run Job trigger succeeds
+        # so a failed API call never leaves the job stuck in "Analyzing…" state
+        tc_bucket.blob(
+            tc_blob_path.replace("task_config.json", "analysis_metadata.json")
+        ).upload_from_string(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "total_predictions": len(raw_predictions),
+                    "started_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "running",
+                    "model_type": model_type,
+                    "execution_method": "cloud_run_job",
+                    "triggered_by": "foldrun-viewer",
+                },
+                indent=2,
+            ),
+            content_type="application/json",
+        )
 
         logger.info(
             f"Triggered analysis for {job_id}: {len(raw_predictions)} tasks, job={cr_job_name}"
