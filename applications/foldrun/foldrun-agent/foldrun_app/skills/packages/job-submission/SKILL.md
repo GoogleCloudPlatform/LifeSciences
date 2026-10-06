@@ -319,24 +319,26 @@ OF3 writes outputs to a nested directory structure:
   inference_query_set.json                            # Input with resolved seeds
 ```
 
-## AlphaFold 3 (AF3) Agent Platform Endpoint & --msa-free Mode
+## AlphaFold 3 (AF3) Agent Platform Endpoint (`--msa-free` & Full 630 GB MSA Modes)
 
-AlphaFold 3 predicts 3D structures across proteins, nucleic acids (DNA/RNA), small molecule ligands, and ions using a diffusion architecture. In FoldRun 2.0, AF3 runs directly against a managed Gemini Enterprise Agent Platform Prediction Endpoint (`AF3_ENDPOINT`), supporting zero-MSA (`--msa-free`) mode for rapid candidate screening and full complex co-folding.
+AlphaFold 3 predicts 3D structures across proteins, nucleic acids (DNA/RNA), small molecule ligands, and ions using a diffusion architecture. In FoldRun 2.0, AF3 runs directly against a managed Vertex AI Prediction Endpoint (`AF3_ENDPOINT`) on `a3-highgpu-1g` (1x NVIDIA H100 80GB GPU + 3 TB local NVMe SSD), supporting both:
+- **Zero-MSA Fast Screening (`msa_free=True` / `run_data_pipeline=false`)**: ~58 sec per job on warm H100; bypasses genetic database search (ideal for de novo designs, cyclic/bicycle peptides, and rapid ligand screening).
+- **Full 630 GB MSA + PDB Templates (`msa_free=False` / `run_data_pipeline=true`)**: ~4.6 min per job; runs `jackhmmer`/`nhmmer` against the local 630 GB MSA bundle on NVMe SSD for maximum accuracy on natural proteins and target complexes.
 
 ### AF3 Pre-Submission Confirmation Table
 Before calling `submit_af3_endpoint_prediction`, present the following breakdown to the user:
 
 | Phase | Resource | Provisioning / Machine | Estimated Runtime |
 |:---|:---|:---|:---|
-| **Input Formatting** | Local Agent Memory | Zero-MSA (`--msa-free`) Schema | < 1 sec |
-| **Diffusion Prediction** | Managed Agent Platform Endpoint | Dedicated NVIDIA L4 (g2-standard-16) (or A100/H100 if configured) | ~30–90 sec |
+| **Data / MSA Pipeline** | Local NVMe SSD (630 GB MSA Bundle) or Skipped (`msa_free=True`) | `a3-highgpu-1g` (3 TB local SSD) | <1 sec (`--msa-free`) or ~3.5 min (Full MSA) |
+| **Diffusion Prediction** | Managed Vertex AI Endpoint | Dedicated NVIDIA H100 80GB (`a3-highgpu-1g`, ~$11.06/hr per replica) | ~58 sec (`--msa-free`) or ~4.6 min total (Full MSA) |
 | **Relaxation** | N/A (None) | Diffusion trunk output (no AMBER) | N/A |
 
-> **Hardware Constraints & Operational Rules:**
-> - Runs directly against Google's managed Gemini Enterprise Agent Platform Prediction Endpoint (`AF3_ENDPOINT`).
-> - In `--msa-free` mode, Jackhmmer genetic database searches are bypassed, eliminating local 3TB genetic database and Filestore dependencies.
-> - Supports all-atom multimodal complexes: proteins, ss/dsDNA, RNA, ligands (SMILES/CCD), and ions (e.g. MG, ZN).
-> - Generates publication-ready mmCIF 3D coordinates, pTM, ipTM, ranking scores, and contact probabilities.
+> **Hardware Constraints, Backlog Scaling & Operational Rules:**
+> - Runs against the managed Vertex AI Online Prediction Endpoint (`AF3_ENDPOINT`). Check status first with `check_af3_endpoint`.
+> - **Maximize 1 Replica First, Scale Replicas on the Same Endpoint for Backlogs >30 min**:
+>   - Because a warm H100 replica takes ~58s (`--msa-free`) or ~4.6m (Full-MSA) per structure whereas cold-starting an additional H100 replica with the 630 GB MSA bundle takes ~25–35 minutes, **keep `min_replica_count=1` for backlogs of <=25 `--msa-free` jobs or <=5 Full-MSA jobs**.
+>   - If the user wants to run a larger batch (>30 min estimated queue), recommend scaling replicas in-place on the **same** endpoint via `deploy_af3_endpoint(min_replica_count=N, max_replica_count=N)` (e.g., `2–4` replicas) rather than creating a second endpoint, and scaling back down or calling `undeploy_af3_endpoint` ($0.00/hr) when complete.
 
 Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction`.
 

@@ -51,6 +51,12 @@ class AF3CheckEndpointTool(AF3Tool):
                 acc_count = (
                     getattr(machine_spec, "accelerator_count", None) if machine_spec else None
                 )
+                min_replicas = (
+                    getattr(dedicated, "min_replica_count", None) if dedicated else None
+                ) or 1
+                max_replicas = (
+                    getattr(dedicated, "max_replica_count", None) if dedicated else None
+                ) or min_replicas
 
                 deployed_models_info.append(
                     {
@@ -60,6 +66,8 @@ class AF3CheckEndpointTool(AF3Tool):
                         "machine_type": machine_type,
                         "accelerator_type": acc_type,
                         "accelerator_count": acc_count,
+                        "min_replica_count": int(min_replicas),
+                        "max_replica_count": int(max_replicas),
                     }
                 )
 
@@ -68,16 +76,36 @@ class AF3CheckEndpointTool(AF3Tool):
             if is_ready:
                 first_model = deployed_models_info[0]
                 m_type = first_model.get("machine_type") or "GPU"
-                cost_estimate = (
-                    "~$1.01/hr (L4)"
-                    if "g2" in m_type or "L4" in str(first_model.get("accelerator_type"))
-                    else "dedicated GPU billing active"
-                )
+                acc_str = str(first_model.get("accelerator_type") or "")
+                replicas = int(first_model.get("min_replica_count") or 1)
+                max_rep = int(first_model.get("max_replica_count") or replicas)
+                if "g2" in m_type or "L4" in acc_str:
+                    unit_rate = 1.01
+                    tier_label = "L4"
+                elif "a3" in m_type or "H100" in acc_str:
+                    unit_rate = 11.06
+                    tier_label = "H100 80GB"
+                elif "a2" in m_type or "A100" in acc_str:
+                    unit_rate = 3.67
+                    tier_label = "A100"
+                else:
+                    unit_rate = None
+                    tier_label = "GPU"
+                if unit_rate is not None:
+                    total_rate = unit_rate * replicas
+                    cost_estimate = (
+                        f"~${total_rate:.2f}/hr ({replicas}x {tier_label}, max_replicas={max_rep})"
+                    )
+                else:
+                    cost_estimate = f"dedicated GPU billing active ({replicas} replica(s))"
                 msg = (
                     f"AlphaFold 3 endpoint '{endpoint.display_name or endpoint.resource_name}' is active "
-                    f"with {len(deployed_models_info)} deployed model(s) ({m_type}). "
+                    f"with {len(deployed_models_info)} deployed model(s) ({m_type}, "
+                    f"min_replicas={replicas}, max_replicas={max_rep}). "
                     f"Dedicated GPU billing is active ({cost_estimate}). "
-                    "Run undeploy_af3_endpoint when your session is finished to avoid ongoing idle costs."
+                    "To scale replicas for a large backlog (>30 min queue), call deploy_af3_endpoint "
+                    "with min_replica_count/max_replica_count. Run undeploy_af3_endpoint when your "
+                    "session is finished to return to $0.00/hr."
                 )
             else:
                 cost_estimate = "$0.00/hr"

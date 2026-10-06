@@ -87,13 +87,13 @@ class AF3Config(CoreConfig):
 
     @property
     def machine_type(self) -> str:
-        """Default machine type for AF3 endpoint deployment."""
-        return os.getenv("AF3_MACHINE_TYPE", "g2-standard-16")
+        """Default machine type for AF3 endpoint deployment (a3-highgpu-1g provides 3 TB local NVMe SSD for the 630 GB MSA bundle)."""
+        return os.getenv("AF3_MACHINE_TYPE", "a3-highgpu-1g")
 
     @property
     def accelerator_type(self) -> str:
         """Default accelerator type for AF3 endpoint deployment."""
-        return os.getenv("AF3_ACCELERATOR_TYPE", "NVIDIA_L4")
+        return os.getenv("AF3_ACCELERATOR_TYPE", "NVIDIA_H100_80GB")
 
     @property
     def accelerator_count(self) -> int:

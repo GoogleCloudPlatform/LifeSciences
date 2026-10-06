@@ -14,9 +14,11 @@
 
 """Tool for submitting AlphaFold 3 predictions to Agent Platform Prediction Endpoint."""
 
+import copy
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,12 +34,73 @@ from ..utils.input_converter import (
     validate_af3_json,
 )
 from ..utils.metrics import compute_ranking_score
+from ..utils.viewer_artifacts import build_and_upload_af3_viewer_artifacts
 
 logger = logging.getLogger(__name__)
 
 
+def _prepare_af3_instance_for_endpoint(
+    af3_query: dict[str, Any],
+    job_name: str,
+    model_seeds: list[int],
+    msa_free: bool,
+) -> dict[str, Any]:
+    """Prepare an AF3 query dictionary for the Vertex AI Model Garden AlphaFold 3 container.
+
+    The Model Garden `google/alphafold3` serving container parses each instance via
+    `alphafold3.common.folding_input.Input.from_json()`, which rejects top-level keys
+    outside the official DeepMind AF3 schema (such as `msaFree`).
+    - When `msa_free=True` (`run_data_pipeline=False`), protein chains must include
+      `unpairedMsa: ""`, `pairedMsa: ""`, and `templates: []` so AF3 skips Jackhmmer.
+    - When `msa_free=False` (`run_data_pipeline=True`), empty default MSA strings must
+      be omitted so AF3 runs Jackhmmer + Hmmsearch + template search against the
+      local 630 GB MSA bundle.
+    """
+    payload = copy.deepcopy(af3_query)
+    payload.pop("msaFree", None)
+    payload["name"] = job_name
+    payload["modelSeeds"] = model_seeds
+    payload.setdefault("dialect", "alphafold3")
+    payload.setdefault("version", 1)
+
+    for seq_entry in payload.get("sequences", []):
+        if "protein" in seq_entry and isinstance(seq_entry["protein"], dict):
+            prot = seq_entry["protein"]
+            if msa_free:
+                prot.setdefault("unpairedMsa", "")
+                prot.setdefault("pairedMsa", "")
+                prot.setdefault("templates", [])
+            else:
+                if prot.get("unpairedMsa") == "":
+                    prot.pop("unpairedMsa", None)
+                if prot.get("pairedMsa") == "":
+                    prot.pop("pairedMsa", None)
+                if prot.get("templates") == []:
+                    prot.pop("templates", None)
+        elif "rna" in seq_entry and isinstance(seq_entry["rna"], dict):
+            rna = seq_entry["rna"]
+            if msa_free:
+                rna.setdefault("unpairedMsa", "")
+            elif rna.get("unpairedMsa") == "":
+                rna.pop("unpairedMsa", None)
+
+    return payload
+
+
 class AF3SubmitPredictionTool(AF3Tool):
     """Tool for submitting all-atom complex predictions via AlphaFold 3 Agent Platform Endpoint."""
+
+    def _validate_gcs_bucket(self, bucket_name: str) -> None:
+        """Ensure GCS bucket matches configured bucket or explicit AF3_ALLOWED_BUCKETS."""
+        allowed_buckets = {self.config.bucket_name}
+        extra = os.environ.get("AF3_ALLOWED_BUCKETS", "")
+        if extra:
+            allowed_buckets.update(b.strip() for b in extra.split(",") if b.strip())
+        if bucket_name not in allowed_buckets:
+            raise PermissionError(
+                f"Access denied: GCS bucket '{bucket_name}' is not in allowed buckets "
+                f"{sorted(allowed_buckets)}."
+            )
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Submit an AlphaFold 3 prediction job.
@@ -48,6 +111,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                 'job_name': Optional job name (defaults to 'af3_YYYYMMDD_HHMMSS'),
                 'msa_free': Zero-MSA screening mode (default: True),
                 'model_seeds': Random seeds for diffusion sampling (default: [1]),
+                'num_diffusion_samples': Diffusion samples per seed (default: 5),
                 'endpoint_id': Optional Agent Platform Endpoint ID override,
                 'output_gcs_uri': Optional custom GCS destination URI,
             }
@@ -66,10 +130,16 @@ class AF3SubmitPredictionTool(AF3Tool):
             arguments.get("job_name")
             or f"af3_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         )
-        msa_free = arguments.get("msa_free", self.config.default_msa_free)
+        try:
+            job_name = self.validate_job_name(str(job_name))
+        except ValueError as exc:
+            return {"status": "error", "message": str(exc)}
+
+        msa_free = bool(arguments.get("msa_free", self.config.default_msa_free))
         model_seeds = arguments.get("model_seeds") or [1]
         if isinstance(model_seeds, int):
             model_seeds = [model_seeds]
+        num_diffusion_samples = int(arguments.get("num_diffusion_samples", 5))
 
         endpoint_id = arguments.get("endpoint_id")
         collected_warnings: list[str] = []
@@ -88,6 +158,11 @@ class AF3SubmitPredictionTool(AF3Tool):
                     )
                 bucket_name = parsed_gcs.netloc
                 blob_path = parsed_gcs.path.lstrip("/")
+                if ".." in blob_path.split("/"):
+                    raise ValueError(
+                        f"Invalid GCS path in '{input_data}': path traversal segments ('..') are not allowed."
+                    )
+                self._validate_gcs_bucket(bucket_name)
                 bucket = self.storage_client.bucket(bucket_name)
                 content = bucket.blob(blob_path).download_as_text()
             elif isinstance(input_data, str) and (
@@ -132,7 +207,6 @@ class AF3SubmitPredictionTool(AF3Tool):
                     }
                 af3_query = json.loads(content) if isinstance(content, str) else dict(content)
                 af3_query["name"] = job_name
-                af3_query["msaFree"] = msa_free
                 af3_query["modelSeeds"] = model_seeds
             else:
                 af3_query = fasta_to_af3_json(
@@ -156,16 +230,23 @@ class AF3SubmitPredictionTool(AF3Tool):
             )
 
             # 3. Resolve Endpoint and dispatch prediction
-            # Send the complete af3_query to preserve all dialect fields and msaFree
             endpoint = self.get_endpoint(endpoint_id)
-            instance_payload = dict(af3_query)
-            instance_payload["name"] = job_name
-            instance_payload["modelSeeds"] = model_seeds
-            instance_payload["msaFree"] = msa_free
+            instance_payload = _prepare_af3_instance_for_endpoint(
+                af3_query=af3_query,
+                job_name=job_name,
+                model_seeds=model_seeds,
+                msa_free=msa_free,
+            )
+            predict_parameters = {
+                "run_data_pipeline": not msa_free,
+                "num_diffusion_samples": num_diffusion_samples,
+            }
 
+            t0 = time.time()
             try:
                 prediction_response = endpoint.predict(
                     instances=[instance_payload],
+                    parameters=predict_parameters,
                     timeout=self.config.timeout_seconds,
                 )
             except DeadlineExceeded:
@@ -183,6 +264,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                     "job_id": job_name,
                     "message": f"Agent Platform Prediction API call failed: {e.message or str(e)}",
                 }
+            elapsed_sec = time.time() - t0
 
             predictions = getattr(prediction_response, "predictions", [])
             if not predictions:
@@ -193,7 +275,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                 }
 
             result_item = predictions[0] if isinstance(predictions, list) else predictions
-            cif_content = result_item.get("cif") or result_item.get("structure_cif", "")
+            cif_content = result_item.get("structure_cif") or result_item.get("cif", "")
             if not cif_content or not cif_content.strip():
                 return {
                     "status": "error",
@@ -201,7 +283,10 @@ class AF3SubmitPredictionTool(AF3Tool):
                     "message": f"Agent Platform Endpoint returned no structure coordinates for job '{job_name}'.",
                 }
 
-            summary_confidences = result_item.get("summary_confidences") or {}
+            summary_confidences = dict(
+                result_item.get("summary") or result_item.get("summary_confidences") or {}
+            )
+            atom_plddts = result_item.get("plddt")
             pae = result_item.get("pae")
 
             # 4. Upload results to GCS using canonical paths
@@ -213,7 +298,12 @@ class AF3SubmitPredictionTool(AF3Tool):
                         f"Invalid output GCS URI: '{output_gcs_uri}'. Must follow format 'gs://bucket-name/[prefix]'."
                     )
                 bucket_name = parsed_out.netloc
+                self._validate_gcs_bucket(bucket_name)
                 out_path = parsed_out.path.strip("/")
+                if ".." in out_path.split("/"):
+                    raise ValueError(
+                        f"Invalid output GCS path in '{output_gcs_uri}': path traversal segments ('..') are not allowed."
+                    )
                 job_prefix = (
                     f"{out_path}/{job_name}" if out_path else self.get_job_blob_prefix(job_name)
                 )
@@ -226,14 +316,7 @@ class AF3SubmitPredictionTool(AF3Tool):
             # Write input JSON
             input_blob = bucket.blob(f"{job_prefix}/input.json")
             input_blob.upload_from_string(
-                json.dumps(af3_query, indent=2), content_type="application/json"
-            )
-
-            # Write summary confidences
-            conf_filename = SUMMARY_CONFIDENCES_FILENAME.format(job_id=job_name)
-            conf_blob = bucket.blob(f"{job_prefix}/{conf_filename}")
-            conf_blob.upload_from_string(
-                json.dumps(summary_confidences, indent=2), content_type="application/json"
+                json.dumps(instance_payload, indent=2), content_type="application/json"
             )
 
             # Write CIF structure
@@ -249,13 +332,44 @@ class AF3SubmitPredictionTool(AF3Tool):
 
             gcs_output_dir = f"gs://{bucket_name}/{job_prefix}"
             cif_uri = f"{gcs_output_dir}/{cif_filename}"
+            ranking_score = compute_ranking_score(summary_confidences)
+
+            # Generate viewer summary.json + plots and enrich mean_plddt / mean_pae
+            viewer_meta = build_and_upload_af3_viewer_artifacts(
+                bucket=bucket,
+                bucket_name=bucket_name,
+                job_prefix=job_prefix,
+                job_name=job_name,
+                af3_query=instance_payload,
+                cif_text=cif_content,
+                cif_uri=cif_uri,
+                summary_confidences=summary_confidences,
+                atom_plddts=atom_plddts,
+                pae_matrix=pae,
+                msa_free=msa_free,
+                ranking_score=ranking_score,
+                elapsed_sec=elapsed_sec,
+            )
+            if summary_confidences.get("mean_plddt") is None and viewer_meta.get("mean_plddt"):
+                summary_confidences["mean_plddt"] = viewer_meta["mean_plddt"]
+            if (
+                summary_confidences.get("mean_pae") is None
+                and viewer_meta.get("mean_pae") is not None
+            ):
+                summary_confidences["mean_pae"] = viewer_meta["mean_pae"]
+
+            # Write summary confidences (enriched with mean_plddt / mean_pae)
+            conf_filename = SUMMARY_CONFIDENCES_FILENAME.format(job_id=job_name)
+            conf_blob = bucket.blob(f"{job_prefix}/{conf_filename}")
+            conf_blob.upload_from_string(
+                json.dumps(summary_confidences, indent=2), content_type="application/json"
+            )
+
             viewer_url = (
                 f"{self.config.viewer_url}/job/{job_name}?model=af3"
                 if self.config.viewer_url
                 else self.gcs_console_url(cif_uri)
             )
-
-            ranking_score = compute_ranking_score(summary_confidences)
 
             return {
                 "status": "succeeded",
@@ -266,6 +380,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                 "endpoint": endpoint.resource_name,
                 "gcs_output_dir": gcs_output_dir,
                 "cif_uri": cif_uri,
+                "summary_uri": viewer_meta.get("summary_uri"),
                 "metrics": {
                     "ranking_score": round(float(ranking_score), 4)
                     if ranking_score is not None
@@ -273,13 +388,14 @@ class AF3SubmitPredictionTool(AF3Tool):
                     "ptm": summary_confidences.get("ptm"),
                     "iptm": summary_confidences.get("iptm"),
                     "mean_plddt": summary_confidences.get("mean_plddt"),
+                    "mean_pae": summary_confidences.get("mean_pae"),
                     "has_clash": summary_confidences.get("has_clash", 0.0),
                 },
                 "warnings": collected_warnings,
                 "viewer_url": viewer_url,
                 "message": (
                     f"AlphaFold 3 all-atom prediction for '{job_name}' completed on Agent Platform Endpoint. "
-                    f"Predicted coordinates saved to {cif_uri}."
+                    f"Predicted coordinates and viewer analysis saved to {gcs_output_dir}."
                 ),
             }
 

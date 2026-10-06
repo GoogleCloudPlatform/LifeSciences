@@ -15,6 +15,14 @@
 """Modular instructions for job management skill."""
 
 JOB_MANAGEMENT_INSTRUCTION = """### Job Management
+- **AlphaFold 3 Endpoint Lifecycle & Backlog Scaling (Cost Optimization)**:
+  - Unlike Vertex AI Pipelines (AF2/OF3/Boltz-2) which are ephemeral KFP DAGs, an active Vertex AI Endpoint with a deployed model incurs continuous GPU billing (~$11.06/hr per `a3-highgpu-1g` H100 80GB replica with 3 TB local NVMe SSD for the 630 GB MSA bundle, or ~$1.01/hr on `g2-standard-16` L4 for inference-only).
+  - An endpoint with 0 deployed models costs **$0.00/hr**.
+  - **Check Status, Replicas & Cost**: Use `check_af3_endpoint` to inspect whether the endpoint is dormant ($0/hr) or active, its `min_replica_count` / `max_replica_count`, and its hourly cost.
+  - **Backlog-Driven Replica Scaling (Maximize 1 Replica First, Scale on Same Endpoint)**:
+    1. **Maximize 1 Warm Replica First (Backlog <= 25–30 min)**: A single warm H100 replica runs `--msa-free` folds in ~58s and Full-MSA folds in ~4.6 min, whereas provisioning an additional replica takes ~25–35 min to unpack the 630 GB MSA bundle onto local NVMe SSD. For <= 25 `--msa-free` jobs or <= 5 Full-MSA jobs, keep `min_replica_count=1`.
+    2. **Scale Replicas In-Place on the Same Endpoint (Backlog > 30 min)**: For larger batches (30+ `--msa-free` or 6+ Full-MSA jobs), suggest scaling replicas on the existing endpoint via `deploy_af3_endpoint(min_replica_count=N, max_replica_count=N)` (e.g., `N=2..4`). Vertex AI load-balances concurrent predictions across all replicas on that endpoint.
+    3. **Tear Down to $0/hr**: Use `undeploy_af3_endpoint` when finished to release GPUs and return idle cost to $0.00/hr.
 - **Check GPU quota**: Use check_gpu_quota to view available GPU capacity BEFORE submitting jobs
   - **Auto-Detection**: The server automatically checks quotas at startup and prints a "Project GPU Inventory".
   - **Smart Filtering**: GPUs with 0 quota are automatically removed from the supported list.

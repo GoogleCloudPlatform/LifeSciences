@@ -105,10 +105,80 @@ class TestAF3Tools:
         mock_endpoint.predict.assert_called_once()
         call_kwargs = mock_endpoint.predict.call_args.kwargs
         assert call_kwargs.get("timeout") == config.timeout_seconds
+        assert call_kwargs.get("parameters") == {
+            "run_data_pipeline": False,
+            "num_diffusion_samples": 5,
+        }
         call_instances = mock_endpoint.predict.call_args.kwargs.get("instances")
         assert call_instances is not None
-        assert call_instances[0]["msaFree"] is True
+        assert "msaFree" not in call_instances[0]
         assert call_instances[0]["dialect"] == "alphafold3"
+        assert call_instances[0]["sequences"][0]["protein"]["unpairedMsa"] == ""
+        assert call_instances[0]["sequences"][0]["protein"]["pairedMsa"] == ""
+        assert call_instances[0]["sequences"][0]["protein"]["templates"] == []
+
+    def test_submit_prediction_full_msa_and_model_garden_response(self, mock_af3_env):
+        config = AF3Config()
+
+        mock_storage = MagicMock()
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        mock_storage.bucket.return_value = mock_bucket
+        mock_bucket.blob.return_value = mock_blob
+
+        tool = AF3SubmitPredictionTool(
+            tool_config={"name": "af3_submit_prediction"},
+            config=config,
+        )
+        tool.storage_client = mock_storage
+
+        mock_endpoint = MagicMock()
+        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
+        mock_endpoint.predict.return_value = MagicMock(
+            predictions=[
+                {
+                    "structure_cif": (
+                        "data_test\n"
+                        "ATOM 1 N N . MET A 1 1 ? 0.0 0.0 0.0 1.00 92.40 ? 1 MET A N 1\n"
+                        "ATOM 2 CA C . MET A 1 1 ? 1.0 0.0 0.0 1.00 92.40 ? 1 MET A CA 1\n"
+                    ),
+                    "plddt": [92.0, 92.8],
+                    "pae": [[0.5, 1.5], [1.5, 0.5]],
+                    "summary": {
+                        "ptm": 0.85,
+                        "ranking_score": 0.85,
+                        "fraction_disordered": 0.0,
+                        "has_clash": 0.0,
+                    },
+                }
+            ]
+        )
+
+        with patch.object(tool, "get_endpoint", return_value=mock_endpoint):
+            result = tool.run(
+                {
+                    "input": "MKTIIALSYIFCLVFA",
+                    "job_name": "af3_full_msa_test",
+                    "msa_free": False,
+                }
+            )
+
+        assert result["status"] == "succeeded"
+        assert result["mode"] == "standard"
+        assert result["metrics"]["ranking_score"] == 0.85
+        assert result["metrics"]["ptm"] == 0.85
+        assert result["metrics"]["mean_plddt"] == 92.4
+        assert result["metrics"]["mean_pae"] == 1.0
+        assert result["summary_uri"].endswith("af3_full_msa_test/analysis/summary.json")
+
+        call_kwargs = mock_endpoint.predict.call_args.kwargs
+        assert call_kwargs.get("parameters") == {
+            "run_data_pipeline": True,
+            "num_diffusion_samples": 5,
+        }
+        call_instances = call_kwargs.get("instances")
+        assert "msaFree" not in call_instances[0]
+        assert "unpairedMsa" not in call_instances[0]["sequences"][0]["protein"]
 
     def test_submit_prediction_missing_input(self, mock_af3_env):
         config = AF3Config()
@@ -285,14 +355,48 @@ class TestAF3Tools:
         config = AF3Config()
         tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
 
+        dedicated = MagicMock()
+        dedicated.min_replica_count = 1
+        dedicated.max_replica_count = 1
         mock_endpoint = MagicMock()
         mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
-        mock_endpoint.deployed_models = [MagicMock(id="dep-1")]
+        mock_endpoint.deployed_models = [MagicMock(id="dep-1", dedicated_resources=dedicated)]
 
         with patch.object(tool, "get_endpoint", return_value=mock_endpoint):
             result = tool.run()
 
         assert result["status"] == "already_deployed"
+        assert result["min_replica_count"] == 1
+        assert result["max_replica_count"] == 1
+        assert mock_endpoint.deploy.called is False
+
+    def test_deploy_endpoint_scale_replicas_in_place(self, mock_af3_env):
+        config = AF3Config()
+        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
+
+        dedicated = MagicMock()
+        dedicated.min_replica_count = 1
+        dedicated.max_replica_count = 1
+        mock_endpoint = MagicMock()
+        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
+        mock_endpoint.deployed_models = [MagicMock(id="dep-1", dedicated_resources=dedicated)]
+
+        mock_client = MagicMock()
+        with (
+            patch.object(tool, "get_endpoint", return_value=mock_endpoint),
+            patch(
+                "google.cloud.aiplatform_v1.EndpointServiceClient",
+                return_value=mock_client,
+            ),
+        ):
+            result = tool.run({"min_replica_count": 3, "max_replica_count": 4, "sync": True})
+
+        assert result["status"] == "scaled"
+        assert result["previous_min_replica_count"] == 1
+        assert result["min_replica_count"] == 3
+        assert result["max_replica_count"] == 4
+        assert "$33.18/hr" in result["idle_cost"]
+        mock_client.mutate_deployed_model.assert_called_once()
         assert mock_endpoint.deploy.called is False
 
     def test_undeploy_endpoint_all(self, mock_af3_env):
@@ -387,7 +491,23 @@ class TestAF3Tools:
             ]
         )
 
+        # Unpinned bucket without AF3_ALLOWED_BUCKETS is rejected
         with patch.object(tool, "get_endpoint", return_value=mock_endpoint):
+            denied = tool.run(
+                {
+                    "input": "MKTIIALSYIFCLVFA",
+                    "job_name": "custom_out_test",
+                    "output_gcs_uri": "gs://unauthorized-bucket/experiments/run1",
+                }
+            )
+        assert denied["status"] == "error"
+        assert "Access denied" in denied["message"]
+
+        # Allowed bucket via AF3_ALLOWED_BUCKETS succeeds
+        with (
+            patch.dict(os.environ, {"AF3_ALLOWED_BUCKETS": "custom-archive-bucket"}),
+            patch.object(tool, "get_endpoint", return_value=mock_endpoint),
+        ):
             result = tool.run(
                 {
                     "input": "MKTIIALSYIFCLVFA",
@@ -402,6 +522,28 @@ class TestAF3Tools:
             in result["gcs_output_dir"]
         )
         mock_storage.bucket.assert_called_with("custom-archive-bucket")
+
+    def test_submit_prediction_job_name_traversal_denied(self, mock_af3_env):
+        config = AF3Config()
+        tool = AF3SubmitPredictionTool(
+            tool_config={"name": "af3_submit_prediction"},
+            config=config,
+        )
+        result = tool.run(
+            {
+                "input": "MKTIIALSYIFCLVFA",
+                "job_name": "../../pipeline_runs/victim_job",
+            }
+        )
+        assert result["status"] == "error"
+        assert "Invalid job_name" in result["message"]
+
+    def test_deploy_endpoint_replica_cap_enforced(self, mock_af3_env):
+        config = AF3Config()
+        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
+        result = tool.run({"min_replica_count": 10, "max_replica_count": 20})
+        assert result["status"] == "error"
+        assert "Invalid replica count" in result["message"]
 
     def test_multimer_ranking_score_zero_iptm(self):
         from foldrun_app.models.af3.utils.metrics import compute_ranking_score

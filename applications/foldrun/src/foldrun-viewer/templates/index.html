@@ -181,6 +181,7 @@
         .badge-alphafold2  { background: #e8f0fe; color: #1a73e8; }
         .badge-openfold3   { background: #e6f4ea; color: #1e8e3e; }
         .badge-boltz2      { background: #f3e8fd; color: #7627bb; }
+        .badge-alphafold3  { background: #fef7e0; color: #b06000; }
 
         .state-chip {
             font-size: 0.72rem;
@@ -362,6 +363,7 @@
                 <select id="filter-model" onchange="renderJobs()">
                     <option value="">All models</option>
                     <option value="alphafold2">AlphaFold2</option>
+                    <option value="alphafold3">AlphaFold 3</option>
                     <option value="openfold3">OpenFold3</option>
                     <option value="boltz2">Boltz-2</option>
                 </select>
@@ -451,6 +453,7 @@
 
         const MODEL_LABELS = {
             alphafold2: 'AlphaFold2',
+            alphafold3: 'AlphaFold 3',
             openfold3:  'OpenFold3',
             boltz2:     'Boltz-2',
         };

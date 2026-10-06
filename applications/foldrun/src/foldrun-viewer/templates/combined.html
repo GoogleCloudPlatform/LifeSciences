@@ -565,7 +565,9 @@
         <div class="header-top">
             <div>
                 <h1><a href="/" style="color: inherit; text-decoration: none;">🧬 FoldRun Structure & Analysis</a></h1>
-                {% if job_id %}
+                {% if job_id and job_id.startswith('af3_') %}
+                <p class="subtitle" id="header-subtitle">Job: <a href="https://console.cloud.google.com/logs/query;query=resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22%20%22{{ job_id }}%22;duration=P30D?project={{ project_id }}" target="_blank" class="job-link" title="View AlphaFold 3 Endpoint logs in Cloud Logging">{{ job_id }} (Endpoint Logs)</a> &middot; <a href="https://console.cloud.google.com/storage/browser/{{ bucket_name }}/af3_predictions/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link" title="View AlphaFold 3 job artifacts in Cloud Storage">GCS Artifacts</a></p>
+                {% elif job_id %}
                 <p class="subtitle" id="header-subtitle">Job: <a href="https://console.cloud.google.com/vertex-ai/pipelines/locations/{{ region }}/runs/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link">{{ job_id }}</a></p>
                 {% else %}
                 <p class="subtitle" id="header-subtitle">Job: Loading...</p>
@@ -738,10 +740,11 @@
                     const rankBadge = pred.rank <= 3 ? ` 🏆` : '';
                     if (isOF3) {
                         const name = pred.sample_name || `Sample ${pred.rank}`;
-                        const score = pred.ranking_score !== undefined ? pred.ranking_score.toFixed(4) : 'N/A';
+                        const score = pred.ranking_score != null ? pred.ranking_score.toFixed(4) : 'N/A';
                         option.textContent = `Rank ${pred.rank}: ${name} (score: ${score})${rankBadge}`;
                     } else {
-                        option.textContent = `Rank ${pred.rank}: ${pred.model_name} (pLDDT: ${pred.plddt_mean.toFixed(1)})${rankBadge}`;
+                        const plddtVal = pred.plddt_mean != null ? pred.plddt_mean.toFixed(1) : 'N/A';
+                        option.textContent = `Rank ${pred.rank}: ${pred.model_name} (pLDDT: ${plddtVal})${rankBadge}`;
                     }
                     selector.appendChild(option);
                 });
@@ -787,7 +790,8 @@
             const mt = proteinInfo.model_type || analysisData.model_type;
             if (mt) {
                 const badge = mt === 'openfold3' ? 'OpenFold3' :
-                              mt === 'boltz2'    ? 'Boltz-2'   : 'AlphaFold2';
+                              mt === 'boltz2'    ? 'Boltz-2'   :
+                              (mt === 'alphafold3' || mt === 'af3') ? 'AlphaFold 3' : 'AlphaFold2';
                 html += `<div class="job-info-item"><span class="job-info-value">${escapeHtml(badge)}</span></div>`;
             }
 
@@ -923,12 +927,12 @@
             // Prediction Summary
             if (isOF3) {
                 const sampleName = escapeHtml(prediction.sample_name || 'N/A');
-                const rankingScore = prediction.ranking_score !== undefined ? escapeHtml(prediction.ranking_score.toFixed(4)) : 'N/A';
-                const ptm = prediction.ptm !== undefined ? escapeHtml(prediction.ptm.toFixed(4)) : 'N/A';
-                const iptm = prediction.iptm !== undefined ? escapeHtml(prediction.iptm.toFixed(4)) : 'N/A';
+                const rankingScore = prediction.ranking_score != null ? escapeHtml(prediction.ranking_score.toFixed(4)) : 'N/A';
+                const ptm = prediction.ptm != null ? escapeHtml(prediction.ptm.toFixed(4)) : 'N/A';
+                const iptm = prediction.iptm != null ? escapeHtml(prediction.iptm.toFixed(4)) : 'N/A';
                 const clash = prediction.has_clash ? 'Yes' : 'No';
                 const qualityAssessment = escapeHtml((prediction.quality_assessment || '').replace(/_/g, ' ').toUpperCase());
-                const modelLabel = isBoltz2 ? 'Boltz-2' : 'OpenFold3';
+                const modelLabel = isBoltz2 ? 'Boltz-2' : (modelType === 'alphafold3' || modelType === 'af3') ? 'AlphaFold 3' : 'OpenFold3';
 
                 html += `
                     <div class="info-card">
@@ -966,7 +970,7 @@
                 `;
             } else {
                 const modelName = escapeHtml(prediction.model_name || '');
-                const rankingConf = prediction.ranking_confidence !== undefined ? escapeHtml(prediction.ranking_confidence.toFixed(2)) : 'N/A';
+                const rankingConf = prediction.ranking_confidence != null ? escapeHtml(prediction.ranking_confidence.toFixed(2)) : 'N/A';
                 const qualityAssessment = escapeHtml((prediction.quality_assessment || '').replace(/_/g, ' ').toUpperCase());
 
                 html += `
@@ -993,7 +997,7 @@
             }
 
             // Quality Metrics
-            const plddtMean = prediction.plddt_mean !== undefined ? escapeHtml(prediction.plddt_mean.toFixed(1)) : 'N/A';
+            const plddtMean = prediction.plddt_mean != null ? escapeHtml(prediction.plddt_mean.toFixed(1)) : 'N/A';
             html += `
                 <div class="info-card">
                     <h3>Quality Metrics</h3>
@@ -1004,9 +1008,9 @@
                         </div>`;
 
             if (isOF3) {
-                const rankingScore = prediction.ranking_score !== undefined ? escapeHtml(prediction.ranking_score.toFixed(4)) : 'N/A';
-                const ptm = prediction.ptm !== undefined ? escapeHtml(prediction.ptm.toFixed(4)) : 'N/A';
-                const iptm = prediction.iptm !== undefined ? escapeHtml(prediction.iptm.toFixed(4)) : 'N/A';
+                const rankingScore = prediction.ranking_score != null ? escapeHtml(prediction.ranking_score.toFixed(4)) : 'N/A';
+                const ptm = prediction.ptm != null ? escapeHtml(prediction.ptm.toFixed(4)) : 'N/A';
+                const iptm = prediction.iptm != null ? escapeHtml(prediction.iptm.toFixed(4)) : 'N/A';
                 html += `
                         <div class="quality-item">
                             <div class="value">${rankingScore}</div>
@@ -1021,9 +1025,9 @@
                             <div class="label">ipTM</div>
                         </div>`;
             } else {
-                const plddtMedian = prediction.plddt_median !== undefined ? escapeHtml(prediction.plddt_median?.toFixed(1)) : 'N/A';
-                const plddtMin = prediction.plddt_min !== undefined ? escapeHtml(prediction.plddt_min?.toFixed(1)) : 'N/A';
-                const plddtMax = prediction.plddt_max !== undefined ? escapeHtml(prediction.plddt_max?.toFixed(1)) : 'N/A';
+                const plddtMedian = prediction.plddt_median != null ? escapeHtml(prediction.plddt_median?.toFixed(1)) : 'N/A';
+                const plddtMin = prediction.plddt_min != null ? escapeHtml(prediction.plddt_min?.toFixed(1)) : 'N/A';
+                const plddtMax = prediction.plddt_max != null ? escapeHtml(prediction.plddt_max?.toFixed(1)) : 'N/A';
                 html += `
                         <div class="quality-item">
                             <div class="value">${plddtMedian}</div>
@@ -1079,9 +1083,9 @@
                     const molType = stats.molecule_type || 'unknown';
                     const comps = (stats.comp_ids || []).slice(0, 3).join(', ');
                     const bgColor = molType === 'ligand' ? '#fff3cd' : (molType === 'protein' ? '#d4edda' : '#d1ecf1');
-                    const meanStr = stats.mean !== undefined ? stats.mean.toFixed(1) : 'N/A';
-                    const minStr = stats.min !== undefined ? stats.min.toFixed(1) : 'N/A';
-                    const maxStr = stats.max !== undefined ? stats.max.toFixed(1) : 'N/A';
+                    const meanStr = stats.mean != null ? stats.mean.toFixed(1) : 'N/A';
+                    const minStr = stats.min != null ? stats.min.toFixed(1) : 'N/A';
+                    const maxStr = stats.max != null ? stats.max.toFixed(1) : 'N/A';
                     const atomCount = stats.atom_count !== undefined ? stats.atom_count : 'N/A';
                     html += `<tr style="border-bottom:1px solid #eee;background:${bgColor};">`;
                     html += `<td style="padding:6px;font-weight:bold;">${escapeHtml(cid)}</td>`;

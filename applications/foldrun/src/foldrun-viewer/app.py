@@ -148,13 +148,19 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
     if not JOB_ID_PATTERN.fullmatch(str(job_id)):
         raise ValueError(f"Invalid job_id format: {job_id}")
 
+    bucket = storage_client.bucket(BUCKET_NAME)
+
+    # Check AlphaFold 3 predictions directory first
+    af3_summary_path = f"af3_predictions/{job_id}/analysis/summary.json"
+    if bucket.blob(af3_summary_path).exists():
+        uri = f"gs://{BUCKET_NAME}/{af3_summary_path}"
+        return load_gcs_file(uri, as_json=True), uri
+
     match = re.search(r"(\d{8})\d{6}$", job_id)
     if not match:
         raise ValueError(f"Cannot extract date from job_id: {job_id}")
 
     date_prefix = match.group(1)  # YYYYMMDD
-
-    bucket = storage_client.bucket(BUCKET_NAME)
     prefix = f"pipeline_runs/{date_prefix}"
 
     summary_blobs = list(
@@ -170,7 +176,7 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
     if not summary_blobs:
         raise FileNotFoundError(
             f"No analysis summary found for job {job_id}. "
-            f"Searched gs://{BUCKET_NAME}/{prefix}*/analysis/summary.json"
+            f"Searched gs://{BUCKET_NAME}/{af3_summary_path} and gs://{BUCKET_NAME}/{prefix}*/analysis/summary.json"
         )
 
     if len(summary_blobs) == 1:
@@ -384,7 +390,7 @@ def combined_viewer():
             description="Either pdb_uri, job_id, or summary_uri parameter is required",
         )
 
-    # Derive GCS console link from summary_uri or pdb_uri
+    # Derive GCS console link from summary_uri, pdb_uri, or af3_ job_id
     gcs_console_url = None
     gcs_ref = summary_uri or pdb_uri
     if gcs_ref and gcs_ref.startswith("gs://"):
@@ -397,6 +403,11 @@ def combined_viewer():
                 gcs_path = gcs_path[: idx + 1]
                 break
         gcs_console_url = f"https://console.cloud.google.com/storage/browser/{gcs_path}?project={PROJECT_ID}"
+    elif job_id and job_id.startswith("af3_"):
+        gcs_console_url = (
+            f"https://console.cloud.google.com/storage/browser/"
+            f"{BUCKET_NAME}/af3_predictions/{job_id}?project={PROJECT_ID}"
+        )
 
     return render_template(
         "combined.html",
@@ -406,6 +417,7 @@ def combined_viewer():
         model_name=model_name,
         project_id=PROJECT_ID,
         region=REGION,
+        bucket_name=BUCKET_NAME,
         gcs_console_url=gcs_console_url,
     )
 
@@ -563,6 +575,53 @@ def list_jobs():
                 job["has_analysis"] = ts in complete_ts
                 job["analysis_running"] = ts in running_ts and not job["has_analysis"]
 
+        # Include AlphaFold 3 Endpoint prediction jobs stored under af3_predictions/
+        if not page_token:
+            try:
+                bucket = storage_client.bucket(BUCKET_NAME)
+                af3_blobs = list(bucket.list_blobs(prefix="af3_predictions/"))
+                af3_by_job: dict[str, dict] = {}
+                for b in af3_blobs:
+                    parts = b.name.split("/")
+                    if len(parts) < 3:
+                        continue
+                    jid = parts[1]
+                    if not jid or not JOB_ID_PATTERN.fullmatch(jid):
+                        continue
+                    entry = af3_by_job.setdefault(
+                        jid,
+                        {
+                            "job_id": jid,
+                            "display_name": jid,
+                            "model_type": "alphafold3",
+                            "state": "PIPELINE_STATE_SUCCEEDED",
+                            "create_time": "",
+                            "has_analysis": False,
+                            "analysis_running": False,
+                        },
+                    )
+                    if b.time_created:
+                        iso_ts = b.time_created.isoformat().replace("+00:00", "Z")
+                        if not entry["create_time"] or iso_ts > entry["create_time"]:
+                            entry["create_time"] = iso_ts
+                    if b.name.endswith("/analysis/summary.json"):
+                        entry["has_analysis"] = True
+                        if "msa_free" in jid:
+                            entry["display_name"] = f"{jid} (Zero-MSA / --msa-free)"
+                        elif "full_msa" in jid:
+                            entry["display_name"] = (
+                                f"{jid} (Full 630 GB MSA + Templates)"
+                            )
+                seen_ids = {j["job_id"] for j in jobs}
+                for jid, af3_job in af3_by_job.items():
+                    if jid not in seen_ids and af3_job["has_analysis"]:
+                        jobs.append(af3_job)
+                jobs.sort(key=lambda x: x.get("create_time", ""), reverse=True)
+            except Exception as af3_exc:
+                logger.warning(
+                    f"Could not scan af3_predictions/ for job list: {af3_exc}"
+                )
+
         return jsonify(
             {
                 "jobs": jobs,
@@ -615,13 +674,24 @@ def trigger_analysis():
     """
     data = request.get_json(silent=True) or {}
     job_id = data.get("job_id")
-    model_type = data.get("model_type", "alphafold2")
+    model_type = str(data.get("model_type", "alphafold2")).strip().lower()
 
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
 
-    if not JOB_ID_PATTERN.match(str(job_id)):
+    if not JOB_ID_PATTERN.fullmatch(str(job_id)):
         return jsonify({"error": "Invalid job_id format"}), 400
+
+    allowed_model_types = {"alphafold2", "openfold3", "boltz2"}
+    if model_type not in allowed_model_types:
+        return jsonify(
+            {
+                "error": (
+                    f"Invalid model_type '{model_type}'. "
+                    f"Must be one of {sorted(allowed_model_types)}"
+                )
+            }
+        ), 400
 
     safe_job_id = urllib.parse.quote(str(job_id), safe="")
 
@@ -742,6 +812,9 @@ def trigger_analysis():
                         "env": [
                             {"name": "ANALYSIS_PATH", "value": analysis_path},
                             {"name": "MODEL_TYPE", "value": model_type},
+                            {"name": "GCS_BUCKET", "value": BUCKET_NAME},
+                            {"name": "GOOGLE_CLOUD_PROJECT", "value": PROJECT_ID},
+                            {"name": "PIPELINE_JOB_LOCATION", "value": REGION},
                         ]
                     }
                 ],

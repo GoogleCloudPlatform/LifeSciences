@@ -119,6 +119,7 @@ steps:
       - 'BUILD_TARGET=${_BUILD_TARGET}'
       - 'REGION=${_REGION}'
       - 'AR_REPO=${_AR_REPO}'
+      - 'BUCKET_NAME=${_BUCKET_NAME}'
     args:
       - '-c'
       - |
@@ -127,7 +128,11 @@ steps:
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",analysis,"* ]]; then
           gcloud run jobs update foldrun-analysis-job \
             --image "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" \
-            --region "$$REGION"
+            --region "$$REGION" \
+            --set-env-vars "GCS_BUCKET=$$BUCKET_NAME,GOOGLE_CLOUD_PROJECT=$$PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_ENTERPRISE=1,PIPELINE_JOB_LOCATION=$$REGION" \
+            --cpu 2 \
+            --memory 8Gi \
+            --max-retries 0
         else
           echo "Skipping analysis deploy (BUILD_TARGET=$$BUILD_TARGET)"
         fi
@@ -245,6 +250,8 @@ steps:
       - 'NETWORK_ID=${_NETWORK_ID}'
       - 'NETWORK_PROJECT_NUMBER=${_NETWORK_PROJECT_NUMBER}'
       - 'AGENT_SA_EMAIL=${_AGENT_SA_EMAIL}'
+      - 'AF3_ENDPOINT=${_AF3_ENDPOINT}'
+      - 'AF3_MODEL_ID=${_AF3_MODEL_ID}'
     args:
       - '-c'
       - |
@@ -280,6 +287,8 @@ steps:
             "FOLDRUN_VIEWER_URL=$$FOLDRUN_VIEWER_URL"
             "ANALYSIS_JOB_NAME=foldrun-analysis-job"
             "PIPELINES_SA_EMAIL=$$PIPELINES_SA_EMAIL"
+            "AF3_ENDPOINT=$${AF3_ENDPOINT:-auto}"
+            "AF3_MODEL_ID=$${AF3_MODEL_ID:-auto}"
         )
 
         ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
@@ -354,6 +363,8 @@ substitutions:
   _FOLDRUN_VIEWER_URL: ""
   _AGENT_RUNTIME_ID: ""
   _GEMINI_ENTERPRISE_APP_ID: ""
+  _AF3_ENDPOINT: "auto"
+  _AF3_MODEL_ID: "auto"
 timeout: 3600s
 options:
   logging: CLOUD_LOGGING_ONLY
