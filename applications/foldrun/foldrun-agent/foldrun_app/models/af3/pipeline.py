@@ -210,10 +210,30 @@ def predict_af3_endpoint_task(
     hb_thread.start()
 
     try:
-        # 4. Dispatch synchronous prediction to Vertex AI Endpoint
+        # 4. Dispatch prediction to Vertex AI Endpoint with GCS output_dir
+        # Using parameters.output_dir causes the AF3 container to upload all outputs
+        # (*_model.cif, *_confidences.json, *_summary_confidences.json) directly to GCS.
+        # Critically, for large proteins (>1,000 aa) where Full MSA + inference exceeds
+        # Vertex AI Online Prediction's 600s (10-minute) HTTP proxy timeout (HTTP 504),
+        # the container subprocess continues running (up to 3,590s) and uploads the
+        # completed files to output_dir. Holding the slot lock and polling output_dir on
+        # 504 prevents premature slot release and 429 collisions.
+        job_prefix_clean = job_prefix.strip("/")
+        raw_output_prefix = f"{job_prefix_clean}/af3_raw"
+        raw_output_gcs_uri = f"gs://{bucket_name}/{raw_output_prefix}"
+
+        for stale_blob in list(bucket.list_blobs(prefix=f"{raw_output_prefix}/")):
+            try:
+                stale_blob.delete()
+            except Exception:
+                pass
+
+        use_gcs_output_dir = True
         predict_parameters = {
             "run_data_pipeline": not msa_free,
             "num_diffusion_samples": int(num_diffusion_samples),
+            "output_dir": raw_output_gcs_uri,
+            "force_output_dir": True,
         }
         start_dt = datetime.now(timezone.utc)
         start_iso = start_dt.isoformat()
@@ -221,33 +241,136 @@ def predict_af3_endpoint_task(
         log.info(
             f"[AF3 KFP] Calling endpoint.predict() for '{job_name}' "
             f"(run_data_pipeline={not msa_free}, num_diffusion_samples={num_diffusion_samples}, "
-            f"timeout={timeout_seconds}s)..."
+            f"output_dir={raw_output_gcs_uri}, timeout={timeout_seconds}s)..."
         )
 
-        try:
-            prediction_response = endpoint.predict(
-                instances=[instance_payload],
-                parameters=predict_parameters,
-                timeout=timeout_seconds,
-            )
-        except Exception as first_err:
-            if "NameResolutionError" in repr(first_err) or "ConnectionError" in repr(first_err):
-                log.warning(
-                    f"[AF3 KFP] Transient DNS/ConnectionError ({first_err}); "
-                    "refreshing endpoint and retrying after 5s..."
-                )
-                time.sleep(5)
-                endpoint = aiplatform.Endpoint(
-                    endpoint_name=endpoint_id,
-                    project=project_id,
-                    location=endpoint_location,
-                )
+        def _find_gcs_raw_outputs():
+            cif_b = None
+            conf_b = None
+            sum_b = None
+            for b in bucket.list_blobs(prefix=f"{raw_output_prefix}/"):
+                bname = b.name
+                if "/seed-" in bname:
+                    continue
+                if bname.endswith("_model.cif"):
+                    cif_b = b
+                elif bname.endswith("_summary_confidences.json"):
+                    sum_b = b
+                elif bname.endswith("_confidences.json"):
+                    conf_b = b
+            return cif_b, conf_b, sum_b
+
+        prediction_response = None
+        while True:
+            try:
                 prediction_response = endpoint.predict(
                     instances=[instance_payload],
                     parameters=predict_parameters,
                     timeout=timeout_seconds,
                 )
-            else:
+                break
+            except Exception as pred_err:
+                err_repr = repr(pred_err) + " " + str(pred_err)
+                # Case A: Transient DNS or connection reset
+                if "NameResolutionError" in err_repr or "ConnectionError" in err_repr:
+                    log.warning(
+                        f"[AF3 KFP] Transient DNS/ConnectionError ({pred_err}); "
+                        "refreshing endpoint and retrying after 5s..."
+                    )
+                    time.sleep(5)
+                    endpoint = aiplatform.Endpoint(
+                        endpoint_name=endpoint_id,
+                        project=project_id,
+                        location=endpoint_location,
+                    )
+                    continue
+
+                # Case B: Container still busy finishing a prior request (HTTP 429)
+                if "Status code:429" in err_repr or ("429" in err_repr and "already working on a prediction" in err_repr):
+                    if time.time() - t0 > timeout_seconds:
+                        raise
+                    log.warning(
+                        "[AF3 KFP] Endpoint container reported HTTP 429 (still finishing prior prediction); "
+                        "holding slot and retrying in 20s..."
+                    )
+                    time.sleep(20)
+                    continue
+
+                # Case C: Endpoint tenant SA missing GCS permission on output_dir -> auto-grant or fallback
+                if use_gcs_output_dir and (
+                    "does not have storage.objects" in err_repr
+                    or "does not have write access" in err_repr
+                ):
+                    import re as _re
+
+                    sa_match = _re.search(
+                        r"([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.iam\.gserviceaccount\.com)",
+                        err_repr,
+                    )
+                    granted = False
+                    if sa_match:
+                        tenant_sa = sa_match.group(1)
+                        try:
+                            policy = bucket.get_iam_policy(requested_policy_version=3)
+                            policy.bindings.append(
+                                {
+                                    "role": "roles/storage.objectAdmin",
+                                    "members": {f"serviceAccount:{tenant_sa}"},
+                                }
+                            )
+                            bucket.set_iam_policy(policy)
+                            log.info(
+                                f"[AF3 KFP] Granted roles/storage.objectAdmin on gs://{bucket_name} to {tenant_sa}; retrying..."
+                            )
+                            granted = True
+                            time.sleep(5)
+                        except Exception as iam_exc:
+                            log.warning(f"[AF3 KFP] Could not auto-grant GCS IAM to {tenant_sa}: {iam_exc}")
+                    if not granted:
+                        log.warning(
+                            "[AF3 KFP] Falling back to inline response mode (without output_dir)."
+                        )
+                        use_gcs_output_dir = False
+                        predict_parameters.pop("output_dir", None)
+                        predict_parameters.pop("force_output_dir", None)
+                    continue
+
+                # Case D: Vertex AI HTTP proxy 600s gateway timeout (HTTP 504 / DeadlineExceeded)
+                # while container continues executing /run_alphafold and uploading to output_dir
+                if use_gcs_output_dir and (
+                    "Status code:504" in err_repr
+                    or "504" in err_repr
+                    or "DeadlineExceeded" in err_repr
+                    or "timed out" in err_repr.lower()
+                ):
+                    log.info(
+                        f"[AF3 KFP] Vertex AI HTTP front-end reached 600s gateway timeout after "
+                        f"{time.time() - t0:.1f}s while H100 container continues running '{job_name}'. "
+                        f"Holding replica slot and polling {raw_output_gcs_uri} for completion..."
+                    )
+                    poll_deadline = t0 + max(timeout_seconds, 3600)
+                    last_poll_log = 0.0
+                    while time.time() < poll_deadline:
+                        cif_b, conf_b, sum_b = _find_gcs_raw_outputs()
+                        if cif_b is not None and sum_b is not None and conf_b is not None:
+                            log.info(
+                                f"[AF3 KFP] Detected completed AF3 outputs in {raw_output_gcs_uri} "
+                                f"after {time.time() - t0:.1f}s total runtime!"
+                            )
+                            break
+                        if time.time() - last_poll_log >= 60.0:
+                            log.info(
+                                f"[AF3 KFP] Still waiting for H100 container to finish '{job_name}' "
+                                f"and upload to {raw_output_gcs_uri} ({ (time.time() - t0) / 60:.1f}m elapsed)..."
+                            )
+                            last_poll_log = time.time()
+                        time.sleep(15)
+                    else:
+                        raise RuntimeError(
+                            f"Timed out waiting for AF3 outputs in {raw_output_gcs_uri} after {time.time() - t0:.1f}s."
+                        ) from pred_err
+                    break
+
                 raise
 
         elapsed_sec = time.time() - t0
@@ -301,24 +424,31 @@ def predict_af3_endpoint_task(
 
         execution_log_text = "\n".join(execution_log_lines) + "\n"
 
-        # 6. Extract predictions and validate structure coordinates
-        predictions = getattr(prediction_response, "predictions", [])
-        if not predictions:
-            raise RuntimeError(
-                f"Agent Platform Endpoint returned empty prediction response for '{job_name}'."
+        # 6. Extract predictions from GCS output_dir (or inline prediction_response fallback)
+        cif_b, conf_b, sum_b = _find_gcs_raw_outputs() if use_gcs_output_dir else (None, None, None)
+        if cif_b is not None and sum_b is not None:
+            cif_content = cif_b.download_as_text()
+            summary_confidences = dict(json.loads(sum_b.download_as_text()) or {})
+            conf_data = json.loads(conf_b.download_as_text()) if conf_b is not None else {}
+            atom_plddts = conf_data.get("atom_plddts") or conf_data.get("plddt")
+            pae_matrix = conf_data.get("pae")
+        else:
+            predictions = getattr(prediction_response, "predictions", []) if prediction_response else []
+            if not predictions:
+                raise RuntimeError(
+                    f"Agent Platform Endpoint returned empty prediction response for '{job_name}'."
+                )
+            result_item = predictions[0] if isinstance(predictions, list) else predictions
+            cif_content = result_item.get("structure_cif") or result_item.get("cif", "")
+            if not cif_content or not cif_content.strip():
+                raise RuntimeError(
+                    f"Agent Platform Endpoint returned empty CIF coordinates for '{job_name}'."
+                )
+            summary_confidences = dict(
+                result_item.get("summary") or result_item.get("summary_confidences") or {}
             )
-        result_item = predictions[0] if isinstance(predictions, list) else predictions
-        cif_content = result_item.get("structure_cif") or result_item.get("cif", "")
-        if not cif_content or not cif_content.strip():
-            raise RuntimeError(
-                f"Agent Platform Endpoint returned empty CIF coordinates for '{job_name}'."
-            )
-
-        summary_confidences = dict(
-            result_item.get("summary") or result_item.get("summary_confidences") or {}
-        )
-        atom_plddts = result_item.get("plddt")
-        pae_matrix = result_item.get("pae")
+            atom_plddts = result_item.get("plddt")
+            pae_matrix = result_item.get("pae")
 
         # Compute ranking score
         ranking_score = summary_confidences.get("ranking_score")
