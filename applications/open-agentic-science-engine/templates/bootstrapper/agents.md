@@ -50,16 +50,7 @@ Skip this step and proceed to Step 1.
 **If `/workspace/tools/install.sh` does not exist:** clone the repository and make
 `tools/` available.
 
-1. Verify GitHub authentication is available:
-
-   ```bash
-   gh auth status
-   ```
-
-   If this fails, check whether `GITHUB_TOKEN` is set. If neither is available, STOP
-   and report — the clone requires authentication and none is configured.
-
-2. Clone the repository to the shared scratchpad volume:
+1. Clone the public repository to the shared scratchpad volume:
 
    **If `/scion-volumes/scratchpad/LifeSciences` already exists:** the clone from
    a previous container is still present on the shared volume. Skip the clone and
@@ -71,7 +62,7 @@ Skip this step and proceed to Step 1.
    **Otherwise:**
 
    ```bash
-   gh repo clone scion-frontiers/LifeSciences /scion-volumes/scratchpad/LifeSciences
+   git clone https://github.com/GoogleCloudPlatform/LifeSciences.git /scion-volumes/scratchpad/LifeSciences
    ```
 
    Clone to the scratchpad volume, not into `/workspace` — this ensures the clone
@@ -82,7 +73,7 @@ Skip this step and proceed to Step 1.
    If the clone fails, STOP and report the error. Nothing downstream can proceed
    without the tools directory.
 
-3. Symlink the tools directory into the workspace:
+2. Symlink the tools directory into the workspace:
 
    ```bash
    ln -s /scion-volumes/scratchpad/LifeSciences/applications/open-agentic-science-engine/tools /workspace/tools
