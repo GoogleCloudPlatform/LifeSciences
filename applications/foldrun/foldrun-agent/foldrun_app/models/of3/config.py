@@ -22,6 +22,12 @@ from foldrun_app.core.config import CoreConfig
 logger = logging.getLogger(__name__)
 
 
+# Checkpoints that load under openfold3>=0.5 with only a warning (missing
+# model.version_tensor) and then produce incorrect predictions. Refuse them.
+LEGACY_OF3_CHECKPOINTS = ("of3-p2-155k.pt", "of3-p2-145k.pt", "of3_ft3_v1.pt")
+DEFAULT_OF3_CHECKPOINT = "of3-ob-2025-06-30-174k.pt"
+
+
 class OF3Config(CoreConfig):
     """OpenFold3-specific configuration class extending CoreConfig."""
 
@@ -53,7 +59,12 @@ class OF3Config(CoreConfig):
         OF3's checkpoint loader treats directories as DeepSpeed checkpoints
         requiring a 'latest' pointer file.
         """
-        return os.getenv("OF3_PARAMS_PATH", "of3/params/of3-p2-155k.pt")
+        return os.getenv("OF3_PARAMS_PATH", f"of3/params/{DEFAULT_OF3_CHECKPOINT}")
+
+    @property
+    def uses_legacy_checkpoint(self) -> bool:
+        """True if params_path points to a deprecated pre-OpenBind checkpoint."""
+        return os.path.basename(self.params_path) in LEGACY_OF3_CHECKPOINTS
 
     @property
     def ccd_path(self) -> str:

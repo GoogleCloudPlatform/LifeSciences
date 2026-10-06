@@ -73,6 +73,15 @@ def predict_of3(
     t0 = time.time()
 
     params_path = nfs_params_path
+    ckpt_basename = os.path.basename(params_path)
+    legacy_ckpts = ("of3-p2-155k.pt", "of3-p2-145k.pt", "of3_ft3_v1.pt")
+    if ckpt_basename in legacy_ckpts:
+        raise ValueError(
+            f"Refusing to run openfold3>=0.5 with deprecated checkpoint "
+            f"'{ckpt_basename}' ({params_path}): it loads with only a warning "
+            f"and produces incorrect predictions. Use the OpenBind v0 checkpoint "
+            f"(of3-ob-2025-06-30-174k.pt)."
+        )
 
     # Output paths
     output_dir = os.path.dirname(predicted_structure.path)
@@ -93,31 +102,40 @@ def predict_of3(
         json.dump(query_data, f, indent=2)
     logging.info(f"Patched query JSON seeds to [{seed_value}]")
 
-    # Write runner YAML if using templates with local NFS CIF structures.
-    # This configures OF3's TemplatePreprocessorSettings to look in pdb_mmcif
-    # instead of downloading from RCSB, keeping prediction VPC-isolated.
-    runner_yaml_path = None
-    if use_templates and nfs_mmcif_dir:
-        import yaml
+    # Write runner YAML.
+    # - Always disable per-seed MSA output copies (default True since OF3 0.4.5),
+    #   because output_dir is a GCS-backed KFP artifact directory and MSAs are
+    #   already cached on NFS by the MSA pipeline step.
+    # - When using templates with local NFS CIF structures, configure OF3's
+    #   TemplatePreprocessorSettings to look in pdb_mmcif instead of downloading
+    #   from RCSB, keeping prediction VPC-isolated.
+    import yaml
 
-        runner_config = {
-            "template_preprocessor_settings": {
-                "structure_directory": nfs_mmcif_dir,
-                "fetch_missing_structures": False,
-                "structure_file_format": "cif",
-            }
+    runner_config: dict = {
+        "msa_computation_settings": {
+            "save_openfold_outputs": False,
+            "save_colabfold_outputs": False,
+            "save_mappings": False,
         }
-        runner_yaml_path = os.path.join(output_dir, "runner.yaml")
-        with open(runner_yaml_path, "w") as f:
-            yaml.dump(runner_config, f, default_flow_style=False)
-        logging.info(
-            f"Runner YAML written: {runner_yaml_path} (structure_directory={nfs_mmcif_dir})"
-        )
+    }
+    if use_templates and nfs_mmcif_dir:
+        runner_config["template_preprocessor_settings"] = {
+            "structure_directory": nfs_mmcif_dir,
+            "fetch_missing_structures": False,
+            "structure_file_format": "cif",
+        }
     elif use_templates:
         logging.warning(
             "use_templates=True but nfs_mmcif_dir not provided; "
             "OF3 will attempt to download template structures from RCSB"
         )
+
+    runner_yaml_path = os.path.join(output_dir, "runner.yaml")
+    with open(runner_yaml_path, "w") as f:
+        yaml.dump(runner_config, f, default_flow_style=False)
+    logging.info(
+        f"Runner YAML written: {runner_yaml_path} (structure_directory={nfs_mmcif_dir or 'none'})"
+    )
 
     # Run OpenFold3 prediction via run_openfold CLI entrypoint
     cmd = [
@@ -130,9 +148,8 @@ def predict_of3(
         f"--num_diffusion_samples={num_diffusion_samples}",
         "--use_msa_server=False",
         f"--use_templates={use_templates!s}",
+        f"--runner_yaml={runner_yaml_path}",
     ]
-    if runner_yaml_path:
-        cmd.append(f"--runner_yaml={runner_yaml_path}")
 
     logging.info(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
@@ -196,6 +213,7 @@ def predict_of3(
     predicted_structure.metadata["seed_value"] = seed_value
     predicted_structure.metadata["num_diffusion_samples"] = num_diffusion_samples
     predicted_structure.metadata["use_templates"] = use_templates
+    predicted_structure.metadata["checkpoint"] = ckpt_basename
 
     if best_conf and os.path.exists(confidence_json.path):
         with open(confidence_json.path) as f:
@@ -203,6 +221,7 @@ def predict_of3(
         confidence_json.metadata["category"] = "confidence"
         confidence_json.metadata["is_monomer"] = _is_monomer
         confidence_json.metadata["use_templates"] = use_templates
+        confidence_json.metadata["checkpoint"] = ckpt_basename
         # Store both scores so downstream tools can display the right one
         if "sample_ranking_score" in conf_data:
             confidence_json.metadata["sample_ranking_score"] = conf_data["sample_ranking_score"]

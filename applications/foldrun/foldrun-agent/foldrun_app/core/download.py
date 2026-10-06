@@ -108,16 +108,18 @@ def get_databases_for_models(
     return deduped
 
 
-def check_gcs_exists(gcs_bucket: str, nfs_path: str) -> bool:
+def check_gcs_exists(gcs_bucket: str, nfs_path: str, expected_file: str | None = None) -> bool:
     """Check if a database already exists in GCS backup.
 
-    Returns True if the GCS prefix has at least one object (indicating
-    a previous successful download + sync).
+    Returns True if the GCS prefix (or specific expected_file under nfs_path)
+    has at least one object (indicating a previous successful download + sync).
     """
     try:
         client = storage.Client()
         bucket = client.bucket(gcs_bucket)
         prefix = nfs_path.rstrip("/") + "/"
+        if expected_file:
+            prefix = prefix + expected_file.lstrip("/")
         blobs = list(bucket.list_blobs(prefix=prefix, max_results=1))
         return len(blobs) > 0
     except Exception as e:
@@ -143,8 +145,14 @@ def check_existing(
         if db_name not in databases_config:
             result[db_name] = False
             continue
-        nfs_path = databases_config[db_name]["nfs_path"]
-        result[db_name] = check_gcs_exists(gcs_bucket, nfs_path)
+        db_cfg = databases_config[db_name]
+        nfs_path = db_cfg["nfs_path"]
+        expected_file = db_cfg.get("expected_file")
+        result[db_name] = (
+            check_gcs_exists(gcs_bucket, nfs_path, expected_file)
+            if expected_file
+            else check_gcs_exists(gcs_bucket, nfs_path)
+        )
     return result
 
 

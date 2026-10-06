@@ -272,11 +272,12 @@ databases:
   # ===========================================================================
   of3_params:
     models: [of3]
-    display_name: OpenFold3 Parameters
+    display_name: OpenFold3 Parameters (OpenBind v0, requires openfold3>=0.5)
     nfs_path: of3/params
+    expected_file: of3-ob-2025-06-30-174k.pt
     script: |
       apt-get install -y awscli
-      aws s3 cp --no-sign-request s3://openfold3-data/openfold3-parameters/of3-p2-155k.pt {dest}/of3-p2-155k.pt
+      aws s3 cp --no-sign-request s3://openfold3-data/openfold3-parameters/of3-ob-2025-06-30-174k.pt {dest}/of3-ob-2025-06-30-174k.pt
 
   of3_ccd:
     models: [of3]

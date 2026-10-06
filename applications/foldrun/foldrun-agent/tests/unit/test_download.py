@@ -93,7 +93,27 @@ class TestDatabasesYaml:
 
         of3_dbs = {name for name, db in manifest["databases"].items() if "of3" in _get_models(db)}
         expected = {"of3_params", "of3_ccd", "uniref90", "mgnify"}
-        assert expected.issubset(of3_dbs), f"Missing OF3 databases: {expected - of3_dbs}"
+        assert expected.issubset(af2_dbs := of3_dbs), f"Missing OF3 databases: {expected - af2_dbs}"
+
+    def test_of3_params_checks_expected_file_in_gcs(self, manifest):
+        """of3_params specifies expected_file so legacy weights in of3/params/ do not falsely satisfy check_existing."""
+        from unittest.mock import MagicMock, patch
+
+        from foldrun_app.core.download import check_existing
+        from foldrun_app.models.of3.config import DEFAULT_OF3_CHECKPOINT
+
+        assert manifest["databases"]["of3_params"].get("expected_file") == DEFAULT_OF3_CHECKPOINT
+
+        with patch("foldrun_app.core.download.storage.Client") as mock_client:
+            mock_bucket = MagicMock()
+            mock_client.return_value.bucket.return_value = mock_bucket
+            mock_bucket.list_blobs.return_value = []
+
+            res = check_existing(["of3_params"], "test-gdbs", manifest)
+            assert res == {"of3_params": False}
+            mock_bucket.list_blobs.assert_called_once_with(
+                prefix=f"of3/params/{DEFAULT_OF3_CHECKPOINT}", max_results=1
+            )
 
 
 # ------------------------------------------------------------------ #

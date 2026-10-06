@@ -45,7 +45,8 @@ usage() {
     echo "                         Combine with commas: --build-target of3,viewer"
     echo "  --db DATABASE          With --steps data or convert: target a single database."
     echo "                   data options: bfd, small_bfd, mgnify, pdb70, pdb_mmcif,"
-    echo "                                pdb_seqres, uniref30, uniref90, uniprot, alphafold_params"
+    echo "                                pdb_seqres, uniref30, uniref90, uniprot,"
+    echo "                                alphafold_params, of3_params, boltz2_params"
     echo "                   convert options: uniref90, mgnify, small_bfd"
     echo "  --force        With --steps data: re-download even if databases exist in GCS."
     echo "  --clean        Remove generated build artifacts (.egg-info, .venv, etc.)"
@@ -57,7 +58,7 @@ usage() {
     echo "  AF2_VERSION        AlphaFold2 git commit to build (default: pinned commit)"
     echo "  FOLDRUN_VIEWER_URL Custom Viewer URL (defaults to Terraform output if available)"
     echo "  ENABLE_VIEWER_IAP  Enable IAP for the viewer: true (default) or false"
-    echo "  OF3_VERSION        OpenFold3 Docker image tag to use (default: 0.4.0)"
+    echo "  OF3_VERSION        OpenFold3 image tag[@digest] (default: 0.5-pixi pinned; requires OpenBind weights)"
     echo "  BOLTZ_VERSION      Boltz-2 pip package version to install (default: 2.2.1)"
     echo "  GEMINI_ENTERPRISE_APP_ID  Gemini Enterprise App ID (optional)"
     echo ""
@@ -176,7 +177,7 @@ fi
 REGION=${POSITIONAL_ARGS[1]:-"us-central1"}
 DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
 AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
-OF3_VERSION=${OF3_VERSION:-"0.4.0"}
+OF3_VERSION=${OF3_VERSION:-"0.5-pixi@sha256:8764f7320ff12c52e9b9ec6bb0047f71df0ab197d401d04a78a51f48e9913335"}
 BOLTZ_VERSION=${BOLTZ_VERSION:-"2.2.1"}
 ENABLE_VIEWER_IAP=${ENABLE_VIEWER_IAP:-"true"}
 GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID:-""}

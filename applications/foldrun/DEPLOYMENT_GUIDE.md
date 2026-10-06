@@ -377,6 +377,7 @@ This triggers the `register-agent` step in the Cloud Build pipeline, which runs 
 | Cloud Build timeout | OF3 components image is large (~15 min first build) | Re-run `./deploy-all.sh --steps build`; subsequent builds use Docker layer caching |
 | Terraform backend error | State bucket mismatch | Script runs `terraform init -reconfigure` automatically |
 | Predictions fail after deploy | Databases still downloading | Check `gcloud batch jobs list`; wait for downloads to complete |
+| OF3 error: `deprecated pre-OpenBind checkpoint` or missing `of3-ob-2025-06-30-174k.pt` | Upgrading from OF3 0.4 (`of3-p2-155k.pt`) to 0.5+ OpenBind | Download OpenBind v0 weights: `./deploy-all.sh YOUR_PROJECT_ID --steps data --db of3_params --force` and unset any custom `OF3_PARAMS_PATH` |
 | Viewer shows 403 | IAP not configured for your domain | Set `iap_access_domain` in Terraform and re-apply |
 | A2A endpoint returns 403 | Caller lacks `aiplatform.user` role or invalid token | Ensure caller has `roles/aiplatform.user` on the project, and is passing a GCP Access Token (`gcloud auth print-access-token`), NOT an Identity Token |
 | A2A endpoint returns 404 | Agent Runtime URL or app name is incorrect | Verify that the path suffix matches your configured app name (default: `/api/a2a/foldrun_app`) and the reasoning engine ID is correct |

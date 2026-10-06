@@ -347,7 +347,7 @@ substitutions:
   _AGENT_SA_EMAIL: required_sa_email
   _PIPELINES_SA_EMAIL: required_pipelines_sa_email
   _AF2_VERSION: "42719e135a62438aa651d2bc1d143626083c3703"
-  _OF3_VERSION: "0.4.0"
+  _OF3_VERSION: "0.5-pixi@sha256:8764f7320ff12c52e9b9ec6bb0047f71df0ab197d401d04a78a51f48e9913335"
   _BOLTZ_VERSION: "2.2.1"
   _BUILD_TARGET: "all"
   _MODEL_ENDPOINT_LOCATION: "global"

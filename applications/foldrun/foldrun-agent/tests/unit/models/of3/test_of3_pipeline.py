@@ -235,9 +235,43 @@ class TestOF3PredictTemplateArgs:
         assert "False" in source
 
     def test_predict_passes_runner_yaml_to_run_openfold(self):
-        """Predict passes --runner_yaml flag to run_openfold when templates enabled."""
+        """Predict passes --runner_yaml flag to run_openfold."""
         source = self._read_predict_source()
         assert "--runner_yaml=" in source
+
+    def test_predict_disables_msa_output_copies_in_runner_yaml(self):
+        """Runner YAML disables per-seed MSA output writes to GCS artifact dir."""
+        source = self._read_predict_source()
+        assert "msa_computation_settings" in source
+        assert "save_openfold_outputs" in source
+        assert "save_colabfold_outputs" in source
+        assert "save_mappings" in source
+
+    def test_predict_rejects_legacy_checkpoints(self, tmp_path, monkeypatch):
+        """predict_of3 raises ValueError when given a deprecated pre-OpenBind checkpoint."""
+        import sys
+        from types import SimpleNamespace
+
+        import pytest
+
+        from foldrun_app.models.of3.pipeline import config as of3_config
+
+        monkeypatch.setitem(sys.modules, "config", of3_config)
+        from foldrun_app.models.of3.pipeline.components.predict import predict_of3
+
+        with pytest.raises(ValueError, match="deprecated checkpoint"):
+            predict_of3.python_func(
+                updated_query_json=SimpleNamespace(path=str(tmp_path / "q.json")),
+                seed_value=42,
+                num_diffusion_samples=1,
+                nfs_params_path="/mnt/nfs/foldrun/of3/params/of3-p2-155k.pt",
+                predicted_structure=SimpleNamespace(
+                    path=str(tmp_path / "p"), uri="gs://b/p", metadata={}
+                ),
+                confidence_json=SimpleNamespace(
+                    path=str(tmp_path / "c"), uri="gs://b/c", metadata={}
+                ),
+            )
 
     def test_predict_selects_matching_cif_for_winning_confidence_sample(
         self, tmp_path, monkeypatch
@@ -247,6 +281,8 @@ class TestOF3PredictTemplateArgs:
         import subprocess
         import sys
         from types import SimpleNamespace
+
+        import yaml
 
         from foldrun_app.models.of3.pipeline import config as of3_config
 
@@ -299,7 +335,7 @@ class TestOF3PredictTemplateArgs:
             updated_query_json=updated_query_json,
             seed_value=42,
             num_diffusion_samples=2,
-            nfs_params_path="/nfs/params",
+            nfs_params_path="/nfs/params/of3-ob-2025-06-30-174k.pt",
             predicted_structure=predicted_structure,
             confidence_json=confidence_json,
             use_templates=False,
@@ -307,9 +343,13 @@ class TestOF3PredictTemplateArgs:
 
         selected_conf = json.loads(confidence_json_path.read_text())
         selected_cif = predicted_structure_path.read_text()
+        runner_cfg = yaml.safe_load((output_dir / "runner.yaml").read_text())
 
         assert selected_conf["ptm"] == 0.92
         assert selected_cif == "SAMPLE_1_CIF_CONTENT"
+        assert runner_cfg["msa_computation_settings"]["save_openfold_outputs"] is False
+        assert predicted_structure.metadata["checkpoint"] == "of3-ob-2025-06-30-174k.pt"
+        assert confidence_json.metadata["checkpoint"] == "of3-ob-2025-06-30-174k.pt"
 
 
 class TestOF3MSAPipelineCacheBehavior:

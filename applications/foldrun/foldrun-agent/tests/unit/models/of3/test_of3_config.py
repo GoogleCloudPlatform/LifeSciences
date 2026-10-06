@@ -69,10 +69,28 @@ class TestOF3Config:
 
     def test_config_default_params_path(self, monkeypatch):
         monkeypatch.delenv("OF3_PARAMS_PATH", raising=False)
+        from foldrun_app.models.of3.config import DEFAULT_OF3_CHECKPOINT, OF3Config
+
+        config = OF3Config()
+        assert config.params_path == f"of3/params/{DEFAULT_OF3_CHECKPOINT}"
+        assert config.params_path == "of3/params/of3-ob-2025-06-30-174k.pt"
+        assert config.uses_legacy_checkpoint is False
+
+    @pytest.mark.parametrize(
+        "params_path,expected",
+        [
+            ("of3/params/of3-ob-2025-06-30-174k.pt", False),
+            ("of3/params/of3-p2-155k.pt", True),
+            ("of3/params/of3-p2-145k.pt", True),
+            ("of3/params/of3_ft3_v1.pt", True),
+        ],
+    )
+    def test_uses_legacy_checkpoint(self, monkeypatch, params_path, expected):
+        monkeypatch.setenv("OF3_PARAMS_PATH", params_path)
         from foldrun_app.models.of3.config import OF3Config
 
         config = OF3Config()
-        assert config.params_path == "of3/params/of3-p2-155k.pt"
+        assert config.uses_legacy_checkpoint is expected
 
     def test_config_to_dict(self):
         from foldrun_app.models.of3.config import OF3Config
@@ -92,3 +110,29 @@ class TestOF3Config:
         }
         assert set(d.keys()) == expected_keys
         assert d["base_image"] == "test-of3-image:stable"
+
+    def test_dockerfile_sets_nvidia_runtime_and_ld_library_path(self):
+        """Ensure 0.5-pixi Dockerfile defines NVIDIA container runtime env vars and LD_LIBRARY_PATH."""
+        dockerfile_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "openfold3-components",
+            "Dockerfile",
+        )
+        with open(dockerfile_path) as f:
+            content = f.read()
+
+        assert "0.5-pixi@sha256:" in content
+        assert "NVIDIA_VISIBLE_DEVICES=all" in content
+        assert "NVIDIA_DRIVER_CAPABILITIES=compute,utility" in content
+        assert (
+            "LD_LIBRARY_PATH=${OF3_ENV_PREFIX}/lib:/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
+            in content
+        )
+        assert "/etc/ld.so.conf.d/nvidia.conf" in content
+        assert "libtorch_cuda.so" in content

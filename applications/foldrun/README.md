@@ -233,8 +233,8 @@ The agent is automatically redeployed whenever any non-analysis target is includ
 
 **Pinned model versions** — override without editing any files:
 ```bash
-# Upgrade OpenFold3 to a newer release
-OF3_VERSION=0.4.0 ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target of3
+# Override OpenFold3 image tag[@digest] (0.5+ requires OpenBind v0 weights via `--steps data --db of3_params`)
+OF3_VERSION=0.5-pixi ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target of3
 
 # Pin AlphaFold2 to a specific git commit
 AF2_VERSION=abc123def ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target af2
@@ -492,7 +492,7 @@ uv run python scripts/setup_data.py --list
   alphafold2/params/     # AF2 only
   small_bfd/             # AF2 only
   pdb70/                 # AF2 only
-  of3/params/            # OF3 only (~2GB weights)
+  of3/params/            # OF3 only (~2GB OpenBind v0 weights: of3-ob-2025-06-30-174k.pt)
   of3/ccd/               # OF3 only (~500MB Chemical Component Dictionary)
   of3_msas/              # OF3 runtime — per-job MSA + template alignment files (auto-created)
   rfam/                  # OF3 only (RNA MSA via nhmmer)

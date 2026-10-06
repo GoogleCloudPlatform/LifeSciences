@@ -54,6 +54,20 @@ class OF3SubmitPredictionTool(OF3Tool):
         Returns:
             Job submission details.
         """
+        # Refuse legacy pre-OpenBind checkpoints: openfold3>=0.5 loads them with
+        # only a warning and then produces incorrect predictions.
+        if self.config.uses_legacy_checkpoint:
+            return {
+                "status": "error",
+                "message": (
+                    f"OF3_PARAMS_PATH ({self.config.params_path}) points to a deprecated "
+                    f"pre-OpenBind checkpoint, which produces incorrect predictions with "
+                    f"openfold3>=0.5. Download the OpenBind v0 weights with "
+                    f"`./deploy-all.sh {self.config.project_id} --steps data --db of3_params --force` "
+                    f"and unset/update OF3_PARAMS_PATH."
+                ),
+            }
+
         # Pre-flight check for OF3 parameters in GCS
         bucket = self.storage_client.bucket(self.config.databases_bucket_name)
         if not bucket.blob(self.config.params_path).exists():

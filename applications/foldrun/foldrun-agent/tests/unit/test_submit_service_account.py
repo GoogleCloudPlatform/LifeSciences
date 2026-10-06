@@ -44,6 +44,27 @@ class TestOF3SubmitServiceAccount:
         assert "self.config.pipelines_sa_email" in source
         assert 'os.environ.get("PIPELINES_SA_EMAIL")' not in source
 
+    def test_rejects_legacy_checkpoint(self, monkeypatch):
+        """OF3 submit refuses deprecated preview-2 checkpoints before hitting GCS or Vertex."""
+        from unittest.mock import MagicMock, patch
+
+        from foldrun_app.models.of3.config import OF3Config
+        from foldrun_app.models.of3.tools.submit_prediction import OF3SubmitPredictionTool
+
+        monkeypatch.setenv("OPENFOLD3_COMPONENTS_IMAGE", "test-of3:latest")
+        monkeypatch.setenv("OF3_PARAMS_PATH", "of3/params/of3-p2-155k.pt")
+        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
+            tool = OF3SubmitPredictionTool(
+                tool_config={"name": "submit_of3_prediction", "description": "test"},
+                config=OF3Config(),
+            )
+            tool.storage_client = MagicMock()
+            result = tool.run({"input": ">seq\nACDEFGHIK\n"})
+
+        assert result["status"] == "error"
+        assert "deprecated" in result["message"]
+        tool.storage_client.bucket.assert_not_called()
+
 
 class TestBoltz2SubmitServiceAccount:
     def test_uses_config_pipelines_sa_email(self):
