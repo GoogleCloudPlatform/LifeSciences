@@ -49,6 +49,9 @@ points include:
 - **Rate limiting**: gnomAD throttles aggressively (HTTP 200 with errors
   array). NCBI E-utilities allow 3 req/s without API key. Open Targets
   and GTEx pace politely. Do not run parallel fetches across containers.
+- **GWAS Catalog gene set**: queries use REST API v2 with
+  `extended_geneset=true`, intentionally preserving the broader Ensembl
+  and RefSeq gene mapping used by API v1 rather than the narrower v2 default.
 - **gnomAD constraint availability**: gnomAD computes constraint only on
   MANE Select transcripts passing outlier filters. No constraint record
   is a property of the gene, not a fetch failure.
