@@ -621,3 +621,96 @@ class TestAF3Tools:
         assert result["status"] == "deploying"
         assert "Skipping duplicate deployment" in result["message"]
         mock_endpoint.deploy.assert_not_called()
+
+    def test_submit_prediction_kfp_async(self, mock_af3_env):
+        config = AF3Config()
+        tool = AF3SubmitPredictionTool(
+            tool_config={"name": "af3_submit_prediction"},
+            config=config,
+        )
+        mock_endpoint = MagicMock()
+        mock_endpoint.resource_name = (
+            "projects/test-project/locations/us-central1/endpoints/mg-endpoint-12345"
+        )
+        mock_endpoint.deployed_models = [MagicMock(id="dep-1")]
+
+        mock_pjob = MagicMock()
+        mock_pjob.resource_name = (
+            "projects/test-project/locations/us-central1/pipelineJobs/"
+            "alphafold3-inference-pipeline-20261006070000"
+        )
+        mock_pjob.state.name = "PIPELINE_STATE_PENDING"
+
+        with (
+            patch.object(tool, "get_endpoint", return_value=mock_endpoint),
+            patch("google.cloud.aiplatform.PipelineJob", return_value=mock_pjob) as mock_pjob_cls,
+        ):
+            result = tool.run(
+                {
+                    "input": "MKTIIALSYIFCLVFA",
+                    "job_name": "kras_af3_msa",
+                    "msa_free": False,
+                    "sync": False,
+                }
+            )
+
+        assert result["status"] == "submitted"
+        assert result["query_name"] == "kras_af3_msa"
+        assert result["job_name"] == "kras_af3_msa"
+        assert result["job_id"].startswith("alphafold3-inference-pipeline-")
+        assert result["mode"] == "standard"
+        assert "/vertex-ai/pipelines/locations/us-central1/runs/" in result["console_url"]
+        assert f"viewer.example.com/job/{result['job_id']}" in result["viewer_url"]
+        mock_pjob_cls.assert_called_once()
+        mock_pjob.submit.assert_called_once()
+
+    def test_submit_batch_predictions(self, mock_af3_env):
+        from foldrun_app.models.af3.tools.submit_batch import AF3BatchSubmitTool
+
+        config = AF3Config()
+        batch_tool = AF3BatchSubmitTool(
+            tool_config={"name": "af3_submit_batch"},
+            config=config,
+        )
+        mock_endpoint = MagicMock()
+        mock_endpoint.resource_name = (
+            "projects/test-project/locations/us-central1/endpoints/mg-endpoint-12345"
+        )
+        mock_endpoint.deployed_models = [MagicMock(id="dep-1")]
+
+        mock_pjob = MagicMock()
+        mock_pjob.state.name = "PIPELINE_STATE_PENDING"
+
+        with (
+            patch(
+                "foldrun_app.models.af3.tools.submit_prediction.AF3SubmitPredictionTool.get_endpoint",
+                return_value=mock_endpoint,
+            ),
+            patch("google.cloud.aiplatform.PipelineJob", return_value=mock_pjob),
+        ):
+            res = batch_tool.run(
+                {
+                    "batch_config": [
+                        {
+                            "input": "MKTIIALSYIFCLVFA",
+                            "job_name": "btk_af3_msa",
+                            "msa_free": False,
+                        },
+                        {
+                            "input": "ACDEFGHIKLMNPQRSTVWY",
+                            "job_name": "jak2_af3_msa",
+                            "msa_free": False,
+                        },
+                    ]
+                }
+            )
+
+        assert res["status"] == "submitted"
+        assert res["total"] == 2
+        assert res["succeeded"] == 2
+        assert res["failed"] == 0
+        # Ensure unique KFP job IDs even when submitted in the same second
+        job_ids = [j["job_id"] for j in res["submitted_jobs"]]
+        assert len(set(job_ids)) == 2
+
+

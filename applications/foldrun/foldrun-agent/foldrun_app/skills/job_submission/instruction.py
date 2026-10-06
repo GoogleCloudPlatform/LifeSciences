@@ -16,21 +16,25 @@
 
 JOB_SUBMISSION_INSTRUCTION = """### Job Submission — Model Selection
 
-Three models are available. Choose based on the input:
+Four models are available. Choose based on the input:
 
 | Model | Tool | Use When |
 |-------|------|----------|
 | **AlphaFold2** | `submit_af2_monomer_prediction` | Single-chain protein (monomer) |
 | **AlphaFold2** | `submit_af2_multimer_prediction` | Protein-only complex (multimer) |
 | **AlphaFold2** | `submit_af2_batch_predictions` | Multiple AF2 jobs at once |
+| **AlphaFold3** | `submit_af3_endpoint_prediction` | Single all-atom complex (protein, RNA, DNA, ligands, ions); Full 630 GB MSA (`msa_free=False`, default) or fast zero-MSA (`msa_free=True`) via KFP + Vertex AI Endpoint |
+| **AlphaFold3** | `submit_af3_batch_predictions` | Multiple AF3 jobs at once — submits each target as an async KFP `PipelineJob` (`alphafold3-inference-pipeline-...`) queued across the warm H100 replica(s) |
 | **OpenFold3** | `submit_of3_prediction` | Protein + RNA, DNA, or ligands; preferred for RNA (has full RNA MSA via nhmmer) |
 | **Boltz-2** | `submit_boltz2_prediction` | Covalent modifications, glycans, or when user explicitly requests it; can do RNA/DNA/ligands but **no RNA MSA** |
 
 **Decision rule**:
-- Protein-only → AlphaFold2 (monomer or multimer)
-- Contains RNA, DNA, or ligands → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy)
+- Protein-only → AlphaFold2 (monomer or multimer) or AlphaFold 3 (if requested or comparing)
+- Single AF3 job → **AlphaFold 3** (`submit_af3_endpoint_prediction`)
+- Multiple AF3 jobs (2+ targets) → **AlphaFold 3 Batch** (`submit_af3_batch_predictions` — always prefer batch over calling `submit_af3_endpoint_prediction` in a loop)
+- Contains RNA, DNA, or ligands → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy) or **AlphaFold 3**
 - Contains covalent modifications or glycans → **Boltz-2** (only model that supports these)
-- User explicitly requests Boltz-2 → Boltz-2
+- User explicitly requests Boltz-2 or AlphaFold 3 → use requested model
 - RNA + covalent mod/glycan → Boltz-2 (no choice), but note RNA accuracy may be lower without MSA
 
 Boltz-2 natively uses YAML input. `submit_boltz2_prediction` will automatically convert FASTA to Boltz-2 YAML.
@@ -320,24 +324,20 @@ OF3 writes outputs to a nested directory structure:
   inference_query_set.json                            # Input with resolved seeds
 ```
 
-## AlphaFold 3 (AF3) Agent Platform Endpoint & --msa-free Mode
+## AlphaFold 3 (AF3) — Asynchronous KFP PipelineJobs + Managed H100 Endpoint (`--msa-free` & Full 630 GB MSA Modes)
 
-AlphaFold 3 predicts 3D structures across proteins, nucleic acids (DNA/RNA), small molecule ligands, and ions using a diffusion architecture. In FoldRun 2.0, AF3 runs directly against a managed Gemini Enterprise Agent Platform Prediction Endpoint (`AF3_ENDPOINT`), supporting zero-MSA (`--msa-free`) mode for rapid candidate screening and full complex co-folding.
+AlphaFold 3 predicts 3D structures across proteins, nucleic acids (DNA/RNA), small molecule ligands, and ions using a diffusion architecture. In FoldRun 2.0, every AF3 prediction (single via `submit_af3_endpoint_prediction` or batch via `submit_af3_batch_predictions`) is submitted as an **asynchronous Vertex AI `PipelineJob`** (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`) that coordinates H100 replica access via GCS slot locks, harvests container execution logs into KFP, and populates the 3D viewer.
 
 ### AF3 Pre-Submission Confirmation Table
-Before calling `submit_af3_endpoint_prediction`, present the following breakdown to the user:
+Before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`, present the following breakdown to the user:
 
 | Phase | Resource | Provisioning / Machine | Estimated Runtime |
 |:---|:---|:---|:---|
-| **Input Formatting** | Local Agent Memory | Zero-MSA (`--msa-free`) Schema | < 1 sec |
-| **Diffusion Prediction** | Managed Agent Platform Endpoint | Dedicated NVIDIA L4 (g2-standard-16) (or A100/H100 if configured) | ~30–90 sec |
+| **KFP Orchestrator & Log Harvester** | Vertex AI PipelineJob (`e2-standard-4`) | Asynchronous CPU coordinator + GCS slot lock | Queues automatically across active replicas |
+| **Data / MSA Pipeline** | Local NVMe SSD (630 GB MSA Bundle) or Skipped (`msa_free=True`) | `a3-highgpu-1g` (3 TB local SSD) | <1 sec (`--msa-free`) or ~3.5–7 min (Full MSA) |
+| **Diffusion Prediction** | Managed Vertex AI Endpoint | Dedicated NVIDIA H100 80GB (`a3-highgpu-1g`, ~$11.06/hr per replica) | ~58 sec (`--msa-free`) or ~4.6–9 min total (Full MSA) |
 | **Relaxation** | N/A (None) | Diffusion trunk output (no AMBER) | N/A |
 
-> **Hardware Constraints & Operational Rules:**
-> - Runs directly against Google's managed Gemini Enterprise Agent Platform Prediction Endpoint (`AF3_ENDPOINT`).
-> - In `--msa-free` mode, Jackhmmer genetic database searches are bypassed, eliminating local 3TB genetic database and Filestore dependencies.
-> - Supports all-atom multimodal complexes: proteins, ss/dsDNA, RNA, ligands (SMILES/CCD), and ions (e.g. MG, ZN).
-> - Generates publication-ready mmCIF 3D coordinates, pTM, ipTM, ranking scores, and contact probabilities.
-
-Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction`.
+Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`.
 """
+

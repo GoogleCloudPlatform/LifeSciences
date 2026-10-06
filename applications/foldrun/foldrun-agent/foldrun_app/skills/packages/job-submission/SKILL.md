@@ -9,6 +9,7 @@ metadata:
     - submit_of3_prediction
     - submit_boltz2_prediction
     - submit_af3_endpoint_prediction
+    - submit_af3_batch_predictions
 ---
 
 # Job Submission — Model Selection
@@ -20,14 +21,16 @@ Four models are available. Choose based on the input:
 | **AlphaFold2** | `submit_af2_monomer_prediction` | Single-chain protein (monomer) |
 | **AlphaFold2** | `submit_af2_multimer_prediction` | Protein-only complex (multimer) |
 | **AlphaFold2** | `submit_af2_batch_predictions` | Multiple AF2 jobs at once |
-| **AlphaFold3** | `submit_af3_endpoint_prediction` | All-atom complexes (protein, RNA, DNA, ligands, ions); zero-MSA fast screening (`--msa-free`) via managed Agent Platform Endpoint |
+| **AlphaFold3** | `submit_af3_endpoint_prediction` | Single all-atom complex (protein, RNA, DNA, ligands, ions); Full 630 GB MSA (`msa_free=False`, default) or fast zero-MSA (`msa_free=True`) via KFP + Vertex AI Endpoint |
+| **AlphaFold3** | `submit_af3_batch_predictions` | Multiple AF3 jobs at once — submits each target as an async KFP `PipelineJob` (`alphafold3-inference-pipeline-...`) queued across the warm H100 replica(s) |
 | **OpenFold3** | `submit_of3_prediction` | Protein + RNA, DNA, or ligands; preferred for RNA (has full RNA MSA via nhmmer) |
 | **Boltz-2** | `submit_boltz2_prediction` | Covalent modifications, glycans, or when user explicitly requests it; can do RNA/DNA/ligands but **no RNA MSA** |
 
 **Decision rule**:
-- Protein-only → AlphaFold2 (monomer or multimer)
-- All-atom fast zero-MSA screening / Agent Platform Endpoint → **AlphaFold 3** (`submit_af3_endpoint_prediction`)
-- Contains RNA, DNA, or ligands with full MSA pipeline → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy)
+- Protein-only → AlphaFold2 (monomer or multimer) or AlphaFold 3 (if requested or comparing)
+- Single AF3 job → **AlphaFold 3** (`submit_af3_endpoint_prediction`)
+- Multiple AF3 jobs (2+ targets) → **AlphaFold 3 Batch** (`submit_af3_batch_predictions` — always prefer batch over calling `submit_af3_endpoint_prediction` in a loop)
+- Contains RNA, DNA, or ligands with OpenFold3 pipeline → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy)
 - Contains covalent modifications or glycans → **Boltz-2** (only model that supports these)
 - User explicitly requests Boltz-2 or AlphaFold 3 → use requested model
 - RNA + covalent mod/glycan → Boltz-2 (no choice), but note RNA accuracy may be lower without MSA
@@ -319,26 +322,33 @@ OF3 writes outputs to a nested directory structure:
   inference_query_set.json                            # Input with resolved seeds
 ```
 
-## AlphaFold 3 (AF3) Agent Platform Endpoint (`--msa-free` & Full 630 GB MSA Modes)
+## AlphaFold 3 (AF3) — Asynchronous KFP PipelineJobs + Managed H100 Endpoint (`--msa-free` & Full 630 GB MSA Modes)
 
-AlphaFold 3 predicts 3D structures across proteins, nucleic acids (DNA/RNA), small molecule ligands, and ions using a diffusion architecture. In FoldRun 2.0, AF3 runs directly against a managed Vertex AI Prediction Endpoint (`AF3_ENDPOINT`) on `a3-highgpu-1g` (1x NVIDIA H100 80GB GPU + 3 TB local NVMe SSD), supporting both:
-- **Zero-MSA Fast Screening (`msa_free=True` / `run_data_pipeline=false`)**: ~58 sec per job on warm H100; bypasses genetic database search (ideal for de novo designs, cyclic/bicycle peptides, and rapid ligand screening).
-- **Full 630 GB MSA + PDB Templates (`msa_free=False` / `run_data_pipeline=true`)**: ~4.6 min per job; runs `jackhmmer`/`nhmmer` against the local 630 GB MSA bundle on NVMe SSD for maximum accuracy on natural proteins and target complexes.
+AlphaFold 3 predicts 3D structures across proteins, nucleic acids (DNA/RNA), small molecule ligands, and ions using a diffusion architecture. In FoldRun 2.0, every AF3 prediction (single via `submit_af3_endpoint_prediction` or batch via `submit_af3_batch_predictions`) is submitted as an **asynchronous Vertex AI `PipelineJob`** (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`):
+- **Non-blocking & Full Observability**: Submission returns immediately in <2 seconds with a `job_id`, KFP console URL, and 3D viewer URL. A lightweight CPU KFP worker (`e2-standard-4`) acquires a GCS replica slot lock (`gs://<bucket>/af3_predictions/.locks/<endpoint>_slot_<0..R-1>.json`), invokes the warm `a3-highgpu-1g` (NVIDIA H100 80GB + 3 TB local NVMe SSD) endpoint synchronously, harvests the AF3 container execution logs from Cloud Logging into KFP (`execution.log`), and generates all 3D viewer plots and `analysis/summary.json`.
+- **Single vs. Batch**:
+  - For **1 target**: call `submit_af3_endpoint_prediction(input=..., job_name=..., msa_free=False)`.
+  - For **2+ targets**: call `submit_af3_batch_predictions(batch_config=[...])` in a single tool call. Each target gets its own independent KFP `PipelineJob` (`alphafold3-inference-pipeline-...`) that automatically queues for the warm H100 replica(s) (`R` concurrent jobs for `R` active replicas) and can be monitored asynchronously via `list_jobs` / `check_job_status`.
+- **Modes**:
+  - **Full 630 GB MSA + PDB Templates (`msa_free=False`, default)**: ~4.6–9 min per job; runs `jackhmmer`/`nhmmer` against the local 630 GB MSA bundle on NVMe SSD for maximum accuracy on natural proteins, multimers, and ligand complexes.
+  - **Zero-MSA Fast Screening (`msa_free=True`)**: ~58 sec per job on warm H100; bypasses genetic database search (ideal for de novo designs, cyclic/bicycle peptides, and rapid screening).
 
 ### AF3 Pre-Submission Confirmation Table
-Before calling `submit_af3_endpoint_prediction`, present the following breakdown to the user:
+Before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`, present the following breakdown to the user:
 
 | Phase | Resource | Provisioning / Machine | Estimated Runtime |
 |:---|:---|:---|:---|
-| **Data / MSA Pipeline** | Local NVMe SSD (630 GB MSA Bundle) or Skipped (`msa_free=True`) | `a3-highgpu-1g` (3 TB local SSD) | <1 sec (`--msa-free`) or ~3.5 min (Full MSA) |
-| **Diffusion Prediction** | Managed Vertex AI Endpoint | Dedicated NVIDIA H100 80GB (`a3-highgpu-1g`, ~$11.06/hr per replica) | ~58 sec (`--msa-free`) or ~4.6 min total (Full MSA) |
+| **KFP Orchestrator & Log Harvester** | Vertex AI PipelineJob (`e2-standard-4`) | Asynchronous CPU coordinator + GCS slot lock | Queues automatically across active replicas |
+| **Data / MSA Pipeline** | Local NVMe SSD (630 GB MSA Bundle) or Skipped (`msa_free=True`) | `a3-highgpu-1g` (3 TB local SSD) | <1 sec (`--msa-free`) or ~3.5–7 min (Full MSA) |
+| **Diffusion Prediction** | Managed Vertex AI Endpoint | Dedicated NVIDIA H100 80GB (`a3-highgpu-1g`, ~$11.06/hr per replica) | ~58 sec (`--msa-free`) or ~4.6–9 min total (Full MSA) |
 | **Relaxation** | N/A (None) | Diffusion trunk output (no AMBER) | N/A |
 
 > **Hardware Constraints, Backlog Scaling & Operational Rules:**
 > - Runs against the managed Vertex AI Online Prediction Endpoint (`AF3_ENDPOINT`). Check status first with `check_af3_endpoint`.
 > - **Maximize 1 Replica First, Scale Replicas on the Same Endpoint for Backlogs >30 min**:
->   - Because a warm H100 replica takes ~58s (`--msa-free`) or ~4.6m (Full-MSA) per structure whereas cold-starting an additional H100 replica with the 630 GB MSA bundle takes ~25–35 minutes, **keep `min_replica_count=1` for backlogs of <=25 `--msa-free` jobs or <=5 Full-MSA jobs**.
+>   - Because a warm H100 replica takes ~58s (`--msa-free`) or ~4.6–9m (Full-MSA) per structure whereas cold-starting an additional H100 replica with the 630 GB MSA bundle takes ~25–35 minutes, **keep `min_replica_count=1` for backlogs of <=25 `--msa-free` jobs or <=5 Full-MSA jobs**.
 >   - If the user wants to run a larger batch (>30 min estimated queue), recommend scaling replicas in-place on the **same** endpoint via `deploy_af3_endpoint(min_replica_count=N, max_replica_count=N)` (e.g., `2–4` replicas) rather than creating a second endpoint, and scaling back down or calling `undeploy_af3_endpoint` ($0.00/hr) when complete.
 
-Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction`.
+Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`.
+
 

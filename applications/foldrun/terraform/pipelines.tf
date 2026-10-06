@@ -27,6 +27,7 @@ resource "google_service_account_iam_member" "agent_sa_actas_pipelines" {
 resource "google_project_iam_member" "pipelines_roles" {
   for_each = toset([
     "roles/aiplatform.user",
+    "roles/logging.viewer",
   ])
 
   project = var.project_id

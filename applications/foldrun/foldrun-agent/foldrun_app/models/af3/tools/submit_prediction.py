@@ -18,6 +18,8 @@ import copy
 import json
 import logging
 import os
+import tempfile
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +27,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from google.api_core.exceptions import DeadlineExceeded, GoogleAPICallError
+from google.cloud import aiplatform as vertex_ai
 
 from ..base import MODEL_CIF_FILENAME, SUMMARY_CONFIDENCES_FILENAME, AF3Tool
 from ..utils.input_converter import (
@@ -37,6 +40,25 @@ from ..utils.metrics import compute_ranking_score
 from ..utils.viewer_artifacts import build_and_upload_af3_viewer_artifacts
 
 logger = logging.getLogger(__name__)
+
+_COMPILE_LOCK = threading.Lock()
+_LAST_PIPELINE_TS = 0
+
+
+def _allocate_unique_pipeline_timestamps() -> tuple[str, str]:
+    """Allocate a strictly unique (YYYYMMDD_HHMMSS, YYYYMMDDHHMMSS) timestamp pair for KFP runs.
+
+    Prevents collisions in `pipeline_runs/YYYYMMDD_HHMMSS` and `job_id` when multiple AF3 jobs
+    are submitted within the same second (e.g., via `submit_af3_batch_predictions`).
+    """
+    global _LAST_PIPELINE_TS
+    with _COMPILE_LOCK:
+        now_epoch = int(time.time())
+        if now_epoch <= _LAST_PIPELINE_TS:
+            now_epoch = _LAST_PIPELINE_TS + 1
+        _LAST_PIPELINE_TS = now_epoch
+        dt = datetime.fromtimestamp(now_epoch, tz=timezone.utc)
+        return dt.strftime("%Y%m%d_%H%M%S"), dt.strftime("%Y%m%d%H%M%S")
 
 
 def _prepare_af3_instance_for_endpoint(
@@ -87,6 +109,20 @@ def _prepare_af3_instance_for_endpoint(
     return payload
 
 
+def _count_af3_chains(af3_query: dict[str, Any]) -> int:
+    """Count total chains/entities across all sequences in an AF3 query."""
+    total = 0
+    for entry in af3_query.get("sequences", []):
+        for key in ("protein", "rna", "dna", "ligand", "ion"):
+            if key in entry and isinstance(entry[key], dict):
+                chain_id = entry[key].get("id", "A")
+                if isinstance(chain_id, list):
+                    total += len(chain_id)
+                else:
+                    total += 1
+    return max(1, total)
+
+
 class AF3SubmitPredictionTool(AF3Tool):
     """Tool for submitting all-atom complex predictions via AlphaFold 3 Agent Platform Endpoint."""
 
@@ -102,6 +138,154 @@ class AF3SubmitPredictionTool(AF3Tool):
                 f"{sorted(allowed_buckets)}."
             )
 
+    def _submit_kfp_pipeline(
+        self,
+        *,
+        endpoint: Any,
+        instance_payload: dict[str, Any],
+        job_name: str,
+        bucket_name: str,
+        job_prefix: str,
+        msa_free: bool,
+        model_seeds: list[int],
+        num_diffusion_samples: int,
+        total_tokens: int,
+        num_chains: int,
+        collected_warnings: list[str],
+    ) -> dict[str, Any]:
+        """Submit an asynchronous KFP PipelineJob that wraps the synchronous AF3 endpoint call."""
+        deployed_models = self.get_deployed_models(endpoint)
+        active_ops = self.get_active_deploy_operations(endpoint)
+        if not deployed_models and not active_ops:
+            return {
+                "status": "error",
+                "job_id": job_name,
+                "message": (
+                    "AlphaFold 3 Endpoint currently has 0 deployed models (paused at $0.00/hr). "
+                    "Please call `deploy_af3_endpoint` first and wait for it to reach READY before submitting predictions."
+                ),
+            }
+
+        active_replicas = 0
+        for dm in deployed_models:
+            dr = getattr(dm, "dedicated_resources", None)
+            min_rep = int(getattr(dr, "min_replica_count", 0) or 0) if dr else 1
+            active_replicas += max(1, min_rep)
+        active_replicas = max(1, active_replicas)
+
+        bucket = self.storage_client.bucket(bucket_name)
+        input_blob_path = f"{job_prefix}/input.json"
+        bucket.blob(input_blob_path).upload_from_string(
+            json.dumps(instance_payload, indent=2), content_type="application/json"
+        )
+        gcs_query_path = f"gs://{bucket_name}/{input_blob_path}"
+
+        ts_dir, ts_id = _allocate_unique_pipeline_timestamps()
+        pipeline_job_id = f"alphafold3-inference-pipeline-{ts_id}"
+        pipeline_root = f"gs://{bucket_name}/pipeline_runs/{ts_dir}"
+
+        with _COMPILE_LOCK:
+            from kfp import compiler
+
+            from ..pipeline import create_af3_inference_pipeline
+
+            pipeline_func = create_af3_inference_pipeline()
+            fd, pipeline_path = tempfile.mkstemp(
+                suffix=".json", prefix=f"af3_pipeline_{job_name}_"
+            )
+            os.close(fd)
+            compiler.Compiler().compile(
+                pipeline_func=pipeline_func,
+                package_path=pipeline_path,
+            )
+
+        labels = {
+            "model_type": "alphafold3",
+            "job_type": "monomer" if num_chains <= 1 else "complex",
+            "query_name": self._clean_label(job_name),
+            "num_tokens": str(total_tokens),
+            "num_chains": str(num_chains),
+            "num_seeds": str(len(model_seeds)),
+            "gpu_type": "h100-80gb",
+            "msa_method": "none" if msa_free else "jackhmmer",
+            "submitted_by": "foldrun-agent",
+        }
+
+        try:
+            pipeline_job = vertex_ai.PipelineJob(
+                display_name=job_name,
+                job_id=pipeline_job_id,
+                template_path=pipeline_path,
+                pipeline_root=pipeline_root,
+                parameter_values={
+                    "project_id": self.config.project_id,
+                    "region": self.config.region,
+                    "endpoint_location": self.config.endpoint_location,
+                    "endpoint_id": endpoint.resource_name,
+                    "bucket_name": bucket_name,
+                    "job_name": job_name,
+                    "pipeline_job_id": pipeline_job_id,
+                    "query_json_path": gcs_query_path,
+                    "pipeline_root": pipeline_root,
+                    "job_prefix": job_prefix,
+                    "msa_free": msa_free,
+                    "num_diffusion_samples": num_diffusion_samples,
+                    "timeout_seconds": self.config.timeout_seconds,
+                },
+                enable_caching=False,
+                labels=labels,
+                project=self.config.project_id,
+                location=self.config.region,
+            )
+            pipeline_job.submit(service_account=self.config.pipelines_sa_email)
+        finally:
+            if os.path.exists(pipeline_path):
+                try:
+                    os.remove(pipeline_path)
+                except OSError:
+                    pass
+
+        resource_name = getattr(pipeline_job, "resource_name", "") or pipeline_job_id
+        run_id = resource_name.split("/")[-1] if "/" in resource_name else pipeline_job_id
+        console_url = (
+            f"https://console.cloud.google.com/vertex-ai/pipelines/locations/{self.config.region}"
+            f"/runs/{run_id}?project={self.config.project_id}"
+        )
+        viewer_url = (
+            f"{self.config.viewer_url}/job/{run_id}"
+            if self.config.viewer_url
+            else self.gcs_console_url(f"gs://{bucket_name}/{job_prefix}")
+        )
+
+        return {
+            "status": "submitted",
+            "job_id": run_id,
+            "pipeline_job_resource": resource_name,
+            "job_name": job_name,
+            "query_name": job_name,
+            "model": "AlphaFold 3",
+            "mode": "msa-free" if msa_free else "standard",
+            "execution_mode": "kfp_pipeline",
+            "total_tokens": total_tokens,
+            "num_chains": num_chains,
+            "endpoint": endpoint.resource_name,
+            "active_replicas": active_replicas,
+            "gcs_output_dir": f"gs://{bucket_name}/{job_prefix}",
+            "pipeline_root": pipeline_root,
+            "console_url": console_url,
+            "endpoint_console_url": self.get_endpoint_console_url(endpoint),
+            "endpoint_logs_url": self.get_endpoint_logs_url(endpoint, job_name=job_name),
+            "viewer_url": viewer_url,
+            "warnings": collected_warnings,
+            "message": (
+                f"Submitted AlphaFold 3 KFP pipeline job '{job_name}' (run ID: '{run_id}', "
+                f"mode={'Zero-MSA' if msa_free else 'Full 630 GB MSA + Templates'}). "
+                f"The KFP worker coordinates replica slots ({active_replicas} active H100 replica(s)), "
+                f"executes the synchronous endpoint prediction, streams container logs into KFP + GCS, "
+                f"and generates FoldRun Viewer artifacts. Monitor progress via `check_job_status(job_id='{run_id}')`."
+            ),
+        }
+
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Submit an AlphaFold 3 prediction job.
 
@@ -109,15 +293,17 @@ class AF3SubmitPredictionTool(AF3Tool):
             arguments: {
                 'input': FASTA content, AF3 JSON content, or GCS/file path,
                 'job_name': Optional job name (defaults to 'af3_YYYYMMDD_HHMMSS'),
-                'msa_free': Zero-MSA screening mode (default: True),
+                'msa_free': Zero-MSA screening mode (default: False),
                 'model_seeds': Random seeds for diffusion sampling (default: [1]),
                 'num_diffusion_samples': Diffusion samples per seed (default: 5),
                 'endpoint_id': Optional Agent Platform Endpoint ID override,
                 'output_gcs_uri': Optional custom GCS destination URI,
+                'sync': If False, submits a KFP PipelineJob and returns immediately;
+                    if True, calls endpoint.predict() inline.
             }
 
         Returns:
-            Dictionary containing prediction status, metrics, warnings, and GCS artifact URIs.
+            Dictionary containing prediction status, metrics/URLs, warnings, and GCS artifact URIs.
         """
         input_data = arguments.get("input")
         if not input_data:
@@ -140,6 +326,7 @@ class AF3SubmitPredictionTool(AF3Tool):
         if isinstance(model_seeds, int):
             model_seeds = [model_seeds]
         num_diffusion_samples = int(arguments.get("num_diffusion_samples", 5))
+        sync = bool(arguments.get("sync", True))
 
         endpoint_id = arguments.get("endpoint_id")
         collected_warnings: list[str] = []
@@ -225,17 +412,60 @@ class AF3SubmitPredictionTool(AF3Tool):
                     }
 
             total_tokens = count_af3_tokens(af3_query)
-            logger.info(
-                f"Submitting AF3 job {job_name} ({total_tokens} tokens, msa_free={msa_free}) to Agent Platform Endpoint"
-            )
+            num_chains = _count_af3_chains(af3_query)
 
-            # 3. Resolve Endpoint and dispatch prediction
+            # Resolve destination GCS bucket and prefix
+            output_gcs_uri = arguments.get("output_gcs_uri")
+            if output_gcs_uri:
+                parsed_out = urlparse(output_gcs_uri)
+                if parsed_out.scheme != "gs" or not parsed_out.netloc:
+                    raise ValueError(
+                        f"Invalid output GCS URI: '{output_gcs_uri}'. Must follow format 'gs://bucket-name/[prefix]'."
+                    )
+                out_bucket_name = parsed_out.netloc
+                self._validate_gcs_bucket(out_bucket_name)
+                out_path = parsed_out.path.strip("/")
+                if ".." in out_path.split("/"):
+                    raise ValueError(
+                        f"Invalid output GCS path in '{output_gcs_uri}': path traversal segments ('..') are not allowed."
+                    )
+                job_prefix = (
+                    f"{out_path}/{job_name}" if out_path else self.get_job_blob_prefix(job_name)
+                )
+            else:
+                out_bucket_name = self.config.bucket_name
+                job_prefix = self.get_job_blob_prefix(job_name)
+
+            # 3. Resolve Endpoint and prepare payload
             endpoint = self.get_endpoint(endpoint_id)
             instance_payload = _prepare_af3_instance_for_endpoint(
                 af3_query=af3_query,
                 job_name=job_name,
                 model_seeds=model_seeds,
                 msa_free=msa_free,
+            )
+
+            # If async KFP mode requested (default for agent tool calls), submit KFP PipelineJob
+            if not sync:
+                logger.info(
+                    f"Submitting AF3 KFP PipelineJob '{job_name}' ({total_tokens} tokens, msa_free={msa_free})"
+                )
+                return self._submit_kfp_pipeline(
+                    endpoint=endpoint,
+                    instance_payload=instance_payload,
+                    job_name=job_name,
+                    bucket_name=out_bucket_name,
+                    job_prefix=job_prefix,
+                    msa_free=msa_free,
+                    model_seeds=model_seeds,
+                    num_diffusion_samples=num_diffusion_samples,
+                    total_tokens=total_tokens,
+                    num_chains=num_chains,
+                    collected_warnings=collected_warnings,
+                )
+
+            logger.info(
+                f"Submitting synchronous AF3 job {job_name} ({total_tokens} tokens, msa_free={msa_free}) to Agent Platform Endpoint"
             )
             predict_parameters = {
                 "run_data_pipeline": not msa_free,
@@ -313,28 +543,7 @@ class AF3SubmitPredictionTool(AF3Tool):
             pae = result_item.get("pae")
 
             # 4. Upload results to GCS using canonical paths
-            output_gcs_uri = arguments.get("output_gcs_uri")
-            if output_gcs_uri:
-                parsed_out = urlparse(output_gcs_uri)
-                if parsed_out.scheme != "gs" or not parsed_out.netloc:
-                    raise ValueError(
-                        f"Invalid output GCS URI: '{output_gcs_uri}'. Must follow format 'gs://bucket-name/[prefix]'."
-                    )
-                bucket_name = parsed_out.netloc
-                self._validate_gcs_bucket(bucket_name)
-                out_path = parsed_out.path.strip("/")
-                if ".." in out_path.split("/"):
-                    raise ValueError(
-                        f"Invalid output GCS path in '{output_gcs_uri}': path traversal segments ('..') are not allowed."
-                    )
-                job_prefix = (
-                    f"{out_path}/{job_name}" if out_path else self.get_job_blob_prefix(job_name)
-                )
-            else:
-                bucket_name = self.config.bucket_name
-                job_prefix = self.get_job_blob_prefix(job_name)
-
-            bucket = self.storage_client.bucket(bucket_name)
+            bucket = self.storage_client.bucket(out_bucket_name)
 
             # Write input JSON
             input_blob = bucket.blob(f"{job_prefix}/input.json")
@@ -353,14 +562,14 @@ class AF3SubmitPredictionTool(AF3Tool):
                     json.dumps(pae, indent=2), content_type="application/json"
                 )
 
-            gcs_output_dir = f"gs://{bucket_name}/{job_prefix}"
+            gcs_output_dir = f"gs://{out_bucket_name}/{job_prefix}"
             cif_uri = f"{gcs_output_dir}/{cif_filename}"
             ranking_score = compute_ranking_score(summary_confidences)
 
             # Generate viewer summary.json + plots and enrich mean_plddt / mean_pae
             viewer_meta = build_and_upload_af3_viewer_artifacts(
                 bucket=bucket,
-                bucket_name=bucket_name,
+                bucket_name=out_bucket_name,
                 job_prefix=job_prefix,
                 job_name=job_name,
                 af3_query=instance_payload,

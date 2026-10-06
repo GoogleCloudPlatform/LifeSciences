@@ -612,7 +612,14 @@ def list_jobs():
                             entry["display_name"] = (
                                 f"{jid} (Full 630 GB MSA + Templates)"
                             )
-                seen_ids = {j["job_id"] for j in jobs}
+                seen_ids = {j["job_id"] for j in jobs} | {
+                    j["display_name"] for j in jobs if j.get("display_name")
+                }
+                for j in jobs:
+                    if j.get("model_type") == "alphafold3":
+                        dn = j.get("display_name", "")
+                        if dn in af3_by_job and af3_by_job[dn].get("has_analysis"):
+                            j["has_analysis"] = True
                 for jid, af3_job in af3_by_job.items():
                     if jid not in seen_ids and af3_job["has_analysis"]:
                         jobs.append(af3_job)

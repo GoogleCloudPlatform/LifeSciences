@@ -668,6 +668,9 @@
         let isBoltz2 = false;
         const initialJobId = {{ (job_id or '') | tojson }};
         const initialSummaryUri = {{ (summary_uri or '') | tojson }};
+        const gcpProject = {{ (project_id or '') | tojson }};
+        const gcpRegion = {{ (region or 'us-central1') | tojson }};
+        const gcpBucket = {{ (bucket_name or '') | tojson }};
 
         function getDownloadBaseQuery() {
             if (initialSummaryUri) {
@@ -773,21 +776,47 @@
         // Populate job info summary in header
         function populateJobInfo() {
             const subtitleEl = document.getElementById('header-subtitle');
-            if (!initialJobId && subtitleEl && analysisData && analysisData.job_id) {
-                subtitleEl.textContent = `Job: ${analysisData.job_id}`;
+            const proteinInfo = (analysisData && analysisData.summary && analysisData.summary.protein_info) || {};
+            const jobMetadata = proteinInfo.job_metadata || {};
+            const mt = proteinInfo.model_type || (analysisData && analysisData.model_type) || '';
+
+            if (subtitleEl && analysisData) {
+                if (mt === 'alphafold3' || mt === 'af3') {
+                    const pipelineJobId = analysisData.pipeline_job_id ||
+                        jobMetadata.pipeline_job_id ||
+                        (initialJobId && initialJobId.startsWith('alphafold3-') ? initialJobId : '');
+                    const queryName = analysisData.query_name ||
+                        jobMetadata.display_name ||
+                        (initialJobId && !initialJobId.startsWith('alphafold3-') ? initialJobId : '') ||
+                        analysisData.job_id || '';
+                    const links = [];
+                    if (pipelineJobId) {
+                        const kfpUrl = `https://console.cloud.google.com/vertex-ai/pipelines/locations/${encodeURIComponent(gcpRegion)}/runs/${encodeURIComponent(pipelineJobId)}?project=${encodeURIComponent(gcpProject)}`;
+                        links.push(`<a href="${kfpUrl}" target="_blank" rel="noopener noreferrer" class="job-link" title="View Vertex AI Pipeline DAG &amp; Logs">Vertex AI Pipeline (${escapeHtml(pipelineJobId)})</a>`);
+                    }
+                    if (queryName) {
+                        const logsUrl = `https://console.cloud.google.com/logs/query;query=resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22%20%22${encodeURIComponent(queryName)}%22;duration=P30D?project=${encodeURIComponent(gcpProject)}`;
+                        links.push(`<a href="${logsUrl}" target="_blank" rel="noopener noreferrer" class="job-link" title="View AlphaFold 3 H100 Endpoint logs in Cloud Logging">${escapeHtml(queryName)} (Endpoint Logs)</a>`);
+                        if (gcpBucket) {
+                            const gcsUrl = `https://console.cloud.google.com/storage/browser/${encodeURIComponent(gcpBucket)}/af3_predictions/${encodeURIComponent(queryName)}?project=${encodeURIComponent(gcpProject)}`;
+                            links.push(`<a href="${gcsUrl}" target="_blank" rel="noopener noreferrer" class="job-link" title="View AlphaFold 3 job artifacts in Cloud Storage">GCS Artifacts</a>`);
+                        }
+                    }
+                    if (links.length > 0) {
+                        subtitleEl.innerHTML = DOMPurify.sanitize(`Job: ${links.join(' &middot; ')}`, { ADD_ATTR: ['target', 'rel'] });
+                    }
+                } else if (!initialJobId && analysisData.job_id) {
+                    subtitleEl.textContent = `Job: ${analysisData.job_id}`;
+                }
             }
 
             const jobInfoDiv = document.getElementById('job-info-summary');
             if (!jobInfoDiv || !analysisData.summary) return;
-
-            const proteinInfo = analysisData.summary.protein_info || {};
-            const jobMetadata = proteinInfo.job_metadata;
-            if (!jobMetadata) return;
+            if (!proteinInfo.job_metadata && !mt) return;
 
             let html = '';
 
             // Model type badge
-            const mt = proteinInfo.model_type || analysisData.model_type;
             if (mt) {
                 const badge = mt === 'openfold3' ? 'OpenFold3' :
                               mt === 'boltz2'    ? 'Boltz-2'   :
@@ -813,9 +842,10 @@
             if (chainComp && chainComp.length > 0) {
                 const parts = chainComp.map(c => {
                     const chainId = escapeHtml(c.chain_id);
-                    if (c.molecule_type === 'ligand') {
-                        const comps = (c.comp_ids || []).map(escapeHtml).join(',');
-                        return `${chainId}: ${comps}`;
+                    if (c.molecule_type === 'ligand' || c.molecule_type === 'ion') {
+                        const rawComps = c.comp_ids || c.ccd_codes || (c.smiles ? ['SMILES'] : []);
+                        const comps = (Array.isArray(rawComps) ? rawComps : [rawComps]).map(escapeHtml).join(',');
+                        return `${chainId}: ${comps || escapeHtml(c.molecule_type)}`;
                     }
                     return `${chainId}: ${escapeHtml(c.molecule_type)} (${escapeHtml(c.residue_count)})`;
                 });

@@ -251,11 +251,17 @@ def submit_af3_endpoint_prediction(
     msa_free: bool = False,
     model_seeds: list[int] | None = None,
     endpoint_id: str | None = None,
+    sync: bool = False,
 ) -> dict:
-    """Submit AlphaFold 3 all-atom structure prediction to Agent Platform Prediction Endpoint.
+    """Submit AlphaFold 3 all-atom structure prediction via a Vertex AI PipelineJob calling the AF3 Endpoint.
 
     Supports proteins, RNA, DNA, ligands, and ions with full 630 GB MSA + PDB templates on H100 NVMe SSD
     (default: msa_free=False) or fast --msa-free zero-MSA mode (msa_free=True).
+
+    By default (`sync=False`), submits an asynchronous Vertex AI PipelineJob (`alphafold3-inference-pipeline-...`)
+    that returns immediately so the agent never blocks or times out, while a lightweight CPU worker
+    coordinates H100 replica access via GCS slot locks, calls the AF3 Endpoint, harvests Cloud Logging
+    container logs, and generates all 3D viewer analysis artifacts.
 
     Args:
         input: Input sequence in FASTA format, AF3 JSON format, or path to input file / GCS URI.
@@ -266,11 +272,14 @@ def submit_af3_endpoint_prediction(
             630 GB MSA + template pipeline runs on the H100 NVMe SSD.
         model_seeds: Random seed(s) for diffusion generation (default: [1]).
         endpoint_id: Optional Agent Platform Endpoint ID override.
+        sync: If False (default), submits an async Vertex AI PipelineJob and returns immediately.
+            Only set True for unit tests or short in-process debugging.
     """
     validated_input = _validate_input_source(input, "input")
     args = {
         "input": validated_input,
         "msa_free": msa_free,
+        "sync": sync,
     }
     if job_name is not None:
         args["job_name"] = job_name
@@ -279,3 +288,34 @@ def submit_af3_endpoint_prediction(
     if endpoint_id is not None:
         args["endpoint_id"] = endpoint_id
     return get_tool("af3_submit_prediction").run(args)
+
+
+def submit_af3_batch_predictions(batch_config: list[dict]) -> dict:
+    """Submit multiple AlphaFold 3 prediction jobs in batch as asynchronous Vertex AI PipelineJobs.
+
+    Each item in `batch_config` is submitted as its own non-blocking KFP PipelineJob
+    (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`) that coordinates H100 replica access
+    via GCS slot locks (`R` concurrent jobs per `R` deployed H100 replicas), harvests
+    container logs into Cloud Logging / KFP, and populates the 3D viewer upon completion.
+
+    Args:
+        batch_config: List of job configuration dicts, each containing:
+            - `input` (or `sequence`): FASTA string, AF3 JSON string, or GCS URI (required)
+            - `job_name`: Human-readable job name (optional, recommended)
+            - `msa_free`: Boolean (default: False for full 630 GB MSA; True for zero-MSA)
+            - `model_seeds`: Optional list of integer random seeds (default: [1])
+            - `endpoint_id`: Optional endpoint ID override
+    """
+    sanitized_batch = []
+    for item in batch_config:
+        entry = dict(item)
+        raw_input = entry.get("input") or entry.get("sequence")
+        if raw_input:
+            entry["input"] = _validate_input_source(str(raw_input), "input")
+            entry.pop("sequence", None)
+        if "job_name" in entry and entry["job_name"] is None:
+            del entry["job_name"]
+        entry["sync"] = False
+        sanitized_batch.append(entry)
+    return get_tool("af3_submit_batch").run({"batch_config": sanitized_batch})
+

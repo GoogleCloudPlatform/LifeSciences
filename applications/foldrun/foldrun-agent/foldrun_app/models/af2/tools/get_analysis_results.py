@@ -680,11 +680,18 @@ class AF2GetAnalysisResultsTool(AF2Tool):
             if not viewer_base:
                 return None
 
-            # Get PDB URI from best prediction
+            # Get PDB/CIF URI from best prediction
             best = summary.get("best_prediction", {})
             pkl_uri = best.get("uri")
             if not pkl_uri:
                 return None
+
+            if str(pkl_uri).endswith(".cif") or summary.get("job_type") in (
+                "alphafold3",
+                "openfold3",
+                "boltz2",
+            ):
+                return f"{viewer_base.rstrip('/')}/job/{quote_plus(job_id)}"
 
             # Convert pickle URI to PDB: .../raw_prediction.pkl -> .../unrelaxed_protein.pdb
             pdb_uri = pkl_uri.rsplit("/", 1)[0] + "/unrelaxed_protein.pdb"

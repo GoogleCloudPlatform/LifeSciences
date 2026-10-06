@@ -32,10 +32,34 @@
         "output_gcs_uri": {
           "type": "string",
           "description": "Optional custom GCS destination URI."
+        },
+        "sync": {
+          "type": "boolean",
+          "description": "Wait synchronously in-process instead of submitting a Vertex AI PipelineJob (default: false)."
         }
       },
       "required": [
         "input"
+      ]
+    }
+  },
+  {
+    "type": "AF3BatchSubmitTool",
+    "name": "af3_submit_batch",
+    "description": "Submit a batch of AlphaFold 3 predictions as asynchronous Vertex AI PipelineJobs that coordinate access to the H100 endpoint replica(s) via GCS slot locks.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "batch_config": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "List of AF3 job configurations (each with 'input', optional 'job_name', 'msa_free', 'model_seeds')."
+        }
+      },
+      "required": [
+        "batch_config"
       ]
     }
   },
