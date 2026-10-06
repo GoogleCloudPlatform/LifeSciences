@@ -181,6 +181,7 @@
         .badge-alphafold2  { background: #e8f0fe; color: #1a73e8; }
         .badge-openfold3   { background: #e6f4ea; color: #1e8e3e; }
         .badge-boltz2      { background: #f3e8fd; color: #7627bb; }
+        .badge-alphafold3  { background: #fef7e0; color: #b06000; }
 
         .state-chip {
             font-size: 0.72rem;
@@ -272,6 +273,26 @@
 
         .download-zip-btn:hover { background: #ceead6; }
 
+        .pipeline-link-btn {
+            background: #f8f9fa;
+            color: #3c4043;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            flex-shrink: 0;
+            display: inline-block;
+        }
+
+        .pipeline-link-btn:hover {
+            background: #e8f0fe;
+            color: #1a73e8;
+            border-color: #1a73e8;
+        }
+
         /* ── Feature grid ── */
         .feature-grid {
             display: grid;
@@ -362,6 +383,7 @@
                 <select id="filter-model" onchange="renderJobs()">
                     <option value="">All models</option>
                     <option value="alphafold2">AlphaFold2</option>
+                    <option value="alphafold3">AlphaFold 3</option>
                     <option value="openfold3">OpenFold3</option>
                     <option value="boltz2">Boltz-2</option>
                 </select>
@@ -451,6 +473,7 @@
 
         const MODEL_LABELS = {
             alphafold2: 'AlphaFold2',
+            alphafold3: 'AlphaFold 3',
             openfold3:  'OpenFold3',
             boltz2:     'Boltz-2',
         };
@@ -516,18 +539,29 @@
                 const safeDisplayName = escapeHtml(j.display_name || j.job_id);
                 const safeTime = escapeHtml(relativeTime(j.create_time));
 
+                let pipelineLinkBtn = '';
+                if (j.pipeline_url) {
+                    pipelineLinkBtn = `<a class="pipeline-link-btn" href="${escapeHtml(j.pipeline_url)}" target="_blank" rel="noopener noreferrer" title="Open Vertex AI Pipeline run in Google Cloud Console">Pipeline ↗</a>`;
+                } else if (j.logs_url) {
+                    pipelineLinkBtn = `<a class="pipeline-link-btn" href="${escapeHtml(j.logs_url)}" target="_blank" rel="noopener noreferrer" title="Open AlphaFold 3 Endpoint execution logs in Cloud Logging">Logs ↗</a>`;
+                }
+
                 let actionBtn;
                 if (canView(j)) {
                     actionBtn = `<a class="view-btn" href="/job/${encodeURIComponent(j.job_id)}">View</a>
+                                 ${pipelineLinkBtn}
                                  <a class="download-zip-btn" href="/api/download/bundle?job_id=${encodeURIComponent(j.job_id)}" title="Download compact ZIP archive of job artifacts">⬇ ZIP</a>`;
                 } else if (j.analysis_running) {
                     actionBtn = `<a class="view-btn disabled" href="#" title="Analysis in progress">View</a>
+                                 ${pipelineLinkBtn}
                                  <button class="analyze-btn" disabled title="Analysis already running">Analyzing…</button>`;
                 } else if (canAnalyze(j)) {
                     actionBtn = `<a class="view-btn disabled" href="#" title="Run analysis first">View</a>
+                                 ${pipelineLinkBtn}
                                  <button class="analyze-btn" data-job-id="${safeJobId}" data-model-type="${safeModelType}">Analyze</button>`;
                 } else {
-                    actionBtn = `<a class="view-btn disabled" href="#">View</a>`;
+                    actionBtn = `<a class="view-btn disabled" href="#">View</a>
+                                 ${pipelineLinkBtn}`;
                 }
 
                 const showQuality = j.has_analysis && j.state === 'PIPELINE_STATE_SUCCEEDED';
@@ -545,7 +579,7 @@
                 </div>`;
             }).join('');
 
-            container.innerHTML = DOMPurify.sanitize(jobsHtml);
+            container.innerHTML = DOMPurify.sanitize(jobsHtml, { ADD_ATTR: ['target', 'rel'] });
 
             // Wire up analyze buttons safely
             container.querySelectorAll('.analyze-btn[data-job-id]').forEach(btn => {

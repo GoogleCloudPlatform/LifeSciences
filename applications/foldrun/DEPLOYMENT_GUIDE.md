@@ -19,10 +19,12 @@ and production access for FoldRun. For a quick-start overview, see [README.md](R
 
 **GPU Quota (check before starting):**
 
-| Model | Minimum GPU | Recommended |
-|-------|-------------|-------------|
-| AlphaFold2 | 1x NVIDIA L4 | 1x NVIDIA A100 40GB |
-| OpenFold3 | 1x NVIDIA A100 40GB | 1x NVIDIA A100 80GB |
+| Model | Minimum GPU | Recommended | Notes |
+|-------|-------------|-------------|-------|
+| **AlphaFold 3** | 1x NVIDIA L4 (`--msa-free`) | **1x NVIDIA H100 80GB (`a3-highgpu-1g`)** | Auto-detects GCE reservations; auto-falls back across `H100_80GB -> A100_80GB -> A100 -> L4`; auto-undeploys to `$0.00/hr` after 20m idle |
+| **AlphaFold 2** | 1x NVIDIA L4 | 1x NVIDIA A100 40GB | A100_80GB for >1,500 residues |
+| **OpenFold 3** | 1x NVIDIA A100 40GB | 1x NVIDIA A100 80GB | Minimum 40 GB VRAM |
+| **Boltz-2** | 1x NVIDIA A100 40GB | 1x NVIDIA A100 80GB | Minimum 40 GB VRAM |
 
 Check your quota on the [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu).
 Request increases early — approvals can take hours.
@@ -35,14 +37,14 @@ You do **not** need to configure these manually — `deploy-all.sh` handles ever
 | Service Account | ID | Purpose | Key Roles |
 |---|---|---|---|
 | **Agent SA** | `foldrun-agent-sa` | Agent Runtime identity | `aiplatform.user`, `batch.jobsEditor`, `run.developer`, `storage.bucketViewer`, `compute.viewer` |
-| **Pipelines SA** | `pipelines-sa` | Agent Platform Pipeline jobs | `aiplatform.user`, `artifactregistry.reader` |
+| **Pipelines SA** | `pipelines-sa` | Agent Platform Pipeline jobs | `aiplatform.user`, `artifactregistry.reader`, `iam.serviceAccountUser` (self-`actAs` for Stage 3 watchdog submission) |
 | **Batch Compute SA** | `batch-compute-sa` | Cloud Batch download/convert jobs | `batch.agentReporter`, `logging.logWriter`, `storage.bucketViewer` |
 | **Build SA** | `foldrun-build-sa` | Cloud Build CI/CD | `aiplatform.user`, `artifactregistry.writer`, `run.developer`, `compute.viewer` |
 | **Viewer SA** | `foldrun-viewer-sa` | Cloud Run viewer service | `storage.objectViewer` (bucket-scoped) |
 | **Analysis SA** | `foldrun-analysis-sa` | Cloud Run analysis jobs | `aiplatform.user`, `storage.objectAdmin` (bucket-scoped) |
 
 Additionally, Terraform grants:
-- **Agent Platform Custom Code SA** (`gcp-sa-aiplatform-cc`): `artifactregistry.reader` on the container repo
+- **Agent Platform Custom Code SA** (`gcp-sa-aiplatform-cc`): `artifactregistry.reader` on the container repo, plus `storage.objectAdmin` and `storage.legacyBucketWriter` on `{project}-foldrun-data` (so Dedicated Endpoints such as AlphaFold 3 can write multi-sample prediction outputs directly to `output_dir`)
 - **IAP Service Agent**: `run.invoker` on the viewer service
 
 ### Organization Policies
@@ -165,12 +167,17 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 |----------|------|---------|
 | VPC + Subnet + Cloud NAT | `foldrun-network` | Private network with outbound internet |
 | Filestore | `foldrun-nfs` | 2.5TB NFS for genetic databases (Basic SSD) |
-| GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, analysis results |
-| GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups |
+| GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, AF3 results, analysis bundles |
+| GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups + AF3 630 GB MSA bundle |
 | Artifact Registry | `foldrun-repo` | Container images |
-| Cloud Run Service | `foldrun-viewer` | 3D structure viewer (IAP-secured) |
+| Vertex AI Endpoint | `alphafold3-endpoint` | Managed AlphaFold 3 endpoint (`a3-highgpu-1g` H100 80GB, scales to `$0.00/hr` when idle) |
+| Cloud Run Service | `foldrun-viewer` | 3D structure viewer (IAP-secured, AF2 + AF3 + OF3 + Boltz-2) |
 | Cloud Run Job | `foldrun-analysis-job` | Parallel prediction analysis (AF2 + OF3 + Boltz-2) |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent |
+
+> [!IMPORTANT]
+> **AlphaFold 3 Model Registry Image URI (`serving_container_image_uri`):**
+> Vertex AI `DeployModel`'s server-side allowlist for the restricted AlphaFold 3 serving container checks exact string equality against the **tagless** URI `us-docker.pkg.dev/vertex-ai-restricted/alphafold3/alphafold3-inference`. When registering an AlphaFold 3 model in Vertex AI Model Registry, do **not** append `:latest` to `serving_container_image_uri` (otherwise `DeployModel` rejects it with `400 Model doesn't have an image uri that's allowed for creating a new endpoint.`). FoldRun's auto-discovery automatically prefers models registered with the tagless URI.
 
 ## 4. Testing and Validation
 
@@ -238,7 +245,8 @@ The Agent Runtime ID is printed at the end of deployment and saved in
 `foldrun-agent/deployment_metadata.json`.
 
 **Example prompts:**
-- "Predict the structure of ubiquitin" (AF2 monomer)
+- "Predict the structure of ubiquitin with AlphaFold 3" (AF3 monomer, 4-stage KFP + H100 endpoint)
+- "Fold this kinase domain with ATP and Mg2+ using AlphaFold 3" (AF3 protein + CCD ligand + metal ion)
 - "Fold this protein with ATP: MQIFVKTLTGKTITL..." (OF3, protein + ligand)
 - "What's the structure of P69905?" (checks AlphaFold DB first)
 
@@ -329,15 +337,15 @@ agents-cli run \
   "What can you do?"
 ```
 
-#### 3. Connect via Gemini CLI (Remote Agent Configuration)
+#### 3. Connect via Standalone Gemini CLI (`kind: remote`)
 
-Create or update `~/.gemini/agents/foldrun.md`:
+If using the standalone open-source `gemini` CLI (which natively parses `kind: remote` A2A agent cards), create `~/.gemini/agents/foldrun.md`:
 
 ```markdown
 ---
 kind: remote
 name: FoldRun
-description: Protein structure prediction agent
+description: Agentic biomolecular structure prediction on Google Cloud (AF2, AF3, OF3, Boltz-2)
 agent_card_url: https://YOUR_REGION-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_ID/locations/YOUR_REGION/reasoningEngines/YOUR_AGENT_RUNTIME_ID/api/a2a/foldrun_app/.well-known/agent-card.json
 auth:
   type: google-credentials
@@ -347,7 +355,56 @@ auth:
 Then query the agent:
 
 ```bash
-gemini -a foldrun "Predict the structure of ubiquitin"
+gemini -a foldrun "Predict the structure of ubiquitin with AlphaFold 3"
+```
+
+#### 4. Connect via Antigravity (`agy`) & `a2a-cli` (`a2a-foldrun` Wrapper)
+
+Unlike the standalone `gemini` CLI, **Antigravity (`agy` / `jetski`) does not natively parse `kind: remote` A2A `agent_card_url` definitions**. Instead, `agy` connects to FoldRun via the official [`a2a-cli`](https://github.com/a2aproject/a2a-cli) through an authenticated `~/.local/bin/a2a-foldrun` wrapper:
+
+```bash
+# 1. Install a2a-cli v0.3.0 into ~/.local/bin
+mkdir -p ~/.local/bin
+curl -sL "https://github.com/a2aproject/a2a-cli/releases/download/v0.3.0/a2a_0.3.0_linux_amd64.tar.gz" -o ~/.local/bin/a2a.tar.gz
+tar -xzf ~/.local/bin/a2a.tar.gz -C ~/.local/bin a2a && chmod +x ~/.local/bin/a2a
+ln -sf ~/.local/bin/a2a ~/.local/bin/a2a-cli && rm -f ~/.local/bin/a2a.tar.gz
+
+# 2. Cache the Agent Card locally (avoids remote resolution latency)
+mkdir -p ~/.config/a2a
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "${A2A_URL}/.well-known/agent-card.json" \
+  -o ~/.config/a2a/foldrun-agent-card.json
+
+# 3. Create ~/.local/bin/a2a-foldrun wrapper (auto-injects fresh GCP OAuth Bearer token)
+cat << 'EOF' > ~/.local/bin/a2a-foldrun
+#!/usr/bin/env bash
+set -e
+CARD_PATH="${A2A_FOLDRUN_CARD:-$HOME/.config/a2a/foldrun-agent-card.json}"
+TOKEN="$(gcloud auth print-access-token)"
+if [ "$#" -eq 0 ]; then
+    echo "Usage: a2a-foldrun [flags] \"<message>\" | a2a-foldrun card"
+    exit 1
+fi
+if [ "$1" = "card" ]; then
+    shift
+    exec a2a card get "$CARD_PATH" --auth "Bearer $TOKEN" "$@"
+fi
+exec a2a send -a "$CARD_PATH" --auth "Bearer $TOKEN" "$@"
+EOF
+chmod +x ~/.local/bin/a2a-foldrun
+```
+
+Then query with real-time SSE streaming:
+```bash
+a2a-foldrun card
+a2a-foldrun --stream "check af3 endpoint status and queue depth"
+a2a-foldrun --stream "get prediction results for af3_zinc_finger_dna"
+```
+
+You can also register `foldrun` as a local Antigravity (`agy`) custom agent in `~/.gemini/config/agents/foldrun.md` (`tools: [run_command]`, `commandExecutionPolicy: auto`) so `agy --agent foldrun` (or subagent invocation inside `agy`) calls `a2a-foldrun --stream` automatically:
+```bash
+alias agy-yolo="agy --dangerously-skip-permissions --mode accept-edits"
+agy-yolo --agent foldrun -p "Check active FoldRun pipeline jobs and report back"
 ```
 
 ## 5c. Gemini Enterprise Integration (Optional)
@@ -378,6 +435,7 @@ This triggers the `register-agent` step in the Cloud Build pipeline, which runs 
 | Terraform backend error | State bucket mismatch | Script runs `terraform init -reconfigure` automatically |
 | Predictions fail after deploy | Databases still downloading | Check `gcloud batch jobs list`; wait for downloads to complete |
 | OF3 error: `deprecated pre-OpenBind checkpoint` or missing `of3-ob-2025-06-30-174k.pt` | Upgrading from OF3 0.4 (`of3-p2-155k.pt`) to 0.5+ OpenBind | Download OpenBind v0 weights: `./deploy-all.sh YOUR_PROJECT_ID --steps data --db of3_params --force` and unset any custom `OF3_PARAMS_PATH` |
+| AF3 `DeployModel` error: `400 Model doesn't have an image uri that's allowed for creating a new endpoint.` | Model in Vertex AI Model Registry was registered with a `:latest` tag on `serving_container_image_uri` | Register the model using the exact tagless URI `us-docker.pkg.dev/vertex-ai-restricted/alphafold3/alphafold3-inference` (no `:latest` suffix) |
 | Viewer shows 403 | IAP not configured for your domain | Set `iap_access_domain` in Terraform and re-apply |
 | A2A endpoint returns 403 | Caller lacks `aiplatform.user` role or invalid token | Ensure caller has `roles/aiplatform.user` on the project, and is passing a GCP Access Token (`gcloud auth print-access-token`), NOT an Identity Token |
 | A2A endpoint returns 404 | Agent Runtime URL or app name is incorrect | Verify that the path suffix matches your configured app name (default: `/api/a2a/foldrun_app`) and the reasoning engine ID is correct |

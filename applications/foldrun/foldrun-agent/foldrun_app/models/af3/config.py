@@ -73,7 +73,7 @@ class AF3Config(CoreConfig):
     @property
     def default_msa_free(self) -> bool:
         """Whether to run predictions in zero-MSA / --msa-free mode by default."""
-        return os.getenv("AF3_DEFAULT_MSA_FREE", "true").lower() in ("true", "1", "yes")
+        return os.getenv("AF3_DEFAULT_MSA_FREE", "false").lower() in ("true", "1", "yes")
 
     @property
     def timeout_seconds(self) -> int:
@@ -87,18 +87,36 @@ class AF3Config(CoreConfig):
 
     @property
     def machine_type(self) -> str:
-        """Default machine type for AF3 endpoint deployment."""
-        return os.getenv("AF3_MACHINE_TYPE", "g2-standard-16")
+        """Default machine type for AF3 endpoint deployment (a3-highgpu-1g provides 3 TB local NVMe SSD for the 630 GB MSA bundle)."""
+        return os.getenv("AF3_MACHINE_TYPE", "a3-highgpu-1g")
 
     @property
     def accelerator_type(self) -> str:
         """Default accelerator type for AF3 endpoint deployment."""
-        return os.getenv("AF3_ACCELERATOR_TYPE", "NVIDIA_L4")
+        return os.getenv("AF3_ACCELERATOR_TYPE", "NVIDIA_H100_80GB")
 
     @property
     def accelerator_count(self) -> int:
         """Default accelerator count for AF3 endpoint deployment."""
         return int(os.getenv("AF3_ACCELERATOR_COUNT", "1"))
+
+    @property
+    def reservation_affinity_type(self) -> str:
+        """Optional GCE reservation affinity type ('NO_RESERVATION', 'ANY_RESERVATION', 'SPECIFIC_RESERVATION')."""
+        return os.getenv("AF3_RESERVATION_AFFINITY_TYPE", "").strip()
+
+    @property
+    def reservation_names(self) -> list[str]:
+        """Optional list of GCE reservation resource names for SPECIFIC_RESERVATION."""
+        raw = os.getenv("AF3_RESERVATION_NAMES", "").strip()
+        if not raw:
+            return []
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
+    @property
+    def auto_fallback_gpu(self) -> bool:
+        """Whether to automatically fall back to lower GPU tiers (H100 -> A100_80GB -> A100 -> L4) on stockout/quota/reservation errors."""
+        return os.getenv("AF3_AUTO_FALLBACK_GPU", "true").lower() in ("true", "1", "yes")
 
     @property
     def viewer_url(self) -> str:
@@ -118,6 +136,9 @@ class AF3Config(CoreConfig):
                 "machine_type": self.machine_type,
                 "accelerator_type": self.accelerator_type,
                 "accelerator_count": self.accelerator_count,
+                "reservation_affinity_type": self.reservation_affinity_type,
+                "reservation_names": self.reservation_names,
+                "auto_fallback_gpu": self.auto_fallback_gpu,
                 "default_msa_free": self.default_msa_free,
                 "timeout_seconds": self.timeout_seconds,
             }

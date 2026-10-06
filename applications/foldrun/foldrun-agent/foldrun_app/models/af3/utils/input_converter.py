@@ -14,7 +14,7 @@
 
 """Convert FASTA sequences and biological entities to AlphaFold 3 query JSON format.
 
-AlphaFold 3 input JSON schema:
+AlphaFold 3 input JSON schema (dialect='alphafold3', version=1):
 {
   "name": "target_complex",
   "modelSeeds": [1],
@@ -23,10 +23,9 @@ AlphaFold 3 input JSON schema:
     {"rna": {"id": "B", "sequence": "AGCU..."}},
     {"dna": {"id": "C", "sequence": "AGCT..."}},
     {"ligand": {"id": "D", "ccdCodes": ["ATP"]}},
-    {"ligand": {"id": "E", "smiles": "CC(=O)O"}},
-    {"ion": {"id": "F", "ion": "MG"}}
+    {"ligand": {"id": "E", "ccdCodes": ["MG"]}},
+    {"ligand": {"id": "F", "smiles": "CC(=O)O"}}
   ],
-  "msaFree": true,
   "dialect": "alphafold3",
   "version": 1
 }
@@ -209,10 +208,18 @@ def validate_af3_json(json_content: str | dict) -> tuple[bool, list[str], list[s
         chain_id = mol_data.get("id")
         if not chain_id:
             errors.append(f"Entity at index {idx} missing 'id' field.")
-        elif chain_id in seen_ids:
-            errors.append(f"Duplicate chain ID '{chain_id}' found in AF3 entities.")
         else:
-            seen_ids.add(chain_id)
+            chain_ids = chain_id if isinstance(chain_id, list) else [chain_id]
+            if not chain_ids or not all(isinstance(cid, str) and cid.strip() for cid in chain_ids):
+                errors.append(
+                    f"Entity at index {idx} has invalid 'id' field (expected string or list of strings)."
+                )
+            else:
+                for cid in chain_ids:
+                    if cid in seen_ids:
+                        errors.append(f"Duplicate chain ID '{cid}' found in AF3 entities.")
+                    else:
+                        seen_ids.add(cid)
 
         if mol_type in ("protein", "rna", "dna"):
             seq = mol_data.get("sequence", "")
@@ -223,13 +230,15 @@ def validate_af3_json(json_content: str | dict) -> tuple[bool, list[str], list[s
                 errors.extend(seq_errors)
         elif mol_type == "ligand":
             smiles = mol_data.get("smiles")
-            ccd_codes = mol_data.get("ccdCodes")
+            ccd_codes = mol_data.get("ccdCodes") or mol_data.get("ccd_codes")
             if not smiles and not ccd_codes:
                 errors.append(
                     f"Ligand entity '{chain_id}' must provide either 'smiles' or 'ccdCodes'."
                 )
         elif mol_type == "ion":
-            ion_symbol = mol_data.get("ion")
+            ion_symbol = (
+                mol_data.get("ion") or mol_data.get("ccdCodes") or mol_data.get("ccd_codes")
+            )
             if not ion_symbol:
                 errors.append(f"Ion entity '{chain_id}' missing 'ion' element symbol.")
 
@@ -316,15 +325,25 @@ def count_af3_tokens(data: dict) -> int:
     for entity in data.get("sequences", []):
         for mol_type in ("protein", "rna", "dna"):
             if mol_type in entity and "sequence" in entity[mol_type]:
-                total += len(entity[mol_type]["sequence"])
+                mol_data = entity[mol_type]
+                cid = mol_data.get("id", "A")
+                mult = len(cid) if isinstance(cid, list) else 1
+                total += len(mol_data["sequence"]) * max(1, mult)
         if "ligand" in entity:
             lig = entity["ligand"]
-            if lig.get("ccdCodes"):
-                total += len(lig["ccdCodes"])
+            cid = lig.get("id", "A")
+            mult = len(cid) if isinstance(cid, list) else 1
+            ccd = lig.get("ccdCodes") or lig.get("ccd_codes")
+            if ccd:
+                ccd_len = len(ccd) if isinstance(ccd, list) else 1
+                total += ccd_len * max(1, mult)
             elif "smiles" in lig:
-                total += max(len(lig["smiles"]) // 2, 5)
+                total += max(len(lig["smiles"]) // 2, 5) * max(1, mult)
             else:
-                total += 10
+                total += 10 * max(1, mult)
         if "ion" in entity:
-            total += 1
+            ion_data = entity["ion"]
+            cid = ion_data.get("id", "A") if isinstance(ion_data, dict) else "A"
+            mult = len(cid) if isinstance(cid, list) else 1
+            total += 1 * max(1, mult)
     return total

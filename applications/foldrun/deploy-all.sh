@@ -249,6 +249,7 @@ extract_terraform_outputs() {
     export SUBNET_ID="${SUBNET_ID:-}"
     export NETWORK_ID="${NETWORK_ID:-}"
     export NETWORK_PROJECT_NUMBER="${NETWORK_PROJECT_NUMBER:-}"
+    export MODEL_ENDPOINT_LOCATION="${MODEL_ENDPOINT_LOCATION:-global}"
     export TF_VIEWER_URL="${TF_VIEWER_URL:-}"
     export GEMINI_ENTERPRISE_APP_ID="${GEMINI_ENTERPRISE_APP_ID:-}"
 
@@ -260,6 +261,15 @@ extract_terraform_outputs() {
         _tf_env=$(mktemp)
         (
             cd "$TERRAFORM_DIR" || exit 0
+            export GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
+            cat <<EOF > backend.tf
+terraform {
+  backend "gcs" {
+    bucket = "${PROJECT_ID}-tfstate-foldrun"
+    prefix = "terraform/state/foldrun"
+  }
+}
+EOF
             terraform init -reconfigure -input=false > /dev/null 2>&1 || exit 0
             # -json outputs a stable JSON object; empty state returns {}
             tf_json=$(terraform output -json 2>/dev/null) || tf_json="{}"
@@ -282,12 +292,21 @@ extract_terraform_outputs() {
             v=$(_tf agent_runtime_id);       if [[ -n "$v" ]]; then echo "AGENT_RUNTIME_ID=$v"; fi
         ) > "$_tf_env" 2>/dev/null || true
         while IFS='=' read -r key val; do
-            [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="$val"
+            [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="${!key:-$val}"
         done < "$_tf_env"
         rm -f "$_tf_env"
     fi
 
     export FOLDRUN_VIEWER_URL="${FOLDRUN_VIEWER_URL:-$TF_VIEWER_URL}"
+    if [[ -z "${FOLDRUN_VIEWER_URL:-}" ]]; then
+        export FOLDRUN_VIEWER_URL=$(gcloud run services describe foldrun-viewer --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)" 2>/dev/null || true)
+    fi
+    if [[ -z "${AGENT_RUNTIME_ID:-}" ]]; then
+        _tok=$(gcloud auth print-access-token 2>/dev/null || true)
+        if [[ -n "$_tok" ]]; then
+            export AGENT_RUNTIME_ID=$(curl -s -H "Authorization: Bearer $_tok" "https://${REGION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}/reasoningEngines" | python3 -c "import json,sys; d=json.load(sys.stdin); engines=[e['name'] for e in d.get('reasoningEngines',[]) if e.get('displayName')=='FoldRun_Agent']; print(engines[0] if engines else '')" 2>/dev/null || true)
+        fi
+    fi
 
     echo "Configuration:"
     echo "  GCS_BUCKET=$GCS_BUCKET"
@@ -375,7 +394,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET",_MODEL_ENDPOINT_LOCATION="$MODEL_ENDPOINT_LOCATION",_FOLDRUN_VIEWER_URL="$FOLDRUN_VIEWER_URL",_AGENT_RUNTIME_ID="$AGENT_RUNTIME_ID",_GEMINI_ENTERPRISE_APP_ID="$GEMINI_ENTERPRISE_APP_ID" \
+        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET",_MODEL_ENDPOINT_LOCATION="$MODEL_ENDPOINT_LOCATION",_FOLDRUN_VIEWER_URL="$FOLDRUN_VIEWER_URL",_AGENT_RUNTIME_ID="$AGENT_RUNTIME_ID",_GEMINI_ENTERPRISE_APP_ID="$GEMINI_ENTERPRISE_APP_ID",_AF3_ENDPOINT="${AF3_ENDPOINT:-auto}",_AF3_MODEL_ID="${AF3_MODEL_ID:-auto}" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi

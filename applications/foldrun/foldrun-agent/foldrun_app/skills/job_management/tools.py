@@ -133,23 +133,29 @@ def check_af3_endpoint(endpoint_id: str | None = None) -> dict:
 def deploy_af3_endpoint(
     model_id: str | None = None,
     endpoint_id: str | None = None,
-    machine_type: str = "g2-standard-16",
-    accelerator_type: str = "NVIDIA_L4",
+    machine_type: str = "a3-highgpu-1g",
+    accelerator_type: str = "NVIDIA_H100_80GB",
     accelerator_count: int = 1,
+    min_replica_count: int | None = None,
+    max_replica_count: int | None = None,
     sync: bool = False,
 ) -> dict:
-    """Deploy AlphaFold 3 model to the Agent Platform Endpoint (spin up GPU resources).
+    """Deploy or scale the AlphaFold 3 model on the Agent Platform Endpoint.
 
-    Allocates dedicated GPU hardware (default: g2-standard-16 with 1x NVIDIA L4 GPU)
-    for interactive prediction campaigns.
+    Allocates dedicated GPU hardware (default: a3-highgpu-1g with 1x NVIDIA H100 80GB GPU
+    and 3 TB local NVMe SSD for the 630 GB MSA bundle) for interactive prediction campaigns.
+    If a model is already deployed, passing min_replica_count / max_replica_count scales
+    the active endpoint's replica count up or down in-place (without creating a new endpoint).
 
     Args:
         model_id: Optional Agent Platform Model resource name or ID.
         endpoint_id: Optional Agent Platform Endpoint override.
-        machine_type: Machine type for inference (default: 'g2-standard-16').
-        accelerator_type: GPU accelerator type (default: 'NVIDIA_L4').
+        machine_type: Machine type for inference (default: 'a3-highgpu-1g').
+        accelerator_type: GPU accelerator type (default: 'NVIDIA_H100_80GB').
         accelerator_count: Number of GPU accelerators (default: 1).
-        sync: Whether to wait synchronously (~5-8 mins; default: False).
+        min_replica_count: Minimum active GPU replicas (default: 1; pass >1 to scale out for large backlogs).
+        max_replica_count: Maximum GPU replicas for autoscaling (defaults to min_replica_count).
+        sync: Whether to wait synchronously (~10-12 mins; default: False).
     """
     args = {
         "machine_type": machine_type,
@@ -161,6 +167,10 @@ def deploy_af3_endpoint(
         args["model_id"] = model_id
     if endpoint_id is not None:
         args["endpoint_id"] = endpoint_id
+    if min_replica_count is not None:
+        args["min_replica_count"] = min_replica_count
+    if max_replica_count is not None:
+        args["max_replica_count"] = max_replica_count
     return get_tool("af3_deploy_endpoint").run(args)
 
 
@@ -173,6 +183,10 @@ def undeploy_af3_endpoint(
 
     Releases dedicated GPU hardware from the endpoint, reverting ongoing idle costs
     to $0.00/hr immediately while preserving the endpoint and model registry entries.
+
+    IMPORTANT: NEVER call `undeploy_af3_endpoint` automatically after a prediction error
+    or without explicit user confirmation, because spinning the H100 endpoint back up
+    takes ~10-12 minutes. Always ask the user before undeploying.
 
     Args:
         deployed_model_id: Optional specific deployed model ID to undeploy. If omitted, undeploys all models.

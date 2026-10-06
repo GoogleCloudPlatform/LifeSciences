@@ -1,15 +1,16 @@
 <table><tr>
 <td width="160" valign="middle"><a href="https://youtu.be/umTLrEF5L7A"><img src="img/foldrun-sticker.svg" alt="FoldRun" width="150"/></a></td>
-<td valign="middle"><strong>FoldRun</strong> is an AI-powered orchestration platform for protein structure prediction on Google Cloud. It provides a conversational interface that manages the entire lifecycle — from sequence input to structural validation — using Gemini and Google Agent Runtime. Supports multiple structure prediction models (AlphaFold2, OpenFold3, Boltz) via a plugin architecture with shared infrastructure.</td>
+<td valign="middle"><strong>FoldRun</strong> is an AI-powered orchestration platform for biomolecular structure prediction on Google Cloud. It provides a conversational interface that manages the entire lifecycle — from sequence and ligand input to structural validation — using Gemini and Google Agent Runtime. Supports four structure prediction models (<strong>AlphaFold 2</strong>, <strong>AlphaFold 3</strong>, <strong>OpenFold 3</strong>, and <strong>Boltz-2</strong>) via a plugin architecture with shared infrastructure.</td>
 </tr></table>
 
 ## Features
 
 - **Conversational AI**: Natural language interface powered by Gemini for submitting, monitoring, and analyzing predictions
-- **Multi-Model Support**: Plugin architecture for AF2, OpenFold3, Boltz — shared databases, independent pipelines
-- **Automated Execution**: Provisions infrastructure and launches pipelines on Agent Platform with optimal compute selection
-- **Parallel Analysis**: Cloud Run jobs calculate structural metrics (pLDDT, PAE) and generate expert biological insights using Gemini
-- **Interactive Visualization**: Web-based 3D structure viewer with confidence coloring and analysis dashboards
+- **Multi-Model Support**: Plugin architecture for **AlphaFold 2**, **AlphaFold 3**, **OpenFold 3**, and **Boltz-2** — shared databases, unified KFP orchestration, and dedicated H100 endpoint management
+- **4-Stage AF3 KFP Pipeline + Auto-Drain**: Orchestrates AlphaFold 3 predictions across 4 observable KFP stages (*Provision & Queue Endpoint $\rightarrow$ Run H100 Inference $\rightarrow$ Report Endpoint Available $\rightarrow$ Process Results & Expert Analysis*) with FIFO GCS replica slot locking and a 20-minute idle auto-undeploy watchdog (`$0.00/hr` when idle)
+- **Automated Execution & Reservation-Aware Hardware**: Provisions infrastructure, detects GCE GPU reservations, and automatically falls back across GPU tiers (`H100_80GB` $\rightarrow$ `A100_80GB` $\rightarrow$ `A100` $\rightarrow$ `L4`)
+- **Multimodal Gemini 3.1 Pro Expert Analysis**: Generates structural metrics (`pLDDT`, `PAE`, `pTM`, `ipTM`, `ranking_score`) and multimodal AI biological interpretation from 3D coordinates and plots
+- **Interactive Visualization & Signed Artifact Bundles**: Web-based 3D structure viewer (3Dmol.js) with confidence coloring, PAE/ipTM heatmaps, and 1-click V4 signed ZIP archive downloads (`artifacts_bundle.zip`)
 - **Smart Database Management**: YAML-driven downloads via Cloud Batch with GCS-based gap detection — shared databases downloaded once across models
 
 ## Supported Models
@@ -17,18 +18,19 @@
 | Model | Source | Capabilities |
 |-------|--------|-------------|
 | [AlphaFold 2](https://github.com/google-deepmind/alphafold) | Google DeepMind | Protein monomers and multimers, AMBER relaxation |
-| [OpenFold 3](https://github.com/aqlaboratory/openfold-3) | AQ Laboratory | Proteins, RNA, DNA, ligands (SMILES/CCD), covalent modifications, glycans |
+| [AlphaFold 3](https://github.com/google-deepmind/alphafold3) | Google DeepMind | All-atom proteins, multimers, RNA, DNA (dsDNA), ligands (CCD codes & SMILES), metal ions (`MG`, `ZN`, `CA`, `FE`); Full 630 GB NVMe MSA + PDB templates or fast `--msa-free` screening |
+| [OpenFold 3](https://github.com/aqlaboratory/openfold-3) | AQ Laboratory | Proteins, RNA, DNA, ligands (SMILES/CCD), full RNA MSA via `nhmmer` |
 | [Boltz-2](https://github.com/jwohlwend/boltz) | MIT / jwohlwend | Proteins, RNA, DNA, ligands, covalent modifications, glycans, binding affinity |
 
 ## Tech Stack
 
-- **Agent**: Google ADK with up to 30 native Skills (AF2 + OF3 + Boltz-2), deployed to Agent Runtime
+- **Agent**: Google ADK with up to 36 native tools across 10 Skill packages (AF2 + AF3 + OF3 + Boltz-2), deployed to Agent Runtime
 - **A2A**: Native Agent-to-Agent protocol integration for agent interoperability
-- **AI**: Gemini (via Agent Platform)
-- **Compute**: Agent Platform Pipelines, Cloud Run, Cloud Batch
-- **Storage**: GCS (artifacts/results), Filestore (genetic databases)
+- **AI**: Gemini 3.8 Flash (agent orchestration) & Gemini 3.1 Pro (multimodal structural expert analysis)
+- **Compute**: Agent Platform Pipelines (KFP v2), Vertex AI Dedicated Endpoints (`a3-highgpu-1g` H100 80GB), Cloud Run, Cloud Batch
+- **Storage**: GCS (artifacts, V4 signed bundles, AF3 630 GB MSA bundle), Filestore (NFS genetic databases)
 - **Infrastructure**: Terraform, Cloud Build
-- **Language**: Python 3.10+
+- **Language**: Python 3.11+
 
 ## Getting Started
 
@@ -59,10 +61,11 @@ If you are using a Shared VPC (network belongs to a host project), the following
 
 
 **GPU Quota (check before starting):**
-- AF2 minimum: **1x NVIDIA A100 40GB** (L4 no longer auto-selected — slow DWS provisioning)
-- AF2 large proteins (>1500 residues): **1x NVIDIA A100 80GB**
-- OF3 minimum: **1x NVIDIA A100 40GB** (no L4 support)
-- Boltz-2 minimum: **1x NVIDIA A100 40GB** (no L4 support — diffusion model requires ≥40 GB VRAM)
+- **AlphaFold 3**: Default **1x NVIDIA H100 80GB (`a3-highgpu-1g`)** for Full 630 GB MSA + NVMe SSD (~3–6 min per standard target); automatically detects GCE reservations and falls back to **A100 80GB (`a2-ultragpu-1g`)**, **A100 40GB (`a2-highgpu-1g`)**, or **L4 (`g2-standard-16`, `--msa-free`)** if H100 quota/capacity is unavailable
+- **AF2 minimum**: **1x NVIDIA A100 40GB** (L4 no longer auto-selected — slow DWS provisioning)
+- **AF2 large proteins (>1500 residues)**: **1x NVIDIA A100 80GB**
+- **OF3 minimum**: **1x NVIDIA A100 40GB** (no L4 support)
+- **Boltz-2 minimum**: **1x NVIDIA A100 40GB** (no L4 support — diffusion model requires ≥40 GB VRAM)
 - Check your quota: [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu)
 - If you need to request quota increases, do it first — approvals can take hours
 
@@ -248,7 +251,7 @@ Default versions are defined in `deploy-all.sh` and match the tested, pinned val
 ### Step 3: Verify
 
 ```bash
-# Check all components are healthy
+# Check all components are healthy (also prints live Reasoning Engine & A2A URLs)
 ./check-status.sh YOUR_PROJECT_ID
 ```
 
@@ -258,41 +261,185 @@ Expected output:
 ✅ [Cloud Run] foldrun-viewer service is deployed and active
 ✅ [Cloud Run] foldrun-analysis-job is deployed
 ✅ [Agent Platform] FoldRun Agent Runtime is deployed
+   🔗 Reasoning Engine: projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID
+   🔗 A2A Endpoint:     https://us-central1-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID/api/a2a/foldrun_app
+   🔗 A2A Agent Card:   https://us-central1-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_NUMBER/locations/us-central1/reasoningEngines/YOUR_ENGINE_ID/api/a2a/foldrun_app/.well-known/agent-card.json
 ✅ [Data] Databases present (12 folders)
    ✅ AF2 core databases (uniref90 etc.)
    ✅ OF3 weights + CCD
    ⚠️  Boltz-2 databases not downloaded (optional)
 ```
 
-### Step 4: Use the Agent
+### Step 4: Use the Agent (Console, Gemini CLI, `a2a-cli`, and Antigravity `agy`)
+
+#### 4a. Vertex AI Agent Runtime Playground
 
 Open the Agent Runtime playground:
 ```
 https://console.cloud.google.com/vertex-ai/agents/locations/YOUR_REGION/agent-engines/YOUR_ENGINE_ID/playground?project=YOUR_PROJECT_ID
 ```
 
-The engine ID is printed at the end of `deploy-all.sh` and saved in `foldrun-agent/deployment_metadata.json`.
+The engine ID is printed at the end of `deploy-all.sh` (or `./check-status.sh YOUR_PROJECT_ID`) and saved in `foldrun-agent/deployment_metadata.json`.
 
 **Try these prompts:**
-- "Predict the structure of ubiquitin" (AF2 monomer)
-- "Fold this protein with ATP: MQIFVKTLTGKTITL..." (OF3, protein + ligand)
+- "Predict the structure of ubiquitin with AlphaFold 3" (AF3 monomer, ~3.8 min Full-MSA or ~58s `--msa-free`)
+- "Fold this kinase domain with ATP and a Mg2+ ion in AlphaFold 3" (AF3 protein + CCD ligand + metal ion)
+- "Predict EGFR kinase bound to Gefitinib SMILES `COc1cc2c(cc1OCCCN3CCOCC3)ncn2-c4cc(Cl)c(F)cc4` using AlphaFold 3" (AF3 protein + SMILES inhibitor)
+- "Fold the Zif268 zinc-finger domain bound to dsDNA `GCGTGGGCG` / `CGCCCACGC` in AlphaFold 3" (AF3 protein + dsDNA duplex)
+- "Predict this RNA aptamer `GGAUACCCUGAUGAGUCCGAAAGGACGAAACAGU` with AlphaFold 3 or OpenFold 3" (RNA monomer with `nhmmer` MSA)
 - "Predict a glycoprotein-ligand complex with covalent modifications" (Boltz-2)
 - "What's the structure of P69905?" (checks AlphaFold DB first)
 
-**Use via Gemini CLI (A2A):**
+---
 
-The deploy prints the native A2A endpoint URL. Create `~/.gemini/agents/foldrun.md`:
+#### 4b. Option 1 — Antigravity (`agy`) + `a2a-cli` (`a2a-foldrun` Wrapper)
+
+Unlike the standalone `gemini` CLI, **Antigravity (`agy` / `jetski`) does not natively parse `kind: remote` A2A `agent_card_url` definitions**. Instead, `agy` connects to FoldRun's A2A endpoint through the official [`a2a-cli`](https://github.com/a2aproject/a2a-cli) via an authenticated `~/.local/bin/a2a-foldrun` wrapper (and optionally a local `agy` Markdown subagent):
+
+```
+┌────────────────────────────────────────────────────────┐
+│               Developer / Terminal Shell               │
+│                                                        │
+│   ┌─────────────────────┐      ┌───────────────────┐   │
+│   │ Antigravity (`agy`) │      │   `a2a-foldrun`   │   │
+│   │  (Autonomous mode)  │◄────►│  (Wrapper Script) │   │
+│   └─────────────────────┘      └─────────┬─────────┘   │
+└──────────────────────────────────────────┼─────────────┘
+                                           │
+                                  A2A Protocol (JSON-RPC / SSE)
+                            + Bearer $(gcloud auth print-access-token)
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────┐
+│        Google Cloud Vertex AI Reasoning Engines        │
+│                                                        │
+│  Endpoint: .../reasoningEngines/<ENGINE_ID>/api/a2a/   │
+│            foldrun_app                                 │
+│                                                        │
+│  Models Managed:                                       │
+│   • AlphaFold 3 (4-Stage KFP + Dedicated H100 Endpoint)│
+│   • AlphaFold 2 Monomer/Multimer (Vertex AI Pipelines) │
+│   • OpenFold 3 & Boltz-2 (Vertex AI Pipelines)         │
+│   • AlphaFold DB (EMBL-EBI direct lookups)             │
+└────────────────────────────────────────────────────────┘
+```
+
+**1. Install `a2a-cli` persistently into `~/.local/bin`:**
+```bash
+mkdir -p ~/.local/bin
+curl -sL "https://github.com/a2aproject/a2a-cli/releases/download/v0.3.0/a2a_0.3.0_linux_amd64.tar.gz" -o ~/.local/bin/a2a.tar.gz
+tar -xzf ~/.local/bin/a2a.tar.gz -C ~/.local/bin a2a
+chmod +x ~/.local/bin/a2a
+ln -sf ~/.local/bin/a2a ~/.local/bin/a2a-cli
+rm -f ~/.local/bin/a2a.tar.gz
+a2a version
+```
+
+**2. Resolve and cache the FoldRun Agent Card locally:**
+```bash
+# Get your A2A Agent Card URL from ./check-status.sh YOUR_PROJECT_ID
+export A2A_CARD_URL="https://YOUR_REGION-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_NUMBER/locations/YOUR_REGION/reasoningEngines/YOUR_ENGINE_ID/api/a2a/foldrun_app/.well-known/agent-card.json"
+
+mkdir -p ~/.config/a2a
+curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  "$A2A_CARD_URL" -o ~/.config/a2a/foldrun-agent-card.json
+```
+
+**3. Create the `~/.local/bin/a2a-foldrun` authenticated wrapper:**
+
+Because Vertex AI Reasoning Engine endpoints require Google Cloud OAuth access tokens (`gcloud auth print-access-token`), create a wrapper script that injects a fresh bearer token on every call:
+
+```bash
+cat << 'EOF' > ~/.local/bin/a2a-foldrun
+#!/usr/bin/env bash
+set -e
+
+CARD_PATH="${A2A_FOLDRUN_CARD:-$HOME/.config/a2a/foldrun-agent-card.json}"
+TOKEN="$(gcloud auth print-access-token)"
+
+if [ "$#" -eq 0 ]; then
+    echo "Usage: a2a-foldrun [flags] \"<message>\""
+    echo "Examples:"
+    echo "  a2a-foldrun \"What models do you support?\""
+    echo "  a2a-foldrun --stream \"Check GPU quotas\""
+    echo "  a2a-foldrun --stream \"Check AF3 endpoint status and queue depth\""
+    echo "  a2a-foldrun card"
+    exit 1
+fi
+
+if [ "$1" = "card" ]; then
+    shift
+    exec a2a card get "$CARD_PATH" --auth "Bearer $TOKEN" "$@"
+fi
+
+exec a2a send -a "$CARD_PATH" --auth "Bearer $TOKEN" "$@"
+EOF
+
+chmod +x ~/.local/bin/a2a-foldrun
+```
+
+**4. Example `a2a-foldrun` Commands:**
+
+| Capability / Tool | Command | Outcome |
+|---|---|---|
+| **Inspect Agent Card** | `a2a-foldrun card` | Displays registered FoldRun skills and A2A interfaces |
+| **GPU Quota & Reservations** | `a2a-foldrun --stream "check gpu quota and reservations"` | Polls regional H100/A100/L4 quota and open GCE reservations |
+| **AF3 Endpoint & Queue Status** | `a2a-foldrun --stream "check af3 endpoint"` | Reports deployed H100 replicas, active/queued jobs, and scale-up advisories |
+| **Job Monitoring** | `a2a-foldrun --stream "check job progress"` | Lists active/completed KFP runs across AF2, AF3, OF3, and Boltz-2 |
+| **Results & Signed Bundles** | `a2a-foldrun --stream "get prediction results for af3_zinc_finger_dna"` | Returns `ranking_score`, `pLDDT`, `ipTM`, signed `.cif`/`.zip` URLs, and 3D Viewer link |
+
+**5. Registering `foldrun` as a Reusable Antigravity (`agy`) Custom Agent (Optional):**
+
+To make `agy --agent foldrun` (or subagent invocation inside `agy`) work out of the box without typing `a2a-foldrun` in every prompt, create `~/.gemini/config/agents/foldrun.md`:
+
+````markdown
+---
+name: foldrun
+description: "Protein & biomolecular structure prediction agent (AF2, AF3, OF3, Boltz-2) via the FoldRun Vertex AI Reasoning Engine A2A endpoint."
+tools:
+  - run_command
+  - view_file
+mainAgent: true
+subagent: true
+commandExecutionPolicy: auto
+---
+
+# FoldRun A2A Agent
+
+Delegate all structure prediction, GPU quota/reservation checks, AF3 endpoint management, and result analysis queries to the deployed FoldRun Reasoning Engine via `~/.local/bin/a2a-foldrun`:
+
+```bash
+a2a-foldrun --stream "<query>"
+```
+````
+
+And for unprompted headless execution in `agy`:
+```bash
+alias agy-yolo="agy --dangerously-skip-permissions --mode accept-edits"
+agy-yolo --agent foldrun -p "Check active FoldRun pipeline jobs and summarize their status"
+```
+
+---
+
+#### 4c. Option 2 — Standalone Gemini CLI (`kind: remote`)
+
+If you are using the standalone open-source **Gemini CLI** (`gemini`, which supports `kind: remote` A2A agent cards natively), create `~/.gemini/agents/foldrun.md`:
+
 ```markdown
 ---
 kind: remote
 name: FoldRun
-description: Protein structure prediction agent
-agent_card_url: https://YOUR_REGION-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_ID/locations/YOUR_REGION/reasoningEngines/YOUR_AGENT_RUNTIME_ID/api/a2a/foldrun_app/.well-known/agent-card.json
+description: Agentic biomolecular structure prediction on Google Cloud (AF2, AF3, OF3, Boltz-2)
+agent_card_url: https://YOUR_REGION-aiplatform.googleapis.com/reasoningEngines/v1/projects/YOUR_PROJECT_NUMBER/locations/YOUR_REGION/reasoningEngines/YOUR_ENGINE_ID/api/a2a/foldrun_app/.well-known/agent-card.json
 auth:
   type: google-credentials
 ---
 ```
-Then: `gemini -a foldrun "Predict the structure of ubiquitin"`
+
+Then invoke directly:
+```bash
+gemini -a foldrun "Predict the structure of ubiquitin with AlphaFold 3"
+```
 
 ### Step 5: Wait for Databases
 
@@ -314,10 +461,11 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 |----------|------|---------|
 | VPC + Subnet | `foldrun-network` | Private network for Filestore + pipelines |
 | Filestore | `foldrun-nfs` | NFS for genetic databases (2.5TB Basic SSD) |
-| GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, analysis results |
-| GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups |
+| GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, AF3 results, analysis bundles |
+| GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups + AF3 630 GB MSA bundle |
 | Artifact Registry | `foldrun-repo` | Container images |
-| Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + OF3 + Boltz-2) |
+| Vertex AI Endpoint | `alphafold3-endpoint` | Managed AlphaFold 3 endpoint (`a3-highgpu-1g` H100 80GB, scales to `$0.00/hr` when idle) |
+| Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + AF3 + OF3 + Boltz-2) |
 | Cloud Run Job | `foldrun-analysis-job` | Parallel prediction analysis (AF2 + OF3 + Boltz-2) |
 | Service Account | `foldrun-agent-sa` | Agent's GCP identity |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
@@ -339,19 +487,22 @@ uv run adk web foldrun_app
 
 ### Estimated Costs
 
-| Component | Estimated Monthly Cost |
-|-----------|----------------------|
+| Component | Estimated Cost |
+|-----------|---------------|
 | Filestore (2.5TB Basic SSD) | ~$770/mo |
-| GCS (~1TB database backups) | ~$20/mo |
+| GCS (~1TB database backups + AF3 630 GB MSA tar.gz) | ~$25/mo |
 | Artifact Registry (~16GB) | ~$2/mo |
 | Agent Runtime (idle) | ~$0 (pay per query) |
 | Cloud Run (viewer, idle) | ~$0 (scale to zero) |
+| **AlphaFold 3 endpoint (idle / undeployed)** | **$0.00/hr** (auto-undeploys after 20 min of inactivity) |
+| **AlphaFold 3 prediction (`--msa-free`, H100)** | **~$0.18 per job** (~58s on warm `a3-highgpu-1g` at ~$11.06/hr) |
+| **AlphaFold 3 prediction (Full 630 GB MSA, H100)** | **~$0.55–$1.15 per standard job** (~3–6 min for 30–350 aa/nt; ~$2.85–$3.55 for >1,100-aa proteins) |
 | AF2 prediction (per job, A100) | ~$8 per job (MSA + 5 seeds predict + relax) |
 | OF3 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
 | Boltz-2 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
-| Gemini API (per analysis) | ~$0.01-0.05 per analysis |
+| Gemini 3.1 Pro API (per expert analysis) | ~$0.01-0.05 per analysis |
 
-The dominant cost is Filestore (~$770/mo). Current databases (AF2 reduced + OF3) use ~944 GB of the 2.5 TB provisioned, leaving room for the full BFD database (~272 GB) if needed. BASIC_SSD avoids throughput throttling during concurrent database downloads. Terraform ignores capacity changes after provisioning, so you can resize via Console or gcloud without drift. To stop costs, delete the Filestore instance when not in use and re-download databases when needed.
+The dominant fixed cost is Filestore (~$770/mo). Current databases (AF2 reduced + OF3) use ~944 GB of the 2.5 TB provisioned, leaving room for the full BFD database (~272 GB) if needed. AlphaFold 3 mounts its 630 GB MSA bundle directly onto the H100 VM's 3 TB local NVMe SSD at endpoint startup and automatically undeploys back to `$0.00/hr` after 20 minutes of inactivity.
 
 ## Project Structure
 
@@ -359,11 +510,12 @@ The dominant cost is Filestore (~$770/mo). Current databases (AF2 reduced + OF3)
 foldrun/
 ├── foldrun-agent/              # AI Agent (Google ADK)
 │   ├── foldrun_app/
-│   │   ├── agent.py            # Agent definition (Gemini + Skills)
+│   │   ├── agent.py            # Agent definition (Gemini + SkillToolset)
 │   │   ├── core/               # Shared infrastructure (model-agnostic)
 │   │   │   ├── base_tool.py    # BaseTool (GCS, Agent Platform, NFS)
 │   │   │   ├── config.py       # GCP project, NFS, GCS config
-│   │   │   ├── hardware.py     # GPU quota detection
+│   │   │   ├── download_artifacts.py # V4 Signed URL artifact & ZIP bundle generator
+│   │   │   ├── hardware.py     # GPU quota & GCE reservation auto-detection + fallback
 │   │   │   ├── batch.py        # Cloud Batch job submission
 │   │   │   ├── download.py     # YAML-driven database downloader
 │   │   │   └── model_registry.py
@@ -374,6 +526,12 @@ foldrun/
 │   │   │   │   ├── pipeline/   # KFP: Configure → Data → ParallelFor[Predict → Relax]
 │   │   │   │   ├── tools/      # 19 tools (submit, status, analysis, viewer, DB queries)
 │   │   │   │   └── utils/      # FASTA validation, pipeline utils
+│   │   │   ├── af3/            # AlphaFold 3 plugin (4-stage KFP + Managed H100 Endpoint)
+│   │   │   │   ├── config.py   # AF3Config (endpoint ID, H100/A100/L4 auto-fallback, reservations)
+│   │   │   │   ├── base.py     # AF3Tool base class
+│   │   │   │   ├── pipeline.py # 4-stage KFP DAG (Queue → Inference → Release → Expert Analysis) + Idle Watchdog
+│   │   │   │   ├── tools/      # 7 tools: submit, submit_batch, check/deploy/undeploy_endpoint, get_results, open_viewer
+│   │   │   │   └── utils/      # Input converter (FASTA/JSON), metrics, multimodal viewer_artifacts
 │   │   │   ├── of3/            # OpenFold3 plugin
 │   │   │   │   ├── config.py   # OF3Config (image, params path, viewer URL)
 │   │   │   │   ├── base.py     # OF3Tool (GPU tiers: A100/A100_80GB, no relax)
@@ -386,20 +544,20 @@ foldrun/
 │   │   │       ├── pipeline/   # KFP: ConfigureSeeds → MSA(protein) → ParallelFor[Predict]
 │   │   │       ├── tools/      # submit, analyze, get_results, open_viewer
 │   │   │       └── utils/      # Input converter (FASTA→Boltz-2 YAML), pipeline utils
-│   │   └── skills/             # ADK FunctionTool wrappers
-│   │       ├── job_submission/  # submit_af2_*, submit_of3_prediction, submit_boltz2_prediction
-│   │       ├── job_management/  # status, list, details, delete, GPU quota
-│   │       ├── results_analysis/ # AF2 + OF3 + Boltz-2 analysis, results retrieval
-│   │       ├── visualization/  # AF2 + OF3 + Boltz-2 viewer tools
+│   │   └── skills/             # ADK FunctionTool wrappers & SKILL.md packages
+│   │       ├── job_submission/  # submit_af2_*, submit_af3_*, submit_of3_prediction, submit_boltz2_prediction
+│   │       ├── job_management/  # status, list, details, delete, GPU quota, AF3 endpoint lifecycle
+│   │       ├── results_analysis/ # AF2 + AF3 + OF3 + Boltz-2 analysis, V4 signed downloads
+│   │       ├── visualization/  # AF2 + AF3 + OF3 + Boltz-2 viewer tools
 │   │       └── _tool_registry.py
 │   ├── databases.yaml          # Database manifest (all models)
 │   ├── scripts/setup_data.py   # CLI for database downloads
-│   └── tests/                  # 298 unit tests
+│   └── tests/                  # 667+ unit tests
 ├── src/
 │   ├── alphafold-components/    # AF2 pipeline container
 │   ├── openfold3-components/    # OF3 pipeline container
 │   ├── boltz2-components/       # Boltz-2 pipeline container
-│   ├── foldrun-viewer/          # Cloud Run web app (AF2 + OF3 + Boltz-2 3D viewer)
+│   ├── foldrun-viewer/          # Cloud Run web app (AF2 + AF3 + OF3 + Boltz-2 3D viewer)
 │   └── foldrun-analysis-job/    # Cloud Run Job (Unified prediction analysis)
 ├── terraform/                   # Infrastructure as code
 ├── cloudbuild.yaml              # CI/CD pipeline
@@ -412,13 +570,14 @@ foldrun/
 ```
                       ┌──────────────────┐
    A2A clients ──→    │  foldrun-agent   │ ← Exposes native A2A endpoints (/api/a2a/foldrun_app)
-                      │  (Agent Runtime)  │   Conversational AI (Gemini Flash + up to 30 Skills)
+                      │  (Agent Runtime)  │   Conversational AI (Gemini + 36 Tools across 4 Models)
                       └───────┬──────────┘
                               │ Native tool calls
-        ├──→ Agent Platform Pipelines  ← AF2 + OF3 + Boltz-2 structure prediction
-        ├──→ Cloud Batch          ← Genetic database downloads
-        ├──→ Cloud Run Jobs       ← Parallel analysis (AF2 + OF3 + Boltz-2) + Gemini Pro expert analysis
-        └──→ Cloud Run Service    ← Interactive 3D structure viewer (AF2 + OF3 + Boltz-2)
+        ├──→ Agent Platform Pipelines  ← AF2 + AF3 (4-stage KFP) + OF3 + Boltz-2 orchestration
+        ├──→ Vertex AI H100 Endpoint   ← AlphaFold 3 (a3-highgpu-1g + 630 GB NVMe MSA + 20m auto-drain)
+        ├──→ Cloud Batch               ← Genetic database downloads
+        ├──→ Cloud Run Jobs            ← Parallel analysis + Gemini 3.1 Pro multimodal expert analysis
+        └──→ Cloud Run Service         ← Interactive 3D viewer & V4 signed ZIP bundle downloads
 ```
 
 ## Why FoldRun vs ColabFold / Public Servers
@@ -429,15 +588,16 @@ but don't meet enterprise requirements for drug discovery pipelines:
 | | ColabFold / AF Server | FoldRun |
 |---|---|---|
 | **Data sovereignty** | Sequences sent to external servers | Everything stays in your GCP project — VPC, no egress |
-| **MSA computation** | ColabFold MMseqs2 server (external) | Local Jackhmmer/nhmmer on NFS-mounted databases |
+| **Small-molecule SMILES & custom ligands** | AlphaFold Server restricts arbitrary SMILES | Full support for custom SMILES inhibitors, CCD cofactors, ions, dsDNA & RNA in AF3, OF3, and Boltz-2 |
+| **MSA computation** | ColabFold MMseqs2 server (external) | Local Jackhmmer/nhmmer on NVMe SSD (AF3 630 GB) or Filestore NFS |
 | **Audit trail** | None | Full Agent Platform pipeline lineage, Cloud Logging |
 | **IP protection** | No control over sequence retention | Your GCS bucket, your retention policies |
 | **Regulatory** | Not GxP-compatible | Runs in your compliant GCP org with IAM controls |
-| **GPU control** | Shared / queued | Dedicated A100s via DWS, configurable scheduling |
-| **Multi-model** | AF2 only (ColabFold) or AF3 only (AF Server) | AF2 + OF3 + Boltz via plugin architecture |
-| **Customization** | Fixed parameters | Full control: GPU tier, MSA method, seeds, samples |
-| **Scale** | Rate-limited | Parallel seeds across N GPUs, batch submission |
-| **Integration** | Web UI only | Conversational AI agent, API, CI/CD, Gemini analysis |
+| **GPU control** | Shared / queued | Dedicated H100/A100s with reservation detection, auto-fallback & 20m idle auto-drain |
+| **Multi-model** | AF2 only (ColabFold) or AF3 only (AF Server) | **AF2 + AF3 + OF3 + Boltz-2** via unified plugin architecture |
+| **Customization** | Fixed parameters | Full control: GPU tier, Full-MSA vs `--msa-free`, seeds, samples |
+| **Scale** | Rate-limited (daily job quota) | Unlimited batch KFP queueing across warm H100 replicas |
+| **Integration** | Web UI only | Conversational AI agent, A2A API, CI/CD, Gemini 3.1 Pro multimodal analysis |
 
 **Bottom line**: FoldRun is built for the pharma/biotech use case where proprietary
 sequences (pre-clinical targets, engineered antibodies, novel drug candidates) must

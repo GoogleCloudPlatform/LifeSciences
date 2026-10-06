@@ -47,14 +47,16 @@ class AF2CheckGPUQuotaTool(AF2Tool):
             quota_result = check_gpu_quota(self.config.project_id, region)
             on_demand = quota_result["on_demand_gpus"]
             preemptible = quota_result["preemptible_gpus"]
+            reservations = quota_result.get("reservations", [])
 
-            summary = self._generate_summary(on_demand, preemptible)
+            summary = self._generate_summary(on_demand, preemptible, reservations)
 
             return {
                 "region": region,
                 "project_id": self.config.project_id,
                 "on_demand_gpus": on_demand,
                 "preemptible_gpus": preemptible,
+                "reservations": reservations,
                 "summary": summary,
                 "recommendation": self._generate_recommendation(on_demand, preemptible),
             }
@@ -67,7 +69,12 @@ class AF2CheckGPUQuotaTool(AF2Tool):
                 "region": region,
             }
 
-    def _generate_summary(self, on_demand: dict, preemptible: dict) -> str:
+    def _generate_summary(
+        self,
+        on_demand: dict,
+        preemptible: dict,
+        reservations: list[dict[str, Any]] | None = None,
+    ) -> str:
         """Generate human-readable summary of GPU availability."""
         lines = []
 
@@ -87,6 +94,19 @@ class AF2CheckGPUQuotaTool(AF2Tool):
                     f"  {info['status_emoji']} {info['friendly_name']}: "
                     f"{info['available']}/{info['limit']} available "
                     f"({info['usage_percentage']}% used)"
+                )
+
+        if reservations:
+            lines.append("\n**Active Compute Engine GPU Reservations:**")
+            for r in reservations:
+                mode_tag = (
+                    "SPECIFIC_RESERVATION"
+                    if r.get("specific_reservation_required")
+                    else "ANY_RESERVATION"
+                )
+                lines.append(
+                    f"  🟢 {r.get('name')} ({r.get('zone')}, {r.get('machine_type')}): "
+                    f"{r.get('available_count')}/{r.get('total_count')} available [{mode_tag}]"
                 )
 
         return "\n".join(lines)

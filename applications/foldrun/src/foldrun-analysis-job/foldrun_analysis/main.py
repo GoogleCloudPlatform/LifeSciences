@@ -38,12 +38,15 @@ def main():
     bucket_name = os.getenv("GCS_BUCKET")
     analysis_path = os.getenv("ANALYSIS_PATH")
 
-    if not bucket_name:
-        logger.error("GCS_BUCKET environment variable not set")
-        sys.exit(1)
-
     if not analysis_path:
         logger.error("ANALYSIS_PATH environment variable not set")
+        sys.exit(1)
+
+    if not bucket_name and analysis_path.startswith("gs://"):
+        bucket_name = analysis_path[5:].split("/", 1)[0]
+
+    if not bucket_name:
+        logger.error("GCS_BUCKET environment variable not set")
         sys.exit(1)
 
     logger.info(f"Bucket: {bucket_name}, Analysis Path: {analysis_path}")

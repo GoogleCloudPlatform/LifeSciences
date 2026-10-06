@@ -1,30 +1,29 @@
 # FoldRun Structure Viewer
 
-Flask web application for visualizing protein structure predictions from AlphaFold2 and OpenFold3 with interactive 3D rendering, confidence metrics, and Gemini expert analysis.
+Flask web application for visualizing biomolecular structure predictions from **AlphaFold 2**, **AlphaFold 3**, **OpenFold 3**, and **Boltz-2** with interactive 3D rendering, confidence metrics, multimodal **Gemini 3.1 Pro** Expert Analysis, and 1-click ZIP artifact bundle downloads.
 
 ## Features
 
-- **Multi-Model Support:** Auto-detects AF2 vs OF3 from analysis summary
-- **Interactive 3D Visualization:** Structures rendered with 3Dmol.js (PDB for AF2, CIF for OF3)
-- **Ligand Rendering:** Protein as cartoon, ligands as ball+stick (auto-detected from HETATM)
-- **pLDDT Confidence Coloring:** Color-coded by prediction confidence
-- **Per-Chain Confidence Table:** Protein vs ligand pLDDT breakdown (OF3)
-- **Analysis Plots:** pLDDT per-chain, PDE/PAE heatmaps with chain boundaries, ipTM matrix
-- **Gemini Expert Analysis:** AI-generated structural assessment (rendered Markdown)
-- **Input Query JSON:** Copyable OF3 query JSON for resubmission (OF3)
-- **Compact Job Summary:** Pill-style header with model type, status, duration, labels
+- **4-Model Support:** Auto-detects `alphafold2`, `alphafold3`, `openfold3`, and `boltz2` from `analysis/summary.json`
+- **Interactive 3D Visualization:** Structures rendered with 3Dmol.js (`.pdb` for AF2, all-atom `.cif` / mmCIF for AF3, OF3, and Boltz-2)
+- **Ligand, Ion & Nucleic Acid Rendering:** Proteins/nucleic acids as cartoon, small-molecule ligands (CCD/SMILES) as ball+stick, and metal ions (`MG`, `ZN`, `CA`, `FE`) as spacefill spheres
+- **pLDDT Confidence Coloring:** Standard AlphaFold color scale (`>90` dark blue, `70–90` light blue, `50–70` yellow, `<50` orange)
+- **Per-Chain Confidence & Composition Table:** Polymer residue counts and ligand CCD/SMILES breakdown
+- **Analysis Plots:** Per-residue pLDDT profiles, PAE/PDE heatmaps, and chain-pair ipTM matrices
+- **Multimodal Gemini 3.1 Pro Expert Analysis:** 8-section AI structural biology assessment (`status: "success"`) rendered as formatted Markdown
+- **1-Click Artifact Downloads:** Download the complete job bundle (`artifacts_bundle.zip` — structure, plots, `expert_analysis.md`, `execution.log`, `input.json`, `summary.json`) or individual files
 
 ## Architecture
 
 ```
 foldrun-viewer/
-├── app.py                 # Flask app with GCS integration + /api/cif endpoint
+├── app.py                 # Flask app with GCS integration, AF3 resolution & ZIP bundle streaming
 ├── templates/
-│   ├── index.html        # Landing page
-│   └── combined.html     # Combined structure + analysis viewer (AF2 + OF3)
-├── requirements.txt      # Python dependencies
-├── Dockerfile           # Cloud Run container
-└── deploy.sh            # Deployment script
+│   ├── index.html         # Job dashboard landing page
+│   └── combined.html      # Unified structure + analysis + Gemini Expert Analysis viewer
+├── requirements.txt       # Python dependencies
+├── Dockerfile             # Cloud Run container
+└── deploy.sh              # Deployment script
 ```
 
 ## Deployment
@@ -35,14 +34,16 @@ cd src/foldrun-viewer
 # Auto-deploy (reads PROJECT_ID from gcloud config)
 ./deploy.sh
 
-# Or explicit project
-PROJECT_ID=my-project-id ./deploy.sh
+# Or via top-level deploy-all.sh
+./deploy-all.sh YOUR_PROJECT_ID us-central1 --steps build --build-target viewer
 ```
 
 ## Usage
 
 ```
-# Short URL (auto-resolves analysis from job ID)
+# Short URLs (auto-resolve analysis from KFP pipeline job ID or AF3 job name)
+https://foldrun-viewer-HASH.run.app/job/alphafold3-inference-pipeline-20261006171144
+https://foldrun-viewer-HASH.run.app/job/af3_zinc_finger_dna
 https://foldrun-viewer-HASH.run.app/job/alphafold-inference-pipeline-20260307165005
 https://foldrun-viewer-HASH.run.app/job/openfold3-inference-pipeline-20260308054830
 ```
@@ -51,12 +52,15 @@ https://foldrun-viewer-HASH.run.app/job/openfold3-inference-pipeline-20260308054
 
 | Endpoint | Description |
 |----------|-------------|
-| `/job/<job_id>` | Short URL — redirects to combined viewer |
-| `/combined` | Combined structure + analysis viewer |
+| `/job/<job_id>` | Short URL — resolves `pipeline_runs/` or `af3_predictions/` and redirects to `/combined` |
+| `/combined` | Combined 3D structure + plots + Gemini Expert Analysis viewer |
+| `/api/jobs` | List all pipeline jobs and AF3 predictions with quality badges |
 | `/api/pdb?uri=gs://...` | Fetch PDB content from GCS (AF2) |
-| `/api/cif?uri=gs://...` | Fetch CIF content from GCS (OF3) |
-| `/api/analysis?job_id=...` | Fetch analysis summary JSON |
-| `/api/image?uri=gs://...` | Fetch plot images from GCS |
+| `/api/cif?uri=gs://...` | Fetch mmCIF content from GCS (AF3, OF3, Boltz-2) |
+| `/api/analysis?job_id=...` | Fetch `analysis/summary.json` |
+| `/api/image?uri=gs://...` | Fetch `plddt_plot` / `pae_plot` PNGs from GCS |
+| `/api/download/bundle?job_id=...` | Download complete `artifacts_bundle.zip` (cached in GCS) |
+| `/api/download/file?job_id=...&kind=...` | Download individual artifact (`structure`, `plddt_plot`, `pae_plot`, `expert_report`, `summary_json`) |
 | `/health` | Health check |
 
 ## Environment Variables
@@ -65,5 +69,5 @@ https://foldrun-viewer-HASH.run.app/job/openfold3-inference-pipeline-20260308054
 |----------|----------|-------------|
 | `PROJECT_ID` | Yes | Google Cloud project ID |
 | `BUCKET_NAME` | Yes | GCS bucket for prediction results |
-| `REGION` | No | GCP region (default: us-central1) |
-| `PORT` | No | Server port (default: 8080, set by Cloud Run) |
+| `REGION` | No | GCP region (default: `us-central1`) |
+| `PORT` | No | Server port (default: `8080`, set by Cloud Run) |

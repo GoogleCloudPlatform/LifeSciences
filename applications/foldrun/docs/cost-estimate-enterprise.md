@@ -29,7 +29,7 @@ Example: AF2 monomer on L4 GPU (DWS FLEX_START)
 
 Predict tasks have a **high baseline** (~16 min on L4 even for tiny proteins) due to model loading, feature preparation, and AMBER relaxation overhead. Runtime then scales roughly linearly with residue count.
 
-### 2. Prediction count (monomer vs multimer vs OF3)
+### 2. Prediction count (monomer vs multimer vs OF3 vs AF3)
 
 The total number of GPU-hours depends heavily on job type:
 
@@ -38,6 +38,7 @@ The total number of GPU-hours depends heavily on job type:
 | **AF2 monomer** | 5 | 1 (fixed) | **5** | **5** |
 | **AF2 multimer** | 5 | 5 (default, configurable 1-25) | **25** | **25** |
 | **OF3** | 1 | 5 (default) | **5** (each runs 5 diffusion samples) | None |
+| **AF3 (Endpoint)** | 1 | 1-5 (configurable) | **1 unified call** (5 diffusion samples/seed + NVMe MSA) | None |
 
 A multimer prediction runs **5x more GPU tasks** than a monomer at the same sequence length, making it roughly 5-6x more expensive. The `num_predictions_per_model` parameter controls this for multimers (default 5, can be reduced for screening or increased for high-confidence work).
 
@@ -54,11 +55,11 @@ Example: 400-residue protein on A100 (DWS FLEX_START)
 
 The GPU is auto-selected based on sequence length, matching the submission tools:
 
-| Sequence Length | AF2 Monomer GPU | AF2 Multimer GPU | OF3 GPU |
-|---|---|---|---|
-| <500 residues | L4 | A100 | A100 |
-| 500-1500 residues | A100 | A100 | A100 |
-| >1500 residues | A100 80GB | A100 80GB | A100 80GB |
+| Sequence Length | AF2 Monomer GPU | AF2 Multimer GPU | OF3 GPU | AF3 Dedicated Endpoint GPU |
+|---|---|---|---|---|
+| <500 residues | L4 | A100 | A100 | H100 80GB (`a3-highgpu-1g`) |
+| 500-1500 residues | A100 | A100 | A100 | H100 80GB (`a3-highgpu-1g`) |
+| >1500 residues | A100 80GB | A100 80GB | A100 80GB | H100 80GB (`a3-highgpu-1g`) |
 
 Larger GPUs cost more per hour but can be required for large proteins that would OOM on smaller GPUs.
 
@@ -78,7 +79,7 @@ The estimator was calibrated against production job data from Agent Platform. Us
 **Organization profile:**
 - ~20-30 active drug programs (antibodies, proteins, peptides)
 - Each program screening ~50-200 variants/month
-- Mix of quick structure checks (AF2) and complex predictions (OF3, protein-ligand)
+- Mix of quick structure checks (AF2) and complex predictions (OF3, AF3 protein-ligand / DNA / RNA)
 - Ramp: lighter months 1-3 during migration, full scale months 4-12
 
 **Estimated monthly job volume at steady state:**
@@ -87,7 +88,8 @@ The estimator was calibrated against production job data from Agent Platform. Us
 |---|---|---|---|
 | AF2 monomer (L4 GPU) | ~800 | 5 | Variant screening, quick structure checks |
 | AF2 multimer (A100) | ~100 | 25 | Protein-protein complexes |
-| OF3 predictions (A100) | ~200 | 5 seeds x 5 samples | Protein-ligand complexes, multi-chain |
+| OF3 predictions (A100) | ~200 | 5 seeds x 5 samples | Apache-2.0 commercial protein-ligand complexes, multi-chain |
+| AF3 predictions (H100 Endpoint) | ~200 | 1 unified call (5 samples) | High-speed NVMe MSA + diffusion (monomers, multimers, ligands, DNA/RNA) |
 | Re-runs / parameter sweeps | ~200 | varies | Additional seeds, different MSA methods |
 
 ## GCP List Pricing Reference (us-central1)
@@ -99,6 +101,7 @@ The estimator was calibrated against production job data from Agent Platform. Us
 | c2-standard-16 (CPU, MSA pipeline) | $0.84/hr | $0.27/hr | 68% |
 | g2-standard-12 + 1x L4 | $1.00/hr | $0.40/hr | 60% |
 | a2-highgpu-1g + 1x A100 (40GB) | $3.67/hr | $1.80/hr | 51% |
+| a3-highgpu-1g + 1x H100 (80GB, AF3 Endpoint) | $11.06/hr | N/A (Online Endpoint + 20m auto-undeploy to `$0.00/hr`) | Idle auto-drain |
 
 ### Storage
 
@@ -146,6 +149,21 @@ The estimator was calibrated against production job data from Agent Platform. Us
 | MSA Pipeline | c2-standard-16 | ~13 min | ~$0.18 | ~$0.06 |
 | Predict (5 seeds x 5 samples) | a2-highgpu-1g + 1x A100 | ~2.5 min/sample | ~$3.82 | ~$1.88 |
 | **Total** | | | **~$4.00** | **~$1.94** |
+
+### AF3 prediction — Dedicated H100 Endpoint (`a3-highgpu-1g`, 630 GB NVMe MSA)
+
+AlphaFold 3 runs on a dedicated Vertex AI Online Endpoint (`a3-highgpu-1g`, 80GB H100 at `~$11.06/hr` on-demand) with a 630 GB NVMe-backed local genetic database cache. Because FoldRun's 4-stage KFP pipeline (`1. Provision & Queue` $\rightarrow$ `2. Run AF3 Inference` $\rightarrow$ `3. Report Endpoint Available` $\rightarrow$ `4. Process Results & Expert Analysis`) releases the H100 replica slot immediately upon inference completion and automatically undeploys the endpoint to **`$0.00/hr`** after 20 minutes of inactivity, warm-endpoint jobs incur only the active H100 wall-clock duration:
+
+| Modality (Calibrated Production Runs) | Tokens | H100 Runtime | Warm Endpoint Cost (`$11.06/hr`) | Notes |
+|---|---|---|---|---|
+| **Ubiquitin (`--msa-free`)** | 76 aa | **~1.0 min** (`58s`) | **~$0.18** | Fast screening mode (lower accuracy: pLDDT `63.7`) |
+| **Ubiquitin (Full-MSA, default)** | 76 aa | **~3.8 min** (`228s`) | **~$0.70** | Full 4-DB NVMe MSA (high accuracy: pLDDT `91.9`, pTM `0.85`) |
+| **Zinc Finger + dsDNA** | 108 tokens | **~4.2 min** (`255s`) | **~$0.78** | Protein + 9 bp dsDNA duplex (pLDDT `95.2`, ipTM `0.92`) |
+| **Insulin Heterodimer** | 51 aa (2 chains) | **~5.8 min** (`350s`) | **~$1.07** | Multi-chain MSA + cross-chain pairing (ipTM `0.79`, Rank `1.05`) |
+| **EGFR + Gefitinib (SMILES)** | ~343 tokens | **~6.1 min** (`365s`) | **~$1.12** | Kinase domain + covalent/non-covalent SMILES ligand (ipTM `0.96`) |
+| **Full-Length JAK2 / EGFR** | 1,132–1,210 aa | **~15.6–19.4 min** | **~$2.88–$3.58** | Large multi-domain monomers (4-DB NVMe JackHMMER + 5 diffusion samples) |
+
+> **Note on Cold Start & Idle Tail**: If the AF3 endpoint is dormant (`0` replicas), auto-provisioning `a3-highgpu-1g` and warming the 630 GB NVMe genetic database cache takes ~25–35 minutes before the first job runs, plus up to 20 minutes (`~$3.69`) of idle tail after the last job in a batch completes before the Cloud Build watchdog undeploys the model back to `$0.00/hr`. Submitting multiple AF3 jobs in a burst amortizes both warm-up and the 20-minute tail across the entire FIFO queue.
 
 ## Monthly Compute Estimates (steady state)
 

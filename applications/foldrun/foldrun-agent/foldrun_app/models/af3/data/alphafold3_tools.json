@@ -2,7 +2,7 @@
   {
     "type": "AF3SubmitPredictionTool",
     "name": "af3_submit_prediction",
-    "description": "Submit AlphaFold 3 all-atom structure prediction to Agent Platform Prediction Endpoint. Supports proteins, RNA, DNA, ligands, and ions in --msa-free zero-MSA mode or with custom MSA inputs.",
+    "description": "Submit AlphaFold 3 all-atom structure prediction via a Vertex AI PipelineJob calling the AF3 Endpoint. Supports proteins, RNA, DNA, ligands (CCD codes or SMILES), and ions in Full 630 GB MSA + PDB templates mode (default: msa_free=false) or --msa-free zero-MSA mode.",
     "parameter": {
       "type": "object",
       "properties": {
@@ -16,14 +16,14 @@
         },
         "msa_free": {
           "type": "boolean",
-          "description": "Whether to run in zero-MSA / --msa-free mode, bypassing Jackhmmer/genetic database searches for fast candidate screening (default: true)."
+          "description": "Whether to skip genetic database search and run in zero-MSA / --msa-free mode for fast screening (default: false; runs full 630 GB MSA + PDB templates by default)."
         },
         "model_seeds": {
           "type": "array",
           "items": {
             "type": "integer"
           },
-          "description": "Random seed(s) for diffusion generation (default: [1])."
+          "description": "Random seed(s) for diffusion generation. Auto-defaults to [1] (1 seed x 5 diffusion samples = 5 structures) for monomers or msa_free=true, and [1, 2, 3, 4, 5] (5 seeds x 5 diffusion samples = 25 structures) for Full-MSA multimers/complexes (>1 chain)."
         },
         "endpoint_id": {
           "type": "string",
@@ -32,10 +32,34 @@
         "output_gcs_uri": {
           "type": "string",
           "description": "Optional custom GCS destination URI."
+        },
+        "sync": {
+          "type": "boolean",
+          "description": "Wait synchronously in-process instead of submitting a Vertex AI PipelineJob (default: false)."
         }
       },
       "required": [
         "input"
+      ]
+    }
+  },
+  {
+    "type": "AF3BatchSubmitTool",
+    "name": "af3_submit_batch",
+    "description": "Submit a batch of AlphaFold 3 predictions as asynchronous Vertex AI PipelineJobs that coordinate access to the H100 endpoint replica(s) via GCS slot locks.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "batch_config": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "List of AF3 job configurations (each with 'input', optional 'job_name', 'msa_free', 'model_seeds'). Auto-defaults model_seeds to [1] (5 samples) for monomers/msa-free and [1,2,3,4,5] (25 samples) for Full-MSA multimers/complexes."
+        }
+      },
+      "required": [
+        "batch_config"
       ]
     }
   },
@@ -56,7 +80,7 @@
   {
     "type": "AF3DeployEndpointTool",
     "name": "af3_deploy_endpoint",
-    "description": "Deploy AlphaFold 3 model to the Agent Platform Endpoint, allocating dedicated GPU resources (e.g. g2-standard-16 + L4 GPU) for prediction campaigns.",
+    "description": "Deploy or scale AlphaFold 3 model on the Agent Platform Endpoint, allocating dedicated GPU resources (default: a3-highgpu-1g + NVIDIA_H100_80GB with automatic fallback to A100_80GB / L4 and GCE reservation detection).",
     "parameter": {
       "type": "object",
       "properties": {
@@ -70,19 +94,27 @@
         },
         "machine_type": {
           "type": "string",
-          "description": "Machine type for inference (default: 'g2-standard-16')."
+          "description": "Machine type for inference (default: 'a3-highgpu-1g')."
         },
         "accelerator_type": {
           "type": "string",
-          "description": "GPU accelerator type (default: 'NVIDIA_L4')."
+          "description": "GPU accelerator type (default: 'NVIDIA_H100_80GB')."
         },
         "accelerator_count": {
           "type": "integer",
           "description": "Number of GPU accelerators (default: 1)."
         },
+        "min_replica_count": {
+          "type": "integer",
+          "description": "Minimum deployed replica count (1 to 4, default: 1)."
+        },
+        "max_replica_count": {
+          "type": "integer",
+          "description": "Maximum deployed replica count (1 to 4, default: 1)."
+        },
         "sync": {
           "type": "boolean",
-          "description": "Whether to wait synchronously for deployment completion (~5-8 mins; default: false)."
+          "description": "Whether to wait synchronously for deployment completion (~10-12 mins for H100 with 630 GB MSA bundle; default: false)."
         }
       }
     }

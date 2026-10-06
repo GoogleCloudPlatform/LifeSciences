@@ -28,6 +28,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import google.auth
+import google.auth.exceptions
 import google.auth.transport.requests
 from flask import (
     Flask,
@@ -148,13 +149,19 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
     if not JOB_ID_PATTERN.fullmatch(str(job_id)):
         raise ValueError(f"Invalid job_id format: {job_id}")
 
+    bucket = storage_client.bucket(BUCKET_NAME)
+
+    # Check AlphaFold 3 predictions directory first
+    af3_summary_path = f"af3_predictions/{job_id}/analysis/summary.json"
+    if bucket.blob(af3_summary_path).exists():
+        uri = f"gs://{BUCKET_NAME}/{af3_summary_path}"
+        return load_gcs_file(uri, as_json=True), uri
+
     match = re.search(r"(\d{8})\d{6}$", job_id)
     if not match:
         raise ValueError(f"Cannot extract date from job_id: {job_id}")
 
     date_prefix = match.group(1)  # YYYYMMDD
-
-    bucket = storage_client.bucket(BUCKET_NAME)
     prefix = f"pipeline_runs/{date_prefix}"
 
     summary_blobs = list(
@@ -170,7 +177,7 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
     if not summary_blobs:
         raise FileNotFoundError(
             f"No analysis summary found for job {job_id}. "
-            f"Searched gs://{BUCKET_NAME}/{prefix}*/analysis/summary.json"
+            f"Searched gs://{BUCKET_NAME}/{af3_summary_path} and gs://{BUCKET_NAME}/{prefix}*/analysis/summary.json"
         )
 
     if len(summary_blobs) == 1:
@@ -384,7 +391,7 @@ def combined_viewer():
             description="Either pdb_uri, job_id, or summary_uri parameter is required",
         )
 
-    # Derive GCS console link from summary_uri or pdb_uri
+    # Derive GCS console link from summary_uri, pdb_uri, or af3_ job_id
     gcs_console_url = None
     gcs_ref = summary_uri or pdb_uri
     if gcs_ref and gcs_ref.startswith("gs://"):
@@ -397,6 +404,11 @@ def combined_viewer():
                 gcs_path = gcs_path[: idx + 1]
                 break
         gcs_console_url = f"https://console.cloud.google.com/storage/browser/{gcs_path}?project={PROJECT_ID}"
+    elif job_id and job_id.startswith("af3_"):
+        gcs_console_url = (
+            f"https://console.cloud.google.com/storage/browser/"
+            f"{BUCKET_NAME}/af3_predictions/{job_id}?project={PROJECT_ID}"
+        )
 
     return render_template(
         "combined.html",
@@ -406,6 +418,7 @@ def combined_viewer():
         model_name=model_name,
         project_id=PROJECT_ID,
         region=REGION,
+        bucket_name=BUCKET_NAME,
         gcs_console_url=gcs_console_url,
     )
 
@@ -532,6 +545,12 @@ def list_jobs():
             labels = pj.get("labels", {})
             resource_name = pj.get("name", "")
             job_id = resource_name.split("/")[-1]
+            if (
+                labels.get("job_type") == "af3_idle_drain"
+                or labels.get("model_type") == "af3_system"
+                or job_id.startswith("alphafold3-idle-drain-")
+            ):
+                continue
             # Extract exact GCS timestamp from gcsOutputDirectory (e.g.
             # "gs://bucket/pipeline_runs/20260504_224020" → "20260504224020").
             # This is more reliable than parsing the job ID timestamp, which can
@@ -542,18 +561,30 @@ def list_jobs():
             m = re.search(r"pipeline_runs/(\d{8})_(\d{6})", gcs_output_dir)
             if m:
                 gcs_ts = m.group(1) + m.group(2)
-            jobs.append(
-                {
-                    "job_id": job_id,
-                    "display_name": pj.get("displayName", job_id),
-                    "model_type": labels.get("model_type", "alphafold2"),
-                    "state": pj.get("state", "PIPELINE_STATE_UNSPECIFIED"),
-                    "create_time": pj.get("createTime", ""),
-                    "has_analysis": False,
-                    "analysis_running": False,
-                    "_gcs_ts": gcs_ts,
-                }
+            disp_name = pj.get("displayName", job_id)
+            pipeline_url = (
+                f"https://console.cloud.google.com/vertex-ai/pipelines/locations/"
+                f"{REGION}/runs/{job_id}?project={PROJECT_ID}"
             )
+            job_entry = {
+                "job_id": job_id,
+                "display_name": disp_name,
+                "model_type": labels.get("model_type", "alphafold2"),
+                "state": pj.get("state", "PIPELINE_STATE_UNSPECIFIED"),
+                "create_time": pj.get("createTime", ""),
+                "has_analysis": False,
+                "analysis_running": False,
+                "pipeline_url": pipeline_url,
+                "_gcs_ts": gcs_ts,
+            }
+            if job_entry["model_type"] == "alphafold3":
+                q_name = labels.get("query_name") or disp_name
+                job_entry["logs_url"] = (
+                    f"https://console.cloud.google.com/logs/query;query="
+                    f"resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22%20%22{q_name}%22"
+                    f";duration=P30D?project={PROJECT_ID}"
+                )
+            jobs.append(job_entry)
 
         # Single GCS scan to determine analysis state per job
         complete_ts, running_ts = _scan_analysis_state()
@@ -562,6 +593,73 @@ def list_jobs():
             if ts:
                 job["has_analysis"] = ts in complete_ts
                 job["analysis_running"] = ts in running_ts and not job["has_analysis"]
+
+        # Include AlphaFold 3 Endpoint prediction jobs stored under af3_predictions/
+        if not page_token:
+            try:
+                bucket = storage_client.bucket(BUCKET_NAME)
+                af3_blobs = list(bucket.list_blobs(prefix="af3_predictions/"))
+                af3_by_job: dict[str, dict] = {}
+                for b in af3_blobs:
+                    parts = b.name.split("/")
+                    if len(parts) < 3:
+                        continue
+                    jid = parts[1]
+                    if (
+                        not jid
+                        or jid.startswith(".")
+                        or not JOB_ID_PATTERN.fullmatch(jid)
+                    ):
+                        continue
+                    entry = af3_by_job.setdefault(
+                        jid,
+                        {
+                            "job_id": jid,
+                            "display_name": jid,
+                            "model_type": "alphafold3",
+                            "state": "PIPELINE_STATE_SUCCEEDED",
+                            "create_time": "",
+                            "has_analysis": False,
+                            "analysis_running": False,
+                            "logs_url": (
+                                f"https://console.cloud.google.com/logs/query;query="
+                                f"resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22%20%22{jid}%22"
+                                f";duration=P30D?project={PROJECT_ID}"
+                            ),
+                        },
+                    )
+                    if b.time_created:
+                        iso_ts = b.time_created.isoformat().replace("+00:00", "Z")
+                        if not entry["create_time"] or iso_ts > entry["create_time"]:
+                            entry["create_time"] = iso_ts
+                    if b.name.endswith("/analysis/summary.json"):
+                        entry["has_analysis"] = True
+                        if "msa_free" in jid:
+                            entry["display_name"] = f"{jid} (Zero-MSA / --msa-free)"
+                        elif "full_msa" in jid:
+                            entry["display_name"] = (
+                                f"{jid} (Full 630 GB MSA + Templates)"
+                            )
+                succeeded_kfp_names = set()
+                for j in jobs:
+                    if (
+                        j.get("model_type") == "alphafold3"
+                        and j.get("state") == "PIPELINE_STATE_SUCCEEDED"
+                    ):
+                        dn = j.get("display_name", "")
+                        succeeded_kfp_names.add(j["job_id"])
+                        if dn:
+                            succeeded_kfp_names.add(dn)
+                        if dn in af3_by_job and af3_by_job[dn].get("has_analysis"):
+                            j["has_analysis"] = True
+                for jid, af3_job in af3_by_job.items():
+                    if jid not in succeeded_kfp_names and af3_job["has_analysis"]:
+                        jobs.append(af3_job)
+                jobs.sort(key=lambda x: str(x.get("create_time", "")), reverse=True)
+            except Exception as af3_exc:
+                logger.warning(
+                    f"Could not scan af3_predictions/ for job list: {af3_exc}"
+                )
 
         return jsonify(
             {
@@ -615,13 +713,24 @@ def trigger_analysis():
     """
     data = request.get_json(silent=True) or {}
     job_id = data.get("job_id")
-    model_type = data.get("model_type", "alphafold2")
+    model_type = str(data.get("model_type", "alphafold2")).strip().lower()
 
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
 
-    if not JOB_ID_PATTERN.match(str(job_id)):
+    if not JOB_ID_PATTERN.fullmatch(str(job_id)):
         return jsonify({"error": "Invalid job_id format"}), 400
+
+    allowed_model_types = {"alphafold2", "openfold3", "boltz2"}
+    if model_type not in allowed_model_types:
+        return jsonify(
+            {
+                "error": (
+                    f"Invalid model_type '{model_type}'. "
+                    f"Must be one of {sorted(allowed_model_types)}"
+                )
+            }
+        ), 400
 
     safe_job_id = urllib.parse.quote(str(job_id), safe="")
 
@@ -705,13 +814,39 @@ def trigger_analysis():
             "predictions": predictions_cfg,
         }
 
-        # Write task_config.json and analysis_metadata.json to GCS
+        # Write task_config.json to GCS before triggering the job (tasks read it on startup)
         tc_bucket_name, tc_blob_path = parse_gcs_uri(f"{analysis_path}task_config.json")
         tc_bucket = storage_client.bucket(tc_bucket_name)
 
         tc_bucket.blob(tc_blob_path).upload_from_string(
             json.dumps(task_config, indent=2), content_type="application/json"
         )
+
+        # Trigger the Cloud Run analysis job via REST API
+        cr_job_path = f"projects/{PROJECT_ID}/locations/{REGION}/jobs/{cr_job_name}"
+        cr_url = f"https://{REGION}-run.googleapis.com/v2/{cr_job_path}:run"
+        cr_body = {
+            "overrides": {
+                "taskCount": len(raw_predictions),
+                "timeout": "600s",
+                "containerOverrides": [
+                    {
+                        "env": [
+                            {"name": "ANALYSIS_PATH", "value": analysis_path},
+                            {"name": "MODEL_TYPE", "value": model_type},
+                            {"name": "GCS_BUCKET", "value": BUCKET_NAME},
+                            {"name": "GOOGLE_CLOUD_PROJECT", "value": PROJECT_ID},
+                            {"name": "PIPELINE_JOB_LOCATION", "value": REGION},
+                        ]
+                    }
+                ],
+            }
+        }
+        cr_resp = authed.post(cr_url, json=cr_body, timeout=30)
+        cr_resp.raise_for_status()
+
+        # Write analysis_metadata.json only after Cloud Run Job trigger succeeds
+        # so a failed API call never leaves the job stuck in "Analyzing…" state
         tc_bucket.blob(
             tc_blob_path.replace("task_config.json", "analysis_metadata.json")
         ).upload_from_string(
@@ -729,26 +864,6 @@ def trigger_analysis():
             ),
             content_type="application/json",
         )
-
-        # Trigger the Cloud Run analysis job via REST API
-        cr_job_path = f"projects/{PROJECT_ID}/locations/{REGION}/jobs/{cr_job_name}"
-        cr_url = f"https://{REGION}-run.googleapis.com/v2/{cr_job_path}:run"
-        cr_body = {
-            "overrides": {
-                "taskCount": len(raw_predictions),
-                "timeout": "600s",
-                "containerOverrides": [
-                    {
-                        "env": [
-                            {"name": "ANALYSIS_PATH", "value": analysis_path},
-                            {"name": "MODEL_TYPE", "value": model_type},
-                        ]
-                    }
-                ],
-            }
-        }
-        cr_resp = authed.post(cr_url, json=cr_body, timeout=30)
-        cr_resp.raise_for_status()
 
         logger.info(
             f"Triggered analysis for {job_id}: {len(raw_predictions)} tasks, job={cr_job_name}"

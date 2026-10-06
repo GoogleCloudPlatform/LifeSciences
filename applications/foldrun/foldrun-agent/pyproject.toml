@@ -60,6 +60,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = [
     "foldrun_app",
+    "foldrun_app.app_utils",
     "foldrun_app.core",
     "foldrun_app.models",
     "foldrun_app.models.af2",
@@ -68,17 +69,37 @@ packages = [
     "foldrun_app.models.af2.pipeline",
     "foldrun_app.models.af2.pipeline.components",
     "foldrun_app.models.af2.pipeline.pipelines",
+    "foldrun_app.models.af3",
+    "foldrun_app.models.af3.tools",
+    "foldrun_app.models.af3.utils",
+    "foldrun_app.models.boltz2",
+    "foldrun_app.models.boltz2.tools",
+    "foldrun_app.models.boltz2.utils",
+    "foldrun_app.models.boltz2.pipeline",
+    "foldrun_app.models.boltz2.pipeline.components",
+    "foldrun_app.models.boltz2.pipeline.pipelines",
+    "foldrun_app.models.of3",
+    "foldrun_app.models.of3.tools",
+    "foldrun_app.models.of3.utils",
+    "foldrun_app.models.of3.pipeline",
+    "foldrun_app.models.of3.pipeline.components",
+    "foldrun_app.models.of3.pipeline.pipelines",
     "foldrun_app.skills",
+    "foldrun_app.skills.cost_estimation",
     "foldrun_app.skills.job_submission",
     "foldrun_app.skills.job_management",
     "foldrun_app.skills.results_analysis",
     "foldrun_app.skills.database_queries",
     "foldrun_app.skills.storage_management",
     "foldrun_app.skills.visualization",
+    "foldrun_app.utils",
 ]
 
 [tool.setuptools.package-data]
 "foldrun_app.models.af2" = ["data/*.json"]
+"foldrun_app.models.af3" = ["data/*.json"]
+"foldrun_app.models.boltz2" = ["data/*.json"]
+"foldrun_app.models.of3" = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

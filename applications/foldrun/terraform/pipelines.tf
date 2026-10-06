@@ -24,9 +24,19 @@ resource "google_service_account_iam_member" "agent_sa_actas_pipelines" {
   member             = "serviceAccount:${google_service_account.agent_sa.email}"
 }
 
+# Stage 3 (report_af3_endpoint_available_task) runs as pipelines-sa and submits the
+# follow-up af3-endpoint-idle-drain PipelineJob as pipelines-sa; Vertex AI enforces
+# iam.serviceAccounts.actAs even when the caller is pipelines-sa itself.
+resource "google_service_account_iam_member" "pipelines_sa_self_actas" {
+  service_account_id = google_service_account.pipelines.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.pipelines.email}"
+}
+
 resource "google_project_iam_member" "pipelines_roles" {
   for_each = toset([
     "roles/aiplatform.user",
+    "roles/logging.viewer",
   ])
 
   project = var.project_id
@@ -52,6 +62,20 @@ resource "google_storage_bucket_iam_member" "pipelines_foldrun_bucket" {
   bucket = google_storage_bucket.foldrun_bucket.name
   role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.pipelines.email}"
+}
+
+# Allow the Vertex AI Custom Code Service Agent (used by Dedicated Endpoints such as AlphaFold 3)
+# to write multi-sample prediction artifacts directly to output_dir in the FoldRun data bucket.
+resource "google_storage_bucket_iam_member" "aiplatform_cc_sa_foldrun_bucket" {
+  for_each = toset([
+    "roles/storage.objectAdmin",
+    "roles/storage.legacyBucketWriter",
+  ])
+
+  bucket     = google_storage_bucket.foldrun_bucket.name
+  role       = each.value
+  member     = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-aiplatform-cc.iam.gserviceaccount.com"
+  depends_on = [time_sleep.service_agent_creation_sleep]
 }
 
 resource "google_artifact_registry_repository_iam_member" "pipelines_sa" {

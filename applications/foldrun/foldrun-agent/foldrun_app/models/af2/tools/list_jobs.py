@@ -200,6 +200,11 @@ class AF2ListJobsTool(AF2Tool):
 
             # Apply client-side filters
             labels = status["labels"]
+            if not arguments.get("job_type") and (
+                labels.get("job_type") == "af3_idle_drain"
+                or labels.get("model_type") == "af3_system"
+            ):
+                continue
 
             # Filter by state
             if state_value and status["state"] != state_value:

@@ -69,6 +69,23 @@ if [ -n "$ACCESS_TOKEN" ]; then
         "https://$REGION-aiplatform.googleapis.com/v1beta1/projects/$PROJECT_ID/locations/$REGION/reasoningEngines" 2>/dev/null)
     if echo "$AGENT_RESULT" | grep -q "FoldRun_Agent"; then
         echo "✅ [Agent Platform] FoldRun Agent Runtime is deployed"
+        AGENT_RUNTIME_ID=$(echo "$AGENT_RESULT" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for re_obj in data.get('reasoningEngines', []):
+        if 'FoldRun_Agent' in re_obj.get('displayName', ''):
+            print(re_obj.get('name', ''))
+            break
+except Exception:
+    pass
+" 2>/dev/null)
+        if [ -n "$AGENT_RUNTIME_ID" ]; then
+            A2A_BASE_URL="https://$REGION-aiplatform.googleapis.com/reasoningEngines/v1/$AGENT_RUNTIME_ID/api/a2a/foldrun_app"
+            echo "   🔗 Reasoning Engine: $AGENT_RUNTIME_ID"
+            echo "   🔗 A2A Endpoint:     $A2A_BASE_URL"
+            echo "   🔗 A2A Agent Card:   $A2A_BASE_URL/.well-known/agent-card.json"
+        fi
     else
         echo "❌ [Agent Platform] FoldRun Agent Runtime is missing"
     fi

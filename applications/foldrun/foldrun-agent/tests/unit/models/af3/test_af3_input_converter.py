@@ -16,6 +16,9 @@
 
 import json
 
+from foldrun_app.models.af3.tools.submit_prediction import (
+    _prepare_af3_instance_for_endpoint,
+)
 from foldrun_app.models.af3.utils.input_converter import (
     count_af3_tokens,
     fasta_to_af3_json,
@@ -108,6 +111,126 @@ class TestAF3InputConverter:
         is_valid, errors, _warnings = validate_af3_json(complex_data)
         assert is_valid is True
         assert len(errors) == 0
+
+    def test_validate_af3_json_homodimer_list_ids_and_ion_normalization(self):
+        homodimer = {
+            "name": "homodimer_atp_mg",
+            "modelSeeds": [1],
+            "sequences": [
+                {"protein": {"id": ["A", "B"], "sequence": "MKTIIALSY"}},
+                {"ligand": {"id": "C", "ccd_codes": "ATP"}},
+                {"ion": {"id": "D", "ion": "MG"}},
+            ],
+            "dialect": "alphafold3",
+            "version": 1,
+        }
+        is_valid, errors, _warnings = validate_af3_json(homodimer)
+        assert is_valid is True
+        assert errors == []
+        # 2 chains * 9 aa + 1 ATP + 1 MG = 20 tokens
+        assert count_af3_tokens(homodimer) == 20
+
+        prepared = _prepare_af3_instance_for_endpoint(
+            homodimer,
+            job_name="homodimer_atp_mg",
+            model_seeds=[1],
+            msa_free=False,
+        )
+        assert prepared["sequences"][1] == {"ligand": {"id": "C", "ccdCodes": ["ATP"]}}
+        assert prepared["sequences"][2] == {"ligand": {"id": "D", "ccdCodes": ["MG"]}}
+
+    def test_validate_af3_json_production_benchmark_modalities(self):
+        """Validate all 6 production AF3 modalities tested on Vertex AI H100."""
+        modalities = [
+            {
+                "name": "af3_ubiquitin_monomer",
+                "modelSeeds": [1],
+                "sequences": [
+                    {
+                        "protein": {
+                            "id": "A",
+                            "sequence": "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG",
+                        }
+                    }
+                ],
+                "dialect": "alphafold3",
+                "version": 1,
+            },
+            {
+                "name": "af3_insulin_heterodimer",
+                "modelSeeds": [1],
+                "sequences": [
+                    {"protein": {"id": "A", "sequence": "GIVEQCCTSICSLYQLENYCN"}},
+                    {"protein": {"id": "B", "sequence": "FVNQHLCGSHLVEALYLVCGERGFFYTPKT"}},
+                ],
+                "dialect": "alphafold3",
+                "version": 1,
+            },
+            {
+                "name": "af3_kinase_atp_mg",
+                "modelSeeds": [1],
+                "sequences": [
+                    {
+                        "protein": {
+                            "id": "A",
+                            "sequence": "IGRGNFGEVFSGRLRADNTLVAVKSCRETLPPDIKAKFLQEAKILKQYSHPNIVRLIGVCTQKQPIYIVMELVQGGDFLTFLRTEGARLRVKTLLQMVGDAAAGMEYLESKCCIHRDLAA",
+                        }
+                    },
+                    {"ligand": {"id": "B", "ccdCodes": ["ATP"]}},
+                    {"ligand": {"id": "C", "ccdCodes": ["MG"]}},
+                ],
+                "dialect": "alphafold3",
+                "version": 1,
+            },
+            {
+                "name": "af3_zinc_finger_dna",
+                "modelSeeds": [1],
+                "sequences": [
+                    {
+                        "protein": {
+                            "id": "A",
+                            "sequence": "MERPYACPVESCDRRFSRSDELTRHIRIHTGQKPFQCRICMRNFSRSDHLTTHIRTHTGEKPFACDICGRKFARSDERKRHTKIHLRQKD",
+                        }
+                    },
+                    {"dna": {"id": "B", "sequence": "GCGTGGGCG"}},
+                    {"dna": {"id": "C", "sequence": "CGCCCACGC"}},
+                ],
+                "dialect": "alphafold3",
+                "version": 1,
+            },
+            {
+                "name": "af3_rna_aptamer",
+                "modelSeeds": [1],
+                "sequences": [
+                    {"rna": {"id": "A", "sequence": "GGAUACCCUGAUGAGUCCGAAAGGACGAAACAGU"}}
+                ],
+                "dialect": "alphafold3",
+                "version": 1,
+            },
+            {
+                "name": "egfr_gefitinib_af3_msa",
+                "modelSeeds": [1],
+                "sequences": [
+                    {
+                        "protein": {
+                            "id": "A",
+                            "sequence": "FKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSKMARDPQRYLVIQGDERMHLPSPTDSNFYRALMDEEDMDDVVDADEYLIPQQGFF",
+                        }
+                    },
+                    {
+                        "ligand": {
+                            "id": "B",
+                            "smiles": "COc1cc2c(cc1OCCCN3CCOCC3)ncn2-c4cc(Cl)c(F)cc4",
+                        }
+                    },
+                ],
+                "dialect": "alphafold3",
+                "version": 1,
+            },
+        ]
+        for query in modalities:
+            is_valid, errors, _warnings = validate_af3_json(query)
+            assert is_valid is True, f"{query['name']} failed validation: {errors}"
 
     def test_validate_af3_json_duplicate_chain_id(self):
         invalid_data = {

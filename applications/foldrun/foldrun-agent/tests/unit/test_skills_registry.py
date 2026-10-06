@@ -175,7 +175,7 @@ class TestSkillRegistry:
         assert "download_job_artifacts" in tool_names
 
     def test_conditional_af3_tools(self, monkeypatch):
-        """When AF3_VERTEX_ENDPOINT is configured, all 6 AF3 tools are registered."""
+        """When AF3_VERTEX_ENDPOINT is configured, all 7 AF3 tools are registered."""
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("BOLTZ2_COMPONENTS_IMAGE", raising=False)
         monkeypatch.setenv(
@@ -190,9 +190,10 @@ class TestSkillRegistry:
             or str(t)
             for t in tools
         }
-        # 23 baseline AF2 + 6 AF3 = 29
-        assert len(tools) == 29
+        # 23 baseline AF2 + 7 AF3 = 30
+        assert len(tools) == 30
         assert "submit_af3_endpoint_prediction" in tool_names
+        assert "submit_af3_batch_predictions" in tool_names
         assert "check_af3_endpoint" in tool_names
         assert "deploy_af3_endpoint" in tool_names
         assert "undeploy_af3_endpoint" in tool_names
