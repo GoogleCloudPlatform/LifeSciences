@@ -37,6 +37,7 @@ from kfp import dsl
         "google-cloud-aiplatform>=1.50.0",
         "google-cloud-storage>=2.10.0",
         "google-cloud-logging>=3.5.0",
+        "requests-toolbelt>=1.0.0",
         "matplotlib>=3.7.0",
         "numpy>=1.24.0",
     ],

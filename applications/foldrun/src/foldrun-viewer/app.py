@@ -560,18 +560,30 @@ def list_jobs():
             m = re.search(r"pipeline_runs/(\d{8})_(\d{6})", gcs_output_dir)
             if m:
                 gcs_ts = m.group(1) + m.group(2)
-            jobs.append(
-                {
-                    "job_id": job_id,
-                    "display_name": pj.get("displayName", job_id),
-                    "model_type": labels.get("model_type", "alphafold2"),
-                    "state": pj.get("state", "PIPELINE_STATE_UNSPECIFIED"),
-                    "create_time": pj.get("createTime", ""),
-                    "has_analysis": False,
-                    "analysis_running": False,
-                    "_gcs_ts": gcs_ts,
-                }
+            disp_name = pj.get("displayName", job_id)
+            pipeline_url = (
+                f"https://console.cloud.google.com/vertex-ai/pipelines/locations/"
+                f"{REGION}/runs/{job_id}?project={PROJECT_ID}"
             )
+            job_entry = {
+                "job_id": job_id,
+                "display_name": disp_name,
+                "model_type": labels.get("model_type", "alphafold2"),
+                "state": pj.get("state", "PIPELINE_STATE_UNSPECIFIED"),
+                "create_time": pj.get("createTime", ""),
+                "has_analysis": False,
+                "analysis_running": False,
+                "pipeline_url": pipeline_url,
+                "_gcs_ts": gcs_ts,
+            }
+            if job_entry["model_type"] == "alphafold3":
+                q_name = labels.get("query_name") or disp_name
+                job_entry["logs_url"] = (
+                    f"https://console.cloud.google.com/logs/query;query="
+                    f"resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22%20%22{q_name}%22"
+                    f";duration=P30D?project={PROJECT_ID}"
+                )
+            jobs.append(job_entry)
 
         # Single GCS scan to determine analysis state per job
         complete_ts, running_ts = _scan_analysis_state()
@@ -592,7 +604,11 @@ def list_jobs():
                     if len(parts) < 3:
                         continue
                     jid = parts[1]
-                    if not jid or not JOB_ID_PATTERN.fullmatch(jid):
+                    if (
+                        not jid
+                        or jid.startswith(".")
+                        or not JOB_ID_PATTERN.fullmatch(jid)
+                    ):
                         continue
                     entry = af3_by_job.setdefault(
                         jid,
@@ -604,6 +620,11 @@ def list_jobs():
                             "create_time": "",
                             "has_analysis": False,
                             "analysis_running": False,
+                            "logs_url": (
+                                f"https://console.cloud.google.com/logs/query;query="
+                                f"resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22%20%22{jid}%22"
+                                f";duration=P30D?project={PROJECT_ID}"
+                            ),
                         },
                     )
                     if b.time_created:
@@ -618,16 +639,20 @@ def list_jobs():
                             entry["display_name"] = (
                                 f"{jid} (Full 630 GB MSA + Templates)"
                             )
-                seen_ids = {j["job_id"] for j in jobs} | {
-                    j["display_name"] for j in jobs if j.get("display_name")
-                }
+                succeeded_kfp_names = set()
                 for j in jobs:
-                    if j.get("model_type") == "alphafold3":
+                    if (
+                        j.get("model_type") == "alphafold3"
+                        and j.get("state") == "PIPELINE_STATE_SUCCEEDED"
+                    ):
                         dn = j.get("display_name", "")
+                        succeeded_kfp_names.add(j["job_id"])
+                        if dn:
+                            succeeded_kfp_names.add(dn)
                         if dn in af3_by_job and af3_by_job[dn].get("has_analysis"):
                             j["has_analysis"] = True
                 for jid, af3_job in af3_by_job.items():
-                    if jid not in seen_ids and af3_job["has_analysis"]:
+                    if jid not in succeeded_kfp_names and af3_job["has_analysis"]:
                         jobs.append(af3_job)
                 jobs.sort(key=lambda x: x.get("create_time", ""), reverse=True)
             except Exception as af3_exc:

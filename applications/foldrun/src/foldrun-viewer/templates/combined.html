@@ -565,7 +565,7 @@
         <div class="header-top">
             <div>
                 <h1><a href="/" style="color: inherit; text-decoration: none;">🧬 FoldRun Structure & Analysis</a></h1>
-                {% if job_id and job_id.startswith('af3_') %}
+                {% if job_id and not (job_id.startswith('alphafold2-') or job_id.startswith('alphafold3-') or job_id.startswith('openfold3-') or job_id.startswith('boltz2-')) %}
                 <p class="subtitle" id="header-subtitle">Job: <a href="https://console.cloud.google.com/logs/query;query=resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22%20%22{{ job_id }}%22;duration=P30D?project={{ project_id }}" target="_blank" class="job-link" title="View AlphaFold 3 Endpoint logs in Cloud Logging">{{ job_id }} (Endpoint Logs)</a> &middot; <a href="https://console.cloud.google.com/storage/browser/{{ bucket_name }}/af3_predictions/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link" title="View AlphaFold 3 job artifacts in Cloud Storage">GCS Artifacts</a></p>
                 {% elif job_id %}
                 <p class="subtitle" id="header-subtitle">Job: <a href="https://console.cloud.google.com/vertex-ai/pipelines/locations/{{ region }}/runs/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link">{{ job_id }}</a></p>
