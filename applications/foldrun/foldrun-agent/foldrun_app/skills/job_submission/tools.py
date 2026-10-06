@@ -248,19 +248,22 @@ def submit_boltz2_prediction(
 def submit_af3_endpoint_prediction(
     input: str,
     job_name: str | None = None,
-    msa_free: bool = True,
+    msa_free: bool = False,
     model_seeds: list[int] | None = None,
     endpoint_id: str | None = None,
 ) -> dict:
     """Submit AlphaFold 3 all-atom structure prediction to Agent Platform Prediction Endpoint.
 
-    Supports proteins, RNA, DNA, ligands, and ions in --msa-free zero-MSA mode or with custom inputs.
+    Supports proteins, RNA, DNA, ligands, and ions with full 630 GB MSA + PDB templates on H100 NVMe SSD
+    (default: msa_free=False) or fast --msa-free zero-MSA mode (msa_free=True).
 
     Args:
         input: Input sequence in FASTA format, AF3 JSON format, or path to input file / GCS URI.
             FASTA is automatically converted to AF3 JSON.
         job_name: Human-readable job name for tracking (optional).
-        msa_free: Whether to run in zero-MSA / --msa-free mode (default: True).
+        msa_free: Whether to skip MSA/template search and run in zero-MSA mode (default: False).
+            Leave False for natural proteins, multimers, and protein-ligand complexes so the
+            630 GB MSA + template pipeline runs on the H100 NVMe SSD.
         model_seeds: Random seed(s) for diffusion generation (default: [1]).
         endpoint_id: Optional Agent Platform Endpoint ID override.
     """

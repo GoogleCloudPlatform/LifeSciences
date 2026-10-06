@@ -73,7 +73,7 @@ class AF3Config(CoreConfig):
     @property
     def default_msa_free(self) -> bool:
         """Whether to run predictions in zero-MSA / --msa-free mode by default."""
-        return os.getenv("AF3_DEFAULT_MSA_FREE", "true").lower() in ("true", "1", "yes")
+        return os.getenv("AF3_DEFAULT_MSA_FREE", "false").lower() in ("true", "1", "yes")
 
     @property
     def timeout_seconds(self) -> int:
