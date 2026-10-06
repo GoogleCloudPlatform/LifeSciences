@@ -260,6 +260,14 @@ extract_terraform_outputs() {
         _tf_env=$(mktemp)
         (
             cd "$TERRAFORM_DIR" || exit 0
+            cat <<EOF > backend.tf
+terraform {
+  backend "gcs" {
+    bucket = "${PROJECT_ID}-tfstate-foldrun"
+    prefix = "terraform/state/foldrun"
+  }
+}
+EOF
             terraform init -reconfigure -input=false > /dev/null 2>&1 || exit 0
             # -json outputs a stable JSON object; empty state returns {}
             tf_json=$(terraform output -json 2>/dev/null) || tf_json="{}"
@@ -282,7 +290,7 @@ extract_terraform_outputs() {
             v=$(_tf agent_runtime_id);       if [[ -n "$v" ]]; then echo "AGENT_RUNTIME_ID=$v"; fi
         ) > "$_tf_env" 2>/dev/null || true
         while IFS='=' read -r key val; do
-            [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="$val"
+            [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="${!key:-$val}"
         done < "$_tf_env"
         rm -f "$_tf_env"
     fi
