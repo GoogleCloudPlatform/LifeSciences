@@ -184,9 +184,7 @@ class SkillRegistry:
         if has_boltz2:
             submission_tools.append(submit_boltz2_prediction)
         if has_af3:
-            submission_tools.extend(
-                [submit_af3_endpoint_prediction, submit_af3_batch_predictions]
-            )
+            submission_tools.extend([submit_af3_endpoint_prediction, submit_af3_batch_predictions])
 
         self.register(
             Skill(

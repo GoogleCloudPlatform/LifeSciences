@@ -33,4 +33,3 @@ __all__ = [
     "submit_boltz2_prediction",
     "submit_of3_prediction",
 ]
-

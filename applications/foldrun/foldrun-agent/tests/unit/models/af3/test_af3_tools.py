@@ -712,5 +712,3 @@ class TestAF3Tools:
         # Ensure unique KFP job IDs even when submitted in the same second
         job_ids = [j["job_id"] for j in res["submitted_jobs"]]
         assert len(set(job_ids)) == 2
-
-

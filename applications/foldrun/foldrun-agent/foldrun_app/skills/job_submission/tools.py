@@ -337,4 +337,3 @@ def submit_af3_batch_predictions(
             "idle_shutdown_minutes": idle_shutdown_minutes,
         }
     )
-

@@ -186,11 +186,11 @@ class AF3SubmitPredictionTool(AF3Tool):
         pipeline_root = f"gs://{bucket_name}/pipeline_runs/{ts_dir}"
 
         # Stamp activity in GCS so any running idle-drain watchdog immediately resets its timer
-        endpoint_short_id = str(getattr(endpoint, "resource_name", endpoint)).rstrip("/").split("/")[-1]
+        endpoint_short_id = (
+            str(getattr(endpoint, "resource_name", endpoint)).rstrip("/").split("/")[-1]
+        )
         try:
-            activity_blob = bucket.blob(
-                f"af3_predictions/.locks/{endpoint_short_id}_activity.json"
-            )
+            activity_blob = bucket.blob(f"af3_predictions/.locks/{endpoint_short_id}_activity.json")
             activity_blob.upload_from_string(
                 json.dumps(
                     {
@@ -216,9 +216,7 @@ class AF3SubmitPredictionTool(AF3Tool):
             from ..pipeline import create_af3_idle_drain_pipeline, create_af3_inference_pipeline
 
             pipeline_func = create_af3_inference_pipeline()
-            fd, pipeline_path = tempfile.mkstemp(
-                suffix=".json", prefix=f"af3_pipeline_{job_name}_"
-            )
+            fd, pipeline_path = tempfile.mkstemp(suffix=".json", prefix=f"af3_pipeline_{job_name}_")
             os.close(fd)
             compiler.Compiler().compile(
                 pipeline_func=pipeline_func,

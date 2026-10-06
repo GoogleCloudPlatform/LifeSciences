@@ -235,11 +235,10 @@ class AF3Tool(BaseTool):
         """Return the Cloud Logging URL filtered to the Vertex AI Endpoint container logs."""
         res_name = getattr(endpoint_resource_name, "resource_name", endpoint_resource_name)
         short_id = str(res_name).rstrip("/").split("/")[-1]
-        job_filter = f'%20%22{job_name}%22' if job_name else ""
+        job_filter = f"%20%22{job_name}%22" if job_name else ""
         return (
             f"https://console.cloud.google.com/logs/query;"
             f"query=resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22"
             f"%20resource.labels.endpoint_id%3D%22{short_id}%22{job_filter};duration=PT1H"
             f"?project={self.config.project_id}"
         )
-

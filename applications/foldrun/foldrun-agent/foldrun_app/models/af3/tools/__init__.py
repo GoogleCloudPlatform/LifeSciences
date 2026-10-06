@@ -31,4 +31,3 @@ __all__ = [
     "AF3SubmitPredictionTool",
     "AF3UndeployEndpointTool",
 ]
-

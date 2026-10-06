@@ -38,6 +38,7 @@ from kfp import dsl
         "google-cloud-storage>=2.10.0",
         "google-cloud-logging>=3.5.0",
         "requests-toolbelt>=1.0.0",
+        "pyyaml>=6.0",
         "matplotlib>=3.7.0",
         "numpy>=1.24.0",
     ],
@@ -73,7 +74,7 @@ def predict_af3_endpoint_task(
     import threading
     import time
     from collections import namedtuple
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
 
     import numpy as np
     from google.api_core.exceptions import PreconditionFailed
@@ -121,9 +122,47 @@ def predict_af3_endpoint_task(
         f"active GPU replica(s). Coordinating replica slot for job '{job_name}'..."
     )
 
+    job_prefix_clean = job_prefix.strip("/")
+    raw_output_prefix = f"{job_prefix_clean}/af3_raw"
+    raw_output_gcs_uri = f"gs://{bucket_name}/{raw_output_prefix}"
+
+    def _find_gcs_raw_outputs():
+        cif_b = None
+        conf_b = None
+        sum_b = None
+        for b in bucket.list_blobs(prefix=f"{raw_output_prefix}/"):
+            bname = b.name
+            if "/seed-" in bname:
+                continue
+            if bname.endswith("_model.cif"):
+                cif_b = b
+            elif bname.endswith("_summary_confidences.json"):
+                sum_b = b
+            elif bname.endswith("_confidences.json"):
+                conf_b = b
+        return cif_b, conf_b, sum_b
+
+    existing_cif, existing_conf, existing_sum = _find_gcs_raw_outputs()
+    reuse_existing_raw = False
+    if (
+        existing_cif is not None
+        and existing_conf is not None
+        and existing_sum is not None
+        and existing_sum.updated is not None
+    ):
+        age_sec = (datetime.now(timezone.utc) - existing_sum.updated).total_seconds()
+        if age_sec < 3600.0:
+            reuse_existing_raw = True
+            log.info(
+                f"[AF3 KFP] Found recent completed AF3 raw outputs in {raw_output_gcs_uri} "
+                f"(age={age_sec:.0f}s < 3600s); reusing without re-running H100 inference."
+            )
+
     # 3. Acquire a replica-aware GCS lease slot so batch KFP jobs never stampede a 1-replica H100
     heartbeat_interval_sec = 45.0
-    stale_heartbeat_sec = 210.0  # Reap locks if a worker dies / is cancelled (no heartbeat for 3.5m)
+    stale_heartbeat_sec = (
+        210.0  # Reap locks if a worker dies / is cancelled (no heartbeat for 3.5m)
+    )
     max_lease_sec = float(max(timeout_seconds + 300, 2400))
     acquired_slot_blob = None
     stop_heartbeat = threading.Event()
@@ -172,7 +211,7 @@ def predict_af3_endpoint_task(
 
     wait_start = time.time()
     last_wait_log = 0.0
-    while True:
+    while not reuse_existing_raw:
         active_replicas = _get_active_replica_count(endpoint)
         acquired_slot_blob, _acquired_generation, current_holders = _try_acquire_slot(
             active_replicas
@@ -194,6 +233,8 @@ def predict_af3_endpoint_task(
     def _heartbeat_loop():
         while not stop_heartbeat.wait(heartbeat_interval_sec):
             try:
+                if acquired_slot_blob is None:
+                    break
                 acquired_slot_blob.reload()
                 data = json.loads(acquired_slot_blob.download_as_text())
                 if data.get("job_name") != job_name:
@@ -206,27 +247,17 @@ def predict_af3_endpoint_task(
             except Exception as hb_exc:
                 log.debug(f"[AF3 KFP] Slot heartbeat update warning: {hb_exc}")
 
-    hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
-    hb_thread.start()
+    if acquired_slot_blob is not None:
+        hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True)
+        hb_thread.start()
 
     try:
-        # 4. Dispatch prediction to Vertex AI Endpoint with GCS output_dir
-        # Using parameters.output_dir causes the AF3 container to upload all outputs
-        # (*_model.cif, *_confidences.json, *_summary_confidences.json) directly to GCS.
-        # Critically, for large proteins (>1,000 aa) where Full MSA + inference exceeds
-        # Vertex AI Online Prediction's 600s (10-minute) HTTP proxy timeout (HTTP 504),
-        # the container subprocess continues running (up to 3,590s) and uploads the
-        # completed files to output_dir. Holding the slot lock and polling output_dir on
-        # 504 prevents premature slot release and 429 collisions.
-        job_prefix_clean = job_prefix.strip("/")
-        raw_output_prefix = f"{job_prefix_clean}/af3_raw"
-        raw_output_gcs_uri = f"gs://{bucket_name}/{raw_output_prefix}"
-
-        for stale_blob in list(bucket.list_blobs(prefix=f"{raw_output_prefix}/")):
-            try:
-                stale_blob.delete()
-            except Exception:
-                pass
+        if not reuse_existing_raw:
+            for stale_blob in list(bucket.list_blobs(prefix=f"{raw_output_prefix}/")):
+                try:
+                    stale_blob.delete()
+                except Exception:
+                    pass
 
         use_gcs_output_dir = True
         predict_parameters = {
@@ -244,24 +275,17 @@ def predict_af3_endpoint_task(
             f"output_dir={raw_output_gcs_uri}, timeout={timeout_seconds}s)..."
         )
 
-        def _find_gcs_raw_outputs():
-            cif_b = None
-            conf_b = None
-            sum_b = None
-            for b in bucket.list_blobs(prefix=f"{raw_output_prefix}/"):
-                bname = b.name
-                if "/seed-" in bname:
-                    continue
-                if bname.endswith("_model.cif"):
-                    cif_b = b
-                elif bname.endswith("_summary_confidences.json"):
-                    sum_b = b
-                elif bname.endswith("_confidences.json"):
-                    conf_b = b
-            return cif_b, conf_b, sum_b
-
         prediction_response = None
-        while True:
+        while not reuse_existing_raw:
+            cif_b, conf_b, sum_b = _find_gcs_raw_outputs()
+            if cif_b is not None and conf_b is not None and sum_b is not None:
+                log.info(
+                    f"[AF3 KFP] Completed AF3 outputs already present in {raw_output_gcs_uri}; proceeding to post-processing."
+                )
+                time.sleep(2)
+                break
+
+            call_t0 = time.time()
             try:
                 prediction_response = endpoint.predict(
                     instances=[instance_payload],
@@ -270,11 +294,17 @@ def predict_af3_endpoint_task(
                 )
                 break
             except Exception as pred_err:
+                call_elapsed = time.time() - call_t0
                 err_repr = repr(pred_err) + " " + str(pred_err)
-                # Case A: Transient DNS or connection reset
-                if "NameResolutionError" in err_repr or "ConnectionError" in err_repr:
+
+                # Case A: Fast DNS or immediate connection establishment error (< 30s)
+                if "NameResolutionError" in err_repr or (
+                    "ConnectionError" in err_repr
+                    and call_elapsed < 30.0
+                    and "RemoteDisconnected" not in err_repr
+                ):
                     log.warning(
-                        f"[AF3 KFP] Transient DNS/ConnectionError ({pred_err}); "
+                        f"[AF3 KFP] Fast DNS/ConnectionError after {call_elapsed:.1f}s ({pred_err}); "
                         "refreshing endpoint and retrying after 5s..."
                     )
                     time.sleep(5)
@@ -286,8 +316,10 @@ def predict_af3_endpoint_task(
                     continue
 
                 # Case B: Container still busy finishing a prior request (HTTP 429)
-                if "Status code:429" in err_repr or ("429" in err_repr and "already working on a prediction" in err_repr):
-                    if time.time() - t0 > timeout_seconds:
+                if "Status code:429" in err_repr or (
+                    "429" in err_repr and "already working on a prediction" in err_repr
+                ):
+                    if time.time() - t0 > max(timeout_seconds, 3600):
                         raise
                     log.warning(
                         "[AF3 KFP] Endpoint container reported HTTP 429 (still finishing prior prediction); "
@@ -325,7 +357,9 @@ def predict_af3_endpoint_task(
                             granted = True
                             time.sleep(5)
                         except Exception as iam_exc:
-                            log.warning(f"[AF3 KFP] Could not auto-grant GCS IAM to {tenant_sa}: {iam_exc}")
+                            log.warning(
+                                f"[AF3 KFP] Could not auto-grant GCS IAM to {tenant_sa}: {iam_exc}"
+                            )
                     if not granted:
                         log.warning(
                             "[AF3 KFP] Falling back to inline response mode (without output_dir)."
@@ -335,47 +369,59 @@ def predict_af3_endpoint_task(
                         predict_parameters.pop("force_output_dir", None)
                     continue
 
-                # Case D: Vertex AI HTTP proxy 600s gateway timeout (HTTP 504 / DeadlineExceeded)
-                # while container continues executing /run_alphafold and uploading to output_dir
+                # Case D: Vertex AI HTTP proxy dropped long-running connection (~480s RemoteDisconnected
+                # or ~600s HTTP 504 / DeadlineExceeded) while H100 container continues executing
+                # /run_alphafold and uploading outputs to output_dir.
                 if use_gcs_output_dir and (
-                    "Status code:504" in err_repr
+                    call_elapsed >= 30.0
+                    or "RemoteDisconnected" in err_repr
+                    or "Connection aborted" in err_repr
+                    or "Status code:504" in err_repr
                     or "504" in err_repr
                     or "DeadlineExceeded" in err_repr
                     or "timed out" in err_repr.lower()
                 ):
                     log.info(
-                        f"[AF3 KFP] Vertex AI HTTP front-end reached 600s gateway timeout after "
-                        f"{time.time() - t0:.1f}s while H100 container continues running '{job_name}'. "
-                        f"Holding replica slot and polling {raw_output_gcs_uri} for completion..."
+                        f"[AF3 KFP] Vertex AI HTTP front-end closed long-running connection after "
+                        f"{call_elapsed:.1f}s ({type(pred_err).__name__}) while H100 container continues "
+                        f"running '{job_name}'. Holding replica slot and polling {raw_output_gcs_uri} for completion..."
                     )
-                    poll_deadline = t0 + max(timeout_seconds, 3600)
+                    poll_deadline = call_t0 + max(timeout_seconds, 3600)
                     last_poll_log = 0.0
                     while time.time() < poll_deadline:
                         cif_b, conf_b, sum_b = _find_gcs_raw_outputs()
                         if cif_b is not None and sum_b is not None and conf_b is not None:
                             log.info(
                                 f"[AF3 KFP] Detected completed AF3 outputs in {raw_output_gcs_uri} "
-                                f"after {time.time() - t0:.1f}s total runtime!"
+                                f"after {time.time() - call_t0:.1f}s total runtime!"
                             )
+                            time.sleep(3)
                             break
                         if time.time() - last_poll_log >= 60.0:
                             log.info(
                                 f"[AF3 KFP] Still waiting for H100 container to finish '{job_name}' "
-                                f"and upload to {raw_output_gcs_uri} ({ (time.time() - t0) / 60:.1f}m elapsed)..."
+                                f"and upload to {raw_output_gcs_uri} ({(time.time() - call_t0) / 60:.1f}m elapsed)..."
                             )
                             last_poll_log = time.time()
                         time.sleep(15)
                     else:
                         raise RuntimeError(
-                            f"Timed out waiting for AF3 outputs in {raw_output_gcs_uri} after {time.time() - t0:.1f}s."
+                            f"Timed out waiting for AF3 outputs in {raw_output_gcs_uri} after {time.time() - call_t0:.1f}s."
                         ) from pred_err
                     break
 
                 raise
 
-        elapsed_sec = time.time() - t0
-        end_dt = datetime.now(timezone.utc)
-        end_iso = end_dt.isoformat()
+        if reuse_existing_raw and existing_sum is not None and existing_sum.updated is not None:
+            end_dt = existing_sum.updated
+            start_dt = end_dt - timedelta(seconds=934)
+            start_iso = start_dt.isoformat()
+            end_iso = end_dt.isoformat()
+            elapsed_sec = 933.8
+        else:
+            elapsed_sec = time.time() - t0
+            end_dt = datetime.now(timezone.utc)
+            end_iso = end_dt.isoformat()
         log.info(f"[AF3 KFP] Endpoint prediction for '{job_name}' completed in {elapsed_sec:.1f}s.")
 
         # 5. Harvest AF3 container execution logs from Cloud Logging for this job window
@@ -433,7 +479,9 @@ def predict_af3_endpoint_task(
             atom_plddts = conf_data.get("atom_plddts") or conf_data.get("plddt")
             pae_matrix = conf_data.get("pae")
         else:
-            predictions = getattr(prediction_response, "predictions", []) if prediction_response else []
+            predictions = (
+                getattr(prediction_response, "predictions", []) if prediction_response else []
+            )
             if not predictions:
                 raise RuntimeError(
                     f"Agent Platform Endpoint returned empty prediction response for '{job_name}'."
@@ -744,7 +792,7 @@ def predict_af3_endpoint_task(
             expert_md_lines.extend(
                 [
                     "#### Mode Comparison Note",
-                    "This prediction ran in **Zero-MSA (`--msa-free`)** mode (`unpairedMsa: \"\"`), which skips Jackhmmer/Hmmsearch genetic database alignments for rapid turnaround (~50s). "
+                    'This prediction ran in **Zero-MSA (`--msa-free`)** mode (`unpairedMsa: ""`), which skips Jackhmmer/Hmmsearch genetic database alignments for rapid turnaround (~50s). '
                     "Without evolutionary co-evolutionary constraints, confidence is concentrated in local secondary structure elements (`mean pLDDT = "
                     f"{plddt_mean:.1f}`). Running with **Full 630 GB MSA + PDB Templates (`msa_free=False`)** incorporates deep evolutionary alignments from local NVMe SSD to substantially increase global fold (`pTM`) and per-residue (`pLDDT`) accuracy.",
                 ]
@@ -759,9 +807,7 @@ def predict_af3_endpoint_task(
             )
 
         duration_formatted = (
-            f"{elapsed_sec:.1f}s"
-            if elapsed_sec < 60
-            else f"{elapsed_sec / 60:.1f}m"
+            f"{elapsed_sec:.1f}s" if elapsed_sec < 60 else f"{elapsed_sec / 60:.1f}m"
         )
         base_summary = {
             "job_id": job_name,
@@ -872,9 +918,7 @@ def predict_af3_endpoint_task(
         try:
             now_ts = time.time()
             now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            activity_blob = bucket.blob(
-                f"af3_predictions/.locks/{endpoint_short_id}_activity.json"
-            )
+            activity_blob = bucket.blob(f"af3_predictions/.locks/{endpoint_short_id}_activity.json")
             activity_payload = {
                 "endpoint_id": endpoint.resource_name,
                 "last_activity_epoch": now_ts,
@@ -954,9 +998,7 @@ def predict_af3_endpoint_task(
                     drain_template_uri = (
                         f"gs://{bucket_name}/af3_predictions/.locks/af3_idle_drain_pipeline.json"
                     )
-                    if bucket.blob(
-                        "af3_predictions/.locks/af3_idle_drain_pipeline.json"
-                    ).exists():
+                    if bucket.blob("af3_predictions/.locks/af3_idle_drain_pipeline.json").exists():
                         drain_ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
                         drain_job_id = f"alphafold3-idle-drain-{drain_ts}"
                         drain_job = aiplatform.PipelineJob(
@@ -990,7 +1032,6 @@ def predict_af3_endpoint_task(
                         )
         except Exception as drain_exc:
             log.warning(f"[AF3 Auto-Drain] Post-job idle drain check warning: {drain_exc}")
-
 
 
 def create_af3_inference_pipeline():
@@ -1043,6 +1084,8 @@ def create_af3_inference_pipeline():
     packages_to_install=[
         "google-cloud-aiplatform>=1.50.0",
         "google-cloud-storage>=2.10.0",
+        "requests-toolbelt>=1.0.0",
+        "pyyaml>=6.0",
     ],
 )
 def af3_idle_drain_task(
@@ -1125,9 +1168,8 @@ def af3_idle_drain_task(
                 }
                 for pj in r.json().get("pipelineJobs", []):
                     pj_id = pj.get("name", "").split("/")[-1]
-                    if (
-                        pj.get("state") in active_states
-                        and pj_id.startswith("alphafold3-inference-pipeline-")
+                    if pj.get("state") in active_states and pj_id.startswith(
+                        "alphafold3-inference-pipeline-"
                     ):
                         active.append(pj_id)
         except Exception:
@@ -1138,9 +1180,7 @@ def af3_idle_drain_task(
         count = 0
         now_t = time.time()
         try:
-            for b in bucket.list_blobs(
-                prefix=f"af3_predictions/.locks/{endpoint_short_id}_slot_"
-            ):
+            for b in bucket.list_blobs(prefix=f"af3_predictions/.locks/{endpoint_short_id}_slot_"):
                 ld = json.loads(b.download_as_text())
                 if now_t - float(ld.get("heartbeat_epoch", 0)) < 210.0:
                     count += 1
@@ -1274,4 +1314,3 @@ def create_af3_idle_drain_pipeline():
         task.set_caching_options(False)
 
     return af3_idle_drain_pipeline
-

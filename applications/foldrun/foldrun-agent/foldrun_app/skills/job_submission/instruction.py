@@ -340,4 +340,3 @@ Before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions
 
 Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`.
 """
-
