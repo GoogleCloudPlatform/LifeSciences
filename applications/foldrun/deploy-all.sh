@@ -260,6 +260,7 @@ extract_terraform_outputs() {
         _tf_env=$(mktemp)
         (
             cd "$TERRAFORM_DIR" || exit 0
+            export GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
             cat <<EOF > backend.tf
 terraform {
   backend "gcs" {
@@ -296,6 +297,15 @@ EOF
     fi
 
     export FOLDRUN_VIEWER_URL="${FOLDRUN_VIEWER_URL:-$TF_VIEWER_URL}"
+    if [[ -z "${FOLDRUN_VIEWER_URL:-}" ]]; then
+        export FOLDRUN_VIEWER_URL=$(gcloud run services describe foldrun-viewer --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)" 2>/dev/null || true)
+    fi
+    if [[ -z "${AGENT_RUNTIME_ID:-}" ]]; then
+        _tok=$(gcloud auth print-access-token 2>/dev/null || true)
+        if [[ -n "$_tok" ]]; then
+            export AGENT_RUNTIME_ID=$(curl -s -H "Authorization: Bearer $_tok" "https://${REGION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${REGION}/reasoningEngines" | python3 -c "import json,sys; d=json.load(sys.stdin); engines=[e['name'] for e in d.get('reasoningEngines',[]) if e.get('displayName')=='FoldRun_Agent']; print(engines[0] if engines else '')" 2>/dev/null || true)
+        fi
+    fi
 
     echo "Configuration:"
     echo "  GCS_BUCKET=$GCS_BUCKET"
