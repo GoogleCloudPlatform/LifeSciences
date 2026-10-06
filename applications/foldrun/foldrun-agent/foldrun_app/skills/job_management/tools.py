@@ -184,6 +184,10 @@ def undeploy_af3_endpoint(
     Releases dedicated GPU hardware from the endpoint, reverting ongoing idle costs
     to $0.00/hr immediately while preserving the endpoint and model registry entries.
 
+    IMPORTANT: NEVER call `undeploy_af3_endpoint` automatically after a prediction error
+    or without explicit user confirmation, because spinning the H100 endpoint back up
+    takes ~10-12 minutes. Always ask the user before undeploying.
+
     Args:
         deployed_model_id: Optional specific deployed model ID to undeploy. If omitted, undeploys all models.
         endpoint_id: Optional Agent Platform Endpoint override.

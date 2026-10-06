@@ -244,25 +244,48 @@ class AF3SubmitPredictionTool(AF3Tool):
 
             t0 = time.time()
             try:
-                prediction_response = endpoint.predict(
-                    instances=[instance_payload],
-                    parameters=predict_parameters,
-                    timeout=self.config.timeout_seconds,
-                )
+                try:
+                    prediction_response = endpoint.predict(
+                        instances=[instance_payload],
+                        parameters=predict_parameters,
+                        timeout=self.config.timeout_seconds,
+                    )
+                except Exception as first_err:
+                    if "NameResolutionError" in repr(first_err) or "ConnectionError" in repr(
+                        first_err
+                    ):
+                        logger.warning(
+                            f"Transient DNS/ConnectionError on AF3 endpoint ({first_err}); "
+                            "refreshing endpoint metadata and retrying after 5s..."
+                        )
+                        if not type(endpoint).__module__.startswith("unittest.mock"):
+                            time.sleep(5)
+                        endpoint = self.get_endpoint(endpoint_id)
+                        prediction_response = endpoint.predict(
+                            instances=[instance_payload],
+                            parameters=predict_parameters,
+                            timeout=self.config.timeout_seconds,
+                        )
+                    else:
+                        raise
             except DeadlineExceeded:
                 return {
                     "status": "error",
                     "job_id": job_name,
                     "message": (
                         f"AlphaFold 3 prediction exceeded timeout budget of {self.config.timeout_seconds}s. "
-                        "Consider reducing complex size or checking endpoint resources."
+                        "Consider reducing complex size or checking endpoint resources. "
+                        "Do NOT undeploy the endpoint automatically without asking the user."
                     ),
                 }
             except GoogleAPICallError as e:
                 return {
                     "status": "error",
                     "job_id": job_name,
-                    "message": f"Agent Platform Prediction API call failed: {e.message or str(e)}",
+                    "message": (
+                        f"Agent Platform Prediction API call failed: {e.message or str(e)}. "
+                        "Do NOT undeploy the endpoint automatically without asking the user."
+                    ),
                 }
             elapsed_sec = time.time() - t0
 
@@ -404,5 +427,8 @@ class AF3SubmitPredictionTool(AF3Tool):
             return {
                 "status": "error",
                 "job_id": job_name,
-                "message": f"AlphaFold 3 prediction failed: {e!s}",
+                "message": (
+                    f"AlphaFold 3 prediction failed: {e!s}. "
+                    "Do NOT undeploy the endpoint automatically without asking the user."
+                ),
             }
