@@ -1,10 +1,10 @@
 # Work Order YAML Reference
 
-Reference for the YAML schema accepted by `dde workorder create --from <file>`.
+Reference for the YAML schema accepted by `oase workorder create --from <file>`.
 
 > **Alias:** `wo` is a shorthand for `workorder`. Every command below works
-> identically with either name — e.g. `dde wo create` and
-> `dde workorder create` are the same command.
+> identically with either name — e.g. `oase wo create` and
+> `oase workorder create` are the same command.
 
 For the design rationale behind work orders, see
 [orchestration-design-guidance.md](orchestration-design-guidance.md) sections 3-5.
@@ -161,18 +161,18 @@ arrow represents a legal transition.
 ### Transition mode
 
 All run transitions are explicit CLI invocations — no transition is automatic.
-A new run is created in the `queued` state by `dde run create <WO-ID>`, and
+A new run is created in the `queued` state by `oase run create <WO-ID>`, and
 every subsequent transition is performed with
-`dde run transition <RUN-ID> <STATE>`.
+`oase run transition <RUN-ID> <STATE>`.
 
 ### Commands
 
 | Command | Effect |
 |---------|--------|
-| `dde run create <WO-ID>` | Creates a new run targeting the latest committed revision, in `queued` state. |
-| `dde run transition <RUN-ID> <STATE>` | Advances the run to `<STATE>` if the transition is legal. |
+| `oase run create <WO-ID>` | Creates a new run targeting the latest committed revision, in `queued` state. |
+| `oase run transition <RUN-ID> <STATE>` | Advances the run to `<STATE>` if the transition is legal. |
 
-If you attempt an illegal transition, `dde run transition` exits with code 9
+If you attempt an illegal transition, `oase run transition` exits with code 9
 (`Refusal`) and reports the current state, the rejected target, and the set of
 legal targets — so you can discover the valid next states from the error message
 itself. This section documents the full graph upfront to remove the need to
@@ -334,12 +334,12 @@ Each entry in `artifact_links` is a dict with:
 | `path`        | string | Path relative to the project root. Must not escape the project root. |
 | `description` | string | What this artifact provides. |
 
-When a work order is **committed** (`dde workorder commit`), the CLI:
+When a work order is **committed** (`oase workorder commit`), the CLI:
 
 1. Resolves each `path` relative to the project root.
 2. Verifies the file exists and is within the project boundary.
 3. Computes a `sha256` checksum for each artifact and stores it in the link.
-4. Creates a context snapshot record under `.dde/control/contexts/`.
+4. Creates a context snapshot record under `.oase/control/contexts/`.
 
 <!-- NOTE: §8 numbering follows §7; update if sections are reordered. -->
 
@@ -359,8 +359,8 @@ order lifecycle, each enforcing a different constraint:
 
 | Check point          | Command               | What it checks |
 |----------------------|-----------------------|----------------|
-| **Type check**       | `dde workorder create` | `deliverables` must be a `dict`, not a `list`. Rejects the wrong container type. |
-| **Schema check**     | `dde validate check`   | The dict must contain at least one of the recognized keys: `layer_1` and/or `layer_0_classes` (alias: `layer_0`). A dict with only arbitrary keys causes 5 of 8 mechanical checks to skip, which is treated as a failure. |
+| **Type check**       | `oase workorder create` | `deliverables` must be a `dict`, not a `list`. Rejects the wrong container type. |
+| **Schema check**     | `oase validate check`   | The dict must contain at least one of the recognized keys: `layer_1` and/or `layer_0_classes` (alias: `layer_0`). A dict with only arbitrary keys causes 5 of 8 mechanical checks to skip, which is treated as a failure. |
 
 A work order that passes creation (type check) can still fail validation
 (schema check) if its `deliverables` dict uses unrecognized keys.
@@ -379,7 +379,7 @@ Both may be present when a work order covers raw artifacts and a written report.
 
 Values in `layer_0_classes` must be registered artifact-class names — each
 one corresponds to a subdirectory under `raw/` in the project. The
-authoritative list lives in `tools/dde/core/context.py` (`ARTIFACT_DIRS`).
+authoritative list lives in `tools/oase/core/context.py` (`ARTIFACT_DIRS`).
 
 <!-- MAINTENANCE NOTE: This list is inlined for convenience. If it drifts from
      ARTIFACT_DIRS in core/context.py, context.py is the source of truth.
@@ -439,18 +439,18 @@ the content fields and creates a context snapshot with artifact checksums.
 
 ```bash
 # Step 1: create the work order in proposed state.
-dde workorder create --from wo-spec.yaml
+oase workorder create --from wo-spec.yaml
 # → WO-003 created (revision 1, state: proposed)
 
 # Step 2: commit it — freezes content, creates context snapshot.
-dde workorder commit WO-003
+oase workorder commit WO-003
 # → WO-003 committed (revision 1)
 ```
 
 Between create and commit you may update content fields with
-`dde workorder update WO-003 --from updated-spec.yaml` as many times as
+`oase workorder update WO-003 --from updated-spec.yaml` as many times as
 needed. Once committed, content is frozen; further changes require a new
-revision (`dde workorder revise`).
+revision (`oase workorder revise`).
 
 ### Single-step shortcut
 
@@ -458,7 +458,7 @@ When the YAML is already final and no intermediate edits are needed, pass
 `--commit` to create both records in one invocation:
 
 ```bash
-dde workorder create --from wo-spec.yaml --commit
+oase workorder create --from wo-spec.yaml --commit
 # → WO-003 created and committed (revision 1, state: committed)
 ```
 
@@ -470,9 +470,9 @@ commands separately.
 
 | Situation | Command |
 |-----------|---------|
-| YAML is final, ready to queue immediately | `dde wo create --from spec.yaml --commit` |
-| Need to review or edit after creation | `dde wo create --from spec.yaml`, then `dde wo commit <ID>` |
-| Updating a proposed WO before committing | `dde wo update <ID> --from updated.yaml` |
+| YAML is final, ready to queue immediately | `oase wo create --from spec.yaml --commit` |
+| Need to review or edit after creation | `oase wo create --from spec.yaml`, then `oase wo commit <ID>` |
+| Updating a proposed WO before committing | `oase wo update <ID> --from updated.yaml` |
 
 
 ---
@@ -490,7 +490,7 @@ submitted → mechanically_validated` — is mechanical bookkeeping.
 ### Usage
 
 ```bash
-dde wo accept <ID>
+oase wo accept <ID>
 ```
 
 ### What it does
@@ -509,7 +509,7 @@ dde wo accept <ID>
    scientific judgment:
 
    ```bash
-   dde workorder transition <ID> scientifically_accepted
+   oase workorder transition <ID> scientifically_accepted
    ```
 
 4. **Stops at `validation_failed`** if any check fails, surfacing the same
@@ -523,7 +523,7 @@ dde wo accept <ID>
 
 ```bash
 # Full chain from committed:
-dde wo accept WO-003
+oase wo accept WO-003
 #   WO-003: committed → queued
 #   WO-003: queued → in_progress
 #   WO-003: in_progress → submitted
@@ -537,17 +537,17 @@ dde wo accept WO-003
 #   WO-003: submitted → mechanically_validated  [validation PASS]
 #
 #   WO-003 is now mechanically_validated and ready for scientific acceptance.
-#     dde workorder transition WO-003 scientifically_accepted
+#     oase workorder transition WO-003 scientifically_accepted
 
 # Starting partway through (already in_progress):
-dde wo accept WO-003
+oase wo accept WO-003
 #   WO-003: in_progress → submitted
 #
 #   Running mechanical validation on WO-003...
 #   ...
 
 # Validation failure — stops with actionable output:
-dde wo accept WO-003
+oase wo accept WO-003
 #   WO-003: committed → queued
 #   WO-003: queued → in_progress
 #   WO-003: in_progress → submitted
@@ -563,7 +563,7 @@ dde wo accept WO-003
 #
 #   Remedy:
 #     1. Fix the failing deliverables and resubmit, or
-#     2. Use `dde workorder override WO-003` to override eligible checks
+#     2. Use `oase workorder override WO-003` to override eligible checks
 ```
 
 ### What it does NOT do
@@ -571,12 +571,12 @@ dde wo accept WO-003
 - **Does not auto-transition to `scientifically_accepted`** — that is a
   human judgment call.
 - **Does not bypass the #178 override guard** — `validation_failed →
-  mechanically_validated` still requires `dde workorder override`.
+  mechanically_validated` still requires `oase workorder override`.
 - **Does not bypass the #237 submitted-bypass guard** — the real
   `validate check` logic runs; the `submitted → mechanically_validated`
   transition is never a direct state flip.
 - **Does not handle `proposed` state** — the WO must be committed first
-  (`dde workorder commit <ID>`).
+  (`oase workorder commit <ID>`).
 
 ### Interaction with override and retry
 
@@ -584,8 +584,8 @@ If `accept` stops at `validation_failed`:
 
 | Next step | Command |
 |-----------|---------|
-| Fix deliverables and retry | `dde workorder transition <ID> in_progress`, fix issues, `dde wo accept <ID>` |
-| Override eligible checks | `dde workorder override <ID> --reason "..." --evidence "..." --checks "..." --actor "..."` |
+| Fix deliverables and retry | `oase workorder transition <ID> in_progress`, fix issues, `oase wo accept <ID>` |
+| Override eligible checks | `oase workorder override <ID> --reason "..." --evidence "..." --checks "..." --actor "..."` |
 
 ---
 
@@ -605,10 +605,10 @@ order.
 ### Foundational Claim Check
 
 **What it is.** A lightweight, single work order that tests ONE foundational
-claim identified as contradicted during `dde coscientist analyze`. The outcome
+claim identified as contradicted during `oase coscientist analyze`. The outcome
 is binary: SUPPORTED or REFUTED.
 
-**When to use it.** After `dde coscientist analyze` flags contradicted claims
+**When to use it.** After `oase coscientist analyze` flags contradicted claims
 on the recommended idea (verdict `leader-with-advisories`), instead of
 immediately dispatching a full validation cohort (e.g. 5 parallel work orders),
 dispatch this single claim-check first. It targets the most-contradicted
@@ -630,7 +630,7 @@ full analysis cycle.
 **Example workflow:**
 
 ```
-1. dde coscientist analyze tournament.json
+1. oase coscientist analyze tournament.json
    → Verdict: leader-with-advisories
    → Leader: GENE_X (3 contradicted claims)
 
@@ -639,7 +639,7 @@ full analysis cycle.
       wo-gene-x-claim-check.yaml
    # Edit wo-gene-x-claim-check.yaml — fill in all [PLACEHOLDER] values
 
-3. dde workorder create --from wo-gene-x-claim-check.yaml --commit
+3. oase workorder create --from wo-gene-x-claim-check.yaml --commit
    → WO-007 created and committed
 
 4. Execute WO-007 (single specialist, fast turnaround)

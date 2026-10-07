@@ -1,8 +1,8 @@
 # OASE science stack — for specialist skills, not for the CLI itself.
 #
-# Nothing under tools/dde/ imports any of these, which is the point:
+# Nothing under tools/oase/ imports any of these, which is the point:
 # they are split out of requirements.txt so that a failure here leaves a
-# working `dde` behind rather than an empty venv.
+# working `oase` behind rather than an empty venv.
 #
 # Some of these build from source. `prody` publishes no wheels for
 # CPython 3.11 and compiles C extensions, so it needs a toolchain and the

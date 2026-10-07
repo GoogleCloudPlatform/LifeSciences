@@ -44,7 +44,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory for CliRunner tests."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     return project
 
 
@@ -66,7 +66,7 @@ def test_docking_analyze_finds_prepare_sidecar_by_receptor_id() -> None:
     sidecar must appear in the analysis output (#191).
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -175,7 +175,7 @@ def test_litref_analyze_raises_on_missing_response_files() -> None:
     ArtifactError, not silently report NOT_FOUND (#198).
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -220,7 +220,7 @@ def test_litref_analyze_raises_on_missing_response_files() -> None:
         assert "resolve" in (result.output or "").lower() or (
             result.exception and "resolve" in str(result.exception).lower()
         ), (
-            f"Error should mention running 'dde litref resolve' first; "
+            f"Error should mention running 'oase litref resolve' first; "
             f"output: {result.output}, exception: {result.exception}"
         )
     print("  PASS: litref analyze raises on missing response files")
@@ -236,7 +236,7 @@ def test_selectivity_compare_rejects_string_panel_complete() -> None:
     string "false" is truthy in Python and would suppress the relay (#205).
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -246,7 +246,7 @@ def test_selectivity_compare_rejects_string_panel_complete() -> None:
         # Write a panel file with panel_complete as string "false" — this
         # should trigger a validation error.
         panel: dict[str, Any] = {
-            "schema": "dde.selectivity-panel.v1",
+            "schema": "oase.selectivity-panel.v1",
             "compound_id": "TEST-001",
             "panel_complete": "false",  # BUG: string, not boolean
             "primary_target": {
@@ -295,7 +295,7 @@ def test_selectivity_analyze_fires_relay_when_panel_complete_not_true() -> None:
     is not exactly True — e.g. when it's False or missing (#205).
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -305,7 +305,7 @@ def test_selectivity_analyze_fires_relay_when_panel_complete_not_true() -> None:
         # Write a properly normalised selectivity artifact with
         # panel_complete = False (the relay SHOULD fire).
         record: dict[str, Any] = {
-            "schema": "dde.selectivity-panel.v1",
+            "schema": "oase.selectivity-panel.v1",
             "source_file": "test.json",
             "compound_id": "TEST-001",
             "primary_target": {
@@ -386,7 +386,7 @@ def test_tox_margins_forwards_both_pk_sidecar_relays() -> None:
     clinical PK sidecars into the output sidecar (#216).
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -399,7 +399,7 @@ def test_tox_margins_forwards_both_pk_sidecar_relays() -> None:
 
         # Write a tox repeat-dose artifact
         tox_doc: dict[str, Any] = {
-            "schema": "dde.tox-repeat-dose.v1",
+            "schema": "oase.tox-repeat-dose.v1",
             "study_id": study_id,
             "species": "rat",
             "strain": "Wistar",
@@ -428,7 +428,7 @@ def test_tox_margins_forwards_both_pk_sidecar_relays() -> None:
         animal_pk: dict[str, Any] = {
             "tool": "pk",
             "subcommand": "nca",
-            "schema": "dde.pk-nca.v1",
+            "schema": "oase.pk-nca.v1",
             "study_id": "animal-pk-study",
             "species": "rat",
             "route": "oral",
@@ -479,7 +479,7 @@ def test_tox_margins_forwards_both_pk_sidecar_relays() -> None:
         clinical_pk: dict[str, Any] = {
             "tool": "pk",
             "subcommand": "nca",
-            "schema": "dde.pk-nca.v1",
+            "schema": "oase.pk-nca.v1",
             "study_id": "clinical-pk-study",
             "species": "human",
             "route": "oral",

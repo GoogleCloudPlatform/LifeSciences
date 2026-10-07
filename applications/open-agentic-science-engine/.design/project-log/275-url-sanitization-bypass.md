@@ -46,7 +46,7 @@ closing the C0 injection vector.
 
 ## Files Changed
 
-- `tools/dde/commands/site.py` — added `_whatwg_normalize_url()`, rewrote
+- `tools/oase/commands/site.py` — added `_whatwg_normalize_url()`, rewrote
   `_is_external_url()` with urlsplit + WHATWG normalization, updated
   dangerous-scheme checks in `_replace_img()` and `_replace_a()`
 - `tests/test_url_sanitization_bypass.py` — new test file with 53 tests covering

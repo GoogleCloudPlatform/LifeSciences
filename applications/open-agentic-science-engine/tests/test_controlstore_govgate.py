@@ -45,13 +45,13 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.controlstore import (
+from oase.core.controlstore import (
     CONTROL_DIR,
     _default_concept_loader,
     ensure_control_dirs,
     write_record,
 )
-from dde.core.errors import Refusal
+from oase.core.errors import Refusal
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -78,7 +78,7 @@ def _check(name: str, fn: Any) -> None:
 def _make_project(base: Path) -> Path:
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -91,7 +91,7 @@ def _make_concept_record(
 ) -> dict[str, Any]:
     """Build a minimal valid concept record."""
     record: dict[str, Any] = {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": concept_id,
         "revision": revision,
         "state": "active",
@@ -113,7 +113,7 @@ def _write_concept_file(
     *,
     revision: int | None = None,
 ) -> Path:
-    """Write a concept record directly to .dde/control/concepts/."""
+    """Write a concept record directly to .oase/control/concepts/."""
     concepts_dir = project / CONTROL_DIR / "concepts"
     concepts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -135,7 +135,7 @@ def _write_concept_file(
 def _valid_decision(**overrides: Any) -> dict[str, Any]:
     """A minimal valid decision record."""
     record: dict[str, Any] = {
-        "schema": "dde.decision-record.v1",
+        "schema": "oase.decision-record.v1",
         "id": "DR-001",
         "action": "advance_with_budget",
         "affected_entity": {

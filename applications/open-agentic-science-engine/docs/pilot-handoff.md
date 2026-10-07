@@ -23,7 +23,7 @@ ls skills/                                           # skills that exist
 ls templates/                                        # agent templates that exist
 grep -c uri: templates/*/scion-agent.yaml            # how many each template grants
 grep -h uri: templates/*/scion-agent.yaml | sort -u  # which skills those are
-dde doctor                                        # which tools are installed and callable
+oase doctor                                        # which tools are installed and callable
 python3 tools/check_invocations.py                   # do our documented commands exist
 ```
 
@@ -81,7 +81,7 @@ designed output.
   neither is a tool that answers "no". The exit codes are defined in the CLI's error
   module — read them there rather than from any table in prose. A pilot report of "the
   tool errored" should always be resolved to *which* code before it is triaged.
-- **`dde doctor` ends with a verdict line, not a warning count.** `STOP` means fix
+- **`oase doctor` ends with a verdict line, not a warning count.** `STOP` means fix
   before running anything; `PROCEED` means work. A healthy install carries warnings.
   "Doctor shows fourteen warnings" is not a bug report.
 - **Ambiguity is refused rather than resolved.** A gene symbol matching two HPA entries
@@ -132,7 +132,7 @@ effect of an edit. Each is stated in full, with its reasoning, in the guidance d
   incomplete. The registry is `provenance.RELAY_CODES`; a relay that is not registered
   does not exist.
 - **Thresholds are cited by name, never by value.** Three-level resolution: CLI default,
-  program override in `.dde/thresholds.yaml`, invocation flag. The value in force is
+  program override in `.oase/thresholds.yaml`, invocation flag. The value in force is
   stamped into every `.analysis.json` along with its source. A specialist quoting a number
   quotes it from the analysis being cited. `tools/check_threshold_names.py` enforces the
   names; nothing can enforce a value copied into prose, which is why the rule is absolute.

@@ -36,7 +36,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.homology import (
+from oase.commands.homology import (
     RCSB_DOWNLOAD_BASE,
     TOOL_FETCH,
     _assess_hit,
@@ -49,7 +49,7 @@ from dde.commands.homology import (
     _parse_pdb_entity_id,
     _parse_range,
 )
-from dde.core.errors import UsageError
+from oase.core.errors import UsageError
 
 # ---------------------------------------------------------------------------
 # 1. _parse_range tests
@@ -211,7 +211,7 @@ def test_entity_matching_homolog() -> None:
         ]
     )
 
-    with mock.patch("dde.commands.homology.http.request") as mock_req:
+    with mock.patch("oase.commands.homology.http.request") as mock_req:
         mock_resp = mock.Mock()
         mock_resp.json.return_value = graphql_response
         mock_req.return_value = mock_resp
@@ -271,7 +271,7 @@ def test_entity_matching_direct() -> None:
         ]
     )
 
-    with mock.patch("dde.commands.homology.http.request") as mock_req:
+    with mock.patch("oase.commands.homology.http.request") as mock_req:
         mock_resp = mock.Mock()
         mock_resp.json.return_value = graphql_response
         mock_req.return_value = mock_resp
@@ -350,7 +350,7 @@ def test_entity_matching_heterocomplex() -> None:
         ]
     )
 
-    with mock.patch("dde.commands.homology.http.request") as mock_req:
+    with mock.patch("oase.commands.homology.http.request") as mock_req:
         mock_resp = mock.Mock()
         mock_resp.json.return_value = graphql_response
         mock_req.return_value = mock_resp
@@ -441,7 +441,7 @@ def test_manifest_schema() -> None:
     )
 
     # Build the manifest the same way the search command does
-    from dde.commands.homology import _blast_search
+    from oase.commands.homology import _blast_search
 
     # Mock both HTTP calls: first call = BLAST search, second = GraphQL
     call_count = 0
@@ -459,7 +459,7 @@ def test_manifest_schema() -> None:
             resp.json.return_value = graphql_response_data
         return resp
 
-    with mock.patch("dde.commands.homology.http.request") as mock_req:
+    with mock.patch("oase.commands.homology.http.request") as mock_req:
         mock_req.side_effect = mock_request_side_effect
 
         # Run BLAST
@@ -696,7 +696,7 @@ def test_verdict_no_hits() -> None:
 
 def test_relay_fires_for_non_direct() -> None:
     """Relay fires when any hit has is_direct_structure: false."""
-    from dde.core import provenance
+    from oase.core import provenance
 
     hits = [
         {"is_direct_structure": False, "source_uniprot": "Q9NP60"},
@@ -820,7 +820,7 @@ def test_fetch_structure_download_and_sidecar() -> None:
     import hashlib
     import tempfile
 
-    from dde.core import provenance
+    from oase.core import provenance
 
     fake_content = b"FAKE CIF CONTENT FOR TESTING"
     expected_sha256 = hashlib.sha256(fake_content).hexdigest()
@@ -891,7 +891,7 @@ def test_fetch_structure_pdb_format() -> None:
     import hashlib
     import tempfile
 
-    from dde.core import provenance
+    from oase.core import provenance
 
     fake_content = b"FAKE PDB CONTENT"
     expected_sha256 = hashlib.sha256(fake_content).hexdigest()
@@ -941,7 +941,7 @@ def test_fetch_structure_sidecar_sha256() -> None:
     import hashlib
     import tempfile
 
-    from dde.core import provenance
+    from oase.core import provenance
 
     # Use content that produces a known hash
     content = b"deterministic test content"

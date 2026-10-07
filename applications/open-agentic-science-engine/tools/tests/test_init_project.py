@@ -27,7 +27,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from dde.core.context import (
+from oase.core.context import (
     ARTIFACT_DIRS,
     FINDINGS_SUBDIRS,
     GATE_STAGES,
@@ -35,7 +35,7 @@ from dde.core.context import (
     _write_if_missing,
     init_project,
 )
-from dde.core.errors import ProjectRootError
+from oase.core.errors import ProjectRootError
 
 
 class TestInitProjectFresh(unittest.TestCase):
@@ -54,7 +54,7 @@ class TestInitProjectFresh(unittest.TestCase):
 
     def test_creates_project_marker(self):
         init_project(self.root)
-        self.assertTrue((self.root / ".dde").is_dir())
+        self.assertTrue((self.root / ".oase").is_dir())
 
     def test_creates_raw_artifact_dirs(self):
         init_project(self.root)
@@ -94,10 +94,10 @@ class TestInitProjectFresh(unittest.TestCase):
         self.assertTrue(summary.is_file())
         self.assertIn("Program Summary", summary.read_text(encoding="utf-8"))
 
-    def test_creates_dde_config_skeletons(self):
+    def test_creates_oase_config_skeletons(self):
         init_project(self.root)
-        thresholds = self.root / ".dde" / "thresholds.yaml"
-        program = self.root / ".dde" / "program.yaml"
+        thresholds = self.root / ".oase" / "thresholds.yaml"
+        program = self.root / ".oase" / "program.yaml"
         self.assertTrue(thresholds.is_file())
         self.assertTrue(program.is_file())
 
@@ -195,7 +195,7 @@ class TestInitProjectRejectsRepo(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_explicit_repo_marker_rejected(self):
-        (self.repo / ".dde-repo").touch()
+        (self.repo / ".oase-repo").touch()
         with self.assertRaises(ProjectRootError) as ctx:
             init_project(self.repo)
         self.assertIn("source repo", str(ctx.exception))

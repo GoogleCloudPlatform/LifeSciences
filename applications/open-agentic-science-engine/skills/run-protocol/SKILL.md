@@ -170,9 +170,9 @@ accountable agent at the controller boundary. It must maintain
 `meta/termination.json` throughout the state machine. Worker messages carry
 the OASE run ID and absolute run directory.
 
-Before FINALIZE completes, the supervisor runs `dde hypex ingest <run-dir>`
-and `dde hypex analyze <artifact>` so the tournament enters OASE as a Layer 0
-`dde.hypex.v1` artifact plus `dde.hypothesis-assessment.v1` analysis. Only
+Before FINALIZE completes, the supervisor runs `oase hypex ingest <run-dir>`
+and `oase hypex analyze <artifact>` so the tournament enters OASE as a Layer 0
+`oase.hypex.v1` artifact plus `oase.hypothesis-assessment.v1` analysis. Only
 those OASE artifact paths, the final Hypex report path, and the termination
 summary cross back to the research-operations controller.
 
@@ -960,8 +960,8 @@ then publish the completed run into OASE's Layer 0 artifact model.
 
    ```bash
    hypex validate --run <run-id> --run-dir "${ARTIFACT_PATH}"
-   dde hypex ingest "${ARTIFACT_PATH}/<run-id>" --json
-   dde hypex analyze <raw-hypex-artifact> --json
+   oase hypex ingest "${ARTIFACT_PATH}/<run-id>" --json
+   oase hypex analyze <raw-hypex-artifact> --json
    ```
 
 6. **Report the final report and OASE artifact paths to the dispatching agent.**

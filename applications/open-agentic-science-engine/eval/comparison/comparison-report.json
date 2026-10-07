@@ -8,7 +8,7 @@
     "Evidence reuse (#77) is P2 and explicitly out of scope for this tracker phase \u2014 it has not been implemented and is not measured in this comparison.",
     "#82's acceptance criteria requests comparison with 'bounded Stage 0 and evidence reuse.'  Only the bounded Stage 0 portion is covered here.  The evidence-reuse comparison will be addressed when #77 is implemented in a future tracker phase.",
     "This harness exercises the control-plane and CLI layers.  The four LLM-dependent metrics (unsupported_claims_accepted, mistaken_rejections, decision_reversals, expensive_work_avoided) remain N/A in both workflows because this harness does not include a live LLM agent in the loop.  These metrics require full workflow execution with scientific review, which this evaluation harness does not provide.",
-    "Stage 0 workstreams invoke real CLI commands (dde manufacturing assess-stage0, etc.) \u2014 no mocked results."
+    "Stage 0 workstreams invoke real CLI commands (oase manufacturing assess-stage0, etc.) \u2014 no mocked results."
   ],
   "metric_comparisons": [
     {

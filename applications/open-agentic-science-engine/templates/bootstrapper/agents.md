@@ -167,13 +167,13 @@ source /scion-volumes/tools/env.sh
 
 **Use `env.sh` — not the venv's `activate` directly.** `env.sh` also:
 - adds provisioned tools (`fpocket`, `vina`, `hypex`, `elo`, `prox`) to `PATH`
-- sets `DDE_TOOLS_HOME`, which the CLI requires for provenance stamping
+- sets `OASE_TOOLS_HOME`, which the CLI requires for provenance stamping
 - sets `PYTHONDONTWRITEBYTECODE=1` to prevent stale bytecode
 
-If `DDE_TOOLS_HOME` was overridden during install, check the `install.sh`
+If `OASE_TOOLS_HOME` was overridden during install, check the `install.sh`
 summary output for the correct `env.sh` path.
 
-Verify activation by confirming `dde --version` runs without error. This serves
+Verify activation by confirming `oase --version` runs without error. This serves
 as the environment sanity check before program initialization in Step 5.
 
 ---
@@ -193,9 +193,9 @@ the controller starts any other agent. If it fails, STOP and report to the resol
 
 Your task prompt includes the program directory path.
 
-- **Fresh program:** run `dde init <directory>` to create the program root with
-  its `.dde/` marker and `raw/` tree.
-- **Continuing from a prior phase:** check for an existing `.dde/` directory at
+- **Fresh program:** run `oase init <directory>` to create the program root with
+  its `.oase/` marker and `raw/` tree.
+- **Continuing from a prior phase:** check for an existing `.oase/` directory at
   the given path. If present, skip init — the existing control state is the source
   of truth. Report that an existing program directory was found.
 
@@ -207,12 +207,12 @@ Now that the environment is activated and the program directory exists, run the 
 doctor check:
 
 ```bash
-dde doctor --json
+oase doctor --json
 ```
 
 This is run after initialization (Step 5) so that doctor can perform the complete
-verification including project resolution. Running doctor before `dde init` would
-report a "project root" failure because no `.dde/` directory exists yet — that is
+verification including project resolution. Running doctor before `oase init` would
+report a "project root" failure because no `.oase/` directory exists yet — that is
 an expected state, not an environment problem.
 
 Parse the JSON output and evaluate:

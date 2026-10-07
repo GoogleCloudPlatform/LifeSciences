@@ -30,9 +30,9 @@ from __future__ import annotations
 
 import unittest
 
-from dde.commands.pk import VALID_ROUTES
-from dde.core.errors import Refusal
-from dde.core.provenance import RELAY_CODES
+from oase.commands.pk import VALID_ROUTES
+from oase.core.errors import Refusal
+from oase.core.provenance import RELAY_CODES
 
 # ---------------------------------------------------------------------------
 # Item 1: VALID_ROUTES expansion
@@ -69,10 +69,10 @@ class TestValidRoutesExpansion(unittest.TestCase):
     def test_route_validation_error_lists_all_routes(self):
         """When _validate_study rejects a route, the remedy must list all
         accepted values dynamically (not a hardcoded subset)."""
-        from dde.commands.pk import _validate_study
+        from oase.commands.pk import _validate_study
 
         doc = {
-            "schema": "dde.pk-study.v1",
+            "schema": "oase.pk-study.v1",
             "study_id": "test-001",
             "species": "rat",
             "route": "nonexistent",
@@ -230,7 +230,7 @@ class TestTopicalArtifactStructure(unittest.TestCase):
         record = {
             "tool": "admet",
             "subcommand": "topical",
-            "schema": "dde.admet-topical.v1",
+            "schema": "oase.admet-topical.v1",
             "canonical_smiles": "CCO",
             "log_kp": log_kp,
             "log_kscw": log_kscw,
@@ -251,7 +251,7 @@ class TestTopicalArtifactStructure(unittest.TestCase):
 
     def test_schema_tag(self):
         record = self._build_record(2.0, 200.0)
-        self.assertEqual(record["schema"], "dde.admet-topical.v1")
+        self.assertEqual(record["schema"], "oase.admet-topical.v1")
 
     def test_required_fields_present(self):
         record = self._build_record(2.0, 200.0, solubility=5.0)

@@ -23,7 +23,7 @@ Covers:
   - No extractable references → exit 0, no-citations-found verdict
   - Phase-2 contract: analyze with network raises PhaseContractError
   - Overwrite guard on analyze
-  - dde validate sees new sidecars
+  - oase validate sees new sidecars
   - Registration checks: relay codes and threshold set
   - Relay guards: each relay fires conditionally, not unconditionally
 """
@@ -42,14 +42,14 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.cite import (
+from oase.commands.cite import (
     _classify,
     _extract_citations,
     _resolve_citation,
     _slug,
     _title_similarity,
 )
-from dde.core import provenance
+from oase.core import provenance
 
 # ---------------------------------------------------------------------------
 # Helper: project setup and mock HTTP
@@ -60,7 +60,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "literature").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -317,7 +317,7 @@ def test_suspect_not_verified_regression() -> None:
     """A document with a known-good, phantom, and suspect reference yields
     correct counts and all_verified == false. §3.3 defect test."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -341,7 +341,7 @@ def test_suspect_not_verified_regression() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result = runner.invoke(
                 cli,
@@ -381,7 +381,7 @@ def test_suspect_only_not_verified() -> None:
     suspect title match must still prevent all_verified from being True.
     This isolates the §3.3 invariant from confounding phantom/error counts."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -408,7 +408,7 @@ def test_suspect_only_not_verified() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result = runner.invoke(
                 cli,
@@ -453,7 +453,7 @@ def test_suspect_only_not_verified() -> None:
 def test_tolerance_flag_changes_status() -> None:
     """Raising --tolerance from 0.75 to 0.95 changes at least one status."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -481,7 +481,7 @@ def test_tolerance_flag_changes_status() -> None:
         runner = CliRunner()
 
         # Run at default tolerance (0.75)
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result1 = runner.invoke(
                 cli,
@@ -502,7 +502,7 @@ def test_tolerance_flag_changes_status() -> None:
             f.unlink()
 
         # Run at strict tolerance (0.95)
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result2 = runner.invoke(
                 cli,
@@ -541,14 +541,14 @@ def test_tolerance_flag_changes_status() -> None:
 def test_no_citations_exit_zero() -> None:
     """A document with no extractable references exits 0, verdict no-citations-found."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         doc_path = _write_document(project, "empty.txt", "No references at all.")
 
         runner = CliRunner()
-        with mock.patch("dde.commands.cite.http.request"):
+        with mock.patch("oase.commands.cite.http.request"):
             result = runner.invoke(
                 cli,
                 ["--project", str(project), "cite", "verify", str(doc_path)],
@@ -600,13 +600,13 @@ def test_no_citations_exit_zero() -> None:
 
 
 def test_analyze_phase_two_contract() -> None:
-    """dde cite analyze with network available raises PhaseContractError.
+    """oase cite analyze with network available raises PhaseContractError.
 
     The enforce_phase_two guard on the CLI forbids network access during
     analyze. We verify this by checking the guard is wired.
     """
     import click
-    from dde.cli import cli
+    from oase.cli import cli
 
     # Find the analyze command
     cite_group = cli.commands.get("cite")
@@ -632,7 +632,7 @@ def test_analyze_phase_two_contract() -> None:
 def test_analyze_overwrite_guard() -> None:
     """Re-running analyze with different threshold refuses without --overwrite."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -640,10 +640,10 @@ def test_analyze_overwrite_guard() -> None:
 
         # Write a canned manifest
         manifest = {
-            "schema": "dde.citation-manifest.v1",
+            "schema": "oase.citation-manifest.v1",
             "target_file": "test.json",
             "verified_at": "2026-09-08T00:00:00Z",
-            "verifier": "dde-cite/0.3.0",
+            "verifier": "oase-cite/0.3.0",
             "summary": {
                 "total": 2,
                 "verified": 1,
@@ -722,7 +722,7 @@ def test_analyze_overwrite_refusal() -> None:
     """Re-running analyze after modifying the manifest (different verdict)
     refuses without --overwrite."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -730,10 +730,10 @@ def test_analyze_overwrite_refusal() -> None:
 
         # Write a canned manifest — 1 suspect, 0 phantom
         manifest = {
-            "schema": "dde.citation-manifest.v1",
+            "schema": "oase.citation-manifest.v1",
             "target_file": "refusal-test.json",
             "verified_at": "2026-09-08T00:00:00Z",
-            "verifier": "dde-cite/0.3.0",
+            "verifier": "oase-cite/0.3.0",
             "summary": {
                 "total": 2,
                 "verified": 1,
@@ -878,7 +878,7 @@ def test_relay_codes_registered() -> None:
 
 def test_threshold_set_registered() -> None:
     """Threshold set citation-verification is in declared_sets()."""
-    from dde.core.thresholds import UNRESOLVED, declared_sets
+    from oase.core.thresholds import UNRESOLVED, declared_sets
 
     sets = declared_sets()
     assert "citation-verification" in sets, (
@@ -894,13 +894,13 @@ def test_threshold_set_registered() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 9. dde validate sees the new sidecars
+# 9. oase validate sees the new sidecars
 # ---------------------------------------------------------------------------
 
 
 def test_validate_recognises_sidecars() -> None:
-    """dde validate's _is_sidecar and _is_analysis recognise cite files."""
-    from dde.commands.validate import _is_analysis, _is_sidecar
+    """oase validate's _is_sidecar and _is_analysis recognise cite files."""
+    from oase.commands.validate import _is_analysis, _is_sidecar
 
     assert _is_sidecar("test-doc.meta.json")
     assert _is_analysis("test-doc.analysis.json")
@@ -918,7 +918,7 @@ def test_validate_recognises_sidecars() -> None:
 def test_relay_phantom_does_not_fire_unconditionally() -> None:
     """cite.phantom_citation does NOT fire when there are no phantoms."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -934,7 +934,7 @@ def test_relay_phantom_does_not_fire_unconditionally() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result = runner.invoke(
                 cli,
@@ -956,7 +956,7 @@ def test_relay_phantom_does_not_fire_unconditionally() -> None:
 def test_relay_suspect_does_not_fire_unconditionally() -> None:
     """cite.suspect_title_match does NOT fire when there are no suspects."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -970,7 +970,7 @@ def test_relay_suspect_does_not_fire_unconditionally() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result = runner.invoke(
                 cli,
@@ -989,7 +989,7 @@ def test_relay_suspect_does_not_fire_unconditionally() -> None:
 def test_relay_unresolved_does_not_fire_unconditionally() -> None:
     """cite.unresolved_offline does NOT fire when everything resolves."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1003,7 +1003,7 @@ def test_relay_unresolved_does_not_fire_unconditionally() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result = runner.invoke(
                 cli,
@@ -1022,7 +1022,7 @@ def test_relay_unresolved_does_not_fire_unconditionally() -> None:
 def test_relay_extraction_does_not_fire_on_structured() -> None:
     """cite.extraction_incomplete does NOT fire when extraction_basis is structured."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1038,7 +1038,7 @@ def test_relay_extraction_does_not_fire_on_structured() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result = runner.invoke(
                 cli,
@@ -1064,7 +1064,7 @@ def test_relay_extraction_does_not_fire_on_structured() -> None:
 def test_manifest_schema() -> None:
     """Verify manifest has correct schema and all required fields."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1076,7 +1076,7 @@ def test_manifest_schema() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.cite.http.request") as mock_req:
+        with mock.patch("oase.commands.cite.http.request") as mock_req:
             mock_req.side_effect = side_effect
             result = runner.invoke(
                 cli,
@@ -1089,7 +1089,7 @@ def test_manifest_schema() -> None:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
         # Required top-level fields
-        assert manifest["schema"] == "dde.citation-manifest.v1"
+        assert manifest["schema"] == "oase.citation-manifest.v1"
         assert "target_file" in manifest
         assert "verified_at" in manifest
         assert "verifier" in manifest
@@ -1166,7 +1166,7 @@ def test_title_double_quotes_sanitized() -> None:
     captured_queries: list[str] = []
     original_resolve_epmc = None
 
-    import dde.commands.cite as cite_module
+    import oase.commands.cite as cite_module
 
     original_resolve_epmc = cite_module._resolve_epmc
 

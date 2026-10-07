@@ -44,19 +44,19 @@ and compute safety margins. Entry points include:
 ## 2. Preconditions
 
 - **Input schemas**: canonical JSON matching one of:
-  - `dde.tox-repeat-dose.v1` — repeat-dose study data (for ingest,
+  - `oase.tox-repeat-dose.v1` — repeat-dose study data (for ingest,
     margins).
-  - `dde.tox-safety-pharm.v1` — safety pharmacology data with
+  - `oase.tox-safety-pharm.v1` — safety pharmacology data with
     measured hERG IC50 (for ingest, margins `--herg`, analyze).
-  - `dde.tox-genotox.v1` — genotoxicity battery results (for ingest,
+  - `oase.tox-genotox.v1` — genotoxicity battery results (for ingest,
     genotox).
 - **Cross-artifact dependency**: `tox margins` requires BOTH a tox
-  repeat-dose artifact AND a PK NCA artifact (`dde.pk-nca.v1`,
+  repeat-dose artifact AND a PK NCA artifact (`oase.pk-nca.v1`,
   produced by `in-vivo-pk-analysis`). Optionally takes a safety-pharm
   artifact via `--herg` for measured hERG IC50 margin calculation.
   PK data is a precondition for margin computation — run
   `in-vivo-pk-analysis` first.
-- **`dde doctor`**: run before first use. It ends with a verdict
+- **`oase doctor`**: run before first use. It ends with a verdict
   line: `STOP` means fix or report; `PROCEED` means work.
 - **No authentication** needed — all operations are local.
 - **No network** — all subcommands are offline.
@@ -65,10 +65,10 @@ and compute safety margins. Entry points include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| Ingest and normalise a tox study? | `dde tox ingest <INPUT_FILE>` | `raw/tox/{id}.tox-repeat-dose.json` + `.meta.json`<br>`raw/tox/{id}.tox-safety-pharm.json` + `.meta.json`<br>`raw/tox/{id}.tox-genotox.json` + `.meta.json` |
-| Assess a genotoxicity battery? | `dde tox genotox <GENOTOX_ARTIFACT>` | `raw/tox/{compound_id}.tox-genotox-assessment.json` + `.meta.json` |
-| Compute therapeutic index and hERG margins? | `dde tox margins <TOX_FILE> <PK_FILE> [--herg <SAFETY_PHARM>]` | `raw/tox/{study_id}.tox-margins.json` + `.meta.json` |
-| Apply thresholds and produce verdict? | `dde tox analyze <ARTIFACT>` | `raw/tox/{stem}.tox.analysis.json` |
+| Ingest and normalise a tox study? | `oase tox ingest <INPUT_FILE>` | `raw/tox/{id}.tox-repeat-dose.json` + `.meta.json`<br>`raw/tox/{id}.tox-safety-pharm.json` + `.meta.json`<br>`raw/tox/{id}.tox-genotox.json` + `.meta.json` |
+| Assess a genotoxicity battery? | `oase tox genotox <GENOTOX_ARTIFACT>` | `raw/tox/{compound_id}.tox-genotox-assessment.json` + `.meta.json` |
+| Compute therapeutic index and hERG margins? | `oase tox margins <TOX_FILE> <PK_FILE> [--herg <SAFETY_PHARM>]` | `raw/tox/{study_id}.tox-margins.json` + `.meta.json` |
+| Apply thresholds and produce verdict? | `oase tox analyze <ARTIFACT>` | `raw/tox/{stem}.tox.analysis.json` |
 
 Run phase 1 (`ingest`, `genotox`, `margins`) before phase 2
 (`analyze`). `analyze` reads from disk and can be re-run with different
@@ -84,13 +84,13 @@ command handles all three study types.
 `analyze` applies the `tox-safety-package@1.0` threshold set and
 emits per-artifact-type verdicts:
 
-**Margins analysis** (`dde.tox-margins.v1`):
+**Margins analysis** (`oase.tox-margins.v1`):
 - **acceptable** — TI and hERG margins (when present) meet thresholds.
 - **flagged** — one or more margins below threshold.
 - **incomplete** — NOAEL exposure data not available; TI cannot be
   computed.
 
-**Genotox analysis** (`dde.tox-genotox-assessment.v1`):
+**Genotox analysis** (`oase.tox-genotox-assessment.v1`):
 - **acceptable** — battery negative, no genotoxic concern.
 - **flagged_equivocal** — mixed results, in vitro positive / in vivo
   negative pattern (equivocal).
@@ -99,7 +99,7 @@ emits per-artifact-type verdicts:
   positive batteries).
 - **unknown** — battery verdict not classifiable.
 
-**Safety-pharm analysis** (`dde.tox-safety-pharm.v1`):
+**Safety-pharm analysis** (`oase.tox-safety-pharm.v1`):
 - **recorded** — safety pharmacology data recorded. Quantitative hERG
   margin requires running `tox margins` with both PK and safety-pharm
   artifacts.
@@ -124,7 +124,7 @@ The `tox-safety-package@1.0` threshold set provides:
 - `herg_marginal` — operational boundary below the full hERG margin.
 - `noael_exposure_margin` — **UNRESOLVED**. This threshold has no
   defensible default value. It is entirely program-specific. Do not
-  invent a value — set it via `.dde/thresholds.yaml` per program
+  invent a value — set it via `.oase/thresholds.yaml` per program
   and record the justification.
 
 Thresholds are cited by name. The values in force are in the artifact:
@@ -181,7 +181,7 @@ measured margin replaces the prediction.
 ### Cross-disciplinary consequences
 
 - The therapeutic index assumes the PK file represents exposure at the
-  intended therapeutic dose. `dde.pk-nca.v1` does not tag dose
+  intended therapeutic dose. `oase.pk-nca.v1` does not tag dose
   context — this assumption cannot be verified from the artifact alone.
 - A margins artifact without hERG data does not imply hERG safety —
   it means the measurement was not provided.

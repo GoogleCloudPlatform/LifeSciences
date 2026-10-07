@@ -12,7 +12,7 @@ standards. Safety screening is a mandatory part of every review — it is never
 skipped, even for seemingly benign hypotheses.
 
 This protocol contributes records to a run that the supervisor ultimately
-publishes with `dde hypex analyze`; workers do not publish a separate result.
+publishes with `oase hypex analyze`; workers do not publish a separate result.
 
 ## Dual-Use Biosafety Rubric
 
@@ -81,7 +81,7 @@ In addition to biosafety risks, scientific integrity is strictly enforced across
 
 Automated citation verification is performed using:
 ```bash
-dde cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
+oase cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
 ```
 The resulting manifest records per-citation status (`verified`, `phantom`, `unverified`) and an overall summary.
 
@@ -187,7 +187,7 @@ how benign it appears:
 1. **Automated Citation Verification & Phantom Check:**
    - Run automated citation verification on the hypothesis:
      ```bash
-     dde cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
+     oase cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
      ```
    - Inspect the manifest summary (`summary.phantom`, `summary.verified`, `summary.total`).
    - If `phantom_count >= 2`, OR `phantom_count / total_citations >= 0.50`, OR (`total_citations > 0` AND `verified_count == 0`):
@@ -290,7 +290,7 @@ how benign it appears:
 
 > Hypothesis proposes a mitochondrial pathway in lupus nephritis, citing two papers: `PMID:99999999` (non-existent record) and `PMID:42297600` with a fabricated title ("Direct Mitochondrial Repair in Podocytes via Synthetic Peptides").
 
-- `dde cite verify` generates a manifest whose summary reports `phantom: 2`, `verified: 0`, `total: 2`.
+- `oase cite verify` generates a manifest whose summary reports `phantom: 2`, `verified: 0`, `total: 2`.
 - Quarantine triggers met: `phantom_count >= 2`, `phantom_count / total >= 0.50`, and `verified_count == 0`.
 - Review completed with `scores.correctness: 1`, `phantom_citations: ["PMID:99999999", "PMID:42297600"]`, and `citation_manifest: "citations/H-0042.json"`.
 - Hypothesis moved from `hypotheses/H-0042.json` to `quarantine/H-0042.json` with `status: "quarantined"`.

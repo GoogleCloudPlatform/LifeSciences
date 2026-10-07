@@ -1,10 +1,10 @@
 # AlphaFold 3 Complex Prediction Workflow
 
-A guide to running AF3 predictions through the `dde alphafold predict` command
+A guide to running AF3 predictions through the `oase alphafold predict` command
 on the Vertex AI dedicated endpoint. Covers input preparation, invocation, output
 interpretation, and the operational constraints that shape scheduling.
 
-**Source of truth:** `tools/dde/commands/alphafold.py`. Every claim below is
+**Source of truth:** `tools/oase/commands/alphafold.py`. Every claim below is
 traceable to that file or to the `protein-structure-confidence` skill that wraps
 it. If anything here contradicts the code, the code is right.
 
@@ -12,7 +12,7 @@ it. If anything here contradicts the code, the code is right.
 
 ## 1. Overview
 
-`dde alphafold predict` submits one AlphaFold 3 prediction request to a
+`oase alphafold predict` submits one AlphaFold 3 prediction request to a
 Vertex AI dedicated endpoint running the AF3 model, then blocks until the
 endpoint returns a result or the deadline expires.
 
@@ -27,7 +27,7 @@ The command:
    (structure, summary, pLDDT, PAE) to the project's `raw/structures/` directory
    with a provenance sidecar.
 
-The companion command `dde alphafold analyze-prediction` reads the stored
+The companion command `oase alphafold analyze-prediction` reads the stored
 summary and applies the `af3` threshold set to produce a confidence verdict.
 
 ---
@@ -163,7 +163,7 @@ The choice affects residue numbering in the output (see §7).
 ### CLI invocation
 
 ```bash
-dde alphafold predict --input path/to/input.json
+oase alphafold predict --input path/to/input.json
 ```
 
 ### Options
@@ -199,7 +199,7 @@ All outputs land in `raw/structures/` under the project root, with the stem
 After `predict` completes, run the analysis phase:
 
 ```bash
-dde alphafold analyze-prediction raw/structures/AF3-<name>.summary.json
+oase alphafold analyze-prediction raw/structures/AF3-<name>.summary.json
 ```
 
 This applies the `af3` threshold set and writes
@@ -244,7 +244,7 @@ number of attempts made. Increase the deadline with `--deadline` if cold starts
 are expected:
 
 ```bash
-dde alphafold predict --input input.json --deadline 2400
+oase alphafold predict --input input.json --deadline 2400
 ```
 
 ### Retry summary
@@ -270,10 +270,10 @@ prediction at a time. Any concurrent request receives a 429 response.
 ### Within-container serialisation
 
 The CLI acquires an exclusive file lock (`fcntl.flock`) at
-`/tmp/dde-af3.lock` (configurable via the `DDE_AF3_LOCK` environment
+`/tmp/oase-af3.lock` (configurable via the `OASE_AF3_LOCK` environment
 variable) before sending a request. This means:
 
-- Multiple `dde alphafold predict` invocations in the same container queue
+- Multiple `oase alphafold predict` invocations in the same container queue
   behind the lock. The second caller blocks until the first releases it.
 - The lock is held for the entire prediction, including all retries.
 
@@ -390,9 +390,9 @@ variables if needed:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DDE_AF3_PROJECT` | `pharma-oss-factory` | GCP project ID. |
-| `DDE_AF3_REGION` | `us-central1` | GCP region. |
-| `DDE_AF3_ENDPOINT_NAME` | `AlphaFold 3 Dedicated Endpoint` | Endpoint display name. |
+| `OASE_AF3_PROJECT` | `pharma-oss-factory` | GCP project ID. |
+| `OASE_AF3_REGION` | `us-central1` | GCP region. |
+| `OASE_AF3_ENDPOINT_NAME` | `AlphaFold 3 Dedicated Endpoint` | Endpoint display name. |
 
 ### Multiple model seeds
 
@@ -405,4 +405,4 @@ are not available.
 **Error:** "google-cloud-aiplatform is not installed"
 
 **Action:** Install the package into the tools environment and run
-`dde doctor` to verify.
+`oase doctor` to verify.

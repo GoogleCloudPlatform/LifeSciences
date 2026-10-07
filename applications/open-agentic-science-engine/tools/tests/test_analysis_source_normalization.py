@@ -29,8 +29,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from dde.core.errors import ArtifactError
-from dde.core.provenance import _normalize_source
+from oase.core.errors import ArtifactError
+from oase.core.provenance import _normalize_source
 
 
 class TestNormalizeSourceBareFilename(unittest.TestCase):
@@ -74,7 +74,7 @@ class TestNormalizeSourceBareFilename(unittest.TestCase):
     def _patch_project_root(self):
         """Patch _get_project_root to return our temp project root."""
         return patch(
-            "dde.core.provenance._get_project_root",
+            "oase.core.provenance._get_project_root",
             return_value=self.project_root.resolve(),
         )
 
@@ -108,7 +108,7 @@ class TestNormalizeSourceAbsolutePath(unittest.TestCase):
 
     def _patch_project_root(self):
         return patch(
-            "dde.core.provenance._get_project_root",
+            "oase.core.provenance._get_project_root",
             return_value=self.project_root.resolve(),
         )
 
@@ -139,7 +139,7 @@ class TestNormalizeSourceEscapesProjectRoot(unittest.TestCase):
 
     def _patch_project_root(self):
         return patch(
-            "dde.core.provenance._get_project_root",
+            "oase.core.provenance._get_project_root",
             return_value=self.project_root.resolve(),
         )
 
@@ -148,7 +148,7 @@ class TestNormalizeSourceNoProjectRoot(unittest.TestCase):
     """When no project root is available, source passes through unchanged."""
 
     def test_returns_as_is_when_no_project(self) -> None:
-        with patch("dde.core.provenance._get_project_root", return_value=None):
+        with patch("oase.core.provenance._get_project_root", return_value=None):
             result = _normalize_source("compound.selectivity.json")
         self.assertEqual(result, "compound.selectivity.json")
 
@@ -174,7 +174,7 @@ class TestNormalizeSourceAlreadyRelative(unittest.TestCase):
 
     def _patch_project_root(self):
         return patch(
-            "dde.core.provenance._get_project_root",
+            "oase.core.provenance._get_project_root",
             return_value=self.project_root.resolve(),
         )
 
@@ -202,7 +202,7 @@ class TestCitationCheckErrorMessage(unittest.TestCase):
 
     def test_error_includes_resolution_path(self) -> None:
         """When a source path fails to resolve, the error includes the attempted path."""
-        from dde.commands.validate import _check_analysis_citations
+        from oase.commands.validate import _check_analysis_citations
 
         deliverables = {"layer_0_classes": ["assays"]}
         result = _check_analysis_citations(self.project_root, deliverables)

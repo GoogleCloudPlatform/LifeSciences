@@ -29,12 +29,12 @@ import json
 import unittest
 from pathlib import Path
 
-from dde.commands.mpo import (
+from oase.commands.mpo import (
     _normalize_absolute,
     _normalize_scores,
     _parse_bounds,
 )
-from dde.core.errors import UsageError
+from oase.core.errors import UsageError
 
 
 class TestNormalizeAbsolute(unittest.TestCase):
@@ -238,7 +238,7 @@ class TestMinMaxSmallNWarning(unittest.TestCase):
 
     def test_small_n_warning_emitted(self):
         """Warning fires when scoring fewer than 5 candidates."""
-        from dde.commands.mpo import _SMALL_COHORT_N
+        from oase.commands.mpo import _SMALL_COHORT_N
 
         # Just verify the constant is defined and reasonable
         self.assertGreater(_SMALL_COHORT_N, 0)
@@ -250,7 +250,7 @@ class TestMinMaxSmallRangeWarning(unittest.TestCase):
 
     def test_small_range_fraction_defined(self):
         """The small-range fraction threshold is defined."""
-        from dde.commands.mpo import _SMALL_RANGE_FRACTION
+        from oase.commands.mpo import _SMALL_RANGE_FRACTION
 
         self.assertAlmostEqual(_SMALL_RANGE_FRACTION, 0.10)
 
@@ -260,13 +260,13 @@ class TestMinMaxRelay(unittest.TestCase):
 
     def test_relay_code_registered(self):
         """The relay code is in RELAY_CODES."""
-        from dde.core.provenance import RELAY_CODES
+        from oase.core.provenance import RELAY_CODES
 
         self.assertIn("mpo.minmax_cohort_relative", RELAY_CODES)
 
     def test_relay_message_content(self):
         """The relay message mentions cohort-relative scoring."""
-        from dde.core.provenance import RELAY_CODES
+        from oase.core.provenance import RELAY_CODES
 
         msg = RELAY_CODES["mpo.minmax_cohort_relative"]
         self.assertIn("cohort", msg.lower())
@@ -274,7 +274,7 @@ class TestMinMaxRelay(unittest.TestCase):
 
     def test_relay_can_be_constructed(self):
         """provenance.relay() accepts the code without error."""
-        from dde.core.provenance import relay
+        from oase.core.provenance import relay
 
         result = relay(
             "mpo.minmax_cohort_relative",

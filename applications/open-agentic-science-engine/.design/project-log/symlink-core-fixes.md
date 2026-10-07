@@ -1,13 +1,13 @@
 # Symlink Exploitation Fixes — core/ Batch
 
 **Date:** 2026-09-19
-**Commit:** c1161c0 (DDE branch)
+**Commit:** c1161c0 (OASE branch)
 **Issues:** #292, #294, #296, #279, #299, #301, #302
 
 ## Summary
 
 Added `is_safe_to_open()` guards to 7 symlink-vulnerable call sites in
-`tools/dde/core/`. Each guard uses relative imports (`from .paths import
+`tools/oase/core/`. Each guard uses relative imports (`from .paths import
 is_safe_to_open`) and follows the existing error-handling convention in
 its file.
 

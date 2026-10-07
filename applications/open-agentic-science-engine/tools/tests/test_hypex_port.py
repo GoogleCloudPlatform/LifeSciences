@@ -21,9 +21,9 @@ from pathlib import Path
 
 import yaml
 
-DDE_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATES = DDE_ROOT / "templates"
-SKILLS = DDE_ROOT / "skills"
+OASE_ROOT = Path(__file__).resolve().parents[2]
+TEMPLATES = OASE_ROOT / "templates"
+SKILLS = OASE_ROOT / "skills"
 
 ROLE_SKILLS = {
     "hypex-supervisor": {"run-protocol", "hypothesis-run-corpus"},
@@ -54,7 +54,7 @@ def test_complete_reference_role_set_is_ported() -> None:
         assert "hypex-tool-setup" in _granted_skill_names(role)
 
 
-def test_all_hypex_skill_grants_resolve_to_dde_skills() -> None:
+def test_all_hypex_skill_grants_resolve_to_oase_skills() -> None:
     for role in ROLE_SKILLS:
         for skill in _granted_skill_names(role):
             assert (SKILLS / skill / "SKILL.md").is_file(), f"{role}: missing {skill}"
@@ -80,12 +80,12 @@ def test_ported_instructions_do_not_invoke_standalone_lit_cli() -> None:
         assert not standalone_lit.search(path.read_text()), str(path)
 
 
-def test_supervisor_declares_termination_before_dde_ingest() -> None:
+def test_supervisor_declares_termination_before_oase_ingest() -> None:
     instructions = (TEMPLATES / "hypex-supervisor" / "agents.md").read_text()
     termination = instructions.index(
         "Write `meta/termination.json` with the actual reason"
     )
-    ingest = instructions.index("Run `dde hypex ingest")
+    ingest = instructions.index("Run `oase hypex ingest")
     assert termination < ingest
 
 
@@ -109,7 +109,7 @@ def test_retired_single_epoch_pilot_is_not_part_of_the_port() -> None:
     assert "reason: budget_exhausted" in protocol
 
 
-def test_dde_workorder_boundary_dispatches_only_the_supervisor() -> None:
+def test_oase_workorder_boundary_dispatches_only_the_supervisor() -> None:
     controller = (
         TEMPLATES / "research-operations-controller" / "agents.md"
     ).read_text()

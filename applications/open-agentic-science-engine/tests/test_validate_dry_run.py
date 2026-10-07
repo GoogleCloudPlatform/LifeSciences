@@ -37,11 +37,11 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.validate import (
+from oase.commands.validate import (
     _resolve_wo_record,
     _run_all_checks,
 )
-from dde.core.controlstore import CONTROL_DIR
+from oase.core.controlstore import CONTROL_DIR
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -312,8 +312,8 @@ def test_resolve_wo_record_specific_revision() -> None:
 
 def test_perform_validation_requires_submitted_state() -> None:
     """_perform_validation still refuses non-submitted WOs."""
-    from dde.commands.validate import _perform_validation
-    from dde.core.errors import Refusal
+    from oase.commands.validate import _perform_validation
+    from oase.core.errors import Refusal
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)

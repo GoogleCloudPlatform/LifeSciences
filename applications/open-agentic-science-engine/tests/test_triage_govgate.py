@@ -17,14 +17,14 @@
 
 The bug: ``run_cmd`` resolved ``project_root`` ONLY when
 ``state.project_override`` was set (i.e. ``--project`` CLI flag), ignoring
-``$DDE_PROJECT`` and ``.dde/`` walk-up discovery.  When ``project_root``
+``$OASE_PROJECT`` and ``.oase/`` walk-up discovery.  When ``project_root``
 remained ``None``, ``run_triage()`` skipped persisting assessment and
 decision records, silently bypassing the control store audit trail and
 the governance gate that requires human approval for terminate decisions.
 
 The fix calls ``state.project()`` directly (which internally uses
-``resolve_project()`` — checking ``--project``, then ``$DDE_PROJECT``,
-then ``.dde/`` walk-up) and catches the resulting exception when no
+``resolve_project()`` — checking ``--project``, then ``$OASE_PROJECT``,
+then ``.oase/`` walk-up) and catches the resulting exception when no
 project context is available at all.
 
 Run with:
@@ -50,10 +50,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
 from click.testing import CliRunner
-from dde.cli import cli
-from dde.common import AppState
-from dde.core.controlstore import CONTROL_DIR, ensure_control_dirs, read_record
-from dde.core.errors import ProjectRootError
+from oase.cli import cli
+from oase.common import AppState
+from oase.core.controlstore import CONTROL_DIR, ensure_control_dirs, read_record
+from oase.core.errors import ProjectRootError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -77,10 +77,10 @@ def _check(name: str, fn: Any) -> None:
 
 
 def _make_project(base: Path) -> Path:
-    """Create a minimal OASE project directory with .dde/ and control dirs."""
+    """Create a minimal OASE project directory with .oase/ and control dirs."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -90,7 +90,7 @@ def _small_molecule_concept(concept_id: str = "IC-001") -> dict[str, Any]:
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": concept_id,
         "revision": 1,
         "state": "active",
@@ -118,60 +118,60 @@ def _small_molecule_concept(concept_id: str = "IC-001") -> dict[str, Any]:
 
 
 def test_project_root_resolved_without_project_flag():
-    """project_root is resolved from $DDE_PROJECT even when
+    """project_root is resolved from $OASE_PROJECT even when
     state.project_override is None.
 
     This is the core regression for Issue #206: the old code only set
     project_root when state.project_override was truthy (i.e. --project
     was passed).  After the fix, state.project().root is called directly,
-    which checks $DDE_PROJECT and .dde/ walk-up.
+    which checks $OASE_PROJECT and .oase/ walk-up.
 
     This test exercises the production code path: AppState.project()
-    calls resolve_project(), which checks $DDE_PROJECT.
+    calls resolve_project(), which checks $OASE_PROJECT.
     """
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
 
-        old_env = os.environ.get("DDE_PROJECT")
+        old_env = os.environ.get("OASE_PROJECT")
         try:
-            os.environ["DDE_PROJECT"] = str(project)
+            os.environ["OASE_PROJECT"] = str(project)
 
             state = AppState(project_override=None)
 
             # Exercise the production code path directly.
             # state.project() calls resolve_project() which checks
-            # $DDE_PROJECT — the same path run_cmd uses.
+            # $OASE_PROJECT — the same path run_cmd uses.
             resolved_root = state.project().root
 
             assert resolved_root is not None, (
-                "state.project().root should resolve from $DDE_PROJECT when "
+                "state.project().root should resolve from $OASE_PROJECT when "
                 "project_override is None"
             )
             assert str(resolved_root) == str(project.resolve()), (
-                f"state.project().root should match the $DDE_PROJECT directory: "
+                f"state.project().root should match the $OASE_PROJECT directory: "
                 f"expected {project.resolve()!s}, got {resolved_root!s}"
             )
         finally:
             if old_env is None:
-                os.environ.pop("DDE_PROJECT", None)
+                os.environ.pop("OASE_PROJECT", None)
             else:
-                os.environ["DDE_PROJECT"] = old_env
+                os.environ["OASE_PROJECT"] = old_env
 
 
 def test_project_root_none_when_no_project_available():
     """state.project() raises ProjectRootError when no project is available.
 
-    When there is no --project, no $DDE_PROJECT, and no .dde/ walk-up
+    When there is no --project, no $OASE_PROJECT, and no .oase/ walk-up
     discovery, state.project() should raise ProjectRootError.  The
     production code in run_cmd catches this specific exception and
     gracefully falls through to project_root=None.
     """
-    old_env = os.environ.get("DDE_PROJECT")
+    old_env = os.environ.get("OASE_PROJECT")
     old_cwd = os.getcwd()
     try:
-        os.environ.pop("DDE_PROJECT", None)
+        os.environ.pop("OASE_PROJECT", None)
 
-        # Move to a temp dir that has no .dde/ to prevent walk-up
+        # Move to a temp dir that has no .oase/ to prevent walk-up
         # discovery from finding one.
         with tempfile.TemporaryDirectory() as td:
             os.chdir(td)
@@ -188,23 +188,23 @@ def test_project_root_none_when_no_project_available():
 
             assert raised, (
                 "state.project() should raise ProjectRootError when no "
-                "--project, no $DDE_PROJECT, and no .dde/ walk-up is available"
+                "--project, no $OASE_PROJECT, and no .oase/ walk-up is available"
             )
     finally:
         os.chdir(old_cwd)
         if old_env is None:
-            os.environ.pop("DDE_PROJECT", None)
+            os.environ.pop("OASE_PROJECT", None)
         else:
-            os.environ["DDE_PROJECT"] = old_env
+            os.environ["OASE_PROJECT"] = old_env
 
 
-def test_triage_persists_records_with_dde_project_env():
-    """Records are persisted when project is discovered via $DDE_PROJECT.
+def test_triage_persists_records_with_oase_project_env():
+    """Records are persisted when project is discovered via $OASE_PROJECT.
 
     This is the end-to-end regression: before the fix, running
-    `dde triage run` without --project but with $DDE_PROJECT set would
+    `oase triage run` without --project but with $OASE_PROJECT set would
     silently skip record persistence. After the fix, records should be
-    written to .dde/control/.
+    written to .oase/control/.
     """
     runner = CliRunner()
 
@@ -220,11 +220,11 @@ def test_triage_persists_records_with_dde_project_env():
         f1.write_text(json.dumps(c1, indent=2))
         f2.write_text(json.dumps(c2, indent=2))
 
-        old_env = os.environ.get("DDE_PROJECT")
+        old_env = os.environ.get("OASE_PROJECT")
         try:
-            os.environ["DDE_PROJECT"] = str(project)
+            os.environ["OASE_PROJECT"] = str(project)
 
-            # Run triage WITHOUT --project flag, relying on $DDE_PROJECT
+            # Run triage WITHOUT --project flag, relying on $OASE_PROJECT
             result = runner.invoke(
                 cli,
                 [
@@ -239,7 +239,7 @@ def test_triage_persists_records_with_dde_project_env():
             )
 
             assert result.exit_code == 0, (
-                f"CLI triage with $DDE_PROJECT should exit 0, "
+                f"CLI triage with $OASE_PROJECT should exit 0, "
                 f"got {result.exit_code}: {result.output[:500]}"
             )
 
@@ -248,7 +248,7 @@ def test_triage_persists_records_with_dde_project_env():
             decision_files = list(decisions_dir.glob("DR-*.json"))
             assert len(decision_files) >= 1, (
                 "Expected at least one persisted decision record when "
-                "running CLI with $DDE_PROJECT env var and budget "
+                "running CLI with $OASE_PROJECT env var and budget "
                 "exhaustion.  Before the fix, project_root was None "
                 "and no records were written."
             )
@@ -261,9 +261,9 @@ def test_triage_persists_records_with_dde_project_env():
             )
         finally:
             if old_env is None:
-                os.environ.pop("DDE_PROJECT", None)
+                os.environ.pop("OASE_PROJECT", None)
             else:
-                os.environ["DDE_PROJECT"] = old_env
+                os.environ["OASE_PROJECT"] = old_env
 
 
 # ---------------------------------------------------------------------------
@@ -280,8 +280,8 @@ _TESTS = [
         test_project_root_none_when_no_project_available,
     ),
     (
-        "triage_persists_records_with_dde_project_env",
-        test_triage_persists_records_with_dde_project_env,
+        "triage_persists_records_with_oase_project_env",
+        test_triage_persists_records_with_oase_project_env,
     ),
 ]
 

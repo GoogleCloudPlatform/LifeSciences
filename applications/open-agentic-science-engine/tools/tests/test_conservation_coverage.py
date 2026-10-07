@@ -40,13 +40,13 @@ _module_patches = patch.dict(
 )
 _module_patches.start()
 
-from dde.commands.conservation import (  # noqa: E402
+from oase.commands.conservation import (  # noqa: E402
     COVERAGE_THRESHOLD,
     _find_aligner,
     _run_alignment,
 )
-from dde.core.errors import ArtifactError, DependencyError  # noqa: E402
-from dde.core.provenance import RELAY_CODES  # noqa: E402
+from oase.core.errors import ArtifactError, DependencyError  # noqa: E402
+from oase.core.provenance import RELAY_CODES  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Coverage computation tests

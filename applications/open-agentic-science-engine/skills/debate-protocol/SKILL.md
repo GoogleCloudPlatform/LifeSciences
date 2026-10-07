@@ -11,7 +11,7 @@ in your own reasoning and strengthen the hypothesis before it faces external
 review.
 
 This protocol contributes records to a run that the supervisor ultimately
-publishes with `dde hypex analyze`; workers do not publish a separate result.
+publishes with `oase hypex analyze`; workers do not publish a separate result.
 
 ## Purpose
 
@@ -66,7 +66,7 @@ Challenge the hypothesis on multiple axes:
 - **Prior art:** Has this idea been proposed before? Search for existing
   literature that already tests this hypothesis.
 - **Contradicting evidence:** Search for papers that directly contradict the
-  claim. Use `dde pubmed search` or `dde preprint search --source arxiv` with terms designed to
+  claim. Use `oase pubmed search` or `oase preprint search --source arxiv` with terms designed to
   find counter-evidence.
 
 #### Turn 3: Defend (Advocate)

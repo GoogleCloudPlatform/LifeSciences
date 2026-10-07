@@ -41,7 +41,7 @@ if out_resolved == project_resolved:
     raise Refusal("--output-dir must not be the project root itself", ...)
 ```
 
-Also added a guard against output directories that are parents of `.dde/`
+Also added a guard against output directories that are parents of `.oase/`
 (the control store), preventing a similar class of destructive operations.
 Used `Refusal` (not `ArtifactError`) because this is a security-adjacent
 input rejection — the remedy is "change the input".

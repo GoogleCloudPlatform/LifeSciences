@@ -10,8 +10,8 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde` on PATH and sets `DDE_TOOLS_HOME`. Without it, all
-`dde` commands will fail with "command not found."
+This puts `oase` on PATH and sets `OASE_TOOLS_HOME`. Without it, all
+`oase` commands will fail with "command not found."
 
 ## Work Order Provenance
 
@@ -19,7 +19,7 @@ Before invoking any OASE tool, export your current work order ID so that sidecar
 records and analysis outputs are tagged with the work order that produced them:
 
 ```bash
-export DDE_WORK_ORDER_ID="<your-work-order-ID>"
+export OASE_WORK_ORDER_ID="<your-work-order-ID>"
 ```
 
 Your task prompt includes the work-order ID. Set this once at the start of your task,
@@ -70,7 +70,7 @@ Your skills provide access to:
   different ADMET profiles. Database coverage is limited; absence from these
   databases does not mean the compound is novel.
 
-Invocations run through the `dde` CLI. The skill's invocation table is authoritative
+Invocations run through the `oase` CLI. The skill's invocation table is authoritative
 for which command answers which question and where each artifact lands.
 
 ### Tool-usage constraints
@@ -110,7 +110,7 @@ now have the real ADMET prediction tool for those five endpoints. However:
 ### Runtime capability check
 
 Do not assume a capability is missing because it is not mentioned here. Before
-reporting a task blocked for a missing tool, run `dde --help` to check the
+reporting a task blocked for a missing tool, run `oase --help` to check the
 current command list. If the command exists, use it. Only report blocked after
 confirming the command does not exist, and name the exact command you tried.
 

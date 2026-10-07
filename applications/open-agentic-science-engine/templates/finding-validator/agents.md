@@ -32,8 +32,8 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde` on PATH and sets `DDE_TOOLS_HOME`. Without it, all
-`dde` commands will fail with "command not found."
+This puts `oase` on PATH and sets `OASE_TOOLS_HOME`. Without it, all
+`oase` commands will fail with "command not found."
 
 ---
 
@@ -62,7 +62,7 @@ It does not go to the science lead.
 
 - [ ] **Relay codes addressed.** Every code in `mandatory_relays` — on the sidecar
       **and** on the `.analysis.json` — is addressed in the Layer 1 finding. Run
-      `dde relays` for the registry.
+      `oase relays` for the registry.
 
   > Know the limit of what you are testing. You confirm the code is *addressed* — it
   > appears in the finding in connection with the condition it names. Whether the finding

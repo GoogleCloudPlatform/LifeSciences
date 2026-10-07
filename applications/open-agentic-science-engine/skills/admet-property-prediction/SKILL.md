@@ -51,7 +51,7 @@ for a compound. Entry points include:
   selected by heavy atom count, and the `compound.fragment_stripped`
   relay fires. Unparseable SMILES exits 9 (Refusal) — a different
   input string is the remedy.
-- **RDKit**: must be installed. Run `dde doctor` before first use.
+- **RDKit**: must be installed. Run `oase doctor` before first use.
   It ends with a verdict line: `STOP` means fix or report before
   running anything; `PROCEED` means work. Do not judge by the warning
   count; the verdict line grades them for you.
@@ -62,8 +62,8 @@ for a compound. Entry points include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| What are the predicted ADMET endpoints? | `dde admet predict <SMILES>` | `raw/admet/<slug>.predict.json`<br>`raw/admet/<slug>.predict.meta.json` |
-| How do the predictions classify against thresholds? | `dde admet analyze <SMILES>` | `raw/admet/<slug>.analysis.json` |
+| What are the predicted ADMET endpoints? | `oase admet predict <SMILES>` | `raw/admet/<slug>.predict.json`<br>`raw/admet/<slug>.predict.meta.json` |
+| How do the predictions classify against thresholds? | `oase admet analyze <SMILES>` | `raw/admet/<slug>.analysis.json` |
 
 Run `predict` before `analyze`. `predict` computes molecular
 descriptors and generates endpoint predictions. `analyze` reads

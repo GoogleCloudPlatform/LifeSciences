@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for --protein-only flag in dde docking prepare (#86).
+"""Tests for --protein-only flag in oase docking prepare (#86).
 
 Covers:
   - _strip_non_protein PDB filtering (keeps standard amino acids only)
@@ -33,7 +33,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.docking import (
+from oase.commands.docking import (
     _STANDARD_AMINO_ACIDS,
     _strip_non_protein,
 )
@@ -331,7 +331,7 @@ def test_error_suggests_protein_only() -> None:
     # Verify the hint strings are defined in the function
     import inspect
 
-    from dde.commands.docking import _convert_receptor_to_pdbqt
+    from oase.commands.docking import _convert_receptor_to_pdbqt
 
     source = inspect.getsource(_convert_receptor_to_pdbqt)
     assert "unknown residue" in source

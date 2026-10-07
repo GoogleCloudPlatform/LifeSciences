@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for dde tox margins — dose context and same-study detection (#137).
+"""Tests for oase tox margins — dose context and same-study detection (#137).
 
-Issue #137: `dde tox margins` computes TI = NOAEL_exposure / PK_exposure
+Issue #137: `oase tox margins` computes TI = NOAEL_exposure / PK_exposure
 and assumes PK represents clinical dose.  When both come from the same
 animal study (e.g., tox study at limit dose), TI ≈ 1.0x and the tool
 flags a safety concern.  The true clinical margin may be much larger.
@@ -48,12 +48,12 @@ _module_patches.start()
 
 import unittest  # noqa: E402
 
-from dde.commands.tox import (  # noqa: E402
+from oase.commands.tox import (  # noqa: E402
     VALID_DOSE_CONTEXTS,
     _compute_ti_values,
     _detect_same_study,
 )
-from dde.core.provenance import RELAY_CODES  # noqa: E402
+from oase.core.provenance import RELAY_CODES  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixture helpers
@@ -79,7 +79,7 @@ def _make_tox_artifact(
 ) -> dict[str, Any]:
     """Build a minimal tox-repeat-dose artifact."""
     doc: dict[str, Any] = {
-        "schema": "dde.tox-repeat-dose.v1",
+        "schema": "oase.tox-repeat-dose.v1",
         "study_id": study_id,
         "species": species,
         "route": route,
@@ -114,7 +114,7 @@ def _make_pk_nca_artifact(
     doc: dict[str, Any] = {
         "tool": "pk",
         "subcommand": "nca",
-        "schema": "dde.pk-nca.v1",
+        "schema": "oase.pk-nca.v1",
         "study_id": study_id,
         "species": species,
         "route": route,
@@ -236,7 +236,7 @@ class TestIndeterminateVerdict(unittest.TestCase):
                 clinical_pk_doc = clinical_pk
 
             # Replicate the core margins logic from margins_cmd
-            from dde.commands.tox import _sanitize_id
+            from oase.commands.tox import _sanitize_id
 
             study_id = _sanitize_id(tox["study_id"])
             noael_exposure = tox.get("noael_exposure")
@@ -307,7 +307,7 @@ class TestIndeterminateVerdict(unittest.TestCase):
                     margins = ti_values if ti_values else None
 
             record: dict[str, Any] = {
-                "schema": "dde.tox-margins.v1",
+                "schema": "oase.tox-margins.v1",
                 "study_id": study_id,
             }
             if is_indeterminate:
@@ -379,10 +379,10 @@ class TestIndeterminateVerdict(unittest.TestCase):
 
     def test_ich_threshold_applied_only_to_clinical_ti(self) -> None:
         """ICH M3(R2) thresholds must apply to clinical_ti, not animal_margin."""
-        from dde.commands.tox import _analyze_margins
+        from oase.commands.tox import _analyze_margins
 
         doc = {
-            "schema": "dde.tox-margins.v1",
+            "schema": "oase.tox-margins.v1",
             "margins": {"ti_cmax": 68.6},
             "animal_margin": {"ti_cmax": 1.0},
             "clinical_ti": {"ti_cmax": 68.6},
@@ -457,10 +457,10 @@ class TestIndeterminateRelay(unittest.TestCase):
 
     def test_analyze_indeterminate_verdict(self) -> None:
         """_analyze_margins with indeterminate doc → indeterminate assessment."""
-        from dde.commands.tox import _analyze_margins
+        from oase.commands.tox import _analyze_margins
 
         doc = {
-            "schema": "dde.tox-margins.v1",
+            "schema": "oase.tox-margins.v1",
             "verdict": "indeterminate",
             "verdict_reason": (
                 "Both NOAEL and PK exposures appear to derive from the "

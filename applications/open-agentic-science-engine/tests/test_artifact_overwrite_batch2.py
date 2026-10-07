@@ -34,11 +34,11 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.compound import _guard_sdf_no_clobber
-from dde.commands.screen import _guard_input_output_alias
-from dde.core.errors import Refusal
-from dde.core.paths import sanitize_slug
-from dde.core.provenance import _may_write
+from oase.commands.compound import _guard_sdf_no_clobber
+from oase.commands.screen import _guard_input_output_alias
+from oase.core.errors import Refusal
+from oase.core.paths import sanitize_slug
+from oase.core.provenance import _may_write
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -49,7 +49,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     return project
 
 

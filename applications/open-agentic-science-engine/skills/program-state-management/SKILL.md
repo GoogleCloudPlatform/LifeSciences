@@ -140,7 +140,7 @@ Before acting on Layer 2 state, the orchestrator verifies:
 
 ### Concept lifecycle rules
 
-When concept records exist under `.dde/control/concepts/`, the
+When concept records exist under `.oase/control/concepts/`, the
 following additional rules apply:
 
 **Concept state machine.** Concept state transitions follow the
@@ -226,8 +226,8 @@ triaged sits in the decision surface without being acted on.
 ### Assessment and decision record integrity checks
 
 The pre-routing integrity check is extended to cover structured
-assessment and decision records (`.dde/control/assessments/`,
-`.dde/control/decisions/`):
+assessment and decision records (`.oase/control/assessments/`,
+`.oase/control/decisions/`):
 
 - **Evidence/execution mutual constraint.** Every assessment with
   `execution_outcome != "completed"` must have
@@ -237,7 +237,7 @@ assessment and decision records (`.dde/control/assessments/`,
 
 - **Decision supporting-assessment references.** Every decision's
   `supporting_assessments` entries reference assessment records
-  (`AR-NNN`) that actually exist in `.dde/control/assessments/`.
+  (`AR-NNN`) that actually exist in `.oase/control/assessments/`.
   A dangling reference is a warning — the decision's evidence chain
   is broken.
 

@@ -39,7 +39,7 @@ import traceback
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
@@ -135,11 +135,11 @@ def test_adjacent_dollars_no_crash():
 # ---------------------------------------------------------------------------
 #
 # KaTeX is installed via npm at provision time (install.sh).  The npm
-# location is ${DDE_TOOLS_HOME}/npm/node_modules/katex/dist/.  Tests that
+# location is ${OASE_TOOLS_HOME}/npm/node_modules/katex/dist/.  Tests that
 # check for npm-installed files skip gracefully when not provisioned.
 
-TEMPLATE_DIR = REPO_ROOT / "tools" / "dde" / "site_templates"
-_TOOLS_HOME = os.environ.get("DDE_TOOLS_HOME", "/scion-volumes/tools")
+TEMPLATE_DIR = REPO_ROOT / "tools" / "oase" / "site_templates"
+_TOOLS_HOME = os.environ.get("OASE_TOOLS_HOME", "/scion-volumes/tools")
 KATEX_NPM_DIR = Path(_TOOLS_HOME) / "npm" / "node_modules" / "katex" / "dist"
 _KATEX_PROVISIONED = KATEX_NPM_DIR.is_dir()
 
@@ -258,18 +258,18 @@ def test_katex_not_installed_error():
 
     # Test with a non-existent path by temporarily overriding the env var
 
-    old_val = os.environ.get("DDE_TOOLS_HOME")
+    old_val = os.environ.get("OASE_TOOLS_HOME")
     try:
-        os.environ["DDE_TOOLS_HOME"] = "/nonexistent/path"
+        os.environ["OASE_TOOLS_HOME"] = "/nonexistent/path"
         # The error is raised during _render_site when it tries to find
         # the KaTeX npm directory. We verify the error message content.
         expected_path = Path("/nonexistent/path/npm/node_modules/katex/dist")
         assert not expected_path.is_dir(), "test setup: path should not exist"
     finally:
         if old_val is None:
-            os.environ.pop("DDE_TOOLS_HOME", None)
+            os.environ.pop("OASE_TOOLS_HOME", None)
         else:
-            os.environ["DDE_TOOLS_HOME"] = old_val
+            os.environ["OASE_TOOLS_HOME"] = old_val
 
 
 # ---------------------------------------------------------------------------

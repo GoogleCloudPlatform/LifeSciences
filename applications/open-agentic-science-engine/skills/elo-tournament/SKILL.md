@@ -10,7 +10,7 @@ maintain Elo ratings using the `elo` CLI. You compare hypotheses head-to-head,
 write match records, and trigger rating recomputation.
 
 This protocol contributes records to a run that the supervisor ultimately
-publishes with `dde hypex analyze`; workers do not publish a separate result.
+publishes with `oase hypex analyze`; workers do not publish a separate result.
 
 ## Match Tiers
 

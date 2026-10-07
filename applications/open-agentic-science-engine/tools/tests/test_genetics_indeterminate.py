@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for dde genetics analyze — indeterminate verdict on missing pLI/LOEUF.
+"""Tests for oase genetics analyze — indeterminate verdict on missing pLI/LOEUF.
 
 Issue #84: gnomAD lacks pLI/oe_lof_upper for some genes (no_exp_lof flag —
 gene too short or poorly covered).  The analyze command must return an
@@ -45,7 +45,7 @@ _module_patches.start()
 
 import unittest  # noqa: E402
 
-from dde.core.provenance import RELAY_CODES  # noqa: E402
+from oase.core.provenance import RELAY_CODES  # noqa: E402
 
 
 def _make_gnomad_payload(
@@ -105,16 +105,16 @@ def _write_constraint_json(directory: Path, symbol: str, payload: dict) -> Path:
 
 
 def _run_analyze(symbol: str, payload: dict) -> tuple[int, str, dict | None]:
-    """Run ``dde genetics analyze`` via CliRunner, return (exit_code, output, analysis_dict)."""
+    """Run ``oase genetics analyze`` via CliRunner, return (exit_code, output, analysis_dict)."""
     from click.testing import CliRunner
 
-    from dde.cli import cli
+    from oase.cli import cli
 
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as td:
         project = Path(td) / "test-project"
         project.mkdir()
-        (project / ".dde").mkdir()
+        (project / ".oase").mkdir()
         genomics_dir = project / "raw" / "genomics"
         genomics_dir.mkdir(parents=True)
 

@@ -9,7 +9,7 @@ affects a tracked entity.
 ## [target gene/name]
 
 **Concept ID**: [IC-NNN — reference to the machine-readable concept record
-  in .dde/control/concepts/; omit or leave as "not yet assigned" for
+  in .oase/control/concepts/; omit or leave as "not yet assigned" for
   entries that predate concept record adoption]
 **Status**: under evaluation | nominated | deprioritized | terminated
 **Source**: [how this target was nominated — tournament rank, literature, etc.]
@@ -27,7 +27,7 @@ affects a tracked entity.
 ## Series [name]: [scaffold description]
 
 **Concept ID**: [IC-NNN — reference to the machine-readable concept record
-  in .dde/control/concepts/; omit or leave as "not yet assigned" for
+  in .oase/control/concepts/; omit or leave as "not yet assigned" for
   entries that predate concept record adoption]
 **Status**: active | deprioritized | terminated — Stage [n], DMTA Round [n]
 **Current best**: [compound ID] ([key metrics])

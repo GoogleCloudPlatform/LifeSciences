@@ -37,12 +37,12 @@ import traceback
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.commands.site import (
+from oase.commands.site import (
     _is_external_url,
     _sanitize_external_urls,
     _whatwg_normalize_url,

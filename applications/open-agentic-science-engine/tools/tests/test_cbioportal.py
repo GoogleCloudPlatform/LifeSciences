@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for dde cbioportal search and analyze.
+"""Tests for oase cbioportal search and analyze.
 
 Asserts:
 1. Query returning results — correct schema and count.
@@ -41,15 +41,15 @@ _module_patches = patch.dict(
 )
 _module_patches.start()
 
-from dde.commands import cbioportal as cbioportal_mod  # noqa: E402
-from dde.commands.cbioportal import (  # noqa: E402
+from oase.commands import cbioportal as cbioportal_mod  # noqa: E402
+from oase.commands.cbioportal import (  # noqa: E402
     ARTIFACT_CLASS,
     TOOL,
     _fetch_studies,
     _slugify,
 )
-from dde.core.provenance import RELAY_CODES  # noqa: E402
-from dde.core.thresholds import _DEFAULTS  # noqa: E402
+from oase.core.provenance import RELAY_CODES  # noqa: E402
+from oase.core.thresholds import _DEFAULTS  # noqa: E402
 
 # Sample cBioPortal study records for mocking
 _SAMPLE_STUDIES = [
@@ -107,7 +107,7 @@ class TestFetchStudies(unittest.TestCase):
         ):
             _raw, artifact, truncated = _fetch_studies("breast", None, None, 25)
 
-        self.assertEqual(artifact["schema"], "dde.cbioportal-search.v1")
+        self.assertEqual(artifact["schema"], "oase.cbioportal-search.v1")
         self.assertEqual(artifact["query"], "breast")
         # Two breast-related studies should match
         self.assertEqual(len(artifact["results"]), 2)
@@ -185,13 +185,13 @@ class TestRelayGuards(unittest.TestCase):
 
         from click.testing import CliRunner
 
-        from dde.cli import cli
+        from oase.cli import cli
 
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as td:
             project = Path(td) / "test-project"
             project.mkdir()
-            (project / ".dde").mkdir()
+            (project / ".oase").mkdir()
             (project / "raw" / "expression").mkdir(parents=True)
 
             with patch.object(
@@ -262,13 +262,13 @@ class TestAnalyzeEndToEnd(unittest.TestCase):
 
         from click.testing import CliRunner
 
-        from dde.cli import cli
+        from oase.cli import cli
 
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as td:
             project = Path(td) / "test-project"
             project.mkdir()
-            (project / ".dde").mkdir()
+            (project / ".oase").mkdir()
             expr_dir = project / "raw" / "expression"
             expr_dir.mkdir(parents=True)
 
@@ -371,7 +371,7 @@ class TestPhaseTwoGuard(unittest.TestCase):
     def test_analyze_cmd_is_phase_two_guarded(self):
         """enforce_phase_two wraps the analyze subcommand."""
         # Import the CLI to trigger enforce_phase_two
-        from dde.cli import cli
+        from oase.cli import cli
 
         # Walk the cli tree to find cbioportal -> analyze
         cbioportal_group = cli.commands.get("cbioportal")
@@ -394,7 +394,7 @@ class TestSchemaAndStructure(unittest.TestCase):
         ):
             _raw, artifact, _truncated = _fetch_studies("breast", None, None, 25)
 
-        self.assertEqual(artifact["schema"], "dde.cbioportal-search.v1")
+        self.assertEqual(artifact["schema"], "oase.cbioportal-search.v1")
         self.assertIn("query", artifact)
         self.assertIn("searched_at", artifact)
         self.assertIn("total_results", artifact)

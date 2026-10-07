@@ -15,7 +15,7 @@
 """Tests for the hypex command group.
 
 Covers (from the brief's test requirements):
-  - Happy path: valid run dir → correct dde.hypex.v1 schema
+  - Happy path: valid run dir → correct oase.hypex.v1 schema
   - Integrity violations: dangling match ref → fires hypex.integrity_violations
   - Aborted run: missing termination.json → termination.declared: false,
     fires hypex.run_aborted
@@ -42,9 +42,9 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from click.testing import CliRunner
-from dde.cli import cli
-from dde.core import provenance
-from dde.core.thresholds import UNRESOLVED, declared_sets
+from oase.cli import cli
+from oase.core import provenance
+from oase.core.thresholds import UNRESOLVED, declared_sets
 
 # ---------------------------------------------------------------------------
 # Helper: build minimal run directories
@@ -55,7 +55,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "hypotheses").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -287,7 +287,7 @@ def _make_run_dir(
 
 
 def _run_ingest(runner: CliRunner, project: Path, run_dir: Path) -> Any:
-    """Run dde hypex ingest and return the result."""
+    """Run oase hypex ingest and return the result."""
     return runner.invoke(
         cli,
         ["--project", str(project), "hypex", "ingest", str(run_dir)],
@@ -296,7 +296,7 @@ def _run_ingest(runner: CliRunner, project: Path, run_dir: Path) -> Any:
 
 
 def _run_analyze(runner: CliRunner, project: Path, artifact: str) -> Any:
-    """Run dde hypex analyze and return the result."""
+    """Run oase hypex analyze and return the result."""
     return runner.invoke(
         cli,
         ["--project", str(project), "hypex", "analyze", artifact],
@@ -374,7 +374,7 @@ def test_hypex_threshold_unresolved_values():
 
 
 def test_ingest_happy_path():
-    """Valid run dir → correct dde.hypex.v1 schema output."""
+    """Valid run dir → correct oase.hypex.v1 schema output."""
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         project = _make_project(base)
@@ -390,7 +390,7 @@ def test_ingest_happy_path():
         assert len(json_files) == 1, f"expected 1 hypex.json, got {len(json_files)}"
 
         record = json.loads(json_files[0].read_text(encoding="utf-8"))
-        assert record["schema"] == "dde.hypex.v1"
+        assert record["schema"] == "oase.hypex.v1"
         assert record["hypex_run_id"] == "test-run"
         assert len(record["hypotheses"]) == 3
         assert record["observed"]["n_hypotheses"] == 3
@@ -742,7 +742,7 @@ def test_assessment_core_score_is_object():
         analysis = json.loads(analysis_files[0].read_text(encoding="utf-8"))
 
         core = analysis["assessment"]["assessment_core"]
-        assert core["schema"] == "dde.hypothesis-assessment.v1"
+        assert core["schema"] == "oase.hypothesis-assessment.v1"
         assert core["strategy"] == "hypex"
 
         for candidate in core["candidates"]:
@@ -871,7 +871,7 @@ def test_analyze_rejects_wrong_schema():
 
         # Write a fake artifact with wrong schema
         fake = hyp_dir / "hx-fake.hypex.json"
-        fake.write_text(json.dumps({"schema": "dde.coscientist.v1"}, indent=2))
+        fake.write_text(json.dumps({"schema": "oase.coscientist.v1"}, indent=2))
 
         runner = CliRunner()
         result = runner.invoke(

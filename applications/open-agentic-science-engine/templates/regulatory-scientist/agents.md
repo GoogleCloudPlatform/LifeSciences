@@ -10,10 +10,10 @@ Activate the tools environment, then check what is available:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde` on PATH and sets `DDE_TOOLS_HOME`. Without it, all
-`dde` commands will fail with "command not found."
+This puts `oase` on PATH and sets `OASE_TOOLS_HOME`. Without it, all
+`oase` commands will fail with "command not found."
 
-Run `dde doctor` once, before you touch the task, and read the group of things you
+Run `oase doctor` once, before you touch the task, and read the group of things you
 cannot run — `doctor` labels it `N thing(s) you cannot run`.
 
 - **If that group is absent**, proceed and say nothing about it. A clean environment is
@@ -38,7 +38,7 @@ Before invoking any OASE tool, export your current work order ID so that sidecar
 records and analysis outputs are tagged with the work order that produced them:
 
 ```bash
-export DDE_WORK_ORDER_ID="<your-work-order-ID>"
+export OASE_WORK_ORDER_ID="<your-work-order-ID>"
 ```
 
 Your task prompt includes the work-order ID. Set this once at the start of your task,
@@ -68,7 +68,7 @@ Your skills provide access to:
   structural alerts. Use for compound-level triage and to verify physicochemical
   properties cited in regulatory documents.
 
-Invocations run through the `dde` CLI. The skill's invocation table is authoritative
+Invocations run through the `oase` CLI. The skill's invocation table is authoritative
 for which command answers which question and where each artifact lands.
 
 ### Tool-usage constraints
@@ -79,7 +79,7 @@ for which command answers which question and where each artifact lands.
 - Do not cite an NCT number or trial acronym you did not **resolve**. You have the
   tool for this one, so an unresolved trial citation is now a choice.
 - Do not characterise the competitive or IP landscape from memory.
-- For any capability you have confirmed is absent via `dde --help`, report the task
+- For any capability you have confirmed is absent via `oase --help`, report the task
   blocked, name the capability and the command you checked, and stop.
 
 `artifact-conventions` still governs anything you do write.
@@ -87,7 +87,7 @@ for which command answers which question and where each artifact lands.
 ### Runtime capability check
 
 Do not assume a capability is missing because it is not mentioned here. Before
-reporting a task blocked for a missing tool, run `dde --help` to check the
+reporting a task blocked for a missing tool, run `oase --help` to check the
 current command list. If the command exists, use it. Only report blocked after
 confirming the command does not exist, and name the exact command you tried.
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for dde dossier export (#141).
+"""Tests for oase dossier export (#141).
 
 Covers:
   - Export with tox records populates 2.6.6
@@ -38,14 +38,14 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.dossier import (
+from oase.commands.dossier import (
     ICH_GUIDANCE_REFERENCES,
     _build_export,
     _export_to_json,
     _export_to_markdown,
     _export_to_tsv,
 )
-from dde.core.provenance import RELAY_CODES
+from oase.core.provenance import RELAY_CODES
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -56,7 +56,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     return project
 
 
@@ -69,7 +69,7 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 def _make_tox_repeat_dose(project: Path, name: str = "compound") -> Path:
     """Write a minimal tox-repeat-dose artifact."""
     data: dict[str, Any] = {
-        "schema": "dde.tox-repeat-dose.v1",
+        "schema": "oase.tox-repeat-dose.v1",
         "species": "rat",
         "route": "oral gavage",
         "duration": "28 days",
@@ -87,7 +87,7 @@ def _make_tox_repeat_dose(project: Path, name: str = "compound") -> Path:
 def _make_tox_genotox(project: Path, name: str = "compound") -> Path:
     """Write a minimal tox-genotox artifact."""
     data: dict[str, Any] = {
-        "schema": "dde.tox-genotox.v1",
+        "schema": "oase.tox-genotox.v1",
         "test_system": "Ames test, S. typhimurium TA98/TA100",
         "result": "Negative",
         "conclusion": "Not mutagenic under test conditions",
@@ -101,7 +101,7 @@ def _make_tox_genotox(project: Path, name: str = "compound") -> Path:
 def _make_pk_study(project: Path, name: str = "compound") -> Path:
     """Write a minimal pk-study artifact."""
     data: dict[str, Any] = {
-        "schema": "dde.pk-study.v1",
+        "schema": "oase.pk-study.v1",
         "species": "rat",
         "route": "iv",
         "dose_mg_kg": 10.0,
@@ -119,7 +119,7 @@ def _make_pk_study(project: Path, name: str = "compound") -> Path:
 def _make_pk_nca(project: Path, name: str = "compound") -> Path:
     """Write a minimal pk-nca artifact."""
     data: dict[str, Any] = {
-        "schema": "dde.pk-nca.v1",
+        "schema": "oase.pk-nca.v1",
         "species": "rat",
         "route": "iv",
         "dose_mg_kg": 10.0,
@@ -135,7 +135,7 @@ def _make_pk_nca(project: Path, name: str = "compound") -> Path:
 def _make_assay(project: Path, name: str = "compound") -> Path:
     """Write a minimal assay artifact."""
     data: dict[str, Any] = {
-        "schema": "dde.assay.v1",
+        "schema": "oase.assay.v1",
         "study_type": "Primary pharmacodynamics",
         "target": "Target X",
         "species": "human",
@@ -316,7 +316,7 @@ def test_json_output_structure() -> None:
 
         export = _build_export(project, "WO-001")
 
-        assert export["schema"] == "dde.dossier-export.v1"
+        assert export["schema"] == "oase.dossier-export.v1"
         assert export["work_order_id"] == "WO-001"
         assert export["format"] == "ctd"
         assert "scope_caveat" in export
@@ -440,7 +440,7 @@ def test_empty_project_produces_all_gap_export() -> None:
 
         export = _build_export(project, "WO-001")
 
-        assert export["schema"] == "dde.dossier-export.v1"
+        assert export["schema"] == "oase.dossier-export.v1"
         assert export["relay_count"] == 0
         assert export["relays"] == []
 
@@ -538,7 +538,7 @@ def test_fields_not_in_artifact_labelled_as_not_available() -> None:
         project = _make_project(Path(tmp))
         # Create a minimal tox-repeat-dose with some fields missing.
         data: dict[str, Any] = {
-            "schema": "dde.tox-repeat-dose.v1",
+            "schema": "oase.tox-repeat-dose.v1",
             "species": "rat",
             # deliberately omit route, duration, dose, noael, loael, findings
         }

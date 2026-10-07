@@ -31,11 +31,11 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.docking import (
+from oase.commands.docking import (
     _parse_flexible_residues,
     _split_flexible_receptor,
 )
-from dde.core.errors import ArtifactError, UsageError
+from oase.core.errors import ArtifactError, UsageError
 
 # ---------------------------------------------------------------------------
 # Sample PDBQT content for testing

@@ -111,7 +111,7 @@
       "artifacts_produced": [
         {
           "path": "raw/pocket/synthetic-kinase-Y.fpocket.json",
-          "schema": "dde.pocket-druggability.v1"
+          "schema": "oase.pocket-druggability.v1"
         },
         {
           "path": "raw/pocket/synthetic-kinase-Y.fpocket.meta.json",
@@ -154,7 +154,7 @@
       "artifacts_produced": [
         {
           "path": "raw/structures/synthetic-enzyme-Z.alphafold.json",
-          "schema": "dde.structure-confidence.v1"
+          "schema": "oase.structure-confidence.v1"
         },
         {
           "path": "raw/structures/synthetic-enzyme-Z.alphafold.meta.json",

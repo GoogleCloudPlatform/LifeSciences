@@ -73,9 +73,9 @@ all 5 fixes:
 
 ## Files Modified
 
-- `tools/dde/commands/artifact.py` — import + symlink guard
-- `tools/dde/commands/validate.py` — import, refactor, 4 loop fixes
-- `tools/dde/commands/hypex.py` — import + 7 symlink guards
-- `tools/dde/core/http.py` — import + symlink guard with fallback
-- `tools/dde/commands/site.py` — import, refactor, copytree fix
+- `tools/oase/commands/artifact.py` — import + symlink guard
+- `tools/oase/commands/validate.py` — import, refactor, 4 loop fixes
+- `tools/oase/commands/hypex.py` — import + 7 symlink guards
+- `tools/oase/core/http.py` — import + symlink guard with fallback
+- `tools/oase/commands/site.py` — import, refactor, copytree fix
 - `tests/test_symlink_fixes.py` — new (14 tests)

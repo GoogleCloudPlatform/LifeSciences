@@ -47,16 +47,16 @@ available and to avoid duplication.
 
 ## What Was Built
 
-### Core Assessment Logic (`tools/dde/core/manufacturing.py`)
-- `assess_stage0()`: produces `dde.evidence-assessment.v1` records
+### Core Assessment Logic (`tools/oase/core/manufacturing.py`)
+- `assess_stage0()`: produces `oase.evidence-assessment.v1` records
 - `compute_complexity_heuristics()`: stereocenter/ring/step analysis
 - `STAGE_REQUIREMENTS`: progressive stage definitions (0=concrete, 2-4=placeholders)
 - `PRODUCTION_PLATFORMS`: 9 modality-to-platform mappings
 - `SA_SCORE_MODALITIES`: chemical synthesis modalities only
 
-### CLI Commands (`tools/dde/commands/manufacturing.py`)
-- `dde manufacturing assess-stage0`: assess concept manufacturing feasibility
-- `dde manufacturing stage-requirements`: print stage structure
+### CLI Commands (`tools/oase/commands/manufacturing.py`)
+- `oase manufacturing assess-stage0`: assess concept manufacturing feasibility
+- `oase manufacturing stage-requirements`: print stage structure
 
 ### Skill (`skills/manufacturing-feasibility/SKILL.md`)
 - Interpretation contract documenting SA-score distinction, stereocenter

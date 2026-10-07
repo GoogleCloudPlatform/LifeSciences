@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from dde.commands.doctor import (
+from oase.commands.doctor import (
     _CAPABILITY_VALIDATED,
     _HELP_MARKERS,
     _PROVISIONED_BINARIES,
@@ -55,10 +55,10 @@ class TestHypexDoctorChecks(unittest.TestCase):
     def test_missing_toolchain_is_capability_warning(self):
         report = Report()
         with (
-            mock.patch("dde.commands.doctor.shutil.which", return_value=None),
+            mock.patch("oase.commands.doctor.shutil.which", return_value=None),
             mock.patch(
-                "dde.commands.doctor.env.tools_home",
-                return_value=Path("/definitely/missing/dde-tools"),
+                "oase.commands.doctor.env.tools_home",
+                return_value=Path("/definitely/missing/oase-tools"),
             ),
         ):
             _check_binaries(report)
@@ -88,12 +88,12 @@ class TestHypexDoctorChecks(unittest.TestCase):
 
         with (
             mock.patch(
-                "dde.commands.doctor.shutil.which",
+                "oase.commands.doctor.shutil.which",
                 side_effect=lambda name: (
                     f"/tools/{name}" if name in HYPEX_TOOLS else None
                 ),
             ),
-            mock.patch("dde.commands.doctor.subprocess.run", side_effect=run),
+            mock.patch("oase.commands.doctor.subprocess.run", side_effect=run),
         ):
             _check_hypothesis_strategies(report)
 
@@ -118,12 +118,12 @@ class TestHypexDoctorChecks(unittest.TestCase):
 
         with (
             mock.patch(
-                "dde.commands.doctor.shutil.which",
+                "oase.commands.doctor.shutil.which",
                 side_effect=lambda name: (
                     f"/tools/{name}" if name in HYPEX_TOOLS else None
                 ),
             ),
-            mock.patch("dde.commands.doctor.subprocess.run", side_effect=run),
+            mock.patch("oase.commands.doctor.subprocess.run", side_effect=run),
         ):
             _check_hypothesis_strategies(report)
 
@@ -145,12 +145,12 @@ class TestHypexDoctorChecks(unittest.TestCase):
 
         with (
             mock.patch(
-                "dde.commands.doctor.shutil.which",
+                "oase.commands.doctor.shutil.which",
                 side_effect=lambda name: (
                     f"/tools/{name}" if name in HYPEX_TOOLS else None
                 ),
             ),
-            mock.patch("dde.commands.doctor.subprocess.run", side_effect=run),
+            mock.patch("oase.commands.doctor.subprocess.run", side_effect=run),
         ):
             _check_hypothesis_strategies(report)
 
@@ -166,10 +166,10 @@ class TestHypexDoctorChecks(unittest.TestCase):
 class TestHypexCapabilitySnapshot(unittest.TestCase):
     def test_missing_toolchain_is_unavailable_not_unreleased(self):
         with (
-            mock.patch("dde.commands.doctor.shutil.which", return_value=None),
+            mock.patch("oase.commands.doctor.shutil.which", return_value=None),
             mock.patch(
-                "dde.commands.doctor.env.tools_home",
-                return_value=Path("/definitely/missing/dde-tools"),
+                "oase.commands.doctor.env.tools_home",
+                return_value=Path("/definitely/missing/oase-tools"),
             ),
         ):
             snapshot = get_capability_snapshot()

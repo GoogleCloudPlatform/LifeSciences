@@ -54,7 +54,7 @@ tournament run. Entry points include:
   raw run directory to `analyze`.
 - **No authentication** needed — the tool reads local files only.
 - **No network** — `ingest` and `analyze` are both offline.
-- Run `dde doctor` before first use. It ends with a verdict line:
+- Run `oase doctor` before first use. It ends with a verdict line:
   `STOP` means fix or report before running anything; `PROCEED` means
   work, and the grouped warnings tell you which commands would refuse,
   which results need careful reading, and which are the tooling lead's
@@ -65,8 +65,8 @@ tournament run. Entry points include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| Normalise this tournament run | `dde hypex ingest <RUN-DIR>` | `raw/hypotheses/hx-<slug>.hypex.json`<br>`raw/hypotheses/hx-<slug>.run.tar.zst`<br>`raw/hypotheses/hx-<slug>.meta.json` |
-| Is the ranking admissible? Which hypotheses are flagged? | `dde hypex analyze <ARTIFACT>` | `raw/hypotheses/hx-<slug>.analysis.json` |
+| Normalise this tournament run | `oase hypex ingest <RUN-DIR>` | `raw/hypotheses/hx-<slug>.hypex.json`<br>`raw/hypotheses/hx-<slug>.run.tar.zst`<br>`raw/hypotheses/hx-<slug>.meta.json` |
+| Is the ranking admissible? Which hypotheses are flagged? | `oase hypex analyze <ARTIFACT>` | `raw/hypotheses/hx-<slug>.analysis.json` |
 
 Run `ingest` before `analyze`. `analyze` reads from disk and applies the
 `hypex@1.0` threshold set. It can be re-run with different thresholds
@@ -151,7 +151,7 @@ not a floor of exceptions. A phantom citation *rate*
 computation here where it was not for co-scientist.
 
 **Why this holds:** The citation manifest's `summary.total` comes from
-the `dde.citation-manifest.v1` schema, which counts every citation the
+the `oase.citation-manifest.v1` schema, which counts every citation the
 extractor found — verified, suspect, phantom, and unverified alike.
 Unlike Co-Scientist's exception list, the manifest is a complete
 enumeration of what the extractor saw.
@@ -265,12 +265,12 @@ Check `mandatory_relays` in both the `.analysis.json` and the
 
 ### Assessment core
 
-The `analyze` command emits `dde.hypothesis-assessment.v1` alongside the
+The `analyze` command emits `oase.hypothesis-assessment.v1` alongside the
 analysis. This is the shared contract across all stage 0 strategies:
 
 ```json
 {
-  "schema": "dde.hypothesis-assessment.v1",
+  "schema": "oase.hypothesis-assessment.v1",
   "strategy": "hypex",
   "source_artifact": "raw/hypotheses/hx-<slug>.hypex.json",
   "source_sha256": "...",

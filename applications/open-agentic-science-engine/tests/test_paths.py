@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for dde.core.paths — path confinement and slug sanitization.
+"""Tests for oase.core.paths — path confinement and slug sanitization.
 
 Covers:
   - confine_path: traversal prevention, null bytes, symlink loops, edge cases
@@ -32,7 +32,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.paths import confine_path, is_safe_to_open, sanitize_slug
+from oase.core.paths import confine_path, is_safe_to_open, sanitize_slug
 
 # ---------------------------------------------------------------------------
 # confine_path

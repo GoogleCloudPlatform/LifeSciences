@@ -492,7 +492,7 @@ def generate_comparison(
         ),
         (
             "Stage 0 workstreams invoke real CLI commands "
-            "(dde manufacturing assess-stage0, etc.) — no mocked results."
+            "(oase manufacturing assess-stage0, etc.) — no mocked results."
         ),
     ]
 

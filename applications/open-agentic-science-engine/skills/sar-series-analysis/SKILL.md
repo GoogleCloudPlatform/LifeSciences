@@ -52,14 +52,14 @@ include:
 
 - **fragment**: a single SMILES string. Unparseable SMILES exits 9
   (Refusal). RDKit required.
-- **pairs**: a JSON file matching schema `dde.mmp-series.v1` with a
+- **pairs**: a JSON file matching schema `oase.mmp-series.v1` with a
   top-level `schema` field and a `compounds` array. Each compound record
   must have `compound_id`, `smiles`, and a non-empty `properties` dict.
   Maximum 10,000 compounds. RDKit required.
 - **analyze**: a `.mmp-pairs.json` artifact produced by the `pairs`
   step. RDKit is **not** required — analyze is Phase 2 (offline,
   deterministic, reads from disk).
-- Run `dde doctor` before first use. Its verdict line (`STOP` or
+- Run `oase doctor` before first use. Its verdict line (`STOP` or
   `PROCEED`) is the gate.
 - **No authentication** needed — all operations are offline.
 
@@ -67,9 +67,9 @@ include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| What are this compound's BRICS fragments? | `dde mmp fragment <SMILES>` | `raw/compounds/<slug>.mmp-fragment.json`<br>`raw/compounds/<slug>.mmp-fragment.meta.json` |
-| Which compounds form matched molecular pairs? | `dde mmp pairs <SERIES_FILE>` | `raw/compounds/<name>.mmp-pairs.json`<br>`raw/compounds/<name>.mmp-pairs.meta.json` |
-| Where are the property cliffs? | `dde mmp analyze <ARTIFACT>` | `raw/compounds/<stem>.mmp-analysis.json` |
+| What are this compound's BRICS fragments? | `oase mmp fragment <SMILES>` | `raw/compounds/<slug>.mmp-fragment.json`<br>`raw/compounds/<slug>.mmp-fragment.meta.json` |
+| Which compounds form matched molecular pairs? | `oase mmp pairs <SERIES_FILE>` | `raw/compounds/<name>.mmp-pairs.json`<br>`raw/compounds/<name>.mmp-pairs.meta.json` |
+| Where are the property cliffs? | `oase mmp analyze <ARTIFACT>` | `raw/compounds/<stem>.mmp-analysis.json` |
 
 Run Phase 1 (`fragment`, `pairs`) before Phase 2 (`analyze`). `analyze`
 reads stored `.mmp-pairs.json` from disk and can be re-run with
@@ -137,7 +137,7 @@ those properties. Do not invent a threshold for an unconfigured property.
 Property names are matched case-insensitively (e.g. pIC50 resolves
 against the pic50 entry).
 
-Programs can add property thresholds via `.dde/thresholds.yaml` under
+Programs can add property thresholds via `.oase/thresholds.yaml` under
 `mmp-cliffs.cliff_absolute_delta`.
 
 If a program overrides the entire `cliff_absolute_delta` to UNRESOLVED,

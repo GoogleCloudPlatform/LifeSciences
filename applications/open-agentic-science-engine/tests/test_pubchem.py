@@ -39,7 +39,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.pubchem import (
+from oase.commands.pubchem import (
     SCHEMA,
     _build_artifact,
     _classify_annotation,
@@ -49,7 +49,7 @@ from dde.commands.pubchem import (
     _extract_synonyms,
     _slug,
 )
-from dde.core import provenance
+from oase.core import provenance
 
 # ---------------------------------------------------------------------------
 # Helper: canned API responses
@@ -164,7 +164,7 @@ def test_extract_synonyms_not_found() -> None:
 
 def test_extract_synonyms_bounded() -> None:
     """Synonyms are bounded to MAX_SYNONYMS (20)."""
-    from dde.commands.pubchem import MAX_SYNONYMS
+    from oase.commands.pubchem import MAX_SYNONYMS
 
     payload = _pubchem_synonyms_response(2244, [f"syn-{i}" for i in range(50)])
     result = _extract_synonyms(payload)
@@ -522,7 +522,7 @@ def test_relay_codes_registered() -> None:
 
 def test_threshold_set_registered() -> None:
     """pubchem-annotation threshold set is declared."""
-    from dde.core.thresholds import declared_sets
+    from oase.core.thresholds import declared_sets
 
     sets = declared_sets()
     assert "pubchem-annotation" in sets, (
@@ -584,7 +584,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory for CliRunner tests."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     # Create the compounds artifact directory.
     (project / "raw" / "compounds").mkdir(parents=True, exist_ok=True)
     return project
@@ -657,13 +657,13 @@ def _annotate_http_side_effect(
 def test_cli_annotate_valid_cid() -> None:
     """CliRunner: annotate with valid CID writes artifact and sidecar, exit 0."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubchem.http.request") as mock_req:
+        with mock.patch("oase.commands.pubchem.http.request") as mock_req:
             mock_req.side_effect = _annotate_http_side_effect(cid=2244)
             result = runner.invoke(
                 cli,
@@ -696,13 +696,13 @@ def test_cli_annotate_valid_cid() -> None:
 def test_cli_annotate_not_found_cid() -> None:
     """CliRunner: annotate with unknown CID (404) writes not-found artifact, exit 0."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubchem.http.request") as mock_req:
+        with mock.patch("oase.commands.pubchem.http.request") as mock_req:
             mock_req.side_effect = _annotate_http_side_effect(cid=99999, not_found=True)
             result = runner.invoke(
                 cli,
@@ -726,13 +726,13 @@ def test_cli_annotate_not_found_cid() -> None:
 def test_cli_annotate_json_flag() -> None:
     """CliRunner: --json flag produces valid JSON output."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubchem.http.request") as mock_req:
+        with mock.patch("oase.commands.pubchem.http.request") as mock_req:
             mock_req.side_effect = _annotate_http_side_effect(cid=2244)
             result = runner.invoke(
                 cli,
@@ -751,13 +751,13 @@ def test_cli_annotate_json_flag() -> None:
 def test_cli_annotate_quiet_flag() -> None:
     """CliRunner: --quiet flag suppresses human-readable output."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubchem.http.request") as mock_req:
+        with mock.patch("oase.commands.pubchem.http.request") as mock_req:
             mock_req.side_effect = _annotate_http_side_effect(cid=2244)
             result = runner.invoke(
                 cli,
@@ -809,7 +809,7 @@ def _write_annotation_and_sidecar(
 def test_cli_analyze_known_drug() -> None:
     """CliRunner: analyze-annotation produces known-drug verdict."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -851,7 +851,7 @@ def test_cli_analyze_known_drug() -> None:
 def test_cli_analyze_known_compound() -> None:
     """CliRunner: analyze-annotation produces known-compound verdict."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -883,7 +883,7 @@ def test_cli_analyze_known_compound() -> None:
 def test_cli_analyze_unknown() -> None:
     """CliRunner: analyze-annotation produces unknown verdict."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -916,7 +916,7 @@ def test_cli_analyze_unknown() -> None:
 def test_cli_analyze_json_flag() -> None:
     """CliRunner: --json flag on analyze-annotation produces valid JSON."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -954,7 +954,7 @@ def test_cli_analyze_json_flag() -> None:
 def test_cli_analyze_quiet_flag() -> None:
     """CliRunner: --quiet flag on analyze-annotation suppresses verbose output."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -993,7 +993,7 @@ def test_cli_analyze_quiet_flag() -> None:
 def test_cli_analyze_from_flag() -> None:
     """CliRunner: --from flag reads artifacts from a different directory."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1049,7 +1049,7 @@ def test_cli_analyze_from_flag() -> None:
 def test_cli_analyze_out_flag() -> None:
     """CliRunner: --out flag writes analysis to a different directory."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))

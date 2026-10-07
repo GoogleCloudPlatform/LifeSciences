@@ -42,7 +42,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.commands.structure import (
+from oase.commands.structure import (
     map_pocket_to_topology,
     parse_tm_regions,
     parse_topo_domains,
@@ -419,7 +419,7 @@ def test_resolve_accession_direct():
 
 def _test_resolve_accession_direct():
     """Direct accession recognized by regex."""
-    from dde.commands.structure import _is_accession
+    from oase.commands.structure import _is_accession
 
     assert _is_accession("P07550") is True
     assert _is_accession("Q9UBS5") is True
@@ -429,7 +429,7 @@ def _test_resolve_accession_direct():
 
 def test_is_accession_patterns():
     """Various UniProt accession patterns are correctly identified."""
-    from dde.commands.structure import _is_accession
+    from oase.commands.structure import _is_accession
 
     # Standard 6-char
     assert _is_accession("P12345") is True

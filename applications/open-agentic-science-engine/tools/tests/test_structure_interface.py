@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for ``dde structure interface`` — interface residue detection.
+"""Tests for ``oase structure interface`` — interface residue detection.
 
 Covers:
 - Two-chain PDB: interface residues correctly identified at 5 A cutoff
@@ -29,7 +29,7 @@ from __future__ import annotations
 import textwrap
 import unittest
 
-from dde.commands.structure import (
+from oase.commands.structure import (
     _find_interface_residues,
     _group_atoms_by_chain,
     _near_query,

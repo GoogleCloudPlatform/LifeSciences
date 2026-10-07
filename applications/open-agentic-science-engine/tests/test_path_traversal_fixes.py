@@ -38,7 +38,7 @@ import pytest
 # Ensure the tools package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
-from dde.core.paths import confine_path, sanitize_slug
+from oase.core.paths import confine_path, sanitize_slug
 
 # ---------------------------------------------------------------------------
 # Fix 1: coscientist session_id (#181)

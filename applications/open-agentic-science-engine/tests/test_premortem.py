@@ -50,14 +50,14 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.controlstore import (
+from oase.core.controlstore import (
     CONTROL_DIR,
     ensure_control_dirs,
     write_record,
 )
-from dde.core.errors import Refusal, SchemaError
-from dde.core.evidence import validate_decision
-from dde.core.premortem import (
+from oase.core.errors import Refusal, SchemaError
+from oase.core.evidence import validate_decision
+from oase.core.premortem import (
     RESOLUTION_TYPES,
     check_dissent_in_liabilities,
     decode_resolution_condition,
@@ -96,7 +96,7 @@ def _check(name: str, fn: Any) -> None:
 def _make_project(base: Path) -> Path:
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -106,11 +106,11 @@ def _write_concept_to_disk(
     concept_id: str,
     termination_authority: str,
 ) -> Path:
-    """Write a concept record directly to .dde/control/concepts/."""
+    """Write a concept record directly to .oase/control/concepts/."""
     concepts_dir = project / CONTROL_DIR / "concepts"
     concepts_dir.mkdir(parents=True, exist_ok=True)
     data = {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": concept_id,
         "revision": 1,
         "state": "active",
@@ -165,7 +165,7 @@ def _speculative_hypothesis(**overrides: Any) -> dict[str, Any]:
 def _valid_premortem(**overrides: Any) -> dict[str, Any]:
     """A valid pre-mortem review record."""
     record: dict[str, Any] = {
-        "schema": "dde.premortem-review.v1",
+        "schema": "oase.premortem-review.v1",
         "review_id": "PM-001",
         "finding_ref": "findings/computational-biology/cdk4-druggability.md",
         "review_budget": 3,
@@ -192,7 +192,7 @@ def _valid_premortem(**overrides: Any) -> dict[str, Any]:
 def _valid_decision(**overrides: Any) -> dict[str, Any]:
     """A minimal valid decision record."""
     record: dict[str, Any] = {
-        "schema": "dde.decision-record.v1",
+        "schema": "oase.decision-record.v1",
         "id": "DR-001",
         "action": "advance_with_budget",
         "affected_entity": {
@@ -309,7 +309,7 @@ _check("pre-mortem missing required fields => error", test_premortem_missing_fie
 
 def test_premortem_bad_schema():
     """Wrong schema string is rejected."""
-    pm = _valid_premortem(schema="dde.wrong.v1")
+    pm = _valid_premortem(schema="oase.wrong.v1")
     errors = validate_premortem(pm)
     assert any("schema" in e for e in errors)
 

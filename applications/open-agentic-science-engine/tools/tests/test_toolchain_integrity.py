@@ -30,9 +30,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from dde.commands.doctor import OK, WARN, Report, _check_toolchain_integrity
-from dde.core import toolchain
-from dde.core.provenance import Sidecar
+from oase.commands.doctor import OK, WARN, Report, _check_toolchain_integrity
+from oase.core import toolchain
+from oase.core.provenance import Sidecar
 
 
 class _ResetCacheMixin:
@@ -55,18 +55,18 @@ class _ResetCacheMixin:
 class TestCheckIntegrityClean(_ResetCacheMixin, unittest.TestCase):
     """check_integrity() when running from a clean git checkout."""
 
-    @mock.patch("dde.core.toolchain._git_modified_files", return_value=[])
-    @mock.patch("dde.core.toolchain._git_describe", return_value="v0.3.0")
-    @mock.patch("dde.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
+    @mock.patch("oase.core.toolchain._git_modified_files", return_value=[])
+    @mock.patch("oase.core.toolchain._git_describe", return_value="v0.3.0")
+    @mock.patch("oase.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
     def test_clean(self, _root, _describe, _files):
         state = toolchain.check_integrity()
         self.assertEqual(state.integrity, "v0.3.0")
         self.assertFalse(state.modified)
         self.assertEqual(state.modified_files, [])
 
-    @mock.patch("dde.core.toolchain._git_modified_files", return_value=[])
-    @mock.patch("dde.core.toolchain._git_describe", return_value="v0.3.0-12-gabcdef1")
-    @mock.patch("dde.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
+    @mock.patch("oase.core.toolchain._git_modified_files", return_value=[])
+    @mock.patch("oase.core.toolchain._git_describe", return_value="v0.3.0-12-gabcdef1")
+    @mock.patch("oase.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
     def test_ahead_not_dirty(self, _root, _describe, _files):
         state = toolchain.check_integrity()
         self.assertEqual(state.integrity, "v0.3.0-12-gabcdef1")
@@ -78,11 +78,11 @@ class TestCheckIntegrityDirty(_ResetCacheMixin, unittest.TestCase):
     """check_integrity() when running from a dirty git checkout."""
 
     @mock.patch(
-        "dde.core.toolchain._git_modified_files",
+        "oase.core.toolchain._git_modified_files",
         return_value=["core/provenance.py", "commands/doctor.py"],
     )
-    @mock.patch("dde.core.toolchain._git_describe", return_value="v0.3.0-dirty")
-    @mock.patch("dde.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
+    @mock.patch("oase.core.toolchain._git_describe", return_value="v0.3.0-dirty")
+    @mock.patch("oase.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
     def test_dirty(self, _root, _describe, _files):
         state = toolchain.check_integrity()
         self.assertEqual(state.integrity, "v0.3.0-dirty")
@@ -94,7 +94,7 @@ class TestCheckIntegrityDirty(_ResetCacheMixin, unittest.TestCase):
 class TestCheckIntegrityInstalled(_ResetCacheMixin, unittest.TestCase):
     """check_integrity() when running from an installed package (no .git)."""
 
-    @mock.patch("dde.core.toolchain._find_git_root", return_value=None)
+    @mock.patch("oase.core.toolchain._find_git_root", return_value=None)
     def test_installed(self, _root):
         state = toolchain.check_integrity()
         self.assertEqual(state.integrity, "installed")
@@ -105,9 +105,9 @@ class TestCheckIntegrityInstalled(_ResetCacheMixin, unittest.TestCase):
 class TestCheckIntegrityUnknown(_ResetCacheMixin, unittest.TestCase):
     """check_integrity() when git is present but describe fails."""
 
-    @mock.patch("dde.core.toolchain._git_modified_files", return_value=[])
-    @mock.patch("dde.core.toolchain._git_describe", return_value="unknown")
-    @mock.patch("dde.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
+    @mock.patch("oase.core.toolchain._git_modified_files", return_value=[])
+    @mock.patch("oase.core.toolchain._git_describe", return_value="unknown")
+    @mock.patch("oase.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
     def test_unknown(self, _root, _describe, _files):
         state = toolchain.check_integrity()
         self.assertEqual(state.integrity, "unknown")
@@ -117,9 +117,9 @@ class TestCheckIntegrityUnknown(_ResetCacheMixin, unittest.TestCase):
 class TestSessionCache(_ResetCacheMixin, unittest.TestCase):
     """check_integrity() caches its result for the session."""
 
-    @mock.patch("dde.core.toolchain._git_modified_files", return_value=[])
-    @mock.patch("dde.core.toolchain._git_describe", return_value="v0.3.0")
-    @mock.patch("dde.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
+    @mock.patch("oase.core.toolchain._git_modified_files", return_value=[])
+    @mock.patch("oase.core.toolchain._git_describe", return_value="v0.3.0")
+    @mock.patch("oase.core.toolchain._find_git_root", return_value=Path("/fake/repo"))
     def test_cached(self, mock_root, _describe, _files):
         first = toolchain.check_integrity()
         second = toolchain.check_integrity()
@@ -137,7 +137,7 @@ class TestSidecarIntegrity(_ResetCacheMixin, unittest.TestCase):
     """Sidecar.to_dict() includes cli_integrity and cli_modified fields."""
 
     @mock.patch(
-        "dde.core.provenance.check_integrity",
+        "oase.core.provenance.check_integrity",
         return_value=toolchain.ToolchainState("v0.3.0", False, []),
     )
     def test_clean_sidecar(self, _mock):
@@ -148,7 +148,7 @@ class TestSidecarIntegrity(_ResetCacheMixin, unittest.TestCase):
         self.assertNotIn("cli_modified_note", d)
 
     @mock.patch(
-        "dde.core.provenance.check_integrity",
+        "oase.core.provenance.check_integrity",
         return_value=toolchain.ToolchainState(
             "v0.3.0-dirty", True, ["core/provenance.py"]
         ),
@@ -161,7 +161,7 @@ class TestSidecarIntegrity(_ResetCacheMixin, unittest.TestCase):
         self.assertIn("uncommitted modifications", d["cli_modified_note"])
 
     @mock.patch(
-        "dde.core.provenance.check_integrity",
+        "oase.core.provenance.check_integrity",
         return_value=toolchain.ToolchainState("installed", False, []),
     )
     def test_installed_sidecar(self, _mock):
@@ -180,7 +180,7 @@ class TestDoctorToolchainClean(_ResetCacheMixin, unittest.TestCase):
     """Doctor check reports OK on clean source."""
 
     @mock.patch(
-        "dde.commands.doctor.check_integrity",
+        "oase.commands.doctor.check_integrity",
         return_value=toolchain.ToolchainState("v0.3.0", False, []),
     )
     def test_clean(self, _mock):
@@ -197,7 +197,7 @@ class TestDoctorToolchainDirty(_ResetCacheMixin, unittest.TestCase):
     """Doctor check reports WARN with modified files on dirty source."""
 
     @mock.patch(
-        "dde.commands.doctor.check_integrity",
+        "oase.commands.doctor.check_integrity",
         return_value=toolchain.ToolchainState(
             "v0.3.0-dirty",
             True,
@@ -220,7 +220,7 @@ class TestDoctorToolchainInstalled(_ResetCacheMixin, unittest.TestCase):
     """Doctor check reports OK for installed package."""
 
     @mock.patch(
-        "dde.commands.doctor.check_integrity",
+        "oase.commands.doctor.check_integrity",
         return_value=toolchain.ToolchainState("installed", False, []),
     )
     def test_installed(self, _mock):
@@ -237,7 +237,7 @@ class TestDoctorToolchainUnknown(_ResetCacheMixin, unittest.TestCase):
     """Doctor check reports WARN when git is unavailable."""
 
     @mock.patch(
-        "dde.commands.doctor.check_integrity",
+        "oase.commands.doctor.check_integrity",
         return_value=toolchain.ToolchainState("unknown", False, []),
     )
     def test_unknown(self, _mock):
@@ -259,7 +259,7 @@ class TestCLIDirtyWarning(_ResetCacheMixin, unittest.TestCase):
     """CLI emits stderr warning on dirty source."""
 
     @mock.patch(
-        "dde.cli.check_integrity",
+        "oase.cli.check_integrity",
         return_value=toolchain.ToolchainState(
             "v0.3.0-dirty", True, ["a.py", "b.py", "c.py"]
         ),
@@ -268,39 +268,39 @@ class TestCLIDirtyWarning(_ResetCacheMixin, unittest.TestCase):
         """The cli group callback prints a warning to stderr on dirty source."""
         from click.testing import CliRunner
 
-        from dde.cli import cli
+        from oase.cli import cli
 
         runner = CliRunner(mix_stderr=False)
-        env = {k: v for k, v in os.environ.items() if k != "DDE_NO_DIRTY_WARNING"}
+        env = {k: v for k, v in os.environ.items() if k != "OASE_NO_DIRTY_WARNING"}
         result = runner.invoke(cli, ["--version"], env=env)
         self.assertIn("uncommitted modifications", result.stderr)
         self.assertIn("3 files", result.stderr)
 
     @mock.patch(
-        "dde.cli.check_integrity",
+        "oase.cli.check_integrity",
         return_value=toolchain.ToolchainState("v0.3.0-dirty", True, ["a.py"]),
     )
     def test_warning_suppressed(self, _mock):
-        """DDE_NO_DIRTY_WARNING=1 suppresses the stderr warning."""
+        """OASE_NO_DIRTY_WARNING=1 suppresses the stderr warning."""
         from click.testing import CliRunner
 
-        from dde.cli import cli
+        from oase.cli import cli
 
         runner = CliRunner(mix_stderr=False)
         env = dict(os.environ)
-        env["DDE_NO_DIRTY_WARNING"] = "1"
+        env["OASE_NO_DIRTY_WARNING"] = "1"
         result = runner.invoke(cli, ["--version"], env=env)
         self.assertNotIn("uncommitted modifications", result.stderr)
 
     @mock.patch(
-        "dde.cli.check_integrity",
+        "oase.cli.check_integrity",
         return_value=toolchain.ToolchainState("v0.3.0", False, []),
     )
     def test_no_warning_when_clean(self, _mock):
         """No warning when source is clean."""
         from click.testing import CliRunner
 
-        from dde.cli import cli
+        from oase.cli import cli
 
         runner = CliRunner(mix_stderr=False)
         result = runner.invoke(cli, ["--version"])

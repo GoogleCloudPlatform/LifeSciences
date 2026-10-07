@@ -41,14 +41,14 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.pathway import (
+from oase.commands.pathway import (
     _build_output,
     _resolve_uniprot_accession,
     _search_go,
     _search_reactome,
     analyze_cmd,
 )
-from dde.core.errors import ArtifactError, Refusal
+from oase.core.errors import ArtifactError, Refusal
 
 # ---------------------------------------------------------------------------
 # 1. _resolve_uniprot_accession tests
@@ -60,7 +60,7 @@ def test_resolve_uniprot_accession_happy() -> None:
     mock_response = {
         "results": [{"primaryAccession": "P38398"}],
     }
-    with mock.patch("dde.commands.pathway.http.get_json") as mock_get:
+    with mock.patch("oase.commands.pathway.http.get_json") as mock_get:
         mock_get.return_value = mock_response
         accession = _resolve_uniprot_accession("BRCA1")
 
@@ -75,7 +75,7 @@ def test_resolve_uniprot_accession_happy() -> None:
 def test_resolve_uniprot_accession_not_found() -> None:
     """An unknown gene symbol raises Refusal."""
     mock_response: dict[str, Any] = {"results": []}
-    with mock.patch("dde.commands.pathway.http.get_json") as mock_get:
+    with mock.patch("oase.commands.pathway.http.get_json") as mock_get:
         mock_get.return_value = mock_response
         try:
             _resolve_uniprot_accession("NOTAGENE")
@@ -88,7 +88,7 @@ def test_resolve_uniprot_accession_not_found() -> None:
 def test_resolve_uniprot_accession_empty_accession() -> None:
     """A record with an empty accession raises Refusal."""
     mock_response: dict[str, Any] = {"results": [{"primaryAccession": ""}]}
-    with mock.patch("dde.commands.pathway.http.get_json") as mock_get:
+    with mock.patch("oase.commands.pathway.http.get_json") as mock_get:
         mock_get.return_value = mock_response
         try:
             _resolve_uniprot_accession("BROKEN")
@@ -125,7 +125,7 @@ def test_search_reactome_happy() -> None:
     payload = _make_reactome_response(reactome_entries)
     raw_bytes = json.dumps(payload).encode("utf-8")
 
-    with mock.patch("dde.commands.pathway.http.request") as mock_req:
+    with mock.patch("oase.commands.pathway.http.request") as mock_req:
         mock_resp = mock.Mock()
         mock_resp.content = raw_bytes
         mock_req.return_value = mock_resp
@@ -145,7 +145,7 @@ def test_search_reactome_empty() -> None:
     payload: dict[str, Any] = {"results": []}
     raw_bytes = json.dumps(payload).encode("utf-8")
 
-    with mock.patch("dde.commands.pathway.http.request") as mock_req:
+    with mock.patch("oase.commands.pathway.http.request") as mock_req:
         mock_resp = mock.Mock()
         mock_resp.content = raw_bytes
         mock_req.return_value = mock_resp
@@ -161,7 +161,7 @@ def test_search_reactome_url_encoding() -> None:
     payload: dict[str, Any] = {"results": []}
     raw_bytes = json.dumps(payload).encode("utf-8")
 
-    with mock.patch("dde.commands.pathway.http.request") as mock_req:
+    with mock.patch("oase.commands.pathway.http.request") as mock_req:
         mock_resp = mock.Mock()
         mock_resp.content = raw_bytes
         mock_req.return_value = mock_resp
@@ -212,8 +212,8 @@ def test_search_go_happy() -> None:
     quickgo_raw = json.dumps(quickgo_payload).encode("utf-8")
 
     with (
-        mock.patch("dde.commands.pathway.http.get_json") as mock_get,
-        mock.patch("dde.commands.pathway.http.request") as mock_req,
+        mock.patch("oase.commands.pathway.http.get_json") as mock_get,
+        mock.patch("oase.commands.pathway.http.request") as mock_req,
     ):
         mock_get.return_value = uniprot_response
         mock_resp = mock.Mock()
@@ -245,8 +245,8 @@ def test_search_go_empty() -> None:
     quickgo_raw = json.dumps(quickgo_payload).encode("utf-8")
 
     with (
-        mock.patch("dde.commands.pathway.http.get_json") as mock_get,
-        mock.patch("dde.commands.pathway.http.request") as mock_req,
+        mock.patch("oase.commands.pathway.http.get_json") as mock_get,
+        mock.patch("oase.commands.pathway.http.request") as mock_req,
     ):
         mock_get.return_value = uniprot_response
         mock_resp = mock.Mock()
@@ -293,8 +293,8 @@ def test_search_go_evidence_diversity() -> None:
     quickgo_raw = json.dumps(quickgo_payload).encode("utf-8")
 
     with (
-        mock.patch("dde.commands.pathway.http.get_json") as mock_get,
-        mock.patch("dde.commands.pathway.http.request") as mock_req,
+        mock.patch("oase.commands.pathway.http.get_json") as mock_get,
+        mock.patch("oase.commands.pathway.http.request") as mock_req,
     ):
         mock_get.return_value = uniprot_response
         mock_resp = mock.Mock()
@@ -336,8 +336,8 @@ def test_search_go_dedup_same_evidence() -> None:
     quickgo_raw = json.dumps(quickgo_payload).encode("utf-8")
 
     with (
-        mock.patch("dde.commands.pathway.http.get_json") as mock_get,
-        mock.patch("dde.commands.pathway.http.request") as mock_req,
+        mock.patch("oase.commands.pathway.http.get_json") as mock_get,
+        mock.patch("oase.commands.pathway.http.request") as mock_req,
     ):
         mock_get.return_value = uniprot_response
         mock_resp = mock.Mock()
@@ -360,8 +360,8 @@ def test_search_go_url_encoding() -> None:
     quickgo_raw = json.dumps(quickgo_payload).encode("utf-8")
 
     with (
-        mock.patch("dde.commands.pathway.http.get_json") as mock_get,
-        mock.patch("dde.commands.pathway.http.request") as mock_req,
+        mock.patch("oase.commands.pathway.http.get_json") as mock_get,
+        mock.patch("oase.commands.pathway.http.request") as mock_req,
     ):
         mock_get.return_value = uniprot_response
         mock_resp = mock.Mock()
@@ -382,7 +382,7 @@ def test_search_go_url_encoding() -> None:
 def test_search_go_uniprot_resolution_failure() -> None:
     """If UniProt cannot resolve the gene symbol, _search_go raises Refusal."""
     uniprot_response: dict[str, Any] = {"results": []}
-    with mock.patch("dde.commands.pathway.http.get_json") as mock_get:
+    with mock.patch("oase.commands.pathway.http.get_json") as mock_get:
         mock_get.return_value = uniprot_response
         try:
             _search_go("NOTAGENE")
@@ -398,7 +398,7 @@ def test_search_go_uniprot_resolution_failure() -> None:
 
 
 def test_build_output_reactome_schema() -> None:
-    """Reactome output uses dde.pathway-reactome.v1 schema."""
+    """Reactome output uses oase.pathway-reactome.v1 schema."""
     entries = [
         {
             "source_db": "reactome",
@@ -415,8 +415,8 @@ def test_build_output_reactome_schema() -> None:
     ]
     result = _build_output("BRCA1", "reactome", entries)
 
-    assert result["schema"] == "dde.pathway-reactome.v1", (
-        f"Expected schema 'dde.pathway-reactome.v1', got {result['schema']!r}"
+    assert result["schema"] == "oase.pathway-reactome.v1", (
+        f"Expected schema 'oase.pathway-reactome.v1', got {result['schema']!r}"
     )
     assert result["query"]["gene"] == "BRCA1"
     assert result["query"]["source"] == "reactome"
@@ -427,7 +427,7 @@ def test_build_output_reactome_schema() -> None:
 
 
 def test_build_output_go_schema() -> None:
-    """GO output uses dde.pathway-go.v1 schema."""
+    """GO output uses oase.pathway-go.v1 schema."""
     entries = [
         {
             "source_db": "go",
@@ -439,8 +439,8 @@ def test_build_output_go_schema() -> None:
     ]
     result = _build_output("BRCA1", "go", entries)
 
-    assert result["schema"] == "dde.pathway-go.v1", (
-        f"Expected schema 'dde.pathway-go.v1', got {result['schema']!r}"
+    assert result["schema"] == "oase.pathway-go.v1", (
+        f"Expected schema 'oase.pathway-go.v1', got {result['schema']!r}"
     )
     assert result["query"]["gene"] == "BRCA1"
     assert result["query"]["source"] == "go"
@@ -510,9 +510,9 @@ def _invoke_analyze(
     analysis_out_path = tmp / f"{resolved}.{suffix}.analysis.json"
 
     with (
-        mock.patch("dde.commands.pathway.emitter", return_value=mock_emit),
+        mock.patch("oase.commands.pathway.emitter", return_value=mock_emit),
         mock.patch(
-            "dde.commands.pathway.provenance.write_analysis",
+            "oase.commands.pathway.provenance.write_analysis",
             return_value=analysis_out_path,
         ),
     ):
@@ -643,7 +643,7 @@ def test_analyze_missing_file() -> None:
 
         mock_emit = mock.MagicMock()
 
-        with mock.patch("dde.commands.pathway.emitter", return_value=mock_emit):
+        with mock.patch("oase.commands.pathway.emitter", return_value=mock_emit):
             try:
                 analyze_cmd.callback(
                     mock_state,
@@ -695,9 +695,9 @@ def test_analyze_relays_attached() -> None:
         mock_state.project.return_value = mock_project
 
         with (
-            mock.patch("dde.commands.pathway.emitter", return_value=mock_emit),
+            mock.patch("oase.commands.pathway.emitter", return_value=mock_emit),
             mock.patch(
-                "dde.commands.pathway.provenance.write_analysis",
+                "oase.commands.pathway.provenance.write_analysis",
                 return_value=analysis_out_path,
             ) as mock_wa,
         ):
@@ -821,8 +821,8 @@ def test_search_go_pagination() -> None:
         return resp
 
     with (
-        mock.patch("dde.commands.pathway.http.get_json") as mock_get,
-        mock.patch("dde.commands.pathway.http.request") as mock_req,
+        mock.patch("oase.commands.pathway.http.get_json") as mock_get,
+        mock.patch("oase.commands.pathway.http.request") as mock_req,
     ):
         mock_get.return_value = uniprot_response
         mock_req.side_effect = mock_request_side_effect
@@ -859,8 +859,8 @@ def test_search_go_single_page() -> None:
     quickgo_raw = json.dumps(quickgo_payload).encode("utf-8")
 
     with (
-        mock.patch("dde.commands.pathway.http.get_json") as mock_get,
-        mock.patch("dde.commands.pathway.http.request") as mock_req,
+        mock.patch("oase.commands.pathway.http.get_json") as mock_get,
+        mock.patch("oase.commands.pathway.http.request") as mock_req,
     ):
         mock_get.return_value = uniprot_response
         mock_resp = mock.Mock()
@@ -892,7 +892,7 @@ def test_filename_uses_resolved_gene_not_name() -> None:
     # construction) and by checking that _build_output uses the gene symbol.
     import inspect
 
-    from dde.commands import pathway
+    from oase.commands import pathway
 
     source = inspect.getsource(pathway.search_cmd.callback)
 
@@ -919,7 +919,7 @@ def test_url_encoding_special_characters_reactome() -> None:
     payload: dict[str, Any] = {"results": []}
     raw_bytes = json.dumps(payload).encode("utf-8")
 
-    with mock.patch("dde.commands.pathway.http.request") as mock_req:
+    with mock.patch("oase.commands.pathway.http.request") as mock_req:
         mock_resp = mock.Mock()
         mock_resp.content = raw_bytes
         mock_req.return_value = mock_resp
@@ -935,7 +935,7 @@ def test_url_encoding_special_characters_reactome() -> None:
 def test_url_encoding_uniprot_resolver() -> None:
     """Gene symbols with special characters are encoded in UniProt URL."""
     mock_response: dict[str, Any] = {"results": []}
-    with mock.patch("dde.commands.pathway.http.get_json") as mock_get:
+    with mock.patch("oase.commands.pathway.http.get_json") as mock_get:
         mock_get.return_value = mock_response
         try:
             _resolve_uniprot_accession("GENE#TAG")
@@ -954,9 +954,9 @@ def test_url_encoding_uniprot_resolver() -> None:
 
 def test_search_reactome_non_json_response() -> None:
     """Reactome returning non-JSON raises SchemaError."""
-    from dde.core.errors import SchemaError
+    from oase.core.errors import SchemaError
 
-    with mock.patch("dde.commands.pathway.http.request") as mock_req:
+    with mock.patch("oase.commands.pathway.http.request") as mock_req:
         mock_resp = mock.Mock()
         mock_resp.content = b"<html>Server Error</html>"
         mock_req.return_value = mock_resp
@@ -971,13 +971,13 @@ def test_search_reactome_non_json_response() -> None:
 
 def test_search_go_non_json_response() -> None:
     """QuickGO returning non-JSON raises SchemaError."""
-    from dde.core.errors import SchemaError
+    from oase.core.errors import SchemaError
 
     uniprot_response = {"results": [{"primaryAccession": "P38398"}]}
 
     with (
-        mock.patch("dde.commands.pathway.http.get_json") as mock_get,
-        mock.patch("dde.commands.pathway.http.request") as mock_req,
+        mock.patch("oase.commands.pathway.http.get_json") as mock_get,
+        mock.patch("oase.commands.pathway.http.request") as mock_req,
     ):
         mock_get.return_value = uniprot_response
         mock_resp = mock.Mock()
@@ -999,7 +999,7 @@ def test_search_go_non_json_response() -> None:
 
 def test_dead_constants_removed() -> None:
     """GO_API and GO_QPS constants should no longer exist (O1 fix)."""
-    from dde.commands import pathway
+    from oase.commands import pathway
 
     assert not hasattr(pathway, "GO_API"), (
         "GO_API constant should have been removed (O1 fix)"

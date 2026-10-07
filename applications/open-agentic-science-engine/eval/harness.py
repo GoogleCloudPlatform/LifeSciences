@@ -44,13 +44,13 @@ if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
 from click.testing import CliRunner  # noqa: E402
-from dde.cli import cli  # noqa: E402
-from dde.core.controlstore import (  # noqa: E402
+from oase.cli import cli  # noqa: E402
+from oase.core.controlstore import (  # noqa: E402
     ensure_control_dirs,
     read_record,
     write_record,
 )
-from dde.core.statemachine import (  # noqa: E402
+from oase.core.statemachine import (  # noqa: E402
     validate_transition,
 )
 
@@ -70,7 +70,7 @@ def _make_project(base: Path, name: str = "eval-project") -> Path:
     """Create a minimal OASE project directory with control plane."""
     project = base / name
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     # Create standard raw/ subdirectories
     for subdir in [
@@ -289,7 +289,7 @@ def _run_no_genetic_support(
     if current_state == "submitted":
         # Create a run record so validate check can find the submission
         _now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        from dde.core.controlstore import next_id
+        from oase.core.controlstore import next_id
 
         run_id = next_id(project, "run")
         run_rec = {

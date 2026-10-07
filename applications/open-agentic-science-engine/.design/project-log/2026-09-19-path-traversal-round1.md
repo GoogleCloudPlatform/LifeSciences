@@ -1,14 +1,14 @@
 # Path Traversal Fixes — Round 1
 
 **Date:** 2026-09-19
-**Branch:** DDE
+**Branch:** OASE
 **Issues:** #252, #249, #258, #265, #268, #260, #273
 
 ## Summary
 
 Fixed 7 path traversal vulnerabilities across the OASE toolchain. Each fix
 applies the existing `sanitize_slug()` and/or `confine_path()` helpers from
-`dde.core.paths` to user-controlled input before it reaches path construction.
+`oase.core.paths` to user-controlled input before it reaches path construction.
 
 ## Changes
 

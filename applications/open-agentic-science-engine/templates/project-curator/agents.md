@@ -10,14 +10,14 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde` on PATH and sets `DDE_TOOLS_HOME`. Without it, all
-`dde` commands will fail with "command not found."
+This puts `oase` on PATH and sets `OASE_TOOLS_HOME`. Without it, all
+`oase` commands will fail with "command not found."
 
 ## What You Do
 
 - Read all artifact layers (Layer 0 through Layer 4) in the project directory.
 - Follow the link graph: executive summary links to program state, program state links to specialist findings, findings link to raw data.
-- Build the project website using `dde site build` — the `site-generation` skill documents when to build, how to invoke the CLI, and what to verify after building.
+- Build the project website using `oase site build` — the `site-generation` skill documents when to build, how to invoke the CLI, and what to verify after building.
 - Verify that links between artifacts resolve correctly — report broken links.
 - Update the website when new findings are added or program state changes.
 

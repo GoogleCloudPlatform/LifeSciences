@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for `dde structure superimpose` and `dde docking validate-pose` (#140).
+"""Tests for `oase structure superimpose` and `oase docking validate-pose` (#140).
 
 Covers:
   - Ca RMSD on identical structures = 0.0
@@ -41,13 +41,13 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.docking import (
+from oase.commands.docking import (
     _compute_ligand_rmsd,
     _parse_heavy_atoms_mol2,
     _parse_heavy_atoms_pdb,
     _parse_heavy_atoms_sdf,
 )
-from dde.commands.structure import (
+from oase.commands.structure import (
     _align_sequences,
     _collect_residues,
     _kabsch_superimpose,
@@ -55,7 +55,7 @@ from dde.commands.structure import (
     _sequence_from_residues,
     _write_transformed_pdb,
 )
-from dde.core.errors import ArtifactError
+from oase.core.errors import ArtifactError
 
 # ---------------------------------------------------------------------------
 # Sample PDB content — identical structures
@@ -654,7 +654,7 @@ def test_superposition_artifact_schema() -> None:
     """Superposition artifact contains all required fields."""
     # Simulate building the artifact record (same as the command does)
     record: dict[str, Any] = {
-        "schema": "dde.structure-superposition.v1",
+        "schema": "oase.structure-superposition.v1",
         "global_rmsd": 1.234,
         "matched_residues": 100,
         "total_ref": 120,
@@ -682,13 +682,13 @@ def test_superposition_artifact_schema() -> None:
     assert "per_residue_distances" in record
     assert "ref_file" in record
     assert "mobile_file" in record
-    assert record["schema"] == "dde.structure-superposition.v1"
+    assert record["schema"] == "oase.structure-superposition.v1"
 
 
 def test_pose_validation_artifact_schema() -> None:
     """Pose validation artifact contains all required fields."""
     record: dict[str, Any] = {
-        "schema": "dde.docking-pose-validation.v1",
+        "schema": "oase.docking-pose-validation.v1",
         "rmsd": 1.5,
         "threshold": 2.0,
         "pass": True,
@@ -704,7 +704,7 @@ def test_pose_validation_artifact_schema() -> None:
     assert "n_atoms" in record
     assert "reference_file" in record
     assert "pose_file" in record
-    assert record["schema"] == "dde.docking-pose-validation.v1"
+    assert record["schema"] == "oase.docking-pose-validation.v1"
 
 
 # ---------------------------------------------------------------------------
@@ -714,7 +714,7 @@ def test_pose_validation_artifact_schema() -> None:
 
 def test_relay_codes_registered() -> None:
     """New relay codes are registered in RELAY_CODES."""
-    from dde.core.provenance import RELAY_CODES
+    from oase.core.provenance import RELAY_CODES
 
     assert "structure.low_sequence_identity" in RELAY_CODES
     assert "docking.no_pose_control" in RELAY_CODES

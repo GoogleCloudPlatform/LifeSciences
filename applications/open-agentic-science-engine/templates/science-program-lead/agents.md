@@ -57,10 +57,10 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde` on PATH and sets `DDE_TOOLS_HOME`. Without it, all
-`dde` commands will fail with "command not found."
+This puts `oase` on PATH and sets `OASE_TOOLS_HOME`. Without it, all
+`oase` commands will fail with "command not found."
 
-Run `dde doctor` before you plan anything. It reports which tools are actually
+Run `oase doctor` before you plan anything. It reports which tools are actually
 available in this environment. Plan against what it says, not against what this
 document or the design docs describe as intended.
 
@@ -235,7 +235,7 @@ only to have its deliverables rejected because the inputs were never available.
 Every decision recorded in `decision-log.md` must carry the capability state at
 decision time. Before recording a decision:
 
-1. Run `dde doctor --json` (or `dde doctor` if the JSON format is not yet
+1. Run `oase doctor --json` (or `oase doctor` if the JSON format is not yet
    available) to check current capability state.
 2. If any capability relevant to the decision method is unavailable or degraded,
    record it in the decision entry's `capability_state` field.
@@ -264,8 +264,8 @@ document that depends on it, must be able to see the degradation without finding
 separate prose disclosure in an earlier entry. Mandatory relays already enforce this
 for findings; `capability_state` enforces it for decisions.
 
-If `dde doctor --json` is not yet available, record capability state manually by
-running `dde doctor`, reading its output, and transcribing the relevant unavailable
+If `oase doctor --json` is not yet available, record capability state manually by
+running `oase doctor`, reading its output, and transcribing the relevant unavailable
 capabilities into the decision entry. The structured field is preferred when
 available; the manual fallback ensures the information is captured regardless.
 
@@ -340,7 +340,7 @@ not fall back to ELO ranking alone.
 #### Adopted
 
 For sponsor-supplied, prior-program, or published hypothesis sets adopted via
-`dde hypothesis adopt`, read the assessment from `dde hypothesis analyze`. The
+`oase hypothesis adopt`, read the assessment from `oase hypothesis analyze`. The
 `hypothesis.adopted_not_generated` mandatory relay marks the provenance chain as
 terminating at the attestation. Quote the attestation verbatim in any finding. The
 `hypothesis.unranked_set` relay, when present, forbids treating array order as rank.
@@ -356,16 +356,16 @@ internal Hypex worker types; neither the lead nor controller dispatches those
 workers directly.
 
 The completed supervisor run produces the native append-only Hypex datastore,
-then `dde hypex ingest` and `dde hypex analyze` publish it into OASE Layer 0.
+then `oase hypex ingest` and `oase hypex analyze` publish it into OASE Layer 0.
 The assessment has its own scoring basis: match ledger, Elo rankings, proximity
 clustering, and merge recommendations. Handle it analogously to the co-scientist
 branch, substituting the Hypex-specific analysis output. Do not accept a chat
 summary in place of the normalized artifact and assessment paths.
 
-If the hypothesis-exploration capability is unavailable (check `dde doctor`), the
+If the hypothesis-exploration capability is unavailable (check `oase doctor`), the
 program falls back to a different strategy (typically `charter`). When this happens:
 - The `hypothesis.strategy_fallback` relay fires automatically (if using
-  `dde hypothesis adopt`).
+  `oase hypothesis adopt`).
 - Record the fallback in the decision record's `capability_state` field (see
   "Capability state in decision records" in section 4).
 - Name what the tournament stack would have provided and what the fallback method
@@ -460,15 +460,15 @@ in §5 to cover the full set of pivotal rationale checks:
   independently confirmed, or are key claims contradicted/unverified?
 
 These checks use existing tools and the foundational claim review mechanics from
-#25/#26. The pre-mortem/dissent review step (#76, `tools/dde/core/premortem.py`)
+#25/#26. The pre-mortem/dissent review step (#76, `tools/oase/core/premortem.py`)
 extends claim review for gate-critical assessments.
 
 **Workstream 2: Modality tractability.**
 Assess whether the target can be modulated by the proposed modality. This
 workstream uses:
 
-- `dde structure-screen run` (#38) for scoped rapid structural assessment
-- Competitive landscape / FTO screen via `dde differentiation assess` (#37) for
+- `oase structure-screen run` (#38) for scoped rapid structural assessment
+- Competitive landscape / FTO screen via `oase differentiation assess` (#37) for
   competitive positioning and freedom-to-operate
 
 The three dimensions of competitive differentiation (competitor activity,
@@ -480,7 +480,7 @@ despite crowding."
 **Workstream 3: Preliminary manufacturing feasibility.**
 Screen production/product feasibility for the likely modality using:
 
-- `dde manufacturing assess-stage0` (#23) for progressive manufacturing assessment
+- `oase manufacturing assess-stage0` (#23) for progressive manufacturing assessment
 
 This workstream produces `not_yet_applicable` when no physical entity exists —
 that is the correct Stage 0 behavior, not a failure or a veto. Manufacturing
@@ -551,7 +551,7 @@ Stage 0 records rejections from two distinct sources, and they must not be
 conflated:
 
 - **Program-constraint rejection** cites an applicable policy (GP-NNN from #11,
-  `tools/dde/core/policy.py`). Example: "The charter excludes gene therapy
+  `tools/oase/core/policy.py`). Example: "The charter excludes gene therapy
   modalities."
 - **Scientific refutation** cites a pivotal assessment (AR-NNN). Example:
   "Mechanism-direction evidence contradicts the proposed mode of action."
@@ -605,7 +605,7 @@ the decision rationale.
 `authorized_next_work` field lists the specific checks pre-authorized for
 the backup:
 
-- `structure-screen` — structural assessment via `dde structure-screen run`
+- `structure-screen` — structural assessment via `oase structure-screen run`
 - `safety-expression-constraint` — safety screen via expression and genetic
   constraint workstreams
 
@@ -672,7 +672,7 @@ provenance and score basis:
 |---|---|---|
 | Co-Scientist | Concept records derived from tournament recommendation | ELO ranking, review panel recommendation, claim accuracy |
 | Hypex | Concept records derived from Hypex assessment | Hypex scoring basis |
-| Adopted | Concept records from `dde hypothesis adopt` | Attestation, unranked-set relay |
+| Adopted | Concept records from `oase hypothesis adopt` | Attestation, unranked-set relay |
 | Charter | Concept records from charter-authored hypotheses | Charter decision reference |
 
 The `hypothesis.adopted_not_generated` and `hypothesis.unranked_set` relays
@@ -986,7 +986,7 @@ The pre-clinical pipeline is invariant. Routing *within* a stage is dynamic.
 > The table above names the **dimensions** each gate tests. It deliberately carries no
 > numbers.
 >
-> Gate threshold values are program policy. They belong in `.dde/program.yaml`,
+> Gate threshold values are program policy. They belong in `.oase/program.yaml`,
 > versioned, and are frozen into the evidence snapshot at step 1 so a gate decision
 > can be re-audited against the policy in force when it was made. **That file's schema
 > does not exist yet.**
@@ -1029,8 +1029,8 @@ checks below still apply as Stage 1 prerequisites before Cohort B:
    in the right direction?
 3. Competitive landscape / FTO screen — is there freedom to operate on this target?
 
-   > **FTO disclaimer:** Patent search results from `dde patent` and
-   > `dde differentiation` are based on public database searches and publicly
+   > **FTO disclaimer:** Patent search results from `oase patent` and
+   > `oase differentiation` are based on public database searches and publicly
    > available information. A public search or structural similarity analysis is
    > **not formal legal clearance**. Material FTO conclusions require a formal
    > freedom-to-operate opinion by qualified patent counsel. Always state search
@@ -1107,7 +1107,7 @@ Approved templates: `structural-biologist`, `computational-biologist`,
 > **Snapshot — last revised 2026-08-20, decays from that moment.** It has already been
 > falsified twice within an hour of being written, both times by a skill landing. Read
 > it as a lower bound on what the roles can do, never an upper one. Verify current
-> availability via `dde --help` or `dde doctor` before treating any absence claim as
+> availability via `oase --help` or `oase doctor` before treating any absence claim as
 > authoritative — this table has been falsified by new releases and is not kept in
 > sync with the CLI.
 >
@@ -1134,7 +1134,7 @@ Approved templates: `structural-biologist`, `computational-biologist`,
 > for an answer.** A question no role can source is a gap in the toolkit: record it in
 > `program-state/open-questions.md` and raise it.
 >
-> Plan around what `dde doctor` confirms is available. Docking, binding-mode analysis,
+> Plan around what `oase doctor` confirms is available. Docking, binding-mode analysis,
 > assay data ingestion, ADMET prediction, SAR series analysis, in vivo PK (NCA, allometric
 > scaling, DDI), and preclinical safety assessment (tox interpretation, TI, hERG margins,
 > genotoxicity) are now available. The principal remaining gaps include: virtual screening orchestration,
@@ -1213,8 +1213,8 @@ not binding.
     portfolio-level result before target commitment.
 16. **Screen for competitive landscape and FTO before structural work.** Before
     committing to Cohort B characterization, verify there is freedom to operate on
-    the target using `dde patent`, `dde differentiation`, `dde trials`, and
-    `dde pubchem` (section 9). Patent search results are not formal legal clearance;
+    the target using `oase patent`, `oase differentiation`, `oase trials`, and
+    `oase pubchem` (section 9). Patent search results are not formal legal clearance;
     material FTO conclusions require qualified patent counsel.
 17. **Do not aggregate tool outputs into naive kill rules.** Stage 0 presents
     tool evidence to the lead for a reviewed decision. It must not collapse
@@ -1248,7 +1248,7 @@ not binding.
 These values were carried in an earlier version of this template with no recorded
 provenance. They are preserved only so the discussion that sets real policy has a
 starting point. Each needs to be confirmed, replaced, or dropped by the user, and then
-recorded in `.dde/program.yaml` and the charter.
+recorded in `.oase/program.yaml` and the charter.
 
 - Stage 1: genome-wide significance p < 5e-8, or a replicated Mendelian causal variant;
   binding pocket with pLDDT > 75 or a confirmed druggable interface; LOEUF > 0.35;

@@ -43,7 +43,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     return project
 
 
@@ -66,7 +66,7 @@ def _make_allen_artifact(
     slug = slug or "allen-search"
 
     artifact: dict[str, Any] = {
-        "schema": "dde.allen-search.v1",
+        "schema": "oase.allen-search.v1",
         "query": {"gene": query, "organism": "Homo sapiens"},
         "genes": genes if genes is not None else [],
         "datasets": datasets if datasets is not None else [],
@@ -85,7 +85,7 @@ def test_allen_relay_fires_with_empty_datasets() -> None:
     false negative inferences about peripheral tissue expression.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -119,7 +119,7 @@ def test_allen_relay_fires_with_empty_datasets() -> None:
 def test_allen_relay_fires_with_nonempty_datasets() -> None:
     """Sanity check: the relay also fires when datasets are present."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -211,7 +211,7 @@ def test_conservation_low_coverage_relay_fires() -> None:
     positions are scored (coverage = 10%).
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -264,7 +264,7 @@ def test_conservation_coverage_without_canonical_length_field() -> None:
     low_coverage relay still fires.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -316,7 +316,7 @@ def _make_compreg_meta(project: Path, identifier: str = "aspirin") -> Path:
     """Write a minimal compreg resolve sidecar (meta.json) without any
     registry response files.
     """
-    from dde.commands.compreg import _classify, _slug
+    from oase.commands.compreg import _classify, _slug
 
     kind, value = _classify(identifier)
     slug = _slug(kind, value)
@@ -340,7 +340,7 @@ def test_compreg_raises_when_no_registry_files() -> None:
     files are missing, not silently report 'not_found'.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -380,8 +380,8 @@ def test_compreg_raises_when_no_registry_files() -> None:
 def test_compreg_succeeds_with_registry_files() -> None:
     """Sanity check: compreg analyze succeeds when registry files exist."""
     from click.testing import CliRunner
-    from dde.cli import cli
-    from dde.commands.compreg import _classify, _slug
+    from oase.cli import cli
+    from oase.commands.compreg import _classify, _slug
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))

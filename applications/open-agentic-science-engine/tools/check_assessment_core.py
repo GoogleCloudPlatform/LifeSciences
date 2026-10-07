@@ -14,9 +14,9 @@
 # limitations under the License.
 
 """Check that all hypothesis-assessment producers use the assessment_core
-envelope and conform to the dde.hypothesis-assessment.v1 score shape.
+envelope and conform to the oase.hypothesis-assessment.v1 score shape.
 
-Three producers emit dde.hypothesis-assessment.v1:
+Three producers emit oase.hypothesis-assessment.v1:
 
   - hypothesis.py  (strategy: adopted — score is always null)
   - coscientist.py (strategy: co-scientist — score is {value, basis})
@@ -54,7 +54,7 @@ from pathlib import Path
 CANNOT_RUN = 2
 
 try:
-    from dde.core.assessment_schema import (
+    from oase.core.assessment_schema import (
         SCHEMA_TAG,
         validate_assessment_core,
         validate_score,
@@ -71,7 +71,7 @@ except Exception as exc:
 
 
 ROOT = Path(__file__).resolve().parent.parent
-COMMANDS = ROOT / "tools" / "dde" / "commands"
+COMMANDS = ROOT / "tools" / "oase" / "commands"
 
 #: The three producers that must all use the assessment_core envelope.
 PRODUCERS = ("hypothesis.py", "coscientist.py", "hypex.py")
@@ -101,7 +101,7 @@ def _find_flat_assessment_schema(tree: ast.Module) -> list[int]:
     Detects the pattern::
 
         assessment = {
-            "schema": "dde.hypothesis-assessment.v1",
+            "schema": "oase.hypothesis-assessment.v1",
             ...
         }
 

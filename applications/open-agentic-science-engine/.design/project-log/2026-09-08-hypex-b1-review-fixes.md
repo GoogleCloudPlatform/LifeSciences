@@ -12,7 +12,7 @@ B1 hypex integration.
 ## Changes
 
 ### 1. Pacing Persistence Bug (highest priority)
-- **File:** `tools/dde/commands/hypex.py`
+- **File:** `tools/oase/commands/hypex.py`
 - `_build_hypex_record` now includes `"pacing"` and `"progress"` in the returned
   record dict.
 - `analyze` reads pacing from `record.get("pacing")` instead of from the
@@ -28,18 +28,18 @@ B1 hypex integration.
   is emitted but installation proceeds.
 
 ### 3. Symlink Following (security MEDIUM)
-- **File:** `tools/dde/commands/hypex.py`
+- **File:** `tools/oase/commands/hypex.py`
 - `_walk_json_dir` now skips symlinks (`f.is_symlink() → continue`).
 - `_archive_run_dir` now uses a `_safe_filter` that strips symlinks and hard
   links from tar archives.
 
 ### 4. File Size Guards (security MEDIUM)
-- **File:** `tools/dde/commands/hypex.py`
+- **File:** `tools/oase/commands/hypex.py`
 - Added `MAX_INPUT_BYTES = 50 * 1024 * 1024` at module level.
 - `_walk_json_dir` raises `ArtifactError` for files exceeding the limit.
 
 ### 5. Broad Exception Catch (code review N1)
-- **File:** `tools/dde/commands/hypex.py`
+- **File:** `tools/oase/commands/hypex.py`
 - Changed `except Exception:` to `except ThresholdError:` for the
   `elo_decisive_gap` resolution block.
 - Added `ThresholdError` to the imports from `core.errors`.

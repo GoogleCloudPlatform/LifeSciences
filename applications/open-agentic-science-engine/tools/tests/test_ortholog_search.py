@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for ``dde homology orthologs`` — ortholog/paralog search.
+"""Tests for ``oase homology orthologs`` — ortholog/paralog search.
 
 Covers:
 1. UniProt ortholog query construction
@@ -37,13 +37,13 @@ _module_patches = patch.dict(
 )
 _module_patches.start()
 
-from dde.commands.homology import (  # noqa: E402
+from oase.commands.homology import (  # noqa: E402
     _UNIPROT_RE,
     _format_fasta,
     _resolve_gene_to_accession,
     _search_orthologs,
 )
-from dde.core.errors import UsageError  # noqa: E402
+from oase.core.errors import UsageError  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -98,7 +98,7 @@ class TestUniProtAccessionRegex(unittest.TestCase):
 class TestResolveGeneToAccession(unittest.TestCase):
     """_resolve_gene_to_accession resolves a gene symbol via UniProt search."""
 
-    @patch("dde.commands.homology.http.get_json")
+    @patch("oase.commands.homology.http.get_json")
     def test_resolves_gene(self, mock_get_json):
         mock_get_json.return_value = {"results": [{"primaryAccession": "P04637"}]}
         result = _resolve_gene_to_accession("TP53")
@@ -109,7 +109,7 @@ class TestResolveGeneToAccession(unittest.TestCase):
         self.assertIn("gene_exact:TP53", call_url)
         self.assertIn("reviewed:true", call_url)
 
-    @patch("dde.commands.homology.http.get_json")
+    @patch("oase.commands.homology.http.get_json")
     def test_raises_on_no_results(self, mock_get_json):
         mock_get_json.return_value = {"results": []}
         with self.assertRaises(UsageError) as ctx:
@@ -120,7 +120,7 @@ class TestResolveGeneToAccession(unittest.TestCase):
 class TestSearchOrthologs(unittest.TestCase):
     """_search_orthologs queries UniProt for orthologous sequences."""
 
-    @patch("dde.commands.homology.http.get_json")
+    @patch("oase.commands.homology.http.get_json")
     def test_basic_search(self, mock_get_json):
         mock_get_json.return_value = {
             "results": [
@@ -147,7 +147,7 @@ class TestSearchOrthologs(unittest.TestCase):
         self.assertEqual(orthologs[0]["accession"], "P04637")
         self.assertEqual(orthologs[1]["organism"], "Mus musculus")
 
-    @patch("dde.commands.homology.http.get_json")
+    @patch("oase.commands.homology.http.get_json")
     def test_organism_filter_in_query(self, mock_get_json):
         mock_get_json.return_value = {"results": []}
         _search_orthologs("TP53", max_orthologs=10, organism_filter="Mammalia")
@@ -155,7 +155,7 @@ class TestSearchOrthologs(unittest.TestCase):
         call_url = mock_get_json.call_args[0][0]
         self.assertIn("organism_name:Mammalia", call_url)
 
-    @patch("dde.commands.homology.http.get_json")
+    @patch("oase.commands.homology.http.get_json")
     def test_max_orthologs_in_query(self, mock_get_json):
         mock_get_json.return_value = {"results": []}
         _search_orthologs("TP53", max_orthologs=15, organism_filter=None)
@@ -163,7 +163,7 @@ class TestSearchOrthologs(unittest.TestCase):
         call_url = mock_get_json.call_args[0][0]
         self.assertIn("size=15", call_url)
 
-    @patch("dde.commands.homology.http.get_json")
+    @patch("oase.commands.homology.http.get_json")
     def test_empty_results(self, mock_get_json):
         mock_get_json.return_value = {"results": []}
         _gene, orthologs = _search_orthologs(
@@ -171,7 +171,7 @@ class TestSearchOrthologs(unittest.TestCase):
         )
         self.assertEqual(orthologs, [])
 
-    @patch("dde.commands.homology.http.get_json")
+    @patch("oase.commands.homology.http.get_json")
     def test_missing_fields_handled(self, mock_get_json):
         """Entries with missing optional fields don't crash."""
         mock_get_json.return_value = {

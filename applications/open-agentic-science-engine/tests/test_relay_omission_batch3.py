@@ -41,7 +41,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     return project
 
 
@@ -143,7 +143,7 @@ def test_manifest_present_false_when_citation_manifest_corrupt() -> None:
     file, so corrupt manifests silently suppressed the relay.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -197,7 +197,7 @@ def test_relay_fires_when_citation_manifest_corrupt() -> None:
     mandatory relay appears in the analysis output.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -265,7 +265,7 @@ def test_manifest_present_true_when_citation_manifest_valid() -> None:
     valid, and the hypex.citation_manifest_absent relay does NOT fire.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))

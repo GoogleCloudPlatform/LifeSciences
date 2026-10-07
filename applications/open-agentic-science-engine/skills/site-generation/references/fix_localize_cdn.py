@@ -21,9 +21,9 @@ in the built site, stores them in a ``vendor/`` directory, and rewrites HTML
 references to use local paths.  Handles transitive references such as
 Google Fonts CSS that pulls ``.woff2`` files from ``fonts.gstatic.com``.
 
-Run after ``dde site build`` and before verification::
+Run after ``oase site build`` and before verification::
 
-    dde site build
+    oase site build
     python3 fix_localize_cdn.py _site/
     # verify and serve
 

@@ -37,7 +37,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.paths import is_safe_to_open
+from oase.core.paths import is_safe_to_open
 
 # ---------------------------------------------------------------------------
 # Fix 1: admet.py — _safe_write_artifact symlink write-through (#248)

@@ -30,12 +30,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
-from dde.core import http
-from dde.core.errors import EndpointError, EndpointUnavailable
+from oase.core import http
+from oase.core.errors import EndpointError, EndpointUnavailable
 
 
 def _reload_ncbi(env: dict[str, str]):
-    """Reload ``dde.core.ncbi`` with a controlled environment.
+    """Reload ``oase.core.ncbi`` with a controlled environment.
 
     Returns the reloaded module so callers can inspect its exports.
     """
@@ -43,7 +43,7 @@ def _reload_ncbi(env: dict[str, str]):
         # Remove NCBI_API_KEY from env when not in `env` dict.
         if "NCBI_API_KEY" not in env:
             os.environ.pop("NCBI_API_KEY", None)
-        import dde.core.ncbi as ncbi_mod
+        import oase.core.ncbi as ncbi_mod
 
         importlib.reload(ncbi_mod)
         return ncbi_mod

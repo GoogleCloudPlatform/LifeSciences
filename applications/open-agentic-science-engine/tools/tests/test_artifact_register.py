@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for ``dde artifact register`` command (#87 Phase 2).
+"""Tests for ``oase artifact register`` command (#87 Phase 2).
 
 Covers:
   - register writes sidecar with correct fields
   - register refuses overwrite of existing .meta.json
-  - register sets work_order_id from $DDE_WORK_ORDER_ID
+  - register sets work_order_id from $OASE_WORK_ORDER_ID
   - register requires --source
   - register computes correct sha256 in outputs
   - register sets type: "registration" in sidecar
@@ -38,7 +38,7 @@ if str(TOOLS_DIR) not in sys.path:
 
 from click.testing import CliRunner  # noqa: E402
 
-from dde.cli import cli  # noqa: E402
+from oase.cli import cli  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -47,13 +47,13 @@ from dde.cli import cli  # noqa: E402
 
 @pytest.fixture()
 def project(tmp_path, monkeypatch):
-    """Create a minimal project directory and set DDE_PROJECT."""
+    """Create a minimal project directory and set OASE_PROJECT."""
     root = tmp_path / "program"
-    (root / ".dde").mkdir(parents=True)
+    (root / ".oase").mkdir(parents=True)
     (root / "raw" / "genomics").mkdir(parents=True)
-    monkeypatch.setenv("DDE_PROJECT", str(root))
+    monkeypatch.setenv("OASE_PROJECT", str(root))
     # Clear work order env var by default; individual tests set it.
-    monkeypatch.delenv("DDE_WORK_ORDER_ID", raising=False)
+    monkeypatch.delenv("OASE_WORK_ORDER_ID", raising=False)
     return root
 
 
@@ -130,8 +130,8 @@ def test_register_refuses_overwrite(project):
 
 
 def test_register_sets_work_order_id(project, monkeypatch):
-    """work_order_id in the sidecar comes from $DDE_WORK_ORDER_ID."""
-    monkeypatch.setenv("DDE_WORK_ORDER_ID", "WO-005")
+    """work_order_id in the sidecar comes from $OASE_WORK_ORDER_ID."""
+    monkeypatch.setenv("OASE_WORK_ORDER_ID", "WO-005")
     f = _write_file(project, "raw/genomics/msa.fasta", "ACGT")
 
     runner = CliRunner()

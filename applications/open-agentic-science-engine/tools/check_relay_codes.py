@@ -34,7 +34,7 @@ Three checks:
   1. **Every code in RELAY_CODES has at least one emission site** outside
      ``provenance.py``. Uses ``_enumerate_emission_sites()`` from ``cli.py``
      — the same two-pass method (direct source match, then module-helper
-     search) the ``dde relays`` command uses. Not reimplemented here.
+     search) the ``oase relays`` command uses. Not reimplemented here.
 
   2. **Every code string emitted anywhere is registered.** Currently enforced
      at runtime by ``provenance.relay()``, but at runtime is too late — it
@@ -80,19 +80,19 @@ CANNOT_RUN = 2
 #: Imported defensively, not because the import is optional, but because the
 #: failure has to be reportable as its own outcome rather than as a traceback.
 #: This checker imports the CLI to reuse ``_enumerate_emission_sites()`` for
-#: check 1, which needs click and the full dde package. A broad except is
+#: check 1, which needs click and the full oase package. A broad except is
 #: deliberate: a missing dependency raises ImportError, a half-installed one
 #: raises whatever the broken module raises, and both mean the same thing
 #: here — this checker never reached an opinion.
 try:
-    from dde.cli import _enumerate_emission_sites
-    from dde.core import provenance
+    from oase.cli import _enumerate_emission_sites
+    from oase.core import provenance
 except Exception as exc:
     print(
         f"CANNOT RUN — {type(exc).__name__}: {exc}\n"
         "  This checker imports the CLI to reuse _enumerate_emission_sites() "
         "for check 1 (every registered code is emitted), and the provenance "
-        "module to read RELAY_CODES. Both need click and the full dde "
+        "module to read RELAY_CODES. Both need click and the full oase "
         "package.\n"
         "  Remedy: run as `PYTHONPATH=tools python3 tools/check_relay_codes.py` "
         "from the repository root with the tools venv active.\n"
@@ -104,7 +104,7 @@ except Exception as exc:
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = ROOT / "skills"
-COMMANDS = ROOT / "tools" / "dde" / "commands"
+COMMANDS = ROOT / "tools" / "oase" / "commands"
 
 
 def emitted_codes_from_ast() -> dict[str, list[tuple[str, int]]]:

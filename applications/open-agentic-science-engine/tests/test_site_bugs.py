@@ -32,12 +32,12 @@ import traceback
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.commands.site import _MARKDOWN_LINK_RE, _dedent_tables, _strip_code
+from oase.commands.site import _MARKDOWN_LINK_RE, _dedent_tables, _strip_code
 
 # ---------------------------------------------------------------------------
 # Test infrastructure
@@ -105,12 +105,12 @@ def test_validate_links_ignores_smiles_in_code():
     """
     import tempfile
 
-    from dde.commands.site import _validate_links
-    from dde.core.controlstore import ensure_control_dirs, write_record
+    from oase.commands.site import _validate_links
+    from oase.core.controlstore import ensure_control_dirs, write_record
 
     with tempfile.TemporaryDirectory() as tmp:
         project = Path(tmp)
-        (project / ".dde").mkdir()
+        (project / ".oase").mkdir()
         ensure_control_dirs(project)
 
         # Write an accepted work order

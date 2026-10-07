@@ -15,7 +15,7 @@
 """Tests for the hypothesis command group (adoption and analysis).
 
 Covers (from §10 criteria 18-25):
-  - Criterion 18: Sponsor-supplied file passes dde validate including
+  - Criterion 18: Sponsor-supplied file passes oase validate including
     provenance_valid; hand-placed file without adopt fails.
   - Criterion 19: adopt without --attest exits with usage error.
   - Criterion 20: hypothesis.adopted_not_generated fires on every adoption.
@@ -47,10 +47,10 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from click.testing import CliRunner
-from dde.cli import cli
-from dde.commands.validate import _check_provenance_valid
-from dde.core import provenance
-from dde.core.thresholds import declared_sets
+from oase.cli import cli
+from oase.commands.validate import _check_provenance_valid
+from oase.core import provenance
+from oase.core.thresholds import declared_sets
 
 # ---------------------------------------------------------------------------
 # Helper: project setup
@@ -61,7 +61,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "hypotheses").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -100,7 +100,7 @@ def _write_hypothesis_file(project: Path, hypotheses: list | None = None) -> Pat
 
 def test_adopt_produces_valid_provenance() -> None:
     """A sponsor-supplied JSON file with 3 hypotheses is adopted and passes
-    dde validate including provenance_valid."""
+    oase validate including provenance_valid."""
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -134,7 +134,7 @@ def test_adopt_produces_valid_provenance() -> None:
 
         # Read and verify the normalised artifact
         adopted = json.loads(adopted_files[0].read_text())
-        assert adopted["schema"] == "dde.hypothesis-set.v1"
+        assert adopted["schema"] == "oase.hypothesis-set.v1"
         assert adopted["origin"] == "sponsor"
         assert len(adopted["candidates"]) == 3
         assert adopted["attestation"] == "Provided by Dr. Smith on 2026-09-01"
@@ -171,7 +171,7 @@ def test_hand_placed_fails_validation() -> None:
         hand_placed.write_text(
             json.dumps(
                 {
-                    "schema": "dde.hypothesis-set.v1",
+                    "schema": "oase.hypothesis-set.v1",
                     "origin": "sponsor",
                     "candidates": [{"candidate_id": "1", "statement": "test"}],
                     "attestation": "test",
@@ -327,7 +327,7 @@ def test_assessment_null_rank_and_score() -> None:
 
         # Check assessment — assessment_core envelope (shared path)
         core = analysis["assessment"]["assessment_core"]
-        assert core["schema"] == "dde.hypothesis-assessment.v1"
+        assert core["schema"] == "oase.hypothesis-assessment.v1"
         assert core["strategy"] == "adopted"
 
         for candidate in core["candidates"]:

@@ -22,7 +22,7 @@ Covers the acceptance criteria from the refinement comment:
   4. A documented program-specific constraint (charter-level exclusion)
   5. FTO disclaimer is mandatory and always present
   6. Dimensions are never blended into one score
-  7. Assessment records follow dde.evidence-assessment.v1
+  7. Assessment records follow oase.evidence-assessment.v1
 
 Run with:
     PYTHONPATH=tools python3 tests/test_differentiation.py
@@ -44,13 +44,13 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.commands.differentiation import (
+from oase.commands.differentiation import (
     EVIDENCE_TYPE_COMPETITOR,
     EVIDENCE_TYPE_PATENT,
     assess_competitive_differentiation,
     build_assessment_records,
 )
-from dde.core.evidence import validate_assessment
+from oase.core.evidence import validate_assessment
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -828,7 +828,7 @@ print("\n--- Relay codes ---")
 
 def test_relay_codes_registered():
     """New relay codes are registered in provenance.RELAY_CODES."""
-    from dde.core.provenance import RELAY_CODES
+    from oase.core.provenance import RELAY_CODES
 
     assert "differentiation.crowded_landscape" in RELAY_CODES, (
         "missing relay code: differentiation.crowded_landscape"

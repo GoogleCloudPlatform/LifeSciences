@@ -25,9 +25,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from dde.core import http
-from dde.core.errors import EndpointError, EndpointUnavailable
-from dde.core.http import _sanitize_text, _sanitize_url
+from oase.core import http
+from oase.core.errors import EndpointError, EndpointUnavailable
+from oase.core.http import _sanitize_text, _sanitize_url
 
 # ---------------------------------------------------------------------------
 # Helpers

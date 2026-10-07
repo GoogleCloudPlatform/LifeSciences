@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from dde.commands.coscientist import (
+from oase.commands.coscientist import (
     _extract_recommendation,
     _find_ideas,
     _find_report,
@@ -41,7 +41,7 @@ from dde.commands.coscientist import (
     _require_report_content,
     _validate_schema_tag,
 )
-from dde.core.errors import SchemaError
+from oase.core.errors import SchemaError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "coscientist"
 
@@ -283,7 +283,7 @@ class TestReferencesFailurePaths:
         """
         # Simulate an artifact from before the expansion.
         del normalised["knowledge_base"]["references"]
-        with pytest.raises(SchemaError, match="re-run dde coscientist ingest"):
+        with pytest.raises(SchemaError, match="re-run oase coscientist ingest"):
             _require_expanded_fields(normalised, "references")
 
     def test_schema_error_exit_code_is_3(self) -> None:
@@ -325,7 +325,7 @@ class TestKnowledgeFailurePaths:
         is proof that no output file was created.
         """
         del normalised["knowledge_base"]["connections"]
-        with pytest.raises(SchemaError, match="re-run dde coscientist ingest"):
+        with pytest.raises(SchemaError, match="re-run oase coscientist ingest"):
             _require_expanded_fields(normalised, "connections")
 
     def test_empty_kb_is_not_error(self) -> None:
@@ -470,7 +470,7 @@ class TestCompareFailurePaths:
         The guard fires before any output is produced, so SchemaError
         is proof that no output file was created.
         """
-        record = {"schema": "dde.coscientist.v1", "ideas": []}
+        record = {"schema": "oase.coscientist.v1", "ideas": []}
         with pytest.raises(SchemaError, match="contains no ideas"):
             _require_nonempty_ideas(record["ideas"], "empty.tournament.json")
 

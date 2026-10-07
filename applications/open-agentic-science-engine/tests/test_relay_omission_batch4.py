@@ -44,7 +44,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     return project
 
 
@@ -73,7 +73,7 @@ def _make_cellxgene_artifact(
     slug = slug or "cellxgene-search"
 
     artifact: dict[str, Any] = {
-        "schema": "dde.cellxgene-search.v1",
+        "schema": "oase.cellxgene-search.v1",
         "query": {
             "text": query,
             "tissue": "",
@@ -96,7 +96,7 @@ def test_cellxgene_relay_fires_with_zero_datasets() -> None:
     datasets is zero — the relay is unconditional per tool-design-guidance §8.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -135,7 +135,7 @@ def test_cellxgene_relay_fires_with_zero_datasets() -> None:
 def test_cellxgene_relay_still_fires_with_datasets() -> None:
     """Sanity check: relay also fires when datasets ARE present."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -195,7 +195,7 @@ def _make_patent_artifact(
     slug = re.sub(r"[^a-z0-9._-]+", "-", query_term.lower()).strip("-")[:80] or "query"
 
     artifact: dict[str, Any] = {
-        "schema": "dde.patent.v1",
+        "schema": "oase.patent.v1",
         "query": {"text": query_term},
         "patents": patents if patents is not None else [],
     }
@@ -213,7 +213,7 @@ def test_differentiation_assess_emits_relay_data_in_json_mode() -> None:
     emitted via emit.line (text mode) and absent from JSON output.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -270,7 +270,7 @@ def test_differentiation_assess_relays_in_analysis_sidecar() -> None:
     mandatory_relays field.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -324,7 +324,7 @@ def _make_disco_artifact(
     slug = slug or "disco-search"
 
     artifact: dict[str, Any] = {
-        "schema": "dde.disco-search.v1",
+        "schema": "oase.disco-search.v1",
         "query": {"text": query, "tissue": "", "disease": "", "species": ""},
         "samples": samples if samples is not None else [],
     }
@@ -341,7 +341,7 @@ def test_disco_relay_fires_with_zero_samples() -> None:
     samples are returned — the relay is unconditional per §8.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -378,7 +378,7 @@ def test_disco_relay_fires_with_zero_samples() -> None:
 def test_disco_relay_still_fires_with_samples() -> None:
     """Sanity check: relay also fires when samples ARE present."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -433,7 +433,7 @@ def _make_scp_artifact(
     slug = slug or "scp-search"
 
     artifact: dict[str, Any] = {
-        "schema": "dde.scp-search.v1",
+        "schema": "oase.scp-search.v1",
         "query": {"text": query, "total_found": total_found},
         "results": results if results is not None else [],
     }
@@ -450,7 +450,7 @@ def test_scp_relay_fires_with_zero_results() -> None:
     are returned — the relay is unconditional per §8.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -487,7 +487,7 @@ def test_scp_relay_fires_with_zero_results() -> None:
 def test_scp_relay_still_fires_with_results() -> None:
     """Sanity check: relay also fires when results ARE present."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))

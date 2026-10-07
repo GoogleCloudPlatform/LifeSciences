@@ -42,8 +42,8 @@ if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
 from click.testing import CliRunner  # noqa: E402
-from dde.cli import cli  # noqa: E402
-from dde.core.triage import (  # noqa: E402
+from oase.cli import cli  # noqa: E402
+from oase.core.triage import (  # noqa: E402
     run_triage,
 )
 
@@ -87,7 +87,7 @@ def fixture_to_concept(fixture: FixtureDefinition) -> dict[str, Any]:
         entity_ref = None
 
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": f"IC-{fixture.fixture_id}",
         "revision": 1,
         "state": "active",
@@ -117,7 +117,7 @@ def run_fixture_stage0(fixture: FixtureDefinition) -> FixtureMetrics:
     """Run a single fixture through Stage 0 triage and return metrics.
 
     Calls the real ``run_triage()`` function, which in turn invokes
-    real CLI workstream commands (``dde manufacturing assess-stage0``,
+    real CLI workstream commands (``oase manufacturing assess-stage0``,
     etc.) via ``CliRunner``.  No mocked or hand-crafted results.
     """
     metrics = FixtureMetrics(

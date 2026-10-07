@@ -33,9 +33,9 @@ import unittest
 import click
 
 # Suppress dirty-source warnings during test import.
-os.environ["DDE_NO_DIRTY_WARNING"] = "1"
+os.environ["OASE_NO_DIRTY_WARNING"] = "1"
 
-from dde.cli import cli
+from oase.cli import cli
 
 # ---------------------------------------------------------------------------
 # Helpers

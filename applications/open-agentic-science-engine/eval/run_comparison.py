@@ -40,12 +40,12 @@ import json
 import sys
 from pathlib import Path
 
-_DDE_ROOT = Path(__file__).resolve().parent.parent
-_TOOLS_DIR = _DDE_ROOT / "tools"
+_OASE_ROOT = Path(__file__).resolve().parent.parent
+_TOOLS_DIR = _OASE_ROOT / "tools"
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
-if str(_DDE_ROOT) not in sys.path:
-    sys.path.insert(0, str(_DDE_ROOT))
+if str(_OASE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_OASE_ROOT))
 
 from eval.comparison import generate_comparison, load_baseline_report  # noqa: E402
 from eval.fixtures.definitions import (  # noqa: E402
@@ -57,10 +57,10 @@ from eval.stage0_harness import run_all_fixtures_stage0  # noqa: E402
 
 def main() -> int:
     """Run the Stage 0 evaluation and produce comparison reports."""
-    comparison_dir = _DDE_ROOT / "eval" / "comparison"
+    comparison_dir = _OASE_ROOT / "eval" / "comparison"
     comparison_dir.mkdir(parents=True, exist_ok=True)
 
-    baseline_path = _DDE_ROOT / "eval" / "baseline" / "baseline-report.json"
+    baseline_path = _OASE_ROOT / "eval" / "baseline" / "baseline-report.json"
     if not baseline_path.exists():
         print(f"ERROR: Baseline report not found at {baseline_path}")
         print("Run the baseline first: PYTHONPATH=tools python3 -m eval.run_baseline")
@@ -99,7 +99,7 @@ def main() -> int:
         "fixture_count": len(ALL_FIXTURES),
         "fixture_ids": [f.fixture_id for f in ALL_FIXTURES],
         "declined_candidate_sample": DECLINED_CANDIDATE_SAMPLE,
-        "baseline_source": str(baseline_path.relative_to(_DDE_ROOT)),
+        "baseline_source": str(baseline_path.relative_to(_OASE_ROOT)),
         "stage0_completed": stage0_report.completed_fixtures,
         "stage0_total": stage0_report.total_fixtures,
         "scope_limitation": (
@@ -107,11 +107,11 @@ def main() -> int:
             "baseline vs. Stage 0 bounded triage is compared."
         ),
         "command": "PYTHONPATH=tools python3 -m eval.run_comparison",
-        "working_directory": str(_DDE_ROOT),
+        "working_directory": str(_OASE_ROOT),
         "outputs": [
-            str(stage0_json.relative_to(_DDE_ROOT)),
-            str(json_path.relative_to(_DDE_ROOT)),
-            str(md_path.relative_to(_DDE_ROOT)),
+            str(stage0_json.relative_to(_OASE_ROOT)),
+            str(json_path.relative_to(_OASE_ROOT)),
+            str(md_path.relative_to(_OASE_ROOT)),
         ],
     }
     manifest_path = comparison_dir / "run-manifest.json"

@@ -41,7 +41,7 @@ Do not broaden or rewrite the decision question. Missing budgets use the
 
 ```bash
 source /scion-volumes/tools/env.sh
-dde doctor --json
+oase doctor --json
 ```
 
 Refuse the run unless `binary hypex`, `binary elo`, `binary prox`, and
@@ -55,7 +55,7 @@ append-only datastore:
 
 ```bash
 ARTIFACT_PATH=/scion-volumes/executions
-[ -n "${DDE_RUN_ID:-}" ] && ARTIFACT_PATH="/scion-volumes/executions/${DDE_RUN_ID}"
+[ -n "${OASE_RUN_ID:-}" ] && ARTIFACT_PATH="/scion-volumes/executions/${OASE_RUN_ID}"
 hypex init-run <run-id> --run-dir "${ARTIFACT_PATH}" --goal "<goal>"
 RUN_DIR="${ARTIFACT_PATH}/<run-id>"
 ```
@@ -73,7 +73,7 @@ You own these records for the entire run:
 - `meta/progress.json`: current epoch, state, cumulative matches, and timestamp
 - `meta/termination.json`: declared terminal state on every exit
 
-Before starting any network-touching worker, use `dde doctor --json` to verify
+Before starting any network-touching worker, use `oase doctor --json` to verify
 that OASE pacing resolves to the shared tier and a common writable path. Write
 the result to `meta/pacing.json`. A local/fallback tier is a refusal, even if
 reducing the worker count would appear to avoid contention.
@@ -85,7 +85,7 @@ Run the complete v2 state machine from `run-protocol`:
 ```text
 INIT -> GENERATE -> REVIEW -> DEDUP -> TOURNAMENT -> EVOLVE ->
 REVIEW_EVOLVED -> TOURNAMENT_REMATCH -> META -> convergence check ->
-next epoch or FINALIZE -> DDE_PUBLISH -> DONE
+next epoch or FINALIZE -> OASE_PUBLISH -> DONE
 ```
 
 The worker template map is fixed:
@@ -116,10 +116,10 @@ or IDs by hand.
 There is no standalone `lit` CLI in OASE. Generation, reflection, evolution,
 and meta-review workers use the granted OASE skills and commands:
 
-- `dde pubmed search`
-- `dde preprint search --source arxiv|biorxiv`
-- `dde litref resolve`
-- `dde cite verify` and `dde cite analyze`
+- `oase pubmed search`
+- `oase preprint search --source arxiv|biorxiv`
+- `oase litref resolve`
+- `oase cite verify` and `oase cite analyze`
 
 Every evidence identifier must originate from those tools. OASE's coordinated
 HTTP pacing applies to all network calls.
@@ -166,8 +166,8 @@ FINALIZE tasks `hypex-meta-review` in final-report mode and verifies
 1. Write the final `meta/progress.json`.
 2. Write `meta/termination.json` with the actual reason.
 3. Run `hypex validate --run <run-id> --run-dir "${ARTIFACT_PATH}"`.
-4. Run `dde hypex ingest "${RUN_DIR}" --json`.
-5. Run `dde hypex analyze <raw-hypex-artifact> --json`.
+4. Run `oase hypex ingest "${RUN_DIR}" --json`.
+5. Run `oase hypex analyze <raw-hypex-artifact> --json`.
 6. Verify the normalized artifact, provenance sidecar, analysis, and archived
    run are present under the OASE project.
 
@@ -179,8 +179,8 @@ Report to the dispatching agent with:
 - run ID and termination reason
 - counts observed from the datastore
 - top hypothesis and final report path
-- normalized `dde.hypex.v1` artifact path
-- `dde.hypothesis-assessment.v1` analysis path
+- normalized `oase.hypex.v1` artifact path
+- `oase.hypothesis-assessment.v1` analysis path
 - every mandatory relay emitted by ingest/analyze
 
 Do not claim that the highest Elo hypothesis is scientifically validated.

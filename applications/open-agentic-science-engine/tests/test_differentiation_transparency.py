@@ -15,7 +15,7 @@
 
 """Tests for differentiation transparency — issue #98.
 
-Ensures that ``dde differentiation assess`` is honest about which
+Ensures that ``oase differentiation assess`` is honest about which
 artifact types it reads:
 
   1. Unconsumed trial artifacts produce a notice on stderr.
@@ -43,7 +43,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.commands.differentiation import (
+from oase.commands.differentiation import (
     _SOURCE_PATENT,
     _extract_trial_source_tags,
     _scan_unconsumed_trial_artifacts,
@@ -97,7 +97,7 @@ def _create_trial_artifact(
 ) -> Path:
     """Create a minimal trial artifact file in *tmp_dir*."""
     artifact = {
-        "schema": "dde.clinical-trials.v1",
+        "schema": "oase.clinical-trials.v1",
         "query": {"term": slug, "search_by": "target", "source": "clinicaltrials.gov"},
         "summary": {
             "n_studies": 3,
@@ -325,7 +325,7 @@ def test_schema_version_unchanged():
         _sample_patents(),
         "GENE",
     )
-    assert result["schema"] == "dde.competitive-differentiation.v1"
+    assert result["schema"] == "oase.competitive-differentiation.v1"
 
 
 _check("schema version unchanged", test_schema_version_unchanged)
@@ -347,7 +347,7 @@ def test_sources_metadata_with_trials_present():
         _create_trial_artifact(d, "gene", "clinicaltrials")
         # Also put a patent artifact.
         patent = {
-            "schema": "dde.patent.v1",
+            "schema": "oase.patent.v1",
             "patents": _sample_patents(),
         }
         (d / "gene.patent-google-patents.artifact.json").write_text(

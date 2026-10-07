@@ -38,8 +38,8 @@ _module_patches = patch.dict(
 )
 _module_patches.start()
 
-from dde.commands.gwas import _analyze_clinvar, _classify_variant_type  # noqa: E402
-from dde.core.provenance import RELAY_CODES  # noqa: E402
+from oase.commands.gwas import _analyze_clinvar, _classify_variant_type  # noqa: E402
+from oase.core.provenance import RELAY_CODES  # noqa: E402
 
 
 def _make_variant(

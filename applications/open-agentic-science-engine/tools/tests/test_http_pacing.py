@@ -32,9 +32,9 @@ from unittest.mock import MagicMock, patch
 # that the import succeeds even when ``requests`` or ``click`` are not
 # installed in the test environment.
 with patch.dict("sys.modules", {"requests": MagicMock(), "click": MagicMock()}):
-    from dde.core import http
-    from dde.core.errors import Refusal
-    from dde.core.http import (
+    from oase.core import http
+    from oase.core.errors import Refusal
+    from oase.core.http import (
         _pace,
         _pace_disk,
         _pace_memory,
@@ -47,7 +47,7 @@ class TestPaceDisk(unittest.TestCase):
 
     def setUp(self):
         self._orig_pace_dir = http._PACE_DIR
-        self._tmpdir = tempfile.mkdtemp(prefix="dde_pace_test_")
+        self._tmpdir = tempfile.mkdtemp(prefix="oase_pace_test_")
         http._PACE_DIR = Path(self._tmpdir)
 
     def tearDown(self):
@@ -148,7 +148,7 @@ class TestPaceFallback(unittest.TestCase):
         """When ``_pace_disk`` raises ``OSError``, ``_pace`` should fall
         back to ``_pace_memory``."""
         # Point _PACE_DIR at a non-existent, non-creatable path.
-        http._PACE_DIR = Path("/nonexistent/root/dde_pace_test")
+        http._PACE_DIR = Path("/nonexistent/root/oase_pace_test")
 
         url = "https://api.example.com/resource"
 
@@ -201,13 +201,13 @@ class TestResolvePaceDir(unittest.TestCase):
     """Tests for ``_resolve_pace_dir`` — the three-tier fallback (#68)."""
 
     # ------------------------------------------------------------------
-    # 7. DDE_PACE_DIR env var → shared tier
+    # 7. OASE_PACE_DIR env var → shared tier
     # ------------------------------------------------------------------
     def test_resolve_pace_dir_env_var(self):
-        """When DDE_PACE_DIR is set to a valid path, resolve to shared tier."""
-        tmpdir = tempfile.mkdtemp(prefix="dde_pace_env_")
+        """When OASE_PACE_DIR is set to a valid path, resolve to shared tier."""
+        tmpdir = tempfile.mkdtemp(prefix="oase_pace_env_")
         try:
-            with patch.dict(os.environ, {"DDE_PACE_DIR": tmpdir}):
+            with patch.dict(os.environ, {"OASE_PACE_DIR": tmpdir}):
                 path, tier = _resolve_pace_dir()
             self.assertEqual(tier, "shared")
             self.assertEqual(path, Path(tmpdir))
@@ -220,8 +220,8 @@ class TestResolvePaceDir(unittest.TestCase):
     def test_resolve_pace_dir_fallback_to_local(self):
         """With no env var and no shared volume, resolve to local tier."""
         env_clean = os.environ.copy()
-        env_clean.pop("DDE_PACE_DIR", None)
-        env_clean.pop("DDE_PACE_REQUIRE_SHARED", None)
+        env_clean.pop("OASE_PACE_DIR", None)
+        env_clean.pop("OASE_PACE_REQUIRE_SHARED", None)
 
         original_mkdir = Path.mkdir
 
@@ -235,27 +235,27 @@ class TestResolvePaceDir(unittest.TestCase):
             with patch.object(Path, "mkdir", _selective_mkdir):
                 path, tier = _resolve_pace_dir()
         self.assertEqual(tier, "local")
-        self.assertEqual(path, Path.home() / ".cache" / "dde" / "pace")
+        self.assertEqual(path, Path.home() / ".cache" / "oase" / "pace")
 
     # ------------------------------------------------------------------
     # 9. _PACE_TIER is importable and valid
     # ------------------------------------------------------------------
     def test_pace_tier_exposed(self):
         """``_PACE_TIER`` is importable and is a valid tier string."""
-        from dde.core.http import _PACE_TIER
+        from oase.core.http import _PACE_TIER
 
         self.assertIn(_PACE_TIER, {"shared", "local", "memory"})
 
     # ------------------------------------------------------------------
-    # 10. DDE_PACE_REQUIRE_SHARED — _resolve_pace_dir does NOT raise
+    # 10. OASE_PACE_REQUIRE_SHARED — _resolve_pace_dir does NOT raise
     # ------------------------------------------------------------------
     def test_resolve_pace_dir_require_shared_does_not_raise(self):
-        """When DDE_PACE_REQUIRE_SHARED=1 and no shared path is available,
+        """When OASE_PACE_REQUIRE_SHARED=1 and no shared path is available,
         _resolve_pace_dir falls through (local/memory) without raising.
         The strict-mode check is deferred to _pace()."""
         env_clean = os.environ.copy()
-        env_clean.pop("DDE_PACE_DIR", None)
-        env_clean["DDE_PACE_REQUIRE_SHARED"] = "1"
+        env_clean.pop("OASE_PACE_DIR", None)
+        env_clean["OASE_PACE_REQUIRE_SHARED"] = "1"
 
         def _always_fail(self_path, *args, **kwargs):
             raise OSError("no mount")
@@ -288,9 +288,9 @@ class TestResolvePaceDir(unittest.TestCase):
     # 12. Deferred strict-mode check: import succeeds, _pace raises
     # ------------------------------------------------------------------
     def test_deferred_strict_mode_raises_in_pace(self):
-        """With DDE_PACE_REQUIRE_SHARED=1 and a non-shared tier,
+        """With OASE_PACE_REQUIRE_SHARED=1 and a non-shared tier,
         importing http.py must succeed but calling _pace() must raise
-        Refusal.  This ensures ``dde doctor`` can still run."""
+        Refusal.  This ensures ``oase doctor`` can still run."""
         orig_tier = http._PACE_TIER
         orig_required = http._PACE_SHARED_REQUIRED
         try:

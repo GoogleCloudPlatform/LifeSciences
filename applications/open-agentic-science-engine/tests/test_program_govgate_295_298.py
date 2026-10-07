@@ -35,14 +35,14 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
 from click.testing import CliRunner
-from dde.cli import cli
-from dde.core.controlstore import (
+from oase.cli import cli
+from oase.core.controlstore import (
     CONTROL_DIR,
     ensure_control_dirs,
     write_record,
@@ -59,7 +59,7 @@ def _make_project(base: Path, name: str) -> Path:
     """Create a minimal OASE project directory with control plane."""
     project = base / name
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -104,7 +104,7 @@ def _write_wo(
 
 
 def _run_resume(dest_project: Path, source: str) -> Any:
-    """Invoke ``dde program resume`` via click's test runner."""
+    """Invoke ``oase program resume`` via click's test runner."""
     runner = CliRunner()
     args = ["--project", str(dest_project), "program", "resume", source]
     return runner.invoke(cli, args)
@@ -187,7 +187,7 @@ def _check(name: str, fn):
 # Temp directory
 # ---------------------------------------------------------------------------
 
-_TMPBASE = Path(tempfile.mkdtemp(prefix="dde-test-govgate-"))
+_TMPBASE = Path(tempfile.mkdtemp(prefix="oase-test-govgate-"))
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +413,7 @@ def test_298_non_serializable_data_step5_catch():
     # fix for stage/cycle instead.
 
     # Test: verify _build_markdown_record casts stage/cycle to str.
-    from dde.commands.program import (
+    from oase.commands.program import (
         _build_markdown_record,
         _parse_frontmatter,
         _parse_sections,

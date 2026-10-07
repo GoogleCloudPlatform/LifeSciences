@@ -49,12 +49,12 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.concepts import (
+from oase.core.concepts import (
     BIOMARKER_CATEGORIES,
     CONCEPT_ID_RE,
     CONCEPT_RECORD_KEY_RE,
@@ -67,7 +67,7 @@ from dde.core.concepts import (
     validate_biomarker,
     validate_concept,
 )
-from dde.core.controlstore import (
+from oase.core.controlstore import (
     _VALIDATORS,
     CONTROL_DIR,
     RECORD_TYPES,
@@ -77,8 +77,8 @@ from dde.core.controlstore import (
     read_record,
     write_record,
 )
-from dde.core.errors import Refusal, SchemaError
-from dde.core.statemachine import _MACHINES, validate_transition
+from oase.core.errors import Refusal, SchemaError
+from oase.core.statemachine import _MACHINES, validate_transition
 
 # ---------------------------------------------------------------------------
 # Fixture: design §7 Step 1 concept record
@@ -87,7 +87,7 @@ from dde.core.statemachine import _MACHINES, validate_transition
 _NOW = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 WORKED_EXAMPLE_CONCEPT: dict[str, Any] = {
-    "schema": "dde.intervention-concept.v1",
+    "schema": "oase.intervention-concept.v1",
     "id": "IC-001",
     "revision": 1,
     "state": "active",

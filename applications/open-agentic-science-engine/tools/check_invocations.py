@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Check every `dde …` command written in the repo against the CLI that exists.
+"""Check every `oase …` command written in the repo against the CLI that exists.
 
 A document that describes code is a cache of that code. This is the
 cache-invalidation check: it reads the fenced code blocks and inline code spans
@@ -26,7 +26,7 @@ one knows nothing about the rules it will catch violations of, which is why it
 can catch them. Candidates come from code blocks and code spans only — a
 sentence mentioning a command is not an instruction to run one.
 
-Placeholders (`dde <tool> analyze`) are skipped: they are not claims about
+Placeholders (`oase <tool> analyze`) are skipped: they are not claims about
 the surface. Everything else either resolves or is reported.
 
 **This gate cannot run in a plain container, and that is permanent.** The
@@ -61,7 +61,7 @@ from pathlib import Path
 try:
     import click
 
-    from dde.cli import cli
+    from oase.cli import cli
 except Exception as exc:  # pragma: no cover - environment, not logic
     # Not ImportError. A missing dependency raises that; a half-installed
     # one raises whatever the broken module raises on the way up —
@@ -98,10 +98,10 @@ _PLACEHOLDER = re.compile(r"^[<{$]|\.\.\.|…")
 
 
 def candidates(text: str) -> list[tuple[int, str]]:
-    """(lineno, command) for each dde command in a code block or code span.
+    """(lineno, command) for each oase command in a code block or code span.
 
     Three contexts, not two. Fenced blocks and inline spans are the
-    obvious ones; the third is a line whose first token is `dde`
+    obvious ones; the third is a line whose first token is `oase`
     outside both, which is how an indent-style code block is written.
     Restricting to the first two silently skipped four real invocations
     — two of them in `skills/artifact-conventions`, a skill agents read
@@ -110,8 +110,8 @@ def candidates(text: str) -> list[tuple[int, str]]:
     inflated the count, mine matched too little and understated it. A
     count is only reassuring if you know what it declined to look at.
 
-    Prose is kept out by the requirement that `dde` be the *first*
-    token on the line, which "all dde project artifacts" fails, plus
+    Prose is kept out by the requirement that `oase` be the *first*
+    token on the line, which "all oase project artifacts" fails, plus
     the placeholder filter downstream.
     """
     found: list[tuple[int, str]] = []
@@ -122,15 +122,15 @@ def candidates(text: str) -> list[tuple[int, str]]:
             continue
         stripped = line.strip().lstrip("$").strip()
         if in_fence:
-            if stripped.startswith("dde "):
+            if stripped.startswith("oase "):
                 found.append((lineno, stripped))
             continue
         spans = re.findall(r"`([^`]+)`", line)
         for span in spans:
             span = span.strip().lstrip("$").strip()
-            if span.startswith("dde "):
+            if span.startswith("oase "):
                 found.append((lineno, span))
-        if not spans and stripped.startswith("dde "):
+        if not spans and stripped.startswith("oase "):
             found.append((lineno, stripped))
     return found
 
@@ -149,7 +149,7 @@ def resolve(tokens: list[str]):
                 return None, None
             if node is cli and token in PLANNED_BUT_UNIMPLEMENTED:
                 return None, None
-            return None, f"unknown subcommand {token!r} under {node.name or 'dde'}"
+            return None, f"unknown subcommand {token!r} under {node.name or 'oase'}"
         node, index = nxt, index + 1
     if node is cli or isinstance(node, click.Group):
         return None, None  # a bare group: a help reference, not a call
@@ -212,13 +212,13 @@ def main() -> int:
             (
                 "tools/check_invocations.py",
                 0,
-                f"dde {name}",
-                f"allowlisted as unimplemented but `dde {name}` now exists — "
+                f"oase {name}",
+                f"allowlisted as unimplemented but `oase {name}` now exists — "
                 "remove the entry so its invocations are checked",
             )
         )
 
-    print(f"checked {checked} dde invocation(s) across {', '.join(TARGETS)}")
+    print(f"checked {checked} oase invocation(s) across {', '.join(TARGETS)}")
     print(
         f"allowlisted as not yet implemented: "
         f"{', '.join(sorted(PLANNED_BUT_UNIMPLEMENTED))}"
@@ -233,7 +233,7 @@ def main() -> int:
     # report success without any.
     if checked == 0:
         print(
-            "FAIL: no dde invocations found at all — the checker inspected "
+            "FAIL: no oase invocations found at all — the checker inspected "
             "nothing, which is not the same as finding nothing"
         )
         return 1

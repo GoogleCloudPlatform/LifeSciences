@@ -14,8 +14,8 @@
 
 # OASE CLI packaging — PEP 621.
 #
-# The entry point is `dde = "dde.cli:main"`, which replaces the
-# hand-rolled dde-cli shim that install.sh used to symlink into the
+# The entry point is `oase = "oase.cli:main"`, which replaces the
+# hand-rolled oase-cli shim that install.sh used to symlink into the
 # venv.  `pip install -e .` produces a proper console_scripts wrapper
 # that works in subshells and loops without PYTHONPATH gymnastics.
 #
@@ -30,8 +30,8 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dde"
-version = "0.3.0"  # Keep in sync with CLI_VERSION in dde/core/env.py
+name = "oase"
+version = "0.3.0"  # Keep in sync with CLI_VERSION in oase/core/env.py
 description = "Execution surface for OASE agent tooling"
 requires-python = ">=3.11"
 
@@ -68,13 +68,13 @@ science = [
 ]
 
 [project.scripts]
-dde = "dde.cli:main"
+oase = "oase.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["dde*"]
+include = ["oase*"]
 
 [tool.setuptools.package-data]
-dde = ["site_templates/**/*.html"]
+oase = ["site_templates/**/*.html"]
 
 [tool.ruff]
 line-length = 88

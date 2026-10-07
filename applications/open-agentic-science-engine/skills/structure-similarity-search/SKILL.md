@@ -44,15 +44,15 @@ in public databases. Entry points include:
 - **No authentication** needed -- both registries are public APIs.
 - **Source selection** (`--source`): `pubchem`, `chembl`, or `both`
   (default).
-- Run `dde doctor` before first use.
+- Run `oase doctor` before first use.
 
 ## 3. Tool invocations
 
 | Question | Run | Writes to |
 |---|---|---|
-| What known compounds are structurally similar? | `dde similar search <SMILES> [--source both] [--threshold <T>] [--max-results 20]` | `raw/compounds/<slug>.similar-<source>.json` + `.meta.json` |
-| What known compounds contain this substructure? | `dde similar substructure <SMILES> [--source both] [--max-results 20]` | `raw/compounds/<slug>.substruct-<source>.json` + `.meta.json` |
-| What is the verdict? | `dde similar analyze <SMILES>` | `raw/compounds/<slug>.similar.analysis.json` |
+| What known compounds are structurally similar? | `oase similar search <SMILES> [--source both] [--threshold <T>] [--max-results 20]` | `raw/compounds/<slug>.similar-<source>.json` + `.meta.json` |
+| What known compounds contain this substructure? | `oase similar substructure <SMILES> [--source both] [--max-results 20]` | `raw/compounds/<slug>.substruct-<source>.json` + `.meta.json` |
+| What is the verdict? | `oase similar analyze <SMILES>` | `raw/compounds/<slug>.similar.analysis.json` |
 
 Run `search` or `substructure` before `analyze`. `analyze` reads from
 disk and applies the `similar-search` threshold set. No network.

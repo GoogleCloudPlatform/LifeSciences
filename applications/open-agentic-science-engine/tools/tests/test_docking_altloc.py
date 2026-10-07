@@ -30,7 +30,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from dde.commands.docking import (
+from oase.commands.docking import (
     _convert_receptor_to_pdbqt,
     _resolve_highest_occupancy_altloc,
 )
@@ -116,8 +116,8 @@ class TestResolveHighestOccupancyAltloc(unittest.TestCase):
 class TestConvertReceptorAltloc(unittest.TestCase):
     """_convert_receptor_to_pdbqt passes --default_altloc to Meeko."""
 
-    @mock.patch("dde.commands.docking.subprocess.run")
-    @mock.patch("dde.commands.docking._require_mk_prepare_receptor")
+    @mock.patch("oase.commands.docking.subprocess.run")
+    @mock.patch("oase.commands.docking._require_mk_prepare_receptor")
     def test_passes_default_altloc_a(self, mock_require, mock_run):
         """Default altloc 'A' is passed as --default_altloc A."""
         mock_require.return_value = "mk_prepare_receptor.py"
@@ -139,8 +139,8 @@ class TestConvertReceptorAltloc(unittest.TestCase):
         altloc_idx = args.index("--default_altloc")
         self.assertEqual(args[altloc_idx + 1], "A")
 
-    @mock.patch("dde.commands.docking.subprocess.run")
-    @mock.patch("dde.commands.docking._require_mk_prepare_receptor")
+    @mock.patch("oase.commands.docking.subprocess.run")
+    @mock.patch("oase.commands.docking._require_mk_prepare_receptor")
     def test_passes_default_altloc_b(self, mock_require, mock_run):
         """Altloc 'B' is passed as --default_altloc B."""
         mock_require.return_value = "mk_prepare_receptor.py"
@@ -160,9 +160,9 @@ class TestConvertReceptorAltloc(unittest.TestCase):
         altloc_idx = args.index("--default_altloc")
         self.assertEqual(args[altloc_idx + 1], "B")
 
-    @mock.patch("dde.commands.docking._resolve_highest_occupancy_altloc")
-    @mock.patch("dde.commands.docking.subprocess.run")
-    @mock.patch("dde.commands.docking._require_mk_prepare_receptor")
+    @mock.patch("oase.commands.docking._resolve_highest_occupancy_altloc")
+    @mock.patch("oase.commands.docking.subprocess.run")
+    @mock.patch("oase.commands.docking._require_mk_prepare_receptor")
     def test_highest_resolves_then_passes(self, mock_require, mock_run, mock_resolve):
         """Altloc 'highest' resolves to actual label, then passes it."""
         mock_require.return_value = "mk_prepare_receptor.py"
@@ -187,8 +187,8 @@ class TestConvertReceptorAltloc(unittest.TestCase):
         altloc_idx = args.index("--default_altloc")
         self.assertEqual(args[altloc_idx + 1], "B")
 
-    @mock.patch("dde.commands.docking.subprocess.run")
-    @mock.patch("dde.commands.docking._require_mk_prepare_receptor")
+    @mock.patch("oase.commands.docking.subprocess.run")
+    @mock.patch("oase.commands.docking._require_mk_prepare_receptor")
     def test_default_altloc_is_a(self, mock_require, mock_run):
         """When no altloc specified, default is 'A'."""
         mock_require.return_value = "mk_prepare_receptor.py"
@@ -209,8 +209,8 @@ class TestConvertReceptorAltloc(unittest.TestCase):
         altloc_idx = args.index("--default_altloc")
         self.assertEqual(args[altloc_idx + 1], "A")
 
-    @mock.patch("dde.commands.docking.subprocess.run")
-    @mock.patch("dde.commands.docking._require_mk_prepare_receptor")
+    @mock.patch("oase.commands.docking.subprocess.run")
+    @mock.patch("oase.commands.docking._require_mk_prepare_receptor")
     def test_read_with_prody_still_passed(self, mock_require, mock_run):
         """--read_with_prody is still passed alongside --default_altloc."""
         mock_require.return_value = "mk_prepare_receptor.py"

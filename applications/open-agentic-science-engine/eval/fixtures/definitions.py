@@ -211,7 +211,7 @@ FIXTURE_NEGATIVE_POCKET = FixtureDefinition(
         {
             "path": "raw/pocket/synthetic-kinase-Y.fpocket.json",
             "content": {
-                "schema": "dde.pocket-druggability.v1",
+                "schema": "oase.pocket-druggability.v1",
                 "target": "synthetic-kinase-Y",
                 "pdb_source": "AF-SYNTHY-F1-model_v4.pdb",
                 "method": "fpocket",
@@ -293,7 +293,7 @@ FIXTURE_POSITIVE_GEOMETRY = FixtureDefinition(
         {
             "path": "raw/structures/synthetic-enzyme-Z.alphafold.json",
             "content": {
-                "schema": "dde.structure-confidence.v1",
+                "schema": "oase.structure-confidence.v1",
                 "target": "synthetic-enzyme-Z",
                 "uniprot_id": "SYNZZ_HUMAN",
                 "source": "AlphaFold DB v4",

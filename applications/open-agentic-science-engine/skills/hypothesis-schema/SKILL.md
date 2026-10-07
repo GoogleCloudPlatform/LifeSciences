@@ -9,7 +9,7 @@ This skill teaches you the hypothesis data format, quality requirements, and
 how to use the `hypex` CLI to create and validate hypotheses.
 
 These records remain in the native datastore until the supervisor publishes
-the completed run with `dde hypex analyze`.
+the completed run with `oase hypex analyze`.
 
 ## Schema Reference
 

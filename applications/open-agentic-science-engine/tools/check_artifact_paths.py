@@ -19,7 +19,7 @@ artifact classes the code actually declares.
 The sibling of check_invocations.py, aimed at the other axis. That one asks
 whether the commands in our prose resolve against the built click tree; this
 one asks whether the *paths* resolve against ARTIFACT_DIRS in
-`dde/core/context.py`. Both are cache-invalidation checks over
+`oase/core/context.py`. Both are cache-invalidation checks over
 documentation, and the reason for two is that an instrument only finds what it
 is pointed at: check_invocations.py passed `skills/artifact-conventions/SKILL.md`
 clean while four invented directory names sat in its tree diagram, because it
@@ -80,7 +80,7 @@ from pathlib import Path
 CANNOT_RUN = 2
 
 try:
-    from dde.core.context import ARTIFACT_DIRS
+    from oase.core.context import ARTIFACT_DIRS
 except ImportError as exc:  # pragma: no cover - environment, not logic
     print(
         f"CANNOT RUN: {exc}\n"
@@ -95,7 +95,7 @@ except ImportError as exc:  # pragma: no cover - environment, not logic
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = ("docs", "skills", "templates", "README.md")
-COMMANDS_DIR = ROOT / "tools" / "dde" / "commands"
+COMMANDS_DIR = ROOT / "tools" / "oase" / "commands"
 
 #: Not an artifact class and never routed through `artifact_dir()`: it is the
 #: `--out` override an auditor passes so its re-run does not land on the record

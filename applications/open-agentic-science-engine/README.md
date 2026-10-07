@@ -198,7 +198,7 @@ ls skills/                                           # skills that exist
 ls templates/                                        # agent templates that exist
 grep -c uri: templates/*/scion-agent.yaml            # how many each template grants
 grep -h uri: templates/*/scion-agent.yaml | sort -u  # which skills those are
-dde doctor                                        # which tools are installed and callable
+oase doctor                                        # which tools are installed and callable
 ```
 
 **If those disagree with anything below, they are right and this is stale.**
@@ -217,7 +217,7 @@ does not exist, and a template cannot grant a skill nobody has written. Work mov
 that order, never up.
 
 **Snapshot — 2026-08-18, decays from that moment.** The pilot tools (co-scientist,
-AlphaFold, AlphaGenome) are built, and further tool groups have landed since; `dde
+AlphaFold, AlphaGenome) are built, and further tool groups have landed since; `oase
 doctor` lists what is actually callable. Nine skills exist. All twelve templates,
 including the controller and the reviewer, grant OASE capability skills — the earlier
 state, in which templates granted upstream `science-skills` URIs directly, is gone.
@@ -265,7 +265,7 @@ OASE follows the pre-clinical drug discovery value chain. The stages are invaria
 | **3. Multiparameter Optimization** | Evolve starting matter into entities that meet efficacy, safety, and developability needs together | Does an optimized entity meet all critical quality attributes? |
 | **4. Demonstrate Human Readiness** | Produce the safety, efficacy, pharmacology, and regulatory package for first-in-human studies | Is the risk-benefit acceptable for human dosing? |
 
-Gate criteria are named constants with program overrides in `.dde/thresholds.yaml`. Every analysis output records the threshold set it applied. Thresholds never live in prose, because prose cannot be enforced, versioned, or varied per program. See [oase-plan.md §3](docs/oase-plan.md) for the criteria and how they vary by modality.
+Gate criteria are named constants with program overrides in `.oase/thresholds.yaml`. Every analysis output records the threshold set it applied. Thresholds never live in prose, because prose cannot be enforced, versioned, or varied per program. See [oase-plan.md §3](docs/oase-plan.md) for the criteria and how they vary by modality.
 
 ## Agent Roles
 
@@ -285,7 +285,7 @@ Specialist roles are stage-agnostic. Each definition describes *who the speciali
 | **Preclinical Toxicologist** | GLP toxicology study design, NOAEL determination, safety pharmacology, risk assessment. |
 | **Regulatory Scientist** | IND dossier assembly, GLP compliance, CMC documentation, regulatory strategy. |
 | **Project Curator** | Optional editorial role for executive narrative or new stakeholder views. Deterministic tools maintain site synchronization. |
-| **Hypex Supervisor** | Runs OASE's bounded multi-epoch hypothesis-exploration subgraph and publishes its native datastore through `dde hypex ingest` and `analyze`. |
+| **Hypex Supervisor** | Runs OASE's bounded multi-epoch hypothesis-exploration subgraph and publishes its native datastore through `oase hypex ingest` and `analyze`. |
 
 ## Design Principles
 
@@ -314,7 +314,7 @@ The boundary between Layer 0 and Layer 1 is the boundary between *computed* and 
 
 Every factual claim in a report links to its supporting artifact — vertically to raw data, laterally to peer findings, or upward to program state. These links give both audit trails and the navigation structure for deterministic website and dashboard builds.
 
-Orchestration records — work orders, run history, publication state — live in a separate control plane under `.dde/control/`. They are auditable, but they are not scientific citation sources.
+Orchestration records — work orders, run history, publication state — live in a separate control plane under `.oase/control/`. They are auditable, but they are not scientific citation sources.
 
 ## Repository Structure
 
@@ -322,14 +322,14 @@ Orchestration records — work orders, run history, publication state — live i
 open-agentic-science-engine/
 ├── templates/          # Scion agent templates, one directory per role
 ├── skills/             # OASE skills, one directory per capability
-├── tools/              # The dde CLI and its environment
+├── tools/              # The oase CLI and its environment
 │   ├── BOOTSTRAP.md    # Blank directory to working CLI, incl. container prereqs
 │   ├── bootstrap-preflight.sh   # Can this container build it? Run before install.sh
 │   ├── install.sh      # Environment setup: venv, compiled binaries, ENV_VERSION
 │   ├── requirements.txt
 │   ├── vendor/hypex/  # Vendored Hypex source; binaries are built during provisioning
 │   ├── pyproject.toml  # PEP 621 packaging; console_scripts entry point
-│   └── dde/
+│   └── oase/
 │       ├── cli.py      # Click entry point; one command group per tool
 │       ├── core/       # Project root, HTTP, provenance, thresholds, output
 │       └── commands/   # One module per tool; phases as subcommands
@@ -350,12 +350,12 @@ The `skills:` list is the only declaration of what an agent can do. A template m
 
 ## Tools
 
-The `tools/` directory holds the `dde` CLI. The CLI is the execution surface for every computation an agent performs. A specialist never computes a reported value itself. If a required tool is unavailable, the specialist reports the task as blocked rather than estimating.
+The `tools/` directory holds the `oase` CLI. The CLI is the execution surface for every computation an agent performs. A specialist never computes a reported value itself. If a required tool is unavailable, the specialist reports the task as blocked rather than estimating.
 
 Two rules shape every command:
 
 - **Two phases.** `fetch` or `run` performs the expensive act and writes the artifact with a provenance sidecar. `analyze` reads that artifact from disk and applies named thresholds. The second phase re-runs without repeating the first — after a threshold change, or as a reviewer's fabrication check.
-- **Everything a tool writes is Layer 0.** Tool output lands under `raw/`, resolved from `$DDE_PROJECT` or a `.dde/` marker, never from the working directory. Only a specialist writes to `findings/`.
+- **Everything a tool writes is Layer 0.** Tool output lands under `raw/`, resolved from `$OASE_PROJECT` or a `.oase/` marker, never from the working directory. Only a specialist writes to `findings/`.
 
 ### Bootstrapping a tools environment
 
@@ -379,9 +379,9 @@ out of, rather than a copy each.
 
 ```bash
 cd tools
-DDE_VENV=/scion-volumes/tools/.venv \
-DDE_BIN=/scion-volumes/tools/bin \
-DDE_TOOLS_HOME=/scion-volumes/tools \
+OASE_VENV=/scion-volumes/tools/.venv \
+OASE_BIN=/scion-volumes/tools/bin \
+OASE_TOOLS_HOME=/scion-volumes/tools \
   ./install.sh
 ```
 
@@ -392,19 +392,19 @@ to source — not the venv's `activate`**:
 ```bash
 source /scion-volumes/tools/env.sh
 
-dde init ~/my-program && export DDE_PROJECT=~/my-program
-dde doctor
+oase init ~/my-program && export OASE_PROJECT=~/my-program
+oase doctor
 ```
 
 `env.sh` sets three things `activate` does not: `bin/` on `PATH`, so
-`fpocket` and `vina` resolve; `DDE_TOOLS_HOME`, so the CLI reads the
+`fpocket` and `vina` resolve; `OASE_TOOLS_HOME`, so the CLI reads the
 stamp for *this* environment rather than a compiled-in default; and
 `PYTHONDONTWRITEBYTECODE`, because agents share one `__pycache__` on a
-shared volume. Activating the venv alone yields a working `dde` and a
+shared volume. Activating the venv alone yields a working `oase` and a
 silently degraded environment — missing binaries, and `unpinned-dev`
 written into every artifact's provenance.
 
-**Run `dde doctor` before trusting any result, and read its exit
+**Run `oase doctor` before trusting any result, and read its exit
 code, not just its output.** It converts a missing tool from an invented
 number into a blocked task, and it fails when the environment has
 drifted from its own stamp or was provisioned from a commit nobody else
@@ -423,9 +423,9 @@ side of it carry different `env_version` values and are not directly
 comparable. Price the change before making it.
 
 ```bash
-dde env plan      # what ENV_VERSION would become, and what differs
-dde env show      # what it is now, and whether it still matches
-dde env diff <before> [after]   # explain a partition after the fact
+oase env plan      # what ENV_VERSION would become, and what differs
+oase env show      # what it is now, and whether it still matches
+oase env diff <before> [after]   # explain a partition after the fact
 ```
 
 Command groups today: `alphafold`, `alphagenome`, `coscientist`,
@@ -458,7 +458,7 @@ cost work here:
   owner or vanish with a sweep, and it is read during archaeology rather than while
   deciding. A rationale belongs at the distance the reader will be standing when the
   question occurs to them: in the docstring if it is read while editing, in the output
-  string if it is read while deciding. `dde doctor`'s advisories carry the test that
+  string if it is read while deciding. `oase doctor`'s advisories carry the test that
   would retire them in the remedy field for exactly this reason — the same words in a
   commit message would be correct and unreachable.
 

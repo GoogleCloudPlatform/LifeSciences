@@ -36,10 +36,10 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.admet import _safe_write_artifact
-from dde.commands.dossier import _build_export
-from dde.common import is_phase_two
-from dde.core.errors import Refusal
+from oase.commands.admet import _safe_write_artifact
+from oase.commands.dossier import _build_export
+from oase.common import is_phase_two
+from oase.core.errors import Refusal
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,7 +50,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     return project
 
 
@@ -73,7 +73,7 @@ def _make_tox_artifact(
 ) -> Path:
     """Write a minimal tox-repeat-dose artifact with a specific work order."""
     data: dict[str, Any] = {
-        "schema": "dde.tox-repeat-dose.v1",
+        "schema": "oase.tox-repeat-dose.v1",
         "species": "rat",
         "route": "oral gavage",
         "duration": "28 days",
@@ -122,7 +122,7 @@ def test_dossier_export_includes_matching_and_null_work_orders() -> None:
         _make_tox_artifact(project, "compound-a", "WO-001")
         # Write an artifact without a work_order_id field.
         no_wo_data: dict[str, Any] = {
-            "schema": "dde.tox-repeat-dose.v1",
+            "schema": "oase.tox-repeat-dose.v1",
             "species": "mouse",
             "route": "oral gavage",
             "duration": "14 days",
@@ -210,7 +210,7 @@ def test_predict_batch_creates_per_compound_sidecars() -> None:
         record_path.write_text(content, encoding="utf-8")
 
         # Now import and simulate per-compound sidecar creation.
-        from dde.commands.admet import _build_sidecar
+        from oase.commands.admet import _build_sidecar
 
         sidecar = _build_sidecar("predict", "CCO", "CCO", {})
         sidecar.add_output(record_path)
@@ -258,7 +258,7 @@ def test_differentiation_write_order_prevents_orphaned_overwrite() -> None:
         initial_content = out_path.read_text()
 
         # Simulate write_analysis raising Refusal (a differing analysis exists).
-        from dde.core import provenance
+        from oase.core import provenance
 
         with patch.object(
             provenance,

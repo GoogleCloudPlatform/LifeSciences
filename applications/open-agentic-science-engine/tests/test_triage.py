@@ -56,19 +56,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
 from click.testing import CliRunner
-from dde.cli import cli
-from dde.core.controlstore import (
+from oase.cli import cli
+from oase.core.controlstore import (
     CONTROL_DIR,
     ensure_control_dirs,
     read_record,
     write_record,
 )
-from dde.core.errors import Refusal
-from dde.core.evidence import (
+from oase.core.errors import Refusal
+from oase.core.evidence import (
     ACTIONS,
     EVIDENCE_STATUSES,
 )
-from dde.core.triage import (
+from oase.core.triage import (
     ConceptTriageResult,
     TriageBudget,
     TriageOutcome,
@@ -110,7 +110,7 @@ def _check(name: str, fn: Any) -> None:
 def _make_project(base: Path) -> Path:
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -122,7 +122,7 @@ def _write_concept_to_disk(
     *,
     revision: int | None = None,
 ) -> Path:
-    """Write a concept record directly to .dde/control/concepts/."""
+    """Write a concept record directly to .oase/control/concepts/."""
     concepts_dir = project / CONTROL_DIR / "concepts"
     concepts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -132,7 +132,7 @@ def _write_concept_to_disk(
         filename = f"{concept_id}.json"
 
     record = {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": concept_id,
         "revision": revision or 1,
         "state": "active",
@@ -163,7 +163,7 @@ def _small_molecule_concept(
     entity_ref: str | None = "c1ccc(CC(=O)O)cc1",
 ) -> dict[str, Any]:
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": concept_id,
         "revision": 1,
         "state": "active",
@@ -187,7 +187,7 @@ def _small_molecule_concept(
 
 def _biologic_concept(concept_id: str = "IC-002") -> dict[str, Any]:
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": concept_id,
         "revision": 1,
         "state": "active",
@@ -209,7 +209,7 @@ def _biologic_concept(concept_id: str = "IC-002") -> dict[str, Any]:
 
 def _no_entity_concept(concept_id: str = "IC-003") -> dict[str, Any]:
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": concept_id,
         "revision": 1,
         "state": "active",
@@ -231,7 +231,7 @@ def _no_entity_concept(concept_id: str = "IC-003") -> dict[str, Any]:
 def _sponsor_lone_concept() -> dict[str, Any]:
     """A lone sponsor hypothesis — single concept in the portfolio."""
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": "IC-010",
         "revision": 1,
         "state": "active",
@@ -314,7 +314,7 @@ def test_build_triage_decision_valid_actions():
         )
         assert d["action"] == action
         assert d["affected_entity"]["entity_ref"] == "IC-001-r1"
-        assert d["schema"] == "dde.decision-record.v1"
+        assert d["schema"] == "oase.decision-record.v1"
 
 
 def test_build_triage_decision_invalid_action():
@@ -386,7 +386,7 @@ def test_budget_exhaustion_never_terminate():
 
 
 def test_real_manufacturing_cli():
-    """Workstream 3 calls the REAL dde manufacturing assess-stage0 command."""
+    """Workstream 3 calls the REAL oase manufacturing assess-stage0 command."""
     runner = CliRunner()
     concept = _small_molecule_concept()
 
@@ -455,7 +455,7 @@ def test_real_manufacturing_cli_no_entity():
 
 
 def test_real_differentiation_cli():
-    """Workstream 2 calls the REAL dde differentiation assess command."""
+    """Workstream 2 calls the REAL oase differentiation assess command."""
     runner = CliRunner()
     concept = _small_molecule_concept()
 
@@ -502,7 +502,7 @@ def test_real_structure_screening_cli_no_structures():
 
 
 def test_real_structure_screening_cli_with_structures():
-    """Structure screening calls the REAL dde structure-screen run command."""
+    """Structure screening calls the REAL oase structure-screen run command."""
     runner = CliRunner()
     concept = _small_molecule_concept()
 
@@ -577,7 +577,7 @@ def test_no_naive_kill_rule_in_triage():
     outputs into a naive kill rule.
     """
     # Read the triage module source and check for forbidden patterns
-    triage_path = REPO_ROOT / "tools" / "dde" / "core" / "triage.py"
+    triage_path = REPO_ROOT / "tools" / "oase" / "core" / "triage.py"
     source = triage_path.read_text()
 
     # The module must not contain code that auto-terminates based on
@@ -865,7 +865,7 @@ def test_terminate_program_also_requires_approval():
         project = _make_project(Path(td))
 
         decision = {
-            "schema": "dde.decision-record.v1",
+            "schema": "oase.decision-record.v1",
             "id": "DR-002",
             "action": "terminate",
             "affected_entity": {
@@ -1185,17 +1185,17 @@ def test_write_triage_assessment():
         project = _make_project(Path(td))
 
         assessment = {
-            "schema": "dde.evidence-assessment.v1",
+            "schema": "oase.evidence-assessment.v1",
             "id": "AR-PENDING",
             "concept_ref": "IC-001-r1",
             "claim": "CDK4 has a plausible manufacturing path",
             "evidence_status": "supported",
             "execution_outcome": "completed",
             "assessed_at": _NOW,
-            "assessed_by": "dde-manufacturing-stage0",
+            "assessed_by": "oase-manufacturing-stage0",
         }
 
-        from dde.core.triage import write_triage_assessment
+        from oase.core.triage import write_triage_assessment
 
         result = write_triage_assessment(str(project), assessment, "AR-001")
         assert result["id"] == "AR-001"
@@ -1252,7 +1252,7 @@ def test_persistence_end_to_end():
         assert dr["action"] == "investigate", (
             f"Budget-exhausted decision should use 'investigate', got {dr['action']!r}"
         )
-        assert dr["schema"] == "dde.decision-record.v1"
+        assert dr["schema"] == "oase.decision-record.v1"
         assert "budget" in dr["rationale"].lower()
 
 
@@ -1388,19 +1388,19 @@ def test_all_functions_reachable():
     import ast
     import inspect
 
-    import dde.core.triage as triage_mod
+    import oase.core.triage as triage_mod
 
     public_functions = [
         name
         for name, obj in inspect.getmembers(triage_mod)
         if inspect.isfunction(obj)
         and not name.startswith("_")
-        and obj.__module__ == "dde.core.triage"
+        and obj.__module__ == "oase.core.triage"
     ]
 
     # Parse BOTH production source files for actual function calls
-    core_path = REPO_ROOT / "tools" / "dde" / "core" / "triage.py"
-    cmd_path = REPO_ROOT / "tools" / "dde" / "commands" / "triage.py"
+    core_path = REPO_ROOT / "tools" / "oase" / "core" / "triage.py"
+    cmd_path = REPO_ROOT / "tools" / "oase" / "commands" / "triage.py"
 
     assert core_path.exists(), "core/triage.py must exist"
     assert cmd_path.exists(), "commands/triage.py must exist"
@@ -1437,7 +1437,7 @@ def test_cli_triage_command_registered():
     """The 'triage' command group is registered in the CLI."""
     runner = CliRunner()
     result = runner.invoke(cli, ["triage", "--help"])
-    assert result.exit_code == 0, f"'dde triage --help' failed: {result.output}"
+    assert result.exit_code == 0, f"'oase triage --help' failed: {result.output}"
     assert "Stage 0" in result.output or "triage" in result.output
 
 
@@ -1445,14 +1445,14 @@ def test_cli_triage_run_help():
     """The 'triage run' subcommand is registered and shows help."""
     runner = CliRunner()
     result = runner.invoke(cli, ["triage", "run", "--help"])
-    assert result.exit_code == 0, f"'dde triage run --help' failed: {result.output}"
+    assert result.exit_code == 0, f"'oase triage run --help' failed: {result.output}"
     assert "CONCEPT_PATHS" in result.output
     assert "--max-seconds" in result.output
     assert "--max-concepts" in result.output
 
 
 def test_cli_triage_run_end_to_end():
-    """End-to-end test: invoke 'dde triage run' with a real concept file.
+    """End-to-end test: invoke 'oase triage run' with a real concept file.
 
     This is the critical test proving the orchestration code is reachable
     from a real CLI entry point — not just from the test file.
@@ -1481,7 +1481,7 @@ def test_cli_triage_run_end_to_end():
         # with a project-root error (exit 2) — both prove the CLI
         # wiring works and the orchestration code is invoked.
         assert result.exit_code in (0, 2), (
-            f"'dde triage run' exited {result.exit_code}: {result.output[:500]}"
+            f"'oase triage run' exited {result.exit_code}: {result.output[:500]}"
         )
 
         if result.exit_code == 0:
@@ -1570,9 +1570,9 @@ def test_template_references_existing_tools():
     template_path = REPO_ROOT / "templates" / "science-program-lead" / "agents.md"
     content = template_path.read_text()
 
-    assert "dde manufacturing assess-stage0" in content
-    assert "dde structure-screen run" in content
-    assert "dde differentiation assess" in content
+    assert "oase manufacturing assess-stage0" in content
+    assert "oase structure-screen run" in content
+    assert "oase differentiation assess" in content
 
 
 def test_template_no_auto_veto_documented():
@@ -1643,7 +1643,7 @@ def test_persistence_error_validation_failure_recorded():
         # evidence_status, etc.) so write_record() raises SchemaError.
         ws.assessments.append(
             {
-                "schema": "dde.evidence-assessment.v1",
+                "schema": "oase.evidence-assessment.v1",
                 "id": "AR-PENDING",
                 # Missing: concept_ref, claim, evidence_status, execution_outcome,
                 # assessed_at, assessed_by
@@ -1654,12 +1654,12 @@ def test_persistence_error_validation_failure_recorded():
         outcome.all_assessments.extend(ws.assessments)
 
         # Re-invoke the persistence path
-        from dde.core.controlstore import next_id
+        from oase.core.controlstore import next_id
 
         for _cr in outcome.concept_results:
             for _ws_name, _ws_result in _cr.workstream_results.items():
                 for assessment in _ws_result.assessments:
-                    if assessment.get("schema") != "dde.evidence-assessment.v1":
+                    if assessment.get("schema") != "oase.evidence-assessment.v1":
                         continue
                     try:
                         aid = next_id(str(project), "assessment")
@@ -1728,7 +1728,7 @@ def test_persistence_error_refusal_recorded_distinctly():
         outcome.all_decisions.append(decision)
 
         # Run the persistence path (matching run_triage's logic)
-        from dde.core.controlstore import next_id
+        from oase.core.controlstore import next_id
 
         for _cr in outcome.concept_results:
             if _cr.decision_record is None:
@@ -1816,7 +1816,7 @@ def test_refused_assessment_retains_pending_id():
 
         # Malformed assessment — will fail schema validation
         assessment = {
-            "schema": "dde.evidence-assessment.v1",
+            "schema": "oase.evidence-assessment.v1",
             "id": "AR-PENDING",
             # Missing all required fields
         }
@@ -1944,13 +1944,13 @@ def test_structure_screening_envelope_unpacked():
         "n_assessments": 2,
         "assessments": [
             {
-                "schema": "dde.evidence-assessment.v1",
+                "schema": "oase.evidence-assessment.v1",
                 "id": "AR-001",
                 "evidence_status": "contradicted",
                 "concept_ref": "IC-001-r1",
             },
             {
-                "schema": "dde.evidence-assessment.v1",
+                "schema": "oase.evidence-assessment.v1",
                 "id": "AR-002",
                 "evidence_status": "supported",
                 "concept_ref": "IC-001-r1",
@@ -1969,7 +1969,7 @@ def test_structure_screening_envelope_unpacked():
         "Contradicted status must be detected from unpacked assessments"
     )
     assert ws.assessments[0]["evidence_status"] == "contradicted"
-    assert ws.assessments[0].get("schema") == "dde.evidence-assessment.v1"
+    assert ws.assessments[0].get("schema") == "oase.evidence-assessment.v1"
 
 
 # ---------------------------------------------------------------------------
@@ -1990,7 +1990,7 @@ def test_manufacturing_output_has_schema():
     with tempfile.TemporaryDirectory() as td:
         project = Path(td) / "test-project"
         project.mkdir()
-        (project / ".dde").mkdir()
+        (project / ".oase").mkdir()
         ensure_control_dirs(project)
 
         ws = run_manufacturing_workstream(
@@ -2012,9 +2012,9 @@ def test_manufacturing_output_has_schema():
         )
         for a in ws.assessments:
             schema = a.get("schema")
-            assert schema == "dde.evidence-assessment.v1", (
+            assert schema == "oase.evidence-assessment.v1", (
                 f"Manufacturing assessment must have schema "
-                f"'dde.evidence-assessment.v1', got {schema!r}. "
+                f"'oase.evidence-assessment.v1', got {schema!r}. "
                 f"Keys present: {sorted(a.keys())}"
             )
 

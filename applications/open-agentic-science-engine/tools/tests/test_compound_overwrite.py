@@ -30,8 +30,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dde.commands.compound import _safe_write_artifact
-from dde.core.errors import Refusal
+from oase.commands.compound import _safe_write_artifact
+from oase.core.errors import Refusal
 
 
 class TestSafeWriteArtifactNew(unittest.TestCase):

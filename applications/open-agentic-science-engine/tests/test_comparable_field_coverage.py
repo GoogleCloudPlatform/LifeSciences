@@ -48,7 +48,7 @@ _TOOLS_ROOT = Path(__file__).resolve().parent.parent / "tools"
 if str(_TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOOLS_ROOT))
 
-from dde.core.provenance import (
+from oase.core.provenance import (
     _NORMALIZED_ANALYSIS_FIELDS,
     _VOLATILE_ANALYSIS_FIELDS,
     _comparable,
@@ -207,7 +207,7 @@ class TestComparableSourceNormalization:
         # that exists in ARTIFACT_DIRS (compounds -> raw/compounds).
         (tmp_path / "raw" / "compounds").mkdir(parents=True)
         (tmp_path / "raw" / "compounds" / "compound_data.json").write_text("{}")
-        (tmp_path / ".dde").mkdir()
+        (tmp_path / ".oase").mkdir()
 
         old_record = _maximal_record()
         old_record["source"] = "compound_data.json"
@@ -220,7 +220,7 @@ class TestComparableSourceNormalization:
         # Patch _normalize_source to resolve the bare filename against
         # our tmp_path instead of the real project root.
         def mock_normalize(source: str) -> str:
-            from dde.core.context import ARTIFACT_DIRS
+            from oase.core.context import ARTIFACT_DIRS
 
             if "/" not in source and "\\" not in source and "." in source:
                 for rel_dir in sorted(set(ARTIFACT_DIRS.values())):
@@ -229,7 +229,9 @@ class TestComparableSourceNormalization:
                         return str(Path(rel_dir) / source)
             return source
 
-        with patch("dde.core.provenance._normalize_source", side_effect=mock_normalize):
+        with patch(
+            "oase.core.provenance._normalize_source", side_effect=mock_normalize
+        ):
             assert _comparable(old_record) == _comparable(new_record)
 
     def test_different_files_still_differ(self) -> None:
@@ -248,10 +250,10 @@ class TestComparableSourceNormalization:
         """Applying _normalize_source twice yields the same result."""
         (tmp_path / "raw" / "chemistry").mkdir(parents=True)
         (tmp_path / "raw" / "chemistry" / "data.json").write_text("{}")
-        (tmp_path / ".dde").mkdir()
+        (tmp_path / ".oase").mkdir()
 
         def mock_normalize(source: str) -> str:
-            from dde.core.context import ARTIFACT_DIRS
+            from oase.core.context import ARTIFACT_DIRS
 
             if "/" not in source and "\\" not in source and "." in source:
                 for rel_dir in sorted(set(ARTIFACT_DIRS.values())):
@@ -260,7 +262,9 @@ class TestComparableSourceNormalization:
                         return str(Path(rel_dir) / source)
             return source
 
-        with patch("dde.core.provenance._normalize_source", side_effect=mock_normalize):
+        with patch(
+            "oase.core.provenance._normalize_source", side_effect=mock_normalize
+        ):
             once = _comparable({"source": "data.json"})
             twice = _comparable({"source": once["source"]})
             assert once["source"] == twice["source"]
@@ -461,7 +465,7 @@ class TestArtifactErrorCaughtInMayWrite:
         raises Refusal rather than letting ArtifactError escape."""
         import json as _json
 
-        from dde.core.errors import Refusal
+        from oase.core.errors import Refusal
 
         # Write a stored record with a pathological source that will
         # make _normalize_source() raise ArtifactError.

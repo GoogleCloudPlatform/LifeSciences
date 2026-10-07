@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import unittest
 
-from dde.commands.mpo import _extract_metrics, _flatten_list_of_dicts, _slugify
+from oase.commands.mpo import _extract_metrics, _flatten_list_of_dicts, _slugify
 
 
 class TestSlugify(unittest.TestCase):

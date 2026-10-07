@@ -6,7 +6,7 @@
 
 ## Summary
 
-Implemented the `dde hypex` command group with `ingest` and `analyze`
+Implemented the `oase hypex` command group with `ingest` and `analyze`
 subcommands, declared the `hypex@1.0` threshold set, registered 9
 `hypex.*` relay codes, wired the command into the CLI, and wrote tests.
 
@@ -40,7 +40,7 @@ subcommands, declared the `hypex@1.0` threshold set, registered 9
 6. **`tests/test_hypex.py`** — 24 tests covering:
    - Relay code registration (all 9 codes + alphabetical order)
    - Threshold set declaration (resolved + UNRESOLVED values)
-   - Happy path ingest (valid run dir -> dde.hypex.v1)
+   - Happy path ingest (valid run dir -> oase.hypex.v1)
    - Observed counts from datastore (not run.yaml)
    - Dangling match refs (integrity violations)
    - Aborted run (missing termination.json)

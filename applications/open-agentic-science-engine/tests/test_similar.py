@@ -46,7 +46,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.similar import (
+from oase.commands.similar import (
     SCHEMA,
     _build_artifact,
     _classify_results,
@@ -55,8 +55,8 @@ from dde.commands.similar import (
     _slug,
     _validate_smiles,
 )
-from dde.core import provenance
-from dde.core.errors import ArtifactError, Refusal
+from oase.core import provenance
+from oase.core.errors import ArtifactError, Refusal
 
 # ---------------------------------------------------------------------------
 # Helper: canned API responses
@@ -148,7 +148,7 @@ def _chembl_substructure_response(
 
 def test_validate_smiles_valid() -> None:
     """Valid SMILES returns canonical form."""
-    with mock.patch("dde.commands.similar._require_rdkit") as mock_rdkit:
+    with mock.patch("oase.commands.similar._require_rdkit") as mock_rdkit:
         mock_chem = mock.MagicMock()
         mock_mol = mock.MagicMock()
         mock_chem.MolFromSmiles.return_value = mock_mol
@@ -162,7 +162,7 @@ def test_validate_smiles_valid() -> None:
 
 def test_validate_smiles_invalid() -> None:
     """Invalid SMILES raises Refusal (exit 9)."""
-    with mock.patch("dde.commands.similar._require_rdkit") as mock_rdkit:
+    with mock.patch("oase.commands.similar._require_rdkit") as mock_rdkit:
         mock_chem = mock.MagicMock()
         mock_chem.MolFromSmiles.return_value = None
         mock_rdkit.return_value = mock_chem
@@ -213,8 +213,8 @@ def test_slug_short_smiles() -> None:
 def test_poll_pubchem_listkey_immediate() -> None:
     """Polling returns immediately when result is ready."""
     with (
-        mock.patch("dde.commands.similar.http.get_json") as mock_get,
-        mock.patch("dde.commands.similar.time.sleep"),
+        mock.patch("oase.commands.similar.http.get_json") as mock_get,
+        mock.patch("oase.commands.similar.time.sleep"),
     ):
         mock_get.return_value = _pubchem_listkey_result([2244, 3672])
         result = _poll_pubchem_listkey("test-key")
@@ -225,8 +225,8 @@ def test_poll_pubchem_listkey_immediate() -> None:
 def test_poll_pubchem_listkey_waiting() -> None:
     """Polling waits then returns result."""
     with (
-        mock.patch("dde.commands.similar.http.get_json") as mock_get,
-        mock.patch("dde.commands.similar.time.sleep"),
+        mock.patch("oase.commands.similar.http.get_json") as mock_get,
+        mock.patch("oase.commands.similar.time.sleep"),
     ):
         mock_get.side_effect = [
             {"Waiting": {"ListKey": "test-key"}},
@@ -241,9 +241,9 @@ def test_poll_pubchem_listkey_waiting() -> None:
 def test_poll_pubchem_listkey_timeout() -> None:
     """Polling times out."""
     with (
-        mock.patch("dde.commands.similar.http.get_json") as mock_get,
-        mock.patch("dde.commands.similar.time.sleep"),
-        mock.patch("dde.commands.similar.time.monotonic") as mock_time,
+        mock.patch("oase.commands.similar.http.get_json") as mock_get,
+        mock.patch("oase.commands.similar.time.sleep"),
+        mock.patch("oase.commands.similar.time.monotonic") as mock_time,
     ):
         # First call: t=0, second call: t=200 (past timeout)
         mock_time.side_effect = [0, 0, 200]
@@ -260,8 +260,8 @@ def test_poll_pubchem_listkey_timeout() -> None:
 def test_poll_pubchem_listkey_fault() -> None:
     """Polling raises on fault response."""
     with (
-        mock.patch("dde.commands.similar.http.get_json") as mock_get,
-        mock.patch("dde.commands.similar.time.sleep"),
+        mock.patch("oase.commands.similar.http.get_json") as mock_get,
+        mock.patch("oase.commands.similar.time.sleep"),
     ):
         mock_get.return_value = {"Fault": {"Code": "PUGREST.ServerBusy"}}
 
@@ -580,7 +580,7 @@ def test_relay_codes_registered() -> None:
 
 def test_threshold_set_registered() -> None:
     """similar-search threshold set is declared with expected values."""
-    from dde.core.thresholds import UNRESOLVED, declared_sets
+    from oase.core.thresholds import UNRESOLVED, declared_sets
 
     sets = declared_sets()
     assert "similar-search" in sets, (
@@ -601,7 +601,7 @@ def test_threshold_set_registered() -> None:
 
 def test_chembl_pagination() -> None:
     """ChEMBL pagination follows next URL."""
-    from dde.commands.similar import _chembl_paginate
+    from oase.commands.similar import _chembl_paginate
 
     page1 = {
         "molecules": [
@@ -617,7 +617,7 @@ def test_chembl_pagination() -> None:
         "page_meta": {"next": None},
     }
 
-    with mock.patch("dde.commands.similar.http.get_json") as mock_get:
+    with mock.patch("oase.commands.similar.http.get_json") as mock_get:
         mock_get.side_effect = [page1, page2]
         result = _chembl_paginate("https://example.com/search.json", 10)
         assert len(result) == 3
@@ -628,7 +628,7 @@ def test_chembl_pagination() -> None:
 
 def test_chembl_pagination_cap() -> None:
     """ChEMBL pagination stops at max_results."""
-    from dde.commands.similar import _chembl_paginate
+    from oase.commands.similar import _chembl_paginate
 
     page1 = {
         "molecules": [
@@ -638,7 +638,7 @@ def test_chembl_pagination_cap() -> None:
         "page_meta": {"next": "/chembl/api/data/similarity/page2.json"},
     }
 
-    with mock.patch("dde.commands.similar.http.get_json") as mock_get:
+    with mock.patch("oase.commands.similar.http.get_json") as mock_get:
         mock_get.return_value = page1
         result = _chembl_paginate("https://example.com/search.json", 5)
         assert len(result) == 5
@@ -656,15 +656,15 @@ def test_source_pubchem_only() -> None:
     PubChem similarity hits have tanimoto set to the query threshold
     as a guaranteed lower bound.
     """
-    from dde.commands.similar import _pubchem_similarity
+    from oase.commands.similar import _pubchem_similarity
 
-    with mock.patch("dde.commands.similar.http.get_json") as mock_get:
+    with mock.patch("oase.commands.similar.http.get_json") as mock_get:
         mock_get.side_effect = [
             _pubchem_listkey_waiting("key1"),
             _pubchem_listkey_result([2244]),
             _pubchem_properties([2244]),
         ]
-        with mock.patch("dde.commands.similar.time.sleep"):
+        with mock.patch("oase.commands.similar.time.sleep"):
             hits = _pubchem_similarity("CCO", 0.85, 20)
     assert len(hits) == 1
     assert hits[0]["source_db"] == "pubchem"
@@ -675,9 +675,9 @@ def test_source_pubchem_only() -> None:
 
 def test_source_chembl_only() -> None:
     """--source chembl queries only ChEMBL."""
-    from dde.commands.similar import _chembl_similarity
+    from oase.commands.similar import _chembl_similarity
 
-    with mock.patch("dde.commands.similar.http.get_json") as mock_get:
+    with mock.patch("oase.commands.similar.http.get_json") as mock_get:
         mock_get.return_value = _chembl_similarity_response()
         hits = _chembl_similarity("CCO", 0.85, 20)
     assert len(hits) == 2
@@ -696,7 +696,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory for CliRunner tests."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "compounds").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -704,16 +704,16 @@ def _make_project(base: Path) -> Path:
 def test_cli_search_valid_smiles() -> None:
     """CliRunner: search with valid SMILES writes artifact, exit 0."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
         with (
-            mock.patch("dde.commands.similar._validate_smiles") as mock_validate,
-            mock.patch("dde.commands.similar._pubchem_similarity") as mock_pc,
-            mock.patch("dde.commands.similar._chembl_similarity") as mock_ch,
+            mock.patch("oase.commands.similar._validate_smiles") as mock_validate,
+            mock.patch("oase.commands.similar._pubchem_similarity") as mock_pc,
+            mock.patch("oase.commands.similar._chembl_similarity") as mock_ch,
         ):
             mock_validate.return_value = "CCO"
             mock_pc.return_value = [
@@ -760,13 +760,13 @@ def test_cli_search_valid_smiles() -> None:
 def test_cli_search_invalid_smiles() -> None:
     """CliRunner: search with invalid SMILES exits 9."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.similar._require_rdkit") as mock_rdkit:
+        with mock.patch("oase.commands.similar._require_rdkit") as mock_rdkit:
             mock_chem = mock.MagicMock()
             mock_chem.MolFromSmiles.return_value = None
             mock_rdkit.return_value = mock_chem
@@ -785,16 +785,16 @@ def test_cli_search_invalid_smiles() -> None:
 def test_cli_search_source_pubchem() -> None:
     """CliRunner: --source pubchem queries only PubChem."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
         with (
-            mock.patch("dde.commands.similar._validate_smiles") as mock_validate,
-            mock.patch("dde.commands.similar._pubchem_similarity") as mock_pc,
-            mock.patch("dde.commands.similar._chembl_similarity") as mock_ch,
+            mock.patch("oase.commands.similar._validate_smiles") as mock_validate,
+            mock.patch("oase.commands.similar._pubchem_similarity") as mock_pc,
+            mock.patch("oase.commands.similar._chembl_similarity") as mock_ch,
         ):
             mock_validate.return_value = "CCO"
             mock_pc.return_value = [
@@ -835,16 +835,16 @@ def test_cli_search_source_pubchem() -> None:
 def test_cli_search_source_chembl() -> None:
     """CliRunner: --source chembl queries only ChEMBL."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
         with (
-            mock.patch("dde.commands.similar._validate_smiles") as mock_validate,
-            mock.patch("dde.commands.similar._pubchem_similarity") as mock_pc,
-            mock.patch("dde.commands.similar._chembl_similarity") as mock_ch,
+            mock.patch("oase.commands.similar._validate_smiles") as mock_validate,
+            mock.patch("oase.commands.similar._pubchem_similarity") as mock_pc,
+            mock.patch("oase.commands.similar._chembl_similarity") as mock_ch,
         ):
             mock_validate.return_value = "CCO"
             mock_ch.return_value = [
@@ -883,16 +883,16 @@ def test_cli_search_source_chembl() -> None:
 def test_cli_substructure_valid() -> None:
     """CliRunner: substructure with valid SMILES writes artifact, exit 0."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
         with (
-            mock.patch("dde.commands.similar._validate_smiles") as mock_validate,
-            mock.patch("dde.commands.similar._pubchem_substructure") as mock_pc,
-            mock.patch("dde.commands.similar._chembl_substructure") as mock_ch,
+            mock.patch("oase.commands.similar._validate_smiles") as mock_validate,
+            mock.patch("oase.commands.similar._pubchem_substructure") as mock_pc,
+            mock.patch("oase.commands.similar._chembl_substructure") as mock_ch,
         ):
             mock_validate.return_value = "c1ccccc1"
             mock_pc.return_value = [
@@ -927,16 +927,16 @@ def test_cli_substructure_valid() -> None:
 def test_cli_search_json_flag() -> None:
     """CliRunner: --json flag produces valid JSON output."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
         with (
-            mock.patch("dde.commands.similar._validate_smiles") as mock_validate,
-            mock.patch("dde.commands.similar._pubchem_similarity") as mock_pc,
-            mock.patch("dde.commands.similar._chembl_similarity") as mock_ch,
+            mock.patch("oase.commands.similar._validate_smiles") as mock_validate,
+            mock.patch("oase.commands.similar._pubchem_similarity") as mock_pc,
+            mock.patch("oase.commands.similar._chembl_similarity") as mock_ch,
         ):
             mock_validate.return_value = "CCO"
             mock_pc.return_value = []
@@ -957,16 +957,16 @@ def test_cli_search_json_flag() -> None:
 def test_cli_search_quiet_flag() -> None:
     """CliRunner: --quiet flag suppresses human-readable output."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         runner = CliRunner()
 
         with (
-            mock.patch("dde.commands.similar._validate_smiles") as mock_validate,
-            mock.patch("dde.commands.similar._pubchem_similarity") as mock_pc,
-            mock.patch("dde.commands.similar._chembl_similarity") as mock_ch,
+            mock.patch("oase.commands.similar._validate_smiles") as mock_validate,
+            mock.patch("oase.commands.similar._pubchem_similarity") as mock_pc,
+            mock.patch("oase.commands.similar._chembl_similarity") as mock_ch,
         ):
             mock_validate.return_value = "CCO"
             mock_pc.return_value = []
@@ -1044,7 +1044,7 @@ def _write_search_artifact(
 def test_cli_analyze_exact_match() -> None:
     """CliRunner: analyze produces exact-match verdict."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1065,7 +1065,7 @@ def test_cli_analyze_exact_match() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.similar._validate_smiles") as mock_validate:
+        with mock.patch("oase.commands.similar._validate_smiles") as mock_validate:
             mock_validate.return_value = "CCO"
             result = runner.invoke(
                 cli,
@@ -1087,7 +1087,7 @@ def test_cli_analyze_exact_match() -> None:
 def test_cli_analyze_known_compound() -> None:
     """CliRunner: analyze produces known-compound-found verdict."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1108,7 +1108,7 @@ def test_cli_analyze_known_compound() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.similar._validate_smiles") as mock_validate:
+        with mock.patch("oase.commands.similar._validate_smiles") as mock_validate:
             mock_validate.return_value = "CCO"
             result = runner.invoke(
                 cli,
@@ -1124,7 +1124,7 @@ def test_cli_analyze_known_compound() -> None:
 def test_cli_analyze_novel() -> None:
     """CliRunner: analyze produces novel verdict."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1145,7 +1145,7 @@ def test_cli_analyze_novel() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.similar._validate_smiles") as mock_validate:
+        with mock.patch("oase.commands.similar._validate_smiles") as mock_validate:
             mock_validate.return_value = "CCO"
             result = runner.invoke(
                 cli,
@@ -1161,14 +1161,14 @@ def test_cli_analyze_novel() -> None:
 def test_cli_analyze_json_flag() -> None:
     """CliRunner: --json flag on analyze produces valid JSON."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         _write_search_artifact(project, "CCO")
 
         runner = CliRunner()
-        with mock.patch("dde.commands.similar._validate_smiles") as mock_validate:
+        with mock.patch("oase.commands.similar._validate_smiles") as mock_validate:
             mock_validate.return_value = "CCO"
             result = runner.invoke(
                 cli,
@@ -1185,14 +1185,14 @@ def test_cli_analyze_json_flag() -> None:
 def test_cli_analyze_quiet_flag() -> None:
     """CliRunner: --quiet flag on analyze suppresses verbose output."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
         _write_search_artifact(project, "CCO")
 
         runner = CliRunner()
-        with mock.patch("dde.commands.similar._validate_smiles") as mock_validate:
+        with mock.patch("oase.commands.similar._validate_smiles") as mock_validate:
             mock_validate.return_value = "CCO"
             result = runner.invoke(
                 cli,
@@ -1208,7 +1208,7 @@ def test_cli_analyze_quiet_flag() -> None:
 def test_cli_analyze_from_flag() -> None:
     """CliRunner: --from flag reads artifacts from a different directory."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1249,7 +1249,7 @@ def test_cli_analyze_from_flag() -> None:
         )
 
         runner = CliRunner()
-        with mock.patch("dde.commands.similar._validate_smiles") as mock_validate:
+        with mock.patch("oase.commands.similar._validate_smiles") as mock_validate:
             mock_validate.return_value = "CCO"
             result = runner.invoke(
                 cli,
@@ -1273,7 +1273,7 @@ def test_cli_analyze_from_flag() -> None:
 def test_cli_analyze_out_flag() -> None:
     """CliRunner: --out flag writes analysis to a different directory."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -1281,7 +1281,7 @@ def test_cli_analyze_out_flag() -> None:
 
         alt_out = project / "alt-output"
         runner = CliRunner()
-        with mock.patch("dde.commands.similar._validate_smiles") as mock_validate:
+        with mock.patch("oase.commands.similar._validate_smiles") as mock_validate:
             mock_validate.return_value = "CCO"
             result = runner.invoke(
                 cli,

@@ -59,21 +59,21 @@ phenotype ontology associations for a gene. Entry points include:
 - **HPO resolution path**: the tool resolves gene symbols through HPO's
   gene search API to an NCBI Gene ID, then fetches phenotype and
   disease annotations.
-- Run `dde doctor` before first use.
+- Run `oase doctor` before first use.
 
 ## 3. Tool invocations
 
 | Question | Run | Writes to |
 |---|---|---|
-| What mouse phenotypes are reported for this gene? | `dde phenotype search <GENE> --source mgi` | `raw/genomics/<slug>.phenotype-mgi.json`<br>`raw/genomics/<slug>.phenotype-mgi.artifact.json`<br>`raw/genomics/<slug>.phenotype-mgi.meta.json` |
-| What human phenotype terms are associated? | `dde phenotype search <GENE> --source hpo` | `raw/genomics/<slug>.phenotype-hpo.json`<br>`raw/genomics/<slug>.phenotype-hpo.artifact.json`<br>`raw/genomics/<slug>.phenotype-hpo.meta.json` |
-| What do the phenotype annotations show? | `dde phenotype analyze <GENE> --source <mgi\|hpo>` | `raw/genomics/<slug>.phenotype-<source>.analysis.json` |
+| What mouse phenotypes are reported for this gene? | `oase phenotype search <GENE> --source mgi` | `raw/genomics/<slug>.phenotype-mgi.json`<br>`raw/genomics/<slug>.phenotype-mgi.artifact.json`<br>`raw/genomics/<slug>.phenotype-mgi.meta.json` |
+| What human phenotype terms are associated? | `oase phenotype search <GENE> --source hpo` | `raw/genomics/<slug>.phenotype-hpo.json`<br>`raw/genomics/<slug>.phenotype-hpo.artifact.json`<br>`raw/genomics/<slug>.phenotype-hpo.meta.json` |
+| What do the phenotype annotations show? | `oase phenotype analyze <GENE> --source <mgi\|hpo>` | `raw/genomics/<slug>.phenotype-<source>.analysis.json` |
 
 Run `search` before `analyze`. `analyze` reads from disk and
 summarises without network access.
 
 The `.phenotype-<source>.json` is the verbatim combined API response.
-The `.artifact.json` is the structured `dde.phenotype.v1` artifact
+The `.artifact.json` is the structured `oase.phenotype.v1` artifact
 with parsed phenotype records. For MGI, each record carries the MP
 ontology term, allele type, and PMID references. For HPO, each record
 carries the HPO term ID, and the artifact summary includes

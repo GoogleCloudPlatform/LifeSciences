@@ -28,16 +28,16 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde`, `hypex`, `elo`, and `prox` on PATH and sets `DDE_TOOLS_HOME`.
+This puts `oase`, `hypex`, `elo`, and `prox` on PATH and sets `OASE_TOOLS_HOME`.
 Without it, all tool commands will fail with "command not found."
 
 Then run a health check:
 
 ```bash
-dde doctor --json
+oase doctor --json
 ```
 
-Verify that `dde` literature commands are available for citation verification.
+Verify that `oase` literature commands are available for citation verification.
 
 ## Input
 
@@ -112,13 +112,13 @@ Verify citations using OASE's citation tools:
    For each `lit_id` in the hypothesis evidence array, resolve and verify it:
 
    ```bash
-   dde cite verify <run-dir>/hypotheses/H-XXXX.json
+   oase cite verify <run-dir>/hypotheses/H-XXXX.json
    ```
 
-   If `dde cite verify` is not yet available, verify citations individually:
+   If `oase cite verify` is not yet available, verify citations individually:
 
    ```bash
-   dde litref resolve "<PMID or DOI>"
+   oase litref resolve "<PMID or DOI>"
    ```
 
 2. **Read the verification results and populate review fields:**
@@ -150,7 +150,7 @@ Verify citations using OASE's citation tools:
    Trigger immediate quarantine per Phase 4 / `safety-screen` skill.
 
 5. **Verify claims against paper contents:**
-   For verified citations, use `dde pubmed search` or `dde preprint search` to
+   For verified citations, use `oase pubmed search` or `oase preprint search` to
    confirm that the paper actually demonstrates what the hypothesis claims:
    - If the paper does not support the claim, note as a key criticism
    - Check citation quality: peer-reviewed (PubMed) > preprint (arXiv,
@@ -164,13 +164,13 @@ Search for evidence that contradicts the hypothesis's core mechanism:
    for "A does not affect B", "A inhibits B", or "B occurs without A":
 
    ```bash
-   dde pubmed search "<mechanism negation>[MeSH Terms]" --max-results 10
+   oase pubmed search "<mechanism negation>[MeSH Terms]" --max-results 10
    ```
 
 2. **Search for alternative explanations:**
 
    ```bash
-   dde pubmed search "<observation>[MeSH Terms] AND <alternative mechanism>[MeSH Terms]"
+   oase pubmed search "<observation>[MeSH Terms] AND <alternative mechanism>[MeSH Terms]"
    ```
 
 3. **Record any contradicting papers** in the `contradicting_evidence` array.
@@ -180,8 +180,8 @@ Search for evidence that contradicts the hypothesis's core mechanism:
 Search for existing publications that propose the same or similar hypothesis:
 
 ```bash
-dde pubmed search "<hypothesis title keywords>" --max-results 10
-dde preprint search --source arxiv "<hypothesis key terms>"
+oase pubmed search "<hypothesis title keywords>" --max-results 10
+oase preprint search --source arxiv "<hypothesis key terms>"
 ```
 
 If prior art is found, note it as a key criticism impacting the novelty score.
@@ -210,8 +210,8 @@ weakest:
 3. **Probe the weakest assumption** with targeted searches:
 
    ```bash
-   dde pubmed search "<weakest assumption terms>[MeSH Terms]" --max-results 15
-   dde pubmed search "<weakest assumption negation>[MeSH Terms]" --max-results 10
+   oase pubmed search "<weakest assumption terms>[MeSH Terms]" --max-results 15
+   oase pubmed search "<weakest assumption negation>[MeSH Terms]" --max-results 10
    ```
 
 4. **Update scores if needed.** If the deep review reveals that a foundational
@@ -319,7 +319,7 @@ Use `scion message` to report back to the supervisor.
   seem obviously weak.
 - **Never fabricate citations.** Every literature identifier in
   `verified_citations` or `contradicting_evidence` must come from an actual
-  `dde` search or fetch result.
+  `oase` search or fetch result.
 - **Use the calibrated anchors.** Do not invent your own scoring criteria.
 - **Apply the safety screen to every hypothesis.** Even hypotheses about
   benign topics get a safety score. Most will score 4 or 5 — that's expected.

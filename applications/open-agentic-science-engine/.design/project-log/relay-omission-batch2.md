@@ -35,7 +35,7 @@ verified scientific finding that publications don't exist.
 
 **Fix**: After the response file loop, check `if not totals` and raise
 `ArtifactError` with a clear message directing the user to run
-`dde litref resolve` first.
+`oase litref resolve` first.
 
 ### #205 — selectivity.py: string "false" suppresses panel_incomplete relay
 

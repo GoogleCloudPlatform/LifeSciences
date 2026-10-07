@@ -1,4 +1,4 @@
-# OASE CLI core dependencies — everything `dde` itself imports.
+# OASE CLI core dependencies — everything `oase` itself imports.
 # Install into a venv via: ./install.sh
 #
 # This file is hashed into the `env_version` recorded in every provenance
@@ -9,7 +9,7 @@
 # Kept deliberately small and pure-wheel. The science stack in
 # requirements-science.txt needs a C toolchain and Python headers to
 # build; keeping the two apart is what lets an agent get a working
-# `dde` on a machine where prody cannot compile, instead of an empty
+# `oase` on a machine where prody cannot compile, instead of an empty
 # venv and a wall of gcc output. See tools/README.md.
 #
 # All packages are pinned to exact versions with SHA-256 hashes for

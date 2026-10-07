@@ -41,14 +41,14 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.preprint import (
+from oase.commands.preprint import (
     _BIORXIV_MAX_PAGES,
     _BIORXIV_PAGE_SIZE,
     _parse_arxiv_entries,
     _parse_biorxiv_collection,
     _slugify,
 )
-from dde.core import provenance
+from oase.core import provenance
 
 # ---------------------------------------------------------------------------
 # Helper: project setup and canned arXiv responses
@@ -59,7 +59,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "literature").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -136,7 +136,7 @@ def _mock_http_response(content: bytes, status_code: int = 200) -> mock.Mock:
 def test_search_three_results() -> None:
     """A query returning 3 results produces correct schema and count."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     entries = [
         {
@@ -176,7 +176,7 @@ def test_search_three_results() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.request") as mock_req:
+        with mock.patch("oase.commands.preprint.http.request") as mock_req:
             mock_req.return_value = _mock_http_response(xml_bytes)
             result = runner.invoke(
                 cli,
@@ -200,7 +200,7 @@ def test_search_three_results() -> None:
         assert len(artifact_files) == 1, f"Expected 1 artifact, got {artifact_files}"
 
         artifact = json.loads(artifact_files[0].read_text(encoding="utf-8"))
-        assert artifact["schema"] == "dde.preprint-search.v1"
+        assert artifact["schema"] == "oase.preprint-search.v1"
         assert artifact["source"] == "arxiv"
         assert len(artifact["results"]) == 3
         assert artifact["total_results"] == 3
@@ -216,7 +216,7 @@ def test_search_three_results() -> None:
 def test_search_zero_results() -> None:
     """A query returning 0 results: exit 0, fires preprint.no_results."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     xml_bytes = _arxiv_atom_response([], total=0)
 
@@ -224,7 +224,7 @@ def test_search_zero_results() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.request") as mock_req:
+        with mock.patch("oase.commands.preprint.http.request") as mock_req:
             mock_req.return_value = _mock_http_response(xml_bytes)
             result = runner.invoke(
                 cli,
@@ -264,7 +264,7 @@ def test_search_zero_results() -> None:
 def test_analyze_phase_two_contract() -> None:
     """analyze subcommand is phase-two guarded (offline, --overwrite injected)."""
     import click as click_mod
-    from dde.cli import cli
+    from oase.cli import cli
 
     preprint_group = cli.commands.get("preprint")
     assert preprint_group is not None, "preprint command not registered"
@@ -298,7 +298,7 @@ def test_relay_codes_registered() -> None:
 
 def test_threshold_set_registered() -> None:
     """Threshold set preprint-search is in declared_sets()."""
-    from dde.core.thresholds import declared_sets
+    from oase.core.thresholds import declared_sets
 
     sets = declared_sets()
     assert "preprint-search" in sets, (
@@ -318,7 +318,7 @@ def test_threshold_set_registered() -> None:
 def test_relay_no_results_does_not_fire_when_results_exist() -> None:
     """preprint.no_results does NOT fire when there are results."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     entries = [
         {
@@ -338,7 +338,7 @@ def test_relay_no_results_does_not_fire_when_results_exist() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.request") as mock_req:
+        with mock.patch("oase.commands.preprint.http.request") as mock_req:
             mock_req.return_value = _mock_http_response(xml_bytes)
             result = runner.invoke(
                 cli,
@@ -375,7 +375,7 @@ def test_relay_no_results_does_not_fire_when_results_exist() -> None:
 def test_manifest_schema() -> None:
     """All required fields are present in the preprint search artifact."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     entries = [
         {
@@ -395,7 +395,7 @@ def test_manifest_schema() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.request") as mock_req:
+        with mock.patch("oase.commands.preprint.http.request") as mock_req:
             mock_req.return_value = _mock_http_response(xml_bytes)
             result = runner.invoke(
                 cli,
@@ -419,7 +419,7 @@ def test_manifest_schema() -> None:
         artifact = json.loads(artifact_files[0].read_text(encoding="utf-8"))
 
         # Top-level required fields
-        assert artifact["schema"] == "dde.preprint-search.v1"
+        assert artifact["schema"] == "oase.preprint-search.v1"
         assert "source" in artifact
         assert "query" in artifact
         assert "searched_at" in artifact
@@ -522,7 +522,7 @@ def test_parse_arxiv_entries() -> None:
 def test_query_truncated_fires() -> None:
     """preprint.query_truncated fires when results are truncated."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     entries = [
         {
@@ -553,7 +553,7 @@ def test_query_truncated_fires() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.request") as mock_req:
+        with mock.patch("oase.commands.preprint.http.request") as mock_req:
             mock_req.return_value = _mock_http_response(xml_bytes)
             result = runner.invoke(
                 cli,
@@ -602,7 +602,7 @@ def test_query_truncated_fires() -> None:
 def test_query_truncated_no_fire() -> None:
     """preprint.query_truncated does NOT fire when results are not truncated."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     entries = [
         {
@@ -643,7 +643,7 @@ def test_query_truncated_no_fire() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.request") as mock_req:
+        with mock.patch("oase.commands.preprint.http.request") as mock_req:
             mock_req.return_value = _mock_http_response(xml_bytes)
             result = runner.invoke(
                 cli,
@@ -683,7 +683,7 @@ def test_query_truncated_no_fire() -> None:
 def test_analyze_end_to_end() -> None:
     """analyze subcommand reads search output and produces analysis."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     entries = [
         {
@@ -724,7 +724,7 @@ def test_analyze_end_to_end() -> None:
         runner = CliRunner()
 
         # Phase 1: search
-        with mock.patch("dde.commands.preprint.http.request") as mock_req:
+        with mock.patch("oase.commands.preprint.http.request") as mock_req:
             mock_req.return_value = _mock_http_response(xml_bytes)
             search_result = runner.invoke(
                 cli,
@@ -859,7 +859,7 @@ def _biorxiv_api_response(
 def test_biorxiv_search_results() -> None:
     """A bioRxiv query returning results produces correct schema and source."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     items = [
         {
@@ -899,7 +899,7 @@ def test_biorxiv_search_results() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.get_json") as mock_get:
+        with mock.patch("oase.commands.preprint.http.get_json") as mock_get:
             mock_get.return_value = api_response
             result = runner.invoke(
                 cli,
@@ -923,7 +923,7 @@ def test_biorxiv_search_results() -> None:
         assert len(artifact_files) == 1, f"Expected 1 artifact, got {artifact_files}"
 
         artifact = json.loads(artifact_files[0].read_text(encoding="utf-8"))
-        assert artifact["schema"] == "dde.preprint-search.v1"
+        assert artifact["schema"] == "oase.preprint-search.v1"
         assert artifact["source"] == "biorxiv"
         assert len(artifact["results"]) == 3
         for r in artifact["results"]:
@@ -942,7 +942,7 @@ def test_biorxiv_search_results() -> None:
 def test_biorxiv_search_zero_results() -> None:
     """A bioRxiv query returning 0 results: exit 0, fires preprint.no_results."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     # Empty collection — no items match the query.
     api_response = _biorxiv_api_response([], total=0)
@@ -951,7 +951,7 @@ def test_biorxiv_search_zero_results() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.get_json") as mock_get:
+        with mock.patch("oase.commands.preprint.http.get_json") as mock_get:
             mock_get.return_value = api_response
             result = runner.invoke(
                 cli,
@@ -991,7 +991,7 @@ def test_biorxiv_search_zero_results() -> None:
 def test_biorxiv_source_accepted() -> None:
     """--source biorxiv is accepted by the CLI."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     api_response = _biorxiv_api_response(
         [
@@ -1013,7 +1013,7 @@ def test_biorxiv_source_accepted() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.preprint.http.get_json") as mock_get:
+        with mock.patch("oase.commands.preprint.http.get_json") as mock_get:
             mock_get.return_value = api_response
             result = runner.invoke(
                 cli,
@@ -1101,7 +1101,7 @@ def test_parse_biorxiv_collection() -> None:
 def test_biorxiv_pagination_cap() -> None:
     """bioRxiv search respects _BIORXIV_MAX_PAGES and notes cap in sidecar."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     # Build a full page of 100 items that do NOT match the search query.
     # This keeps len(results) == 0 so the loop continues until the cap fires.
@@ -1133,7 +1133,7 @@ def test_biorxiv_pagination_cap() -> None:
         runner = CliRunner()
 
         with mock.patch(
-            "dde.commands.preprint.http.get_json", side_effect=mock_get_json
+            "oase.commands.preprint.http.get_json", side_effect=mock_get_json
         ):
             result = runner.invoke(
                 cli,

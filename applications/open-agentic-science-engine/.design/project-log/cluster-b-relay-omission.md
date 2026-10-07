@@ -42,10 +42,10 @@ payload. The relay was already present in the analysis sidecar's
 
 ## Files Changed
 
-- `tools/dde/commands/cellxgene.py` — relay moved outside `if total_datasets > 0`
-- `tools/dde/commands/differentiation.py` — added `emit.data("relays", relays)`
-- `tools/dde/commands/disco.py` — relay moved outside `if n > 0`
-- `tools/dde/commands/scp.py` — relay moved outside `if outcome == "results_found"`
+- `tools/oase/commands/cellxgene.py` — relay moved outside `if total_datasets > 0`
+- `tools/oase/commands/differentiation.py` — added `emit.data("relays", relays)`
+- `tools/oase/commands/disco.py` — relay moved outside `if n > 0`
+- `tools/oase/commands/scp.py` — relay moved outside `if outcome == "results_found"`
 - `tests/test_relay_omission_batch4.py` — 8 regression tests
 
 ## Tests

@@ -37,7 +37,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.paths import is_safe_to_open
+from oase.core.paths import is_safe_to_open
 
 # ---------------------------------------------------------------------------
 # Fix 1: artifact.py — sidecar symlink write-through (#178)
@@ -85,8 +85,8 @@ class TestValidateSymlinkOrdering:
     def test_find_layer0_skips_symlink_without_reading(self, tmp_path: Path) -> None:
         """A symlink .json in the artifact dir must be skipped before
         _is_analysis reads it."""
-        from dde.commands.validate import _find_layer0_artifacts
-        from dde.core.context import ARTIFACT_DIRS
+        from oase.commands.validate import _find_layer0_artifacts
+        from oase.core.context import ARTIFACT_DIRS
 
         # Pick an artifact class from ARTIFACT_DIRS.
         art_class = next(iter(ARTIFACT_DIRS))
@@ -230,7 +230,7 @@ class TestHttpPaceFileSymlink:
 
     def test_pace_disk_fallback_on_symlink(self, tmp_path: Path) -> None:
         """A symlink pace file must trigger fallback to _pace_memory."""
-        import dde.core.http as http_mod
+        import oase.core.http as http_mod
 
         # Set up a pace dir with a symlink.
         pace_dir = tmp_path / "pace"
@@ -256,7 +256,7 @@ class TestHttpPaceFileSymlink:
 
     def test_pace_disk_normal_file_works(self, tmp_path: Path) -> None:
         """A normal pace file should work without fallback."""
-        import dde.core.http as http_mod
+        import oase.core.http as http_mod
 
         pace_dir = tmp_path / "pace"
         pace_dir.mkdir()
@@ -337,7 +337,7 @@ class TestSiteCopytreeSymlinks:
         """
         import inspect
 
-        from dde.commands import site as site_mod
+        from oase.commands import site as site_mod
 
         source = inspect.getsource(site_mod)
         # Verify the copytree call includes symlinks=True.

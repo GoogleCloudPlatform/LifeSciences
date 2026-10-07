@@ -24,7 +24,7 @@ Activate and verify the OASE-provisioned environment:
 
 ```bash
 source /scion-volumes/tools/env.sh
-dde doctor --json
+oase doctor --json
 ```
 
 Confirm `hypex`, `elo`, and the OASE literature commands are available. Follow
@@ -83,9 +83,9 @@ instructions in the `evolution-operators` skill. The key steps per operator:
 2. Run targeted literature searches:
 
    ```bash
-   dde pubmed search "<mechanism>[MeSH Terms] AND <target>[MeSH Terms]" --max-results 20
-   dde preprint search --source arxiv "cat:<category> AND abs:<keywords>" --max-results 10
-   dde preprint search --source biorxiv "<keywords>" --max-results 10
+   oase pubmed search "<mechanism>[MeSH Terms] AND <target>[MeSH Terms]" --max-results 20
+   oase preprint search --source arxiv "cat:<category> AND abs:<keywords>" --max-results 10
+   oase preprint search --source biorxiv "<keywords>" --max-results 10
    ```
 
 3. Strengthen the claim with new citations, or rewrite it if contradicting
@@ -119,9 +119,9 @@ instructions in the `evolution-operators` skill. The key steps per operator:
 2. Search for analogies in adjacent or distant fields:
 
    ```bash
-   dde preprint search --source arxiv "cat:<distant-category> AND abs:<analogous keyword>" --max-results 10
-   dde pubmed search "<distant mechanism>[MeSH Terms] AND <target>[MeSH Terms]" --max-results 15
-   dde preprint search --source biorxiv "<phenomenon> <distant field keyword>" --max-results 15
+   oase preprint search --source arxiv "cat:<distant-category> AND abs:<analogous keyword>" --max-results 10
+   oase pubmed search "<distant mechanism>[MeSH Terms] AND <target>[MeSH Terms]" --max-results 15
+   oase preprint search --source biorxiv "<phenomenon> <distant field keyword>" --max-results 15
    ```
 
 3. Identify a transferable insight (mechanism, framework, technique).

@@ -35,12 +35,12 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.controlstore import (
+from oase.core.controlstore import (
     ensure_control_dirs,
     write_record,
 )
@@ -72,7 +72,7 @@ def _make_project() -> Path:
     base = Path(tempfile.mkdtemp())
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -158,10 +158,10 @@ def _invoke_override(
 ) -> _InvokeResult:
     """Invoke override_cmd programmatically via click's testing utility."""
     from click.testing import CliRunner
-    from dde.commands.workorder import workorder
-    from dde.common import AppState
+    from oase.commands.workorder import workorder
+    from oase.common import AppState
 
-    runner = CliRunner(env={"DDE_PROJECT": str(project)})
+    runner = CliRunner(env={"OASE_PROJECT": str(project)})
     result = runner.invoke(
         workorder,
         [
@@ -188,10 +188,10 @@ def _invoke_transition(
 ) -> _InvokeResult:
     """Invoke transition_cmd programmatically via click's testing utility."""
     from click.testing import CliRunner
-    from dde.commands.workorder import workorder
-    from dde.common import AppState
+    from oase.commands.workorder import workorder
+    from oase.common import AppState
 
-    runner = CliRunner(env={"DDE_PROJECT": str(project)})
+    runner = CliRunner(env={"OASE_PROJECT": str(project)})
     result = runner.invoke(
         workorder,
         ["transition", wo_id, target_state],
@@ -275,7 +275,7 @@ def test_override_succeeds_when_all_overridable_checks_covered() -> None:
     )
 
     # Verify the WO transitioned to mechanically_validated
-    from dde.core.controlstore import read_record
+    from oase.core.controlstore import read_record
 
     updated = read_record(project, "work-order", "WO-001-r1")
     assert updated["state"] == "mechanically_validated", (
@@ -327,7 +327,7 @@ def test_transition_proposed_to_committed_blocked() -> None:
     assert (
         "proposed" in result.output.lower() and "committed" in result.output.lower()
     ), f"expected 'proposed' and 'committed' in output: {result.output}"
-    assert "dde workorder commit" in result.output, (
+    assert "oase workorder commit" in result.output, (
         f"should suggest commit cmd: {result.output}"
     )
 
@@ -344,7 +344,7 @@ def test_transition_committed_to_queued_still_works() -> None:
         f"expected success (exit 0), got {result.exit_code}: {result.output}"
     )
 
-    from dde.core.controlstore import read_record
+    from oase.core.controlstore import read_record
 
     updated = read_record(project, "work-order", "WO-001-r1")
     assert updated["state"] == "queued", f"expected queued, got {updated['state']}"

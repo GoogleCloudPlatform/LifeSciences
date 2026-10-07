@@ -39,7 +39,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.provenance import RELAY_CODES
+from oase.core.provenance import RELAY_CODES
 
 # ---------------------------------------------------------------------------
 # Helpers: project and fixture setup
@@ -50,7 +50,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory for CliRunner tests."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "pk").mkdir(parents=True, exist_ok=True)
     # Write a minimal thresholds file (empty — defaults will apply)
     return project
@@ -59,7 +59,7 @@ def _make_project(base: Path) -> Path:
 def _make_study(project: Path, study_id: str = "test-study") -> Path:
     """Write a minimal pk-study.v1 JSON for NCA testing."""
     study: dict[str, Any] = {
-        "schema": "dde.pk-study.v1",
+        "schema": "oase.pk-study.v1",
         "study_id": study_id,
         "species": "rat",
         "route": "iv",
@@ -87,7 +87,7 @@ def _make_nca_result(
     nca: dict[str, Any] = {
         "tool": "pk",
         "subcommand": "nca",
-        "schema": "dde.pk-nca.v1",
+        "schema": "oase.pk-nca.v1",
         "study_id": study_id,
         "species": species,
         "route": "iv",
@@ -129,7 +129,7 @@ def _make_nca_result(
 def _make_ddi_input(project: Path, compound_id: str = "test-compound") -> Path:
     """Write a minimal pk-ddi-input.v1 JSON for DDI testing."""
     ddi_input: dict[str, Any] = {
-        "schema": "dde.pk-ddi-input.v1",
+        "schema": "oase.pk-ddi-input.v1",
         "compound_id": compound_id,
         "cmax_unbound": 50.0,
         "cmax_units": "nM",
@@ -167,7 +167,7 @@ def _read_meta(artifact_path: Path, suffix: str) -> dict[str, Any]:
 def test_nca_no_linearity_relay() -> None:
     """pk nca does NOT emit pk.nca_assumes_linearity as a mandatory relay."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -204,7 +204,7 @@ def test_nca_no_linearity_relay() -> None:
 def test_nca_has_method_caveat() -> None:
     """pk nca DOES include method_caveat as a sidecar note."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -241,7 +241,7 @@ def test_nca_has_method_caveat() -> None:
 def test_ddi_no_static_model_relay() -> None:
     """pk ddi does NOT emit pk.ddi_static_model as a mandatory relay."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -277,7 +277,7 @@ def test_ddi_no_static_model_relay() -> None:
 def test_ddi_has_method_caveat() -> None:
     """pk ddi DOES include method_caveat as a sidecar note."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -314,7 +314,7 @@ def test_ddi_has_method_caveat() -> None:
 def test_scale_single_species_relay_fires() -> None:
     """pk scale with n_species==1 DOES emit pk.single_species_scaling relay."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -354,7 +354,7 @@ def test_scale_single_species_relay_fires() -> None:
 def test_scale_multi_species_no_allometric_relay() -> None:
     """pk scale with n_species>1 does NOT emit pk.allometric_not_pbpk relay."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -403,7 +403,7 @@ def test_scale_multi_species_no_allometric_relay() -> None:
 def test_scale_has_method_caveat() -> None:
     """pk scale DOES include method_caveat as a sidecar note (any n_species)."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))

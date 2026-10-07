@@ -6,7 +6,7 @@
 
 ## What
 
-Created `tools/dde/core/paths.py` — a shared security helper module providing
+Created `tools/oase/core/paths.py` — a shared security helper module providing
 three functions:
 
 - **`confine_path(base_dir, path)`** — resolves a path and verifies it stays

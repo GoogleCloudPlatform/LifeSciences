@@ -48,16 +48,16 @@ neurodegenerative disease donor data. Entry points include:
 - **Brain regions only**: the Allen Brain Atlas covers brain structures.
   Peripheral tissues are not represented. The
   `allen.brain_region_expression_only` relay carries this caveat.
-- Run `dde doctor` before first use.
+- Run `oase doctor` before first use.
 
 ## 3. Tool invocations
 
 | Question | Run | Writes to |
 |---|---|---|
-| Is this gene in the Allen Brain Atlas? | `dde allen search <GENE> [--organism human\|mouse]` | `raw/transcriptomics/<slug>.allen.json`<br>`raw/transcriptomics/<slug>.allen.artifact.json`<br>`raw/transcriptomics/<slug>.allen.meta.json` |
-| What do the Allen gene results show? | `dde allen analyze <GENE>` | `raw/transcriptomics/<slug>.allen.analysis.json` |
-| What donors have dementia/disease data? | `dde allen donors [--disease D] [--dementia] [--min-braak N]` | `raw/transcriptomics/<slug>.allen-donors.json`<br>`raw/transcriptomics/<slug>.allen-donors.artifact.json`<br>`raw/transcriptomics/<slug>.allen-donors.meta.json` |
-| What does the donor cohort look like? | `dde allen analyze-donors [--disease D] [--dementia]` | `raw/transcriptomics/<slug>.allen-donors.analysis.json` |
+| Is this gene in the Allen Brain Atlas? | `oase allen search <GENE> [--organism human\|mouse]` | `raw/transcriptomics/<slug>.allen.json`<br>`raw/transcriptomics/<slug>.allen.artifact.json`<br>`raw/transcriptomics/<slug>.allen.meta.json` |
+| What do the Allen gene results show? | `oase allen analyze <GENE>` | `raw/transcriptomics/<slug>.allen.analysis.json` |
+| What donors have dementia/disease data? | `oase allen donors [--disease D] [--dementia] [--min-braak N]` | `raw/transcriptomics/<slug>.allen-donors.json`<br>`raw/transcriptomics/<slug>.allen-donors.artifact.json`<br>`raw/transcriptomics/<slug>.allen-donors.meta.json` |
+| What does the donor cohort look like? | `oase allen analyze-donors [--disease D] [--dementia]` | `raw/transcriptomics/<slug>.allen-donors.analysis.json` |
 
 Run `search`/`donors` before `analyze`/`analyze-donors`. Analyze
 commands read from disk with no network access. All tools support

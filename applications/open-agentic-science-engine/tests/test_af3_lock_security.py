@@ -15,7 +15,7 @@
 """Regression tests for #182: AF3 lock file security hardening.
 
 Covers:
-  1. Default lock path is NOT in /tmp/ — uses ~/.cache/dde/ instead.
+  1. Default lock path is NOT in /tmp/ — uses ~/.cache/oase/ instead.
   2. Lock acquisition times out rather than blocking indefinitely.
   3. Symlink at the lock path causes the open to fail safely.
 """
@@ -35,11 +35,11 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.alphafold import (
+from oase.commands.alphafold import (
     _acquire_lock_bounded,
     _resolve_lock_path,
 )
-from dde.core.errors import EndpointUnavailable
+from oase.core.errors import EndpointUnavailable
 
 # ---------------------------------------------------------------------------
 # 1. Lock file location
@@ -49,9 +49,9 @@ from dde.core.errors import EndpointUnavailable
 def test_default_lock_path_not_in_tmp():
     """The default lock path must NOT live under /tmp/."""
     with mock.patch.dict(os.environ, {}, clear=False):
-        # Remove DDE_AF3_LOCK if set so the default path is used.
+        # Remove OASE_AF3_LOCK if set so the default path is used.
         env = os.environ.copy()
-        env.pop("DDE_AF3_LOCK", None)
+        env.pop("OASE_AF3_LOCK", None)
         with mock.patch.dict(os.environ, env, clear=True):
             path = _resolve_lock_path()
     assert not str(path).startswith("/tmp"), (
@@ -60,22 +60,22 @@ def test_default_lock_path_not_in_tmp():
 
 
 def test_default_lock_path_under_user_cache():
-    """The default lock path lives under ~/.cache/dde/."""
+    """The default lock path lives under ~/.cache/oase/."""
     with mock.patch.dict(os.environ, {}, clear=False):
         env = os.environ.copy()
-        env.pop("DDE_AF3_LOCK", None)
+        env.pop("OASE_AF3_LOCK", None)
         with mock.patch.dict(os.environ, env, clear=True):
             path = _resolve_lock_path()
-    expected_parent = Path.home() / ".cache" / "dde"
+    expected_parent = Path.home() / ".cache" / "oase"
     assert path.parent == expected_parent, (
         f"Expected parent {expected_parent}, got {path.parent}"
     )
 
 
 def test_env_override_respected():
-    """DDE_AF3_LOCK overrides the default lock path."""
+    """OASE_AF3_LOCK overrides the default lock path."""
     custom = "/some/custom/lock.file"
-    with mock.patch.dict(os.environ, {"DDE_AF3_LOCK": custom}):
+    with mock.patch.dict(os.environ, {"OASE_AF3_LOCK": custom}):
         path = _resolve_lock_path()
     assert str(path) == custom
 

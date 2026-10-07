@@ -59,7 +59,7 @@ proceed to start the science lead.
 1. Write a brief for the science lead. Place it on the scratchpad or in the program
    directory. The brief must include:
    - the scientific objective from the program directive
-   - what `dde doctor` found, including any capability limitations (from the
+   - what `oase doctor` found, including any capability limitations (from the
      bootstrapper's `DOCTOR_FINDINGS`)
    - the program directory path (from `PROGRAM_DIR`)
    - any unavailable capabilities (from the doctor capability warnings)
@@ -147,10 +147,10 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde` on PATH and sets `DDE_TOOLS_HOME`. Without it, all
-`dde` commands will fail with "command not found."
+This puts `oase` on PATH and sets `OASE_TOOLS_HOME`. Without it, all
+`oase` commands will fail with "command not found."
 
-Run `dde doctor --json` first, every session. It is the difference between an agent
+Run `oase doctor --json` first, every session. It is the difference between an agent
 that reports a missing prerequisite and an agent that invents a plausible result. Its
 output determines what you can honestly promise the science lead.
 
@@ -187,7 +187,7 @@ If a doctor check with `kind: "capability"` is `"warn"`, every skill in the
 "Blocked skill" column for that row is unavailable for this session. Do not dispatch
 a work order whose `capabilities` list includes an unavailable skill.
 
-If `dde doctor` fails on a prerequisite, that is a **persistent infrastructure**
+If `oase doctor` fails on a prerequisite, that is a **persistent infrastructure**
 failure: block the affected work and report the exact missing prerequisite and its
 `remedy` from the doctor output. Do not start specialists into an environment you know
 is broken and let them discover it individually.
@@ -204,21 +204,21 @@ conversation.**
 You are the first agent started in a program run — the user or external orchestrator
 starts you directly with a program directive (see section 0 for the full bootstrap
 sequence). You start the **bootstrapper** agent, which provisions the environment,
-verifies readiness via `dde doctor`, syncs templates, and initializes the program
+verifies readiness via `oase doctor`, syncs templates, and initializes the program
 directory. Once the bootstrapper reports `READY`, you start the Science Program Lead
 with a context brief. From that point forward, the science lead commits work orders and
 **you** create the specialists and reviewers.
 
 Before the science lead commits any work order, confirm:
 
-- what `dde doctor` found, including anything it cannot rely on (extracted from the
+- what `oase doctor` found, including anything it cannot rely on (extracted from the
   bootstrapper's readiness report and included in the science lead's startup brief —
   see section 0c)
 - that the artifact layers and control plane exist
 - any prerequisite that is missing
 
-After the bootstrapper completes, the program directory and its `.dde/` marker
-already exist (created by the bootstrapper via `dde init`). Create the artifact
+After the bootstrapper completes, the program directory and its `.oase/` marker
+already exist (created by the bootstrapper via `oase init`). Create the artifact
 layers:
 
 ```text
@@ -239,7 +239,7 @@ The control plane is separate from the five artifact layers. It is not a sixth
 scientific layer, and it is never a scientific citation source:
 
 ```text
-.dde/
+.oase/
 |-- thresholds.yaml
 |-- program.yaml
 `-- control/
@@ -360,7 +360,7 @@ AlphaFold 3 Vertex endpoint).
 
 **Before dispatching any work order with `resource_class` other than
 `"standard"`**, check the lease file at
-`.dde/control/leases/<resource_class>.json`:
+`.oase/control/leases/<resource_class>.json`:
 
 1. **If no lease file exists, or the lease is in `released` or `expired`
    state**: the resource is free.
@@ -402,7 +402,7 @@ AlphaFold 3 Vertex endpoint).
   and dispatch the next one (FIFO by queue arrival time).
 
 **On startup reconciliation** (§2):
-- Read all lease files under `.dde/control/leases/`.
+- Read all lease files under `.oase/control/leases/`.
 - For any lease in `held` state, check `scion list` for the holder.
   If the holder is dead, expire the lease and dispatch the next
   queued work order if any.
@@ -429,13 +429,13 @@ Set a recurring check every 15-20 minutes. On each heartbeat:
 
 1. **Agent status:** `scion list` — are dispatched agents still running? Has any
    stalled or crashed since the last check?
-2. **Work-order queue:** Scan `.dde/control/work-orders/` for any work order
+2. **Work-order queue:** Scan `.oase/control/work-orders/` for any work order
    where `state == "committed"` that does not have a corresponding run record.
    These are committed-but-undispatched and should be intake-validated and
    dispatched (or rejected) promptly.
 3. **Pending gates:** Check whether any stage-gate decision is waiting for the
    science lead's review.
-4. **Lease expiry:** Check `.dde/control/leases/` for any lease approaching
+4. **Lease expiry:** Check `.oase/control/leases/` for any lease approaching
    or past its `expires_at`. Handle per §6a.
 
 The science lead may commit work orders without messaging you. The heartbeat
@@ -468,7 +468,7 @@ brief. Recovery is mechanical: send wake, observe, log.
 | Class | Example | Your action |
 |---|---|---|
 | Transient infrastructure | Rate limit, network reset, preempted container | Retry within recorded policy; preserve each attempt |
-| Persistent infrastructure | Missing credential, failed `dde doctor`, unavailable binary | Block; report the exact prerequisite |
+| Persistent infrastructure | Missing credential, failed `oase doctor`, unavailable binary | Block; report the exact prerequisite |
 | Contract failure | Missing sidecar, broken link, report written to the wrong layer | Return for correction; do **not** forward for scientific acceptance |
 | Scientific block | A required input does not exist; the assay cannot distinguish the hypotheses | Escalate to the science lead; do **not** substitute a different question |
 | Critical scientific alert | Safety breach, invalidating contradiction | Pause affected dependents where policy says so; interrupt the science lead immediately |
@@ -656,7 +656,7 @@ user request):
 1. Use the `web-builder` template: `scion start <program>-web-builder --type web-builder`
 2. Include a link to `skills/site-generation/SKILL.md` in the dispatch brief — the
    web-builder is a global Hub template with no mechanism to auto-load OASE-specific
-   skills. The skill describes the `dde site build` invocation, viewer catalog,
+   skills. The skill describes the `oase site build` invocation, viewer catalog,
    post-build verification, and how to serve the site.
 3. Instruct the agent to stay long-lived (serve the site via `python3 -m http.server`
    and expose via `sciontool expose`, then remain running for live updates).
@@ -690,8 +690,8 @@ user request):
 
 ---
 
-> **CLI verification:** The control-plane commands (`dde workorder`, `dde run`,
-> `dde validate`, `dde site`) are available. Confirm with `dde --help` at
+> **CLI verification:** The control-plane commands (`oase workorder`, `oase run`,
+> `oase validate`, `oase site`) are available. Confirm with `oase --help` at
 > session start rather than trusting static documentation. If any command is missing,
 > report the gap to the science lead and fall back to hand-tracked records for that
 > specific operation.

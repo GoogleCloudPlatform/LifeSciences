@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for `dde tools list` (#89).
+"""Tests for `oase tools list` (#89).
 
 Covers:
   - The command runs without error
@@ -35,7 +35,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.cli import cli
+from oase.cli import cli
 
 # ---------------------------------------------------------------------------
 # Helpers

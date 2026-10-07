@@ -27,16 +27,16 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde`, `hypex`, `elo`, and `prox` on PATH and sets `DDE_TOOLS_HOME`.
+This puts `oase`, `hypex`, `elo`, and `prox` on PATH and sets `OASE_TOOLS_HOME`.
 Without it, all tool commands will fail with "command not found."
 
 Then run a health check:
 
 ```bash
-dde doctor --json
+oase doctor --json
 ```
 
-Verify that `dde` literature commands are available before starting searches.
+Verify that `oase` literature commands are available before starting searches.
 
 ## Input
 
@@ -62,19 +62,19 @@ Use OASE's literature commands to search across multiple sources:
 1. **PubMed search** for peer-reviewed biomedical evidence:
 
    ```bash
-   dde pubmed search "<focus area keywords>" --max-results 15
+   oase pubmed search "<focus area keywords>" --max-results 15
    ```
 
 2. **arXiv search** for computational/theoretical angles:
 
    ```bash
-   dde preprint search --source arxiv "<keywords>" --max-results 10
+   oase preprint search --source arxiv "<keywords>" --max-results 10
    ```
 
 3. **bioRxiv search** for recent unpublished work:
 
    ```bash
-   dde preprint search --source biorxiv "<keywords>" --max-results 10
+   oase preprint search --source biorxiv "<keywords>" --max-results 10
    ```
 
 Run all three OASE searches for broad fan-out; OASE keeps their outputs as
@@ -93,34 +93,34 @@ For each promising direction identified in Phase 1, do targeted searches:
 1. **PubMed** for peer-reviewed evidence with MeSH terms:
 
    ```bash
-   dde pubmed search "<mechanism>[MeSH Terms] AND <disease>[MeSH Terms]" --max-results 20
+   oase pubmed search "<mechanism>[MeSH Terms] AND <disease>[MeSH Terms]" --max-results 20
    ```
 
 2. **arXiv** for computational/theoretical work:
 
    ```bash
-   dde preprint search --source arxiv "<keywords>" --max-results 10
+   oase preprint search --source arxiv "<keywords>" --max-results 10
    ```
 
 3. **bioRxiv** for recent preprints:
 
    ```bash
-   dde preprint search --source biorxiv "<keywords>" --max-results 10
+   oase preprint search --source biorxiv "<keywords>" --max-results 10
    ```
 
 OASE does not expose citation-graph traversal. Use targeted keyword searches
-and `dde litref resolve` for known identifiers.
+and `oase litref resolve` for known identifiers.
 
 4. **Verify citations** for any key papers you plan to reference:
 
    ```bash
-   dde cite verify <file-with-references>
+   oase cite verify <file-with-references>
    ```
 
 5. **Resolve identifiers** for papers you want to cite:
 
    ```bash
-   dde litref resolve "<DOI or PMID>"
+   oase litref resolve "<DOI or PMID>"
    ```
 
 Record the identifiers from every relevant result — you will need these as
@@ -229,7 +229,7 @@ Use `scion message` to report back to the supervisor.
   form any hypotheses in your focus area, report this to the supervisor with
   an explanation.
 - **Never fabricate literature citations.** Every literature identifier must
-  come from an actual `dde` search or fetch result. If you cannot find evidence
+  come from an actual `oase` search or fetch result. If you cannot find evidence
   for a claim, drop the claim or weaken it.
 - **Never write hypothesis JSON files directly.** Always use
   `hypex add-hypothesis`.

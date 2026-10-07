@@ -25,7 +25,7 @@ Activate and verify the OASE-provisioned environment:
 
 ```bash
 source /scion-volumes/tools/env.sh
-dde doctor --json
+oase doctor --json
 ```
 
 Confirm `prox` is reported as available. Follow the `hypex-tool-setup` skill

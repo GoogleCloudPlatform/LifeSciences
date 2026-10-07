@@ -43,9 +43,9 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.controlstore import _VALIDATORS, RECORD_TYPES
-from dde.core.errors import SchemaError
-from dde.core.policy import (
+from oase.core.controlstore import _VALIDATORS, RECORD_TYPES
+from oase.core.errors import SchemaError
+from oase.core.policy import (
     REQUIREMENT_TYPES,
     SNAPSHOT_SCHEMA,
     freeze_policy,
@@ -55,7 +55,7 @@ from dde.core.policy import (
     validate_policy,
     validate_snapshot,
 )
-from dde.core.thresholds import UNRESOLVED, ThresholdSet, load
+from oase.core.thresholds import UNRESOLVED, ThresholdSet, load
 
 # ---------------------------------------------------------------------------
 # Fixtures — design §7 worked example
@@ -65,7 +65,7 @@ from dde.core.thresholds import UNRESOLVED, ThresholdSet, load
 def _worked_example_policy() -> dict[str, Any]:
     """Gate policy from design §7 Step 2."""
     return {
-        "schema": "dde.gate-policy.v1",
+        "schema": "oase.gate-policy.v1",
         "id": "GP-001",
         "version": 1,
         "stage": 1,
@@ -289,11 +289,11 @@ def test_policy_bad_id_format():
 
 
 def test_policy_bad_schema():
-    """Policy schema must be dde.gate-policy.v1."""
+    """Policy schema must be oase.gate-policy.v1."""
     policy = _worked_example_policy()
-    policy["schema"] = "dde.gate-policy.v99"
+    policy["schema"] = "oase.gate-policy.v99"
     errors = validate_policy(policy)
-    assert any("dde.gate-policy.v1" in e for e in errors)
+    assert any("oase.gate-policy.v1" in e for e in errors)
 
 
 def test_policy_bad_stage():
@@ -352,7 +352,7 @@ def test_applicability_bad_field():
 def test_valid_snapshot_passes():
     """A well-formed snapshot passes validation."""
     snapshot = {
-        "schema": "dde.policy-snapshot.v1",
+        "schema": "oase.policy-snapshot.v1",
         "snapshot_id": "SNAP-001",
         "frozen_at": "2026-09-08T18:00:00Z",
         "gate_policy_ref": "GP-001@1",
@@ -383,7 +383,7 @@ def test_snapshot_missing_fields():
 def test_snapshot_bad_id():
     """Snapshot ID must match SNAP-NNN."""
     snapshot = {
-        "schema": "dde.policy-snapshot.v1",
+        "schema": "oase.policy-snapshot.v1",
         "snapshot_id": "S-1",
         "frozen_at": "2026-09-08T18:00:00Z",
         "gate_policy_ref": "GP-001@1",
@@ -399,7 +399,7 @@ def test_snapshot_bad_id():
 def test_snapshot_threshold_set_missing_unresolved():
     """Each threshold set entry must have an unresolved field."""
     snapshot = {
-        "schema": "dde.policy-snapshot.v1",
+        "schema": "oase.policy-snapshot.v1",
         "snapshot_id": "SNAP-001",
         "frozen_at": "2026-09-08T18:00:00Z",
         "gate_policy_ref": "GP-001@1",
@@ -851,16 +851,16 @@ def test_snapshot_validator_registered():
 
 def test_controlstore_creates_policy_dirs(tmp_path):
     """ensure_control_dirs creates policies/ and snapshots/ subdirectories."""
-    from dde.core.controlstore import ensure_control_dirs
+    from oase.core.controlstore import ensure_control_dirs
 
     ensure_control_dirs(tmp_path)
-    assert (tmp_path / ".dde" / "control" / "policies").is_dir()
-    assert (tmp_path / ".dde" / "control" / "snapshots").is_dir()
+    assert (tmp_path / ".oase" / "control" / "policies").is_dir()
+    assert (tmp_path / ".oase" / "control" / "snapshots").is_dir()
 
 
 def test_controlstore_write_and_read_policy(tmp_path):
     """Round-trip a policy record through the control store."""
-    from dde.core.controlstore import ensure_control_dirs, read_record, write_record
+    from oase.core.controlstore import ensure_control_dirs, read_record, write_record
 
     ensure_control_dirs(tmp_path)
 
@@ -874,7 +874,7 @@ def test_controlstore_write_and_read_policy(tmp_path):
 
 def test_controlstore_write_invalid_policy_raises(tmp_path):
     """Writing an invalid policy record raises SchemaError."""
-    from dde.core.controlstore import ensure_control_dirs, write_record
+    from oase.core.controlstore import ensure_control_dirs, write_record
 
     ensure_control_dirs(tmp_path)
 
@@ -899,9 +899,9 @@ def test_load_program_config_missing_file(tmp_path):
 
 def test_load_program_config_valid(tmp_path):
     """A valid program.yaml loads correctly."""
-    dde_dir = tmp_path / ".dde"
-    dde_dir.mkdir()
-    program_yaml = dde_dir / "program.yaml"
+    oase_dir = tmp_path / ".oase"
+    oase_dir.mkdir()
+    program_yaml = oase_dir / "program.yaml"
     program_yaml.write_text(
         "program:\n"
         '  name: "Test Program"\n'
@@ -931,9 +931,9 @@ def test_load_program_config_valid(tmp_path):
 
 def test_load_program_config_invalid_structure(tmp_path):
     """A program.yaml with invalid structure raises SchemaError."""
-    dde_dir = tmp_path / ".dde"
-    dde_dir.mkdir()
-    program_yaml = dde_dir / "program.yaml"
+    oase_dir = tmp_path / ".oase"
+    oase_dir.mkdir()
+    program_yaml = oase_dir / "program.yaml"
     program_yaml.write_text(
         "program: not_a_dict_value\ngate_policies: also_not_a_dict\n",
         encoding="utf-8",

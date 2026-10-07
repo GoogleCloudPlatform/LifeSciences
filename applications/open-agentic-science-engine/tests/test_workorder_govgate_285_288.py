@@ -38,12 +38,12 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.controlstore import (
+from oase.core.controlstore import (
     ensure_control_dirs,
     write_record,
 )
@@ -75,7 +75,7 @@ def _make_project() -> Path:
     base = Path(tempfile.mkdtemp())
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -142,10 +142,10 @@ def _invoke_commit(
 ) -> _InvokeResult:
     """Invoke commit_cmd programmatically via click's testing utility."""
     from click.testing import CliRunner
-    from dde.commands.workorder import workorder
-    from dde.common import AppState
+    from oase.commands.workorder import workorder
+    from oase.common import AppState
 
-    runner = CliRunner(env={"DDE_PROJECT": str(project)})
+    runner = CliRunner(env={"OASE_PROJECT": str(project)})
     result = runner.invoke(
         workorder,
         ["commit", wo_id],
@@ -191,10 +191,10 @@ def _invoke_override(
 ) -> _InvokeResult:
     """Invoke override_cmd programmatically via click's testing utility."""
     from click.testing import CliRunner
-    from dde.commands.workorder import workorder
-    from dde.common import AppState
+    from oase.commands.workorder import workorder
+    from oase.common import AppState
 
-    runner = CliRunner(env={"DDE_PROJECT": str(project)})
+    runner = CliRunner(env={"OASE_PROJECT": str(project)})
     result = runner.invoke(
         workorder,
         [

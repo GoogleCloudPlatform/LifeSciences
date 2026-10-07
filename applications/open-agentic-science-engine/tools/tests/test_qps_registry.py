@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the central per-host QPS registry (dde/core/qps.py, #70).
+"""Tests for the central per-host QPS registry (oase/core/qps.py, #70).
 
 Asserts:
 - The HOST_QPS table exists and maps every host used in command modules.
@@ -33,11 +33,11 @@ from unittest.mock import MagicMock, patch
 
 # Patch optional dependencies before importing the module under test.
 with patch.dict("sys.modules", {"requests": MagicMock(), "click": MagicMock()}):
-    from dde.core.qps import HOST_QPS, qps_for_host
+    from oase.core.qps import HOST_QPS, qps_for_host
 
 
 # Root of the commands package, relative to the repository layout.
-_COMMANDS_DIR = Path(__file__).resolve().parent.parent / "dde" / "commands"
+_COMMANDS_DIR = Path(__file__).resolve().parent.parent / "oase" / "commands"
 
 
 class TestHostQPSTable(unittest.TestCase):
@@ -121,7 +121,7 @@ class TestNoLocalQPSConstants(unittest.TestCase):
         if violations:
             msg = (
                 "Command modules must not declare local *_QPS constants.  "
-                "Use qps_for_host() from dde.core.qps instead.\n"
+                "Use qps_for_host() from oase.core.qps instead.\n"
                 + "\n".join(f"  {v}" for v in violations)
             )
             self.fail(msg)
@@ -170,7 +170,7 @@ class TestCallSitesUseRegistry(unittest.TestCase):
         if violations:
             msg = (
                 "All qps= keyword arguments in command modules must use "
-                "qps_for_host() from dde.core.qps.\n"
+                "qps_for_host() from oase.core.qps.\n"
                 + "\n".join(f"  {v}" for v in violations)
             )
             self.fail(msg)
@@ -233,7 +233,7 @@ class TestHostnameExistence(unittest.TestCase):
         if missing:
             msg = (
                 "Hostnames passed to qps_for_host() must exist in HOST_QPS.  "
-                "Add missing hosts to dde/core/qps.py.\n"
+                "Add missing hosts to oase/core/qps.py.\n"
                 + "\n".join(f"  {m}" for m in missing)
             )
             self.fail(msg)

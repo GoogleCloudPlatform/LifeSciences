@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for ``dde structure surface`` — surface accessibility analysis.
+"""Tests for ``oase structure surface`` — surface accessibility analysis.
 
 Covers:
 - Shrake-Rupley SASA on known geometries (single atom, two touching atoms)
@@ -32,7 +32,7 @@ import textwrap
 import unittest
 from typing import ClassVar
 
-from dde.commands.structure import (
+from oase.commands.structure import (
     MAX_ASA_TIEN,
     _compute_rsa,
     _compute_sasa,
@@ -43,7 +43,7 @@ from dde.commands.structure import (
     _parse_glycosylation_sites,
     _parse_near_residues,
 )
-from dde.core import provenance, thresholds
+from oase.core import provenance, thresholds
 
 # ---------------------------------------------------------------------------
 # Minimal test fixtures

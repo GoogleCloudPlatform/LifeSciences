@@ -16,7 +16,7 @@ comparison report.
 
 1. **`eval/stage0_harness.py`** — Stage 0 harness that runs all 8 existing
    fixtures through the real `run_triage()` function, which internally invokes
-   real CLI workstream commands (e.g., `dde manufacturing assess-stage0`) via
+   real CLI workstream commands (e.g., `oase manufacturing assess-stage0`) via
    `CliRunner`.  Each fixture is converted from its work-order context into a
    Stage 0 intervention concept record (`fixture_to_concept()`), then evaluated
    through the triage workflow.
@@ -68,7 +68,7 @@ evaluation harness is available, these metrics can be measured.
 
 ### Manufacturing Workstream CLI Errors
 
-The Stage 0 manufacturing workstream invokes the real `dde manufacturing
+The Stage 0 manufacturing workstream invokes the real `oase manufacturing
 assess-stage0` CLI command.  In the evaluation environment, this command
 exits with code 2 because the "manufacturing" artifact class is not
 registered in `ARTIFACT_DIRS` (the command computes the assessment
@@ -135,13 +135,13 @@ environments where the full project infrastructure is not available.
 ## Addendum: Re-run After Manufacturing ARTIFACT_DIRS Fix (2026-09-08)
 
 The initial comparison run (commit `89b0a23`) was affected by a pre-existing
-bug in `tools/dde/core/context.py`: the `"manufacturing"` key was missing from
-`ARTIFACT_DIRS`, causing `dde manufacturing assess-stage0` to exit with code 2
+bug in `tools/oase/core/context.py`: the `"manufacturing"` key was missing from
+`ARTIFACT_DIRS`, causing `oase manufacturing assess-stage0` to exit with code 2
 ("unknown artifact class 'manufacturing'") on every invocation.  This meant the
 initial Stage 0 report showed `cli_success_rate: 0/8` for manufacturing — an
 artifact of the bug, not a reflection of Stage 0's actual behavior.
 
-The bug was independently fixed and merged to the DDE branch at commit
+The bug was independently fixed and merged to the OASE branch at commit
 `19eb355` (one-line addition: `"manufacturing": "raw/manufacturing"` in
 `ARTIFACT_DIRS`).  See issue #23 for the full history.
 

@@ -41,7 +41,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.coscientist import _extract_recommendation
+from oase.commands.coscientist import _extract_recommendation
 
 # ---------------------------------------------------------------------------
 # Helper: build a normalised tournament artifact
@@ -92,7 +92,7 @@ def _make_tournament(
             }
         )
     return {
-        "schema": "dde.coscientist.v1",
+        "schema": "oase.coscientist.v1",
         "source_file": "test-export.json",
         "tournament": {
             "title": "Test Tournament",
@@ -135,7 +135,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory for CliRunner tests."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "hypotheses").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -284,7 +284,7 @@ def test_extract_recommendation_best_next_steps_only() -> None:
 def test_analyze_recommendation_in_assessment() -> None:
     """analyze writes recommendation field into assessment in analysis artifact."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -322,7 +322,7 @@ def test_analyze_recommendation_in_assessment() -> None:
 def test_analyze_recommendation_empty_report() -> None:
     """analyze handles empty report gracefully."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -355,7 +355,7 @@ def test_analyze_recommendation_empty_report() -> None:
 def test_analyze_no_recommendation_heading() -> None:
     """analyze handles top_ideas_summary with no recommendation heading."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -387,7 +387,7 @@ def test_analyze_no_recommendation_heading() -> None:
 def test_analyze_cli_shows_recommendation_preview() -> None:
     """CLI output shows recommendation preview when section is present."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -414,7 +414,7 @@ def test_analyze_cli_shows_recommendation_preview() -> None:
 def test_analyze_cli_fallback_message() -> None:
     """CLI output shows fallback message when summary exists but no heading."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -438,7 +438,7 @@ def test_analyze_cli_fallback_message() -> None:
 def test_analyze_cli_no_recommendation_message_when_empty() -> None:
     """CLI output omits recommendation lines when report is empty."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -464,7 +464,7 @@ def test_analyze_cli_no_recommendation_message_when_empty() -> None:
 def test_analyze_json_includes_recommendation() -> None:
     """--json output includes recommendation in assessment."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -501,7 +501,7 @@ def test_analyze_json_includes_recommendation() -> None:
 def test_analyze_long_recommendation_truncated_in_cli() -> None:
     """CLI preview truncates long recommendation to ~500 chars."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -527,14 +527,14 @@ def test_analyze_long_recommendation_truncated_in_cli() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Assessment core tests — dde.hypothesis-assessment.v1
+# 3. Assessment core tests — oase.hypothesis-assessment.v1
 # ---------------------------------------------------------------------------
 
 
 def test_assessment_core_present_in_analysis() -> None:
     """analyze output contains assessment_core key with correct schema."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -558,7 +558,7 @@ def test_assessment_core_present_in_analysis() -> None:
         analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
 
         core = analysis["assessment"]["assessment_core"]
-        assert core["schema"] == "dde.hypothesis-assessment.v1"
+        assert core["schema"] == "oase.hypothesis-assessment.v1"
         assert core["strategy"] == "co-scientist"
         assert "source_artifact" in core
         assert "source_sha256" in core
@@ -572,7 +572,7 @@ def test_assessment_core_present_in_analysis() -> None:
 def test_assessment_core_score_is_object() -> None:
     """Assessment core score is {value, basis} — never a bare number."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -606,7 +606,7 @@ def test_assessment_core_score_is_object() -> None:
 def test_assessment_core_strategy_is_coscientist() -> None:
     """Assessment core strategy is 'co-scientist'."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -632,7 +632,7 @@ def test_assessment_core_strategy_is_coscientist() -> None:
 def test_assessment_core_basis_is_coscientist_elo() -> None:
     """Assessment core basis is 'coscientist-elo@1.1'."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -660,7 +660,7 @@ def test_assessment_core_basis_is_coscientist_elo() -> None:
 def test_assessment_core_backward_compatible() -> None:
     """Existing output keys are unchanged (backward compatibility)."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -708,7 +708,7 @@ def test_assessment_core_backward_compatible() -> None:
 def test_assessment_core_null_rank_score() -> None:
     """Ideas without elo_rating / ranking produce rank: null, score: null."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))

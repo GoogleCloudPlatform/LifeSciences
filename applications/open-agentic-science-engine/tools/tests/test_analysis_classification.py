@@ -34,13 +34,13 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.validate import (  # noqa: E402
+from oase.commands.validate import (  # noqa: E402
     _check_provenance_valid,
     _check_unrecognized_json,
     _is_analysis,
 )
-from dde.core.context import ARTIFACT_DIRS  # noqa: E402
-from dde.core.provenance import sha256_file  # noqa: E402
+from oase.core.context import ARTIFACT_DIRS  # noqa: E402
+from oase.core.provenance import sha256_file  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -48,9 +48,9 @@ from dde.core.provenance import sha256_file  # noqa: E402
 
 
 def _make_project(tmp_path: Path, artifact_class: str = "structures") -> Path:
-    """Create a minimal project layout with .dde marker and artifact dir."""
+    """Create a minimal project layout with .oase marker and artifact dir."""
     project = tmp_path / "project"
-    (project / ".dde").mkdir(parents=True)
+    (project / ".oase").mkdir(parents=True)
     rel_dir = ARTIFACT_DIRS.get(artifact_class, f"raw/{artifact_class}")
     (project / rel_dir).mkdir(parents=True)
     return project
@@ -308,7 +308,7 @@ class TestWriteAnalysisRecordType:
         source_file = tmp_path / "source.pdb"
         source_file.write_text("ATOM ...", encoding="utf-8")
 
-        with patch("dde.core.provenance.check_integrity") as mock_tc:
+        with patch("oase.core.provenance.check_integrity") as mock_tc:
             mock_tc.return_value = type(
                 "TC",
                 (),
@@ -317,7 +317,7 @@ class TestWriteAnalysisRecordType:
                     "modified": False,
                 },
             )()
-            from dde.core.provenance import write_analysis
+            from oase.core.provenance import write_analysis
 
             write_analysis(
                 path=out,
@@ -337,7 +337,7 @@ class TestWriteAnalysisRecordType:
         source_file = tmp_path / "source.pdb"
         source_file.write_text("ATOM ...", encoding="utf-8")
 
-        with patch("dde.core.provenance.check_integrity") as mock_tc:
+        with patch("oase.core.provenance.check_integrity") as mock_tc:
             mock_tc.return_value = type(
                 "TC",
                 (),
@@ -346,7 +346,7 @@ class TestWriteAnalysisRecordType:
                     "modified": False,
                 },
             )()
-            from dde.core.provenance import write_analysis
+            from oase.core.provenance import write_analysis
 
             write_analysis(
                 path=out,

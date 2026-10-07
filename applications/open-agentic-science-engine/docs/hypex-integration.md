@@ -12,12 +12,12 @@ work-order boundary.
 | `hypex` Go CLI | `tools/vendor/hypex`; built by `tools/install.sh` |
 | `elo` Go CLI | `tools/vendor/hypex`; built by `tools/install.sh` |
 | `prox` Python CLI | `tools/vendor/hypex`; installed by `tools/install.sh` |
-| JSON schemas | Installed to `${DDE_TOOLS_HOME}/share/hypex/schemas` |
-| standalone `lit` CLI | Replaced by `dde pubmed`, `dde preprint`, `dde litref`, and `dde cite` |
+| JSON schemas | Installed to `${OASE_TOOLS_HOME}/share/hypex/schemas` |
+| standalone `lit` CLI | Replaced by `oase pubmed`, `oase preprint`, `oase litref`, and `oase cite` |
 | reusable protocols | OASE skills under `skills/` |
 | agent roles | OASE templates under `templates/hypex-*` |
 | external entry point | OASE work order for `hypex-supervisor` |
-| final export | `dde hypex ingest`, then `dde hypex analyze` |
+| final export | `oase hypex ingest`, then `oase hypex analyze` |
 
 The upstream source revision is recorded in `tools/vendor/hypex/README.md`.
 Go module dependencies are vendored too, so deployment builds do not fetch Go
@@ -30,7 +30,7 @@ The bootstrapper runs `tools/bootstrap-preflight.sh`, then `tools/install.sh`.
 The preflight requires the Go version declared by the vendored modules. A full
 install builds `hypex` and `elo`, installs `prox`, copies the schemas, writes
 source-revision markers, and includes each executable in OASE's environment
-stamp. `dde doctor --json` reports the Hypex strategy available only when all
+stamp. `oase doctor --json` reports the Hypex strategy available only when all
 three tools are present and runnable.
 
 `requirements-hypex.txt` is installed in its own transaction before the larger
@@ -61,5 +61,5 @@ OASE work-order targets.
 The native run remains append-only on the shared execution volume. At the end,
 the supervisor writes termination metadata before ingesting the run. This lets
 OASE derive the correct completion state, archive the native corpus, normalize
-it as `dde.hypex.v1`, and emit a `dde.hypothesis-assessment.v1` analysis for the
+it as `oase.hypex.v1`, and emit a `oase.hypothesis-assessment.v1` analysis for the
 science lead.

@@ -23,9 +23,9 @@
 #   cd tools && ./install.sh --update     # update existing venv
 #   cd tools && ./install.sh --core-only  # CLI deps only, skip the science stack
 #   cd tools && ./install.sh --binaries-only  # binaries + stamp, leave pip alone
-#   DDE_VENV=/some/shared/.venv ./install.sh   # install elsewhere
+#   OASE_VENV=/some/shared/.venv ./install.sh   # install elsewhere
 #
-# The venv defaults to ${DDE_TOOLS_HOME}/.venv (which itself defaults
+# The venv defaults to ${OASE_TOOLS_HOME}/.venv (which itself defaults
 # to /scion-volumes/tools/.venv) but can live anywhere, so a shared
 # volume can host one environment that several agents run out of without
 # each of them building their own copy.
@@ -33,14 +33,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOOLS_HOME_DIR="${DDE_TOOLS_HOME:-/scion-volumes/tools}"
-VENV_DIR="${DDE_VENV:-${TOOLS_HOME_DIR}/.venv}"
-BIN_DIR="${DDE_BIN:-${TOOLS_HOME_DIR}/bin}"
+TOOLS_HOME_DIR="${OASE_TOOLS_HOME:-/scion-volumes/tools}"
+VENV_DIR="${OASE_VENV:-${TOOLS_HOME_DIR}/.venv}"
+BIN_DIR="${OASE_BIN:-${TOOLS_HOME_DIR}/bin}"
 
 # Hypex is vendored as source. Provisioning builds deployment-local binaries;
 # no generated artifact belongs in Git.
 HYPEX_REVISION="22316b2db118ab3f3f175a05faa75d74c42a698c"
-HYPEX_VENDOR_VERSION="${HYPEX_REVISION}+dde.2"
+HYPEX_VENDOR_VERSION="${HYPEX_REVISION}+oase.2"
 HYPEX_GO_VERSION="1.26.1"
 HYPEX_SHARE_DIR="${TOOLS_HOME_DIR}/share/hypex"
 HYPEX_SOURCE_ROOT="${SCRIPT_DIR}/vendor/hypex"
@@ -77,9 +77,9 @@ for arg in "$@"; do
             echo "  --binaries-only  Install bin/ tools and re-stamp; touch no Python package"
             echo ""
             echo "Environment:"
-            echo "  DDE_VENV        venv location (default: \${DDE_TOOLS_HOME}/.venv)"
-            echo "  DDE_BIN         binary directory (default: \${DDE_TOOLS_HOME}/bin)"
-            echo "  DDE_TOOLS_HOME  tools home / stamp dir (default: /scion-volumes/tools)"
+            echo "  OASE_VENV        venv location (default: \${OASE_TOOLS_HOME}/.venv)"
+            echo "  OASE_BIN         binary directory (default: \${OASE_TOOLS_HOME}/bin)"
+            echo "  OASE_TOOLS_HOME  tools home / stamp dir (default: /scion-volumes/tools)"
             exit 0
             ;;
         *) err "Unknown argument: $arg" ;;
@@ -157,7 +157,7 @@ if [ "$CORE_ONLY" = false ] && [ "$BINARIES_ONLY" = false ]; then
         SCIENCE_STATUS="installed"
     else
         SCIENCE_STATUS="failed"
-        warn "The science stack did not install. The dde CLI itself is"
+        warn "The science stack did not install. The oase CLI itself is"
         warn "unaffected — it imports none of those packages — but specialist"
         warn "skills that use rdkit, biopython, prody, scipy, pandas or"
         warn "matplotlib will raise DependencyError until this is resolved."
@@ -392,9 +392,9 @@ hypex_tool_revision_installed() {
 prepare_hypex_source() {
     # Tests may point at another copy, but production always uses OASE's vendored
     # tree and therefore has no runtime GitHub/authentication dependency.
-    if [ -n "${DDE_HYPEX_SOURCE_DIR:-}" ]; then
-        HYPEX_SOURCE_ROOT="$(cd "$DDE_HYPEX_SOURCE_DIR" 2>/dev/null && pwd)" || {
-            warn "DDE_HYPEX_SOURCE_DIR does not exist: ${DDE_HYPEX_SOURCE_DIR}"
+    if [ -n "${OASE_HYPEX_SOURCE_DIR:-}" ]; then
+        HYPEX_SOURCE_ROOT="$(cd "$OASE_HYPEX_SOURCE_DIR" 2>/dev/null && pwd)" || {
+            warn "OASE_HYPEX_SOURCE_DIR does not exist: ${OASE_HYPEX_SOURCE_DIR}"
             return 1
         }
     fi
@@ -627,9 +627,9 @@ fi
 # Install the package as an editable console_scripts entry point
 # ---------------------------------------------------------------------------
 #
-# `pip install --no-deps -e .` registers `dde = dde.cli:main` as a
+# `pip install --no-deps -e .` registers `oase = oase.cli:main` as a
 # proper console script in the venv's bin/.  This replaces the old
-# dde-cli shim that was symlinked by hand — the pip-managed wrapper
+# oase-cli shim that was symlinked by hand — the pip-managed wrapper
 # works correctly in subshells and shell loops without PYTHONPATH.
 #
 # --no-deps because dependencies are already installed above from the
@@ -643,7 +643,7 @@ fi
 # up from the initial install.
 
 # ---------------------------------------------------------------------------
-# Editable install of the local dde package
+# Editable install of the local oase package
 # ---------------------------------------------------------------------------
 #
 # SCANNER EXEMPTION (UnverifiedPackageInstall-SHELL-PIP-PHASE2, #313):
@@ -660,9 +660,9 @@ fi
 # to pick up CLI changes from a git pull without re-running install.sh.
 
 if [ "$BINARIES_ONLY" = false ]; then
-    log "Installing dde package (editable, console_scripts entry point)"
+    log "Installing oase package (editable, console_scripts entry point)"
     pip install --no-deps --no-index --no-build-isolation -e "${SCRIPT_DIR}" --quiet \
-        || err "Editable install of dde package failed."
+        || err "Editable install of oase package failed."
 fi
 
 # ---------------------------------------------------------------------------
@@ -672,7 +672,7 @@ fi
 # Written by this script rather than maintained by hand on the volume.
 # It was hand-maintained, and it had drifted: bin/ was never added to
 # PATH, so every binary this script installs was invisible to anything
-# that shells out by name — `dde doctor` reported fpocket present and
+# that shells out by name — `oase doctor` reported fpocket present and
 # unreachable in the same line. A file that provisioning depends on, and
 # that provisioning does not write, is a file that describes an earlier
 # installation.
@@ -684,22 +684,22 @@ if mkdir -p "$TOOLS_HOME_DIR" 2>/dev/null; then
 # discards your change.
 #
 #   source ${TOOLS_HOME_DIR}/env.sh
-#   dde doctor
+#   oase doctor
 #
 # Sourcing this is all you need. Do not pip install into this venv — it
 # is shared, and a package added for one agent changes the env_version
 # stamped into every other agent's provenance sidecars. Ask the tooling
 # lead instead.
 
-DDE_TOOLS_DIR="${TOOLS_HOME_DIR}"
+OASE_TOOLS_DIR="${TOOLS_HOME_DIR}"
 
 # shellcheck disable=SC1091
 source "${VENV_DIR}/bin/activate"
 
-# Read by dde/core/env.py to find the ENV_VERSION stamp. Without it
+# Read by oase/core/env.py to find the ENV_VERSION stamp. Without it
 # every artifact records an "unpinned-dev" env_version and carries a
 # warning saying its environment is not reproducible.
-export DDE_TOOLS_HOME="\${DDE_TOOLS_DIR}"
+export OASE_TOOLS_HOME="\${OASE_TOOLS_DIR}"
 
 # Provisioned binaries — fpocket, vina, hypex, elo, prox. They are hashed into
 # ENV_VERSION, so a tool found here is a tool the provenance record can
@@ -715,11 +715,11 @@ export PATH="${BIN_DIR}:\${PATH}"
 export PYTHONDONTWRITEBYTECODE=1
 
 # Where artifacts land. Point this at your own program directory before
-# running anything that writes, or let the CLI discover it via .dde/
+# running anything that writes, or let the CLI discover it via .oase/
 # walk-up. The CLI produces a clear error with remedy text when it
 # cannot resolve the project root (see core/context.py).
 
-echo "dde \$(dde --version 2>/dev/null | awk '{print \$3}') from \${DDE_TOOLS_DIR}/.venv" >&2
+echo "oase \$(oase --version 2>/dev/null | awk '{print \$3}') from \${OASE_TOOLS_DIR}/.venv" >&2
 ENVSH
     log "Wrote ${TOOLS_HOME_DIR}/env.sh"
 else
@@ -736,7 +736,7 @@ fi
 # transitive dependencies are unpinned. Writing it here is what makes an
 # artifact's environment reproducible after the fact.
 #
-# The stamp is computed by `dde env stamp`, not by this script. It
+# The stamp is computed by `oase env stamp`, not by this script. It
 # hashes env-manifest.txt — interpreter, packages, and every file in
 # bin/ with its own digest — and archives that manifest under its own
 # hash so an old env_version in an old sidecar can still be explained.
@@ -747,17 +747,17 @@ fi
 # shell away from being invisible to provenance. One producer of the
 # canonical document, and it is the one that can also read it back.
 
-export DDE_TOOLS_HOME="${DDE_TOOLS_HOME:-/scion-volumes/tools}"
-if mkdir -p "$DDE_TOOLS_HOME" 2>/dev/null; then
-    if python -m dde.cli env stamp \
+export OASE_TOOLS_HOME="${OASE_TOOLS_HOME:-/scion-volumes/tools}"
+if mkdir -p "$OASE_TOOLS_HOME" 2>/dev/null; then
+    if python -m oase.cli env stamp \
             --note "install.sh${BINARY_STATUS}"; then
         :
     else
-        warn "Could not stamp ${DDE_TOOLS_HOME}; artifacts will record an"
+        warn "Could not stamp ${OASE_TOOLS_HOME}; artifacts will record an"
         warn "unpinned developer env_version and carry a warning saying so."
     fi
 else
-    warn "Could not create ${DDE_TOOLS_HOME}; artifacts will record an"
+    warn "Could not create ${OASE_TOOLS_HOME}; artifacts will record an"
     warn "unpinned developer env_version and carry a warning saying so."
 fi
 
@@ -775,8 +775,8 @@ echo "  Binaries:             ${BINARY_STATUS}"
 echo ""
 # Point at env.sh, not at the venv's activate. This block used to say
 # `source .venv/bin/activate`, and an agent that followed it got a
-# working `dde` and a broken environment: no bin/ on PATH, so
-# `dde pocket` reported fpocket missing, and no DDE_TOOLS_HOME, so
+# working `oase` and a broken environment: no bin/ on PATH, so
+# `oase pocket` reported fpocket missing, and no OASE_TOOLS_HOME, so
 # the CLI read the compiled-in default, found no stamp there, and
 # recorded `unpinned-dev` in every sidecar. The environment it had just
 # built was invisible to it. Instructions that produce a silently
@@ -792,19 +792,19 @@ else
     # three variables it would have set, because an agent can still
     # recover from those.
     warn "No env.sh at ${TOOLS_HOME_DIR}; set these by hand or nothing below works:"
-    echo "    export DDE_TOOLS_HOME=${TOOLS_HOME_DIR}"
+    echo "    export OASE_TOOLS_HOME=${TOOLS_HOME_DIR}"
     echo "    export PATH=${BIN_DIR}:\$PATH"
     echo "    export PATH=${VENV_DIR}/bin:\$PATH"
 fi
 echo ""
 echo "  Create a program to write artifacts into:"
-echo "    dde init ~/my-program && export DDE_PROJECT=~/my-program"
+echo "    oase init ~/my-program && export OASE_PROJECT=~/my-program"
 echo ""
 echo "  Check the installation — do this before trusting any result:"
-echo "    dde doctor"
+echo "    oase doctor"
 echo ""
 echo "  Before changing this environment again, price the change first:"
-echo "    dde env plan     # the ENV_VERSION it would produce, and why"
+echo "    oase env plan     # the ENV_VERSION it would produce, and why"
 echo ""
 
 # A partial install exits non-zero even though the CLI works, so that a
@@ -821,7 +821,7 @@ fi
 # is, missing tool and all — a stamp that waits for a perfect install is
 # a stamp that is absent exactly when artifacts are being produced by a
 # partial one. But the script exits non-zero so nothing upstream records
-# this as a completed provisioning, and `dde doctor` names the
+# this as a completed provisioning, and `oase doctor` names the
 # missing binary directly.
 if [[ "$BINARY_STATUS" == *MISSING* ]]; then
     warn "Exiting non-zero: a declared binary did not install:${BINARY_STATUS}"

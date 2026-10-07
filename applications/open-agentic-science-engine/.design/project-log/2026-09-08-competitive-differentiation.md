@@ -14,12 +14,12 @@ patentability/novelty, freedom to operate), never blending them into one score.
 
 ## What was built
 
-### 1. New command module: `tools/dde/commands/differentiation.py`
+### 1. New command module: `tools/oase/commands/differentiation.py`
 
 Two subcommands:
-- `dde differentiation assess` — reads stored patent search results and
+- `oase differentiation assess` — reads stored patent search results and
   produces a three-dimension assessment
-- `dde differentiation report` — generates `dde.evidence-assessment.v1`
+- `oase differentiation report` — generates `oase.evidence-assessment.v1`
   records from the assessment
 
 Key design decisions:
@@ -51,7 +51,7 @@ Following the naming convention from design doc §1.5:
 
 ### 5. CLI registration
 
-`dde differentiation` added to `cli.py` with proper import and add_command.
+`oase differentiation` added to `cli.py` with proper import and add_command.
 
 ## Cohort A FTO wording reconciliation
 
@@ -63,15 +63,15 @@ FTO:
    lacked:
    - The legal clearance disclaimer
    - The three-dimension separation guidance
-   - Reference to `dde differentiation`
+   - Reference to `oase differentiation`
 
-2. **Rule 16** (line 707): Referenced `dde patent`, `dde trials`, and
-   `dde pubchem` but lacked:
+2. **Rule 16** (line 707): Referenced `oase patent`, `oase trials`, and
+   `oase pubchem` but lacked:
    - The legal clearance disclaimer
-   - Reference to `dde differentiation`
+   - Reference to `oase differentiation`
 
 **Changes made:**
-- Added `dde differentiation` to the tools list in both locations
+- Added `oase differentiation` to the tools list in both locations
 - Added the FTO disclaimer block to Cohort A step 3
 - Added three-dimension separation guidance to Cohort A step 3
 - Added disclaimer note to Rule 16
@@ -124,9 +124,9 @@ No regressions:
 
 | File | Change |
 |---|---|
-| `tools/dde/commands/differentiation.py` | New — competitive differentiation module |
-| `tools/dde/core/provenance.py` | Extended — two new relay codes |
-| `tools/dde/cli.py` | Extended — import and add_command for differentiation |
+| `tools/oase/commands/differentiation.py` | New — competitive differentiation module |
+| `tools/oase/core/provenance.py` | Extended — two new relay codes |
+| `tools/oase/cli.py` | Extended — import and add_command for differentiation |
 | `templates/science-program-lead/agents.md` | Extended — FTO disclaimer and three-dimension guidance in Cohort A and Rule 16 |
 | `skills/competitive-differentiation/SKILL.md` | New — interpretation skill |
 | `tests/test_differentiation.py` | New — 25 tests |

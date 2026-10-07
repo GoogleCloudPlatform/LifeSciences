@@ -56,19 +56,19 @@ data or curated disease gene expression signatures. Entry points include:
 - **Rate limiting**: GEO uses NCBI E-utilities (3 QPS without API key).
   DisigNAtlas and SpatialDB are academic sites with lower throughput
   tolerance. The CLI paces requests.
-- Run `dde doctor` before first use.
+- Run `oase doctor` before first use.
 
 ## 3. Tool invocations
 
 | Question | Run | Writes to |
 |---|---|---|
-| What GEO datasets match a disease/tissue query? | `dde geo search <QUERY> [--organism O] [--entry-type T] [--data-type D] [--year-from Y] [--year-to Y] [--max-results N]` | `raw/transcriptomics/<slug>.geo.json`<br>`raw/transcriptomics/<slug>.geo.artifact.json`<br>`raw/transcriptomics/<slug>.geo.meta.json` |
-| What do the GEO results show? | `dde geo analyze <QUERY>` | `raw/transcriptomics/<slug>.geo.analysis.json` |
-| Is a gene differentially expressed in any disease? | `dde disignatlas search <GENE> --mode gene` | `raw/transcriptomics/<slug>.disignatlas.json`<br>`raw/transcriptomics/<slug>.disignatlas.artifact.json`<br>`raw/transcriptomics/<slug>.disignatlas.meta.json` |
-| What studies exist for a disease? | `dde disignatlas search <DISEASE> --mode disease` | same naming pattern |
-| What do the DisigNAtlas results show? | `dde disignatlas analyze <QUERY> [--mode gene\|disease]` | `raw/transcriptomics/<slug>.disignatlas.analysis.json` |
-| Does a gene have spatial expression data? | `dde spatialdb search <GENE> [--species S]` | `raw/transcriptomics/<slug>.spatialdb.json`<br>`raw/transcriptomics/<slug>.spatialdb.artifact.json`<br>`raw/transcriptomics/<slug>.spatialdb.meta.json` |
-| What do the SpatialDB results show? | `dde spatialdb analyze <GENE> [--species S]` | `raw/transcriptomics/<slug>.spatialdb.analysis.json` |
+| What GEO datasets match a disease/tissue query? | `oase geo search <QUERY> [--organism O] [--entry-type T] [--data-type D] [--year-from Y] [--year-to Y] [--max-results N]` | `raw/transcriptomics/<slug>.geo.json`<br>`raw/transcriptomics/<slug>.geo.artifact.json`<br>`raw/transcriptomics/<slug>.geo.meta.json` |
+| What do the GEO results show? | `oase geo analyze <QUERY>` | `raw/transcriptomics/<slug>.geo.analysis.json` |
+| Is a gene differentially expressed in any disease? | `oase disignatlas search <GENE> --mode gene` | `raw/transcriptomics/<slug>.disignatlas.json`<br>`raw/transcriptomics/<slug>.disignatlas.artifact.json`<br>`raw/transcriptomics/<slug>.disignatlas.meta.json` |
+| What studies exist for a disease? | `oase disignatlas search <DISEASE> --mode disease` | same naming pattern |
+| What do the DisigNAtlas results show? | `oase disignatlas analyze <QUERY> [--mode gene\|disease]` | `raw/transcriptomics/<slug>.disignatlas.analysis.json` |
+| Does a gene have spatial expression data? | `oase spatialdb search <GENE> [--species S]` | `raw/transcriptomics/<slug>.spatialdb.json`<br>`raw/transcriptomics/<slug>.spatialdb.artifact.json`<br>`raw/transcriptomics/<slug>.spatialdb.meta.json` |
+| What do the SpatialDB results show? | `oase spatialdb analyze <GENE> [--species S]` | `raw/transcriptomics/<slug>.spatialdb.analysis.json` |
 
 Run `search` before `analyze`. `analyze` reads from disk and can be
 re-run without re-querying. All tools support `--json`, `--quiet`, and

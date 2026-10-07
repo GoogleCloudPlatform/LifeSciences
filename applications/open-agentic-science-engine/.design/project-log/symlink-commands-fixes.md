@@ -5,9 +5,9 @@
 
 ## Summary
 
-Added `is_safe_to_open()` guards to 7 call sites in `tools/dde/commands/`
+Added `is_safe_to_open()` guards to 7 call sites in `tools/oase/commands/`
 where file reads or writes operated on paths without checking for symlink
-exploitation. All guards use the existing `dde.core.paths.is_safe_to_open`
+exploitation. All guards use the existing `oase.core.paths.is_safe_to_open`
 helper, following the same pattern already established in `validate.py`,
 `artifact.py`, `hypex.py`, and `site.py`.
 

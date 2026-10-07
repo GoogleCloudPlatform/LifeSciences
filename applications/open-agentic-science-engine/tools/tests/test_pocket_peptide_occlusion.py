@@ -30,12 +30,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dde.commands.pocket import (
+from oase.commands.pocket import (
     _LOW_DRUGGABILITY_THRESHOLD,
     _detect_short_chains,
     _strip_chains,
 )
-from dde.core import provenance
+from oase.core import provenance
 
 # ---------------------------------------------------------------------------
 # Minimal test fixtures

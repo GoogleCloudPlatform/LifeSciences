@@ -25,7 +25,7 @@ Activate and verify the OASE-provisioned environment:
 
 ```bash
 source /scion-volumes/tools/env.sh
-dde doctor --json
+oase doctor --json
 ```
 
 Confirm `hypex`, `elo`, and the OASE literature commands are available. Follow
@@ -254,10 +254,10 @@ claims using OASE's citation and literature commands:
 
 ```bash
 # Verify the complete Hypex evidence array
-dde cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
+oase cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
 
 # Resolve any PMID, arXiv identifier, or DOI into an OASE literature artifact
-dde litref resolve <identifier> --json
+oase litref resolve <identifier> --json
 ```
 
 For each evidence item:

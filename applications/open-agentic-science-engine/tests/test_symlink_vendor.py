@@ -111,7 +111,7 @@ class TestFixAddThemesSymlink:
 
         # The real file should have the theme marker injected.
         text = real.read_text(encoding="utf-8")
-        assert "<!-- dde-theme-system -->" in text
+        assert "<!-- oase-theme-system -->" in text
 
 
 # ---------------------------------------------------------------------------

@@ -17,11 +17,11 @@ description: "Independent scientific reviewer — re-runs deterministic analysis
 agent_instructions: agents.md
 system_prompt: system-prompt.md
 
-# DDE_PROJECT is resolved by .dde/ walk-up discovery by default.
+# OASE_PROJECT is resolved by .oase/ walk-up discovery by default.
 # Set it explicitly only when the agent's workspace is not the program
 # directory — e.g. when /workspace is the OASE repo:
 #   env:
-#     DDE_PROJECT: /workspace/program-hr-mbc
+#     OASE_PROJECT: /workspace/program-hr-mbc
 
 skills:
   - uri: "https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications/open-agentic-science-engine/skills/citation-resolution"

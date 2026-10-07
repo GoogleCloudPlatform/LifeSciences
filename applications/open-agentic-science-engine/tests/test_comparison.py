@@ -53,7 +53,6 @@ sys.path.insert(0, str(REPO_ROOT / "tools"))
 sys.path.insert(0, str(REPO_ROOT))
 
 from click.testing import CliRunner
-from dde.cli import cli
 from eval.comparison import (
     ComparisonReport,
     generate_comparison,
@@ -67,6 +66,7 @@ from eval.stage0_harness import (
     fixture_to_concept,
     run_all_fixtures_stage0,
 )
+from oase.cli import cli
 
 # ---------------------------------------------------------------------------
 # Test infrastructure
@@ -146,7 +146,7 @@ def _get_comparison() -> ComparisonReport:
 def test_fixture_to_concept_all():
     for fixture in ALL_FIXTURES:
         concept = fixture_to_concept(fixture)
-        assert concept["schema"] == "dde.intervention-concept.v1", (
+        assert concept["schema"] == "oase.intervention-concept.v1", (
             f"{fixture.fixture_id}: wrong schema"
         )
         assert concept["id"].startswith("IC-"), (
@@ -360,7 +360,7 @@ def test_resource_characteristics():
 # ---------------------------------------------------------------------------
 
 
-@_test("CliRunner end-to-end: dde triage run with fixture-derived concept")
+@_test("CliRunner end-to-end: oase triage run with fixture-derived concept")
 def test_cli_runner_end_to_end():
     """Exercise Stage 0 through CliRunner end-to-end.
 
@@ -392,7 +392,7 @@ def test_cli_runner_end_to_end():
         # Both prove the CLI wiring works and the Stage 0 code is
         # genuinely invoked.
         assert result.exit_code in (0, 2), (
-            f"dde triage run exited {result.exit_code}: {result.output[:500]}"
+            f"oase triage run exited {result.exit_code}: {result.output[:500]}"
         )
 
         if result.exit_code == 0:

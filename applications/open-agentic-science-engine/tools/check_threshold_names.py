@@ -23,7 +23,7 @@ to nothing at the moment a specialist went looking for it.
 
 Two things are checked, and the second is the one worth having:
 
-  1. A cited name is declared somewhere in `dde.core.thresholds`.
+  1. A cited name is declared somewhere in `oase.core.thresholds`.
   2. A cited name is declared in a set the *citing skill's own tools* load.
      Citing a real threshold from another tool's set is the failure that reads
      best and helps least.
@@ -67,7 +67,7 @@ from pathlib import Path
 #: half-installed one raises whatever the broken module raises at import, and
 #: both mean the same thing here — this checker never reached an opinion.
 try:
-    from dde.core import thresholds as th
+    from oase.core import thresholds as th
 except Exception as exc:
     th = None  # type: ignore[assignment]
     _IMPORT_FAILURE: Exception | None = exc
@@ -76,7 +76,7 @@ else:
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = ROOT / "skills"
-COMMANDS = ROOT / "tools" / "dde" / "commands"
+COMMANDS = ROOT / "tools" / "oase" / "commands"
 
 #: A code span must look like this to be considered at all.
 _SNAKE = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
@@ -130,7 +130,7 @@ def relay_codes_from_source() -> list[str]:
     a module solely to read a constant, it inherits every dependency that
     module has, for none of the benefit.
     """
-    source = (ROOT / "tools" / "dde" / "core" / "provenance.py").read_text(
+    source = (ROOT / "tools" / "oase" / "core" / "provenance.py").read_text(
         encoding="utf-8"
     )
     tree = ast.parse(source)
@@ -232,20 +232,20 @@ def code_regions(text: str) -> str:
     """Only the fenced blocks and inline code spans, joined.
 
     An invocation is written as code. Scanning the whole document instead let
-    English match: `all dde project artifacts` in a one-line description
+    English match: `all oase project artifacts` in a one-line description
     registered a tool group named `project`, which no command module provides.
 
     That direction of error is the dangerous one here. A phantom group cannot
-    invent a threshold set — but a *real* word following `dde` in prose can
+    invent a threshold set — but a *real* word following `oase` in prose can
     credit a skill with a set its tools never load, and the placement check
     then passes a citation it was built to catch. A false positive in the
     entitlement pool is a false negative in the finding.
 
     Three code contexts, and the third was found by breaking the second. Fenced
-    blocks and inline spans alone dropped `dde genetics analyze` from
+    blocks and inline spans alone dropped `oase genetics analyze` from
     artifact-conventions, because that file uses a four-space indented block and
     no fence — so tightening the scan turned one false positive into two false
-    negatives. A line whose *first* token is `dde` is a command in any
+    negatives. A line whose *first* token is `oase` is a command in any
     plausible markdown, whatever surrounds it, so it is admitted directly.
     """
     out: list[str] = []
@@ -254,7 +254,7 @@ def code_regions(text: str) -> str:
         if line.lstrip().startswith("```"):
             in_fence = not in_fence
             continue
-        if in_fence or line.strip().startswith("dde "):
+        if in_fence or line.strip().startswith("oase "):
             out.append(line)
         else:
             out.extend(re.findall(r"`([^`]+)`", line))
@@ -262,9 +262,9 @@ def code_regions(text: str) -> str:
 
 
 def tool_groups_in(text: str) -> set[str]:
-    """Tool groups the skill actually invokes, from its `dde …` commands."""
+    """Tool groups the skill actually invokes, from its `oase …` commands."""
     groups: set[str] = set()
-    for match in re.finditer(r"\bdde\s+([a-z][a-z0-9-]*)", code_regions(text)):
+    for match in re.finditer(r"\boase\s+([a-z][a-z0-9-]*)", code_regions(text)):
         groups.add(match.group(1))
     return groups
 
@@ -282,7 +282,7 @@ def main() -> int:
         print(
             f"CANNOT RUN — this checker never reached an opinion about the repo.\n"
             f"  {type(_IMPORT_FAILURE).__name__}: {_IMPORT_FAILURE}\n"
-            f"The threshold declarations are read by importing dde.core.thresholds, "
+            f"The threshold declarations are read by importing oase.core.thresholds, "
             f"which is a leaf module with no third-party dependency — so this failure "
             f"means the package itself is unreachable or broken, not that a tool is "
             f"missing. Remedy: run as `PYTHONPATH=tools python3 "
@@ -307,7 +307,7 @@ def main() -> int:
     if not relay_locals:
         print(
             "CANNOT RUN — no RELAY_CODES literal was found in "
-            "tools/dde/core/provenance.py, so the exclusion set is empty and "
+            "tools/oase/core/provenance.py, so the exclusion set is empty and "
             "every relay code would be reported as a mistyped threshold. Either "
             "the constant moved or it is no longer a dict literal; point this "
             "reader at its new home.",
@@ -433,7 +433,7 @@ def main() -> int:
     )
     if no_tools:
         print(
-            f"{len(no_tools)} file(s) invoke no dde tool, so there is nothing to "
+            f"{len(no_tools)} file(s) invoke no oase tool, so there is nothing to "
             f"place them against: {', '.join(no_tools)}"
         )
     print(f"{len(cited)} of {len(all_names)} declared thresholds are cited by a skill")

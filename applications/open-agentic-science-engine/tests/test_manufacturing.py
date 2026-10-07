@@ -47,11 +47,11 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.evidence import (
+from oase.core.evidence import (
     EVIDENCE_STATUSES,
     validate_assessment,
 )
-from dde.core.manufacturing import (
+from oase.core.manufacturing import (
     MANUFACTURING_EVIDENCE_TYPES,
     PRODUCTION_PLATFORMS,
     SA_SCORE_MODALITIES,
@@ -92,7 +92,7 @@ def _small_molecule_concept(
 ) -> dict[str, Any]:
     """A small-molecule concept with a real SMILES structure."""
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": "IC-001",
         "revision": 1,
         "state": "active",
@@ -118,7 +118,7 @@ def _small_molecule_concept(
 def _biologic_concept() -> dict[str, Any]:
     """A biologic concept (antibody)."""
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": "IC-002",
         "revision": 1,
         "state": "active",
@@ -144,7 +144,7 @@ def _biologic_concept() -> dict[str, Any]:
 def _no_entity_concept() -> dict[str, Any]:
     """A concept without starting matter (entity_ref is null)."""
     return {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": "IC-003",
         "revision": 1,
         "state": "draft",
@@ -165,7 +165,7 @@ def _no_entity_concept() -> dict[str, Any]:
 
 
 def _sa_score_data(score: float = 2.5) -> dict[str, Any]:
-    """SA-score record from `dde compound sa-score`."""
+    """SA-score record from `oase compound sa-score`."""
     return {
         "tool": "compound",
         "subcommand": "sa-score",
@@ -205,7 +205,7 @@ def test_sa_score_command_exists():
     Note: ``click`` may not be installed in the test environment,
     so we verify by file inspection rather than import.
     """
-    compound_py = REPO_ROOT / "tools" / "dde" / "commands" / "compound.py"
+    compound_py = REPO_ROOT / "tools" / "oase" / "commands" / "compound.py"
     assert compound_py.is_file(), "compound.py not found"
     source = compound_py.read_text(encoding="utf-8")
     assert "sa-score" in source or "sa_score" in source, (
@@ -221,7 +221,7 @@ _check(
 
 def test_sa_score_helpers_present():
     """The SA-score helper functions are defined in compound.py."""
-    compound_py = REPO_ROOT / "tools" / "dde" / "commands" / "compound.py"
+    compound_py = REPO_ROOT / "tools" / "oase" / "commands" / "compound.py"
     source = compound_py.read_text(encoding="utf-8")
     assert "_require_rdkit_sa_score" in source, (
         "compound.py does not define _require_rdkit_sa_score"
@@ -234,7 +234,7 @@ _check("SA-score helpers present in compound.py", test_sa_score_helpers_present)
 
 def test_compound_analyze_exists():
     """The compound analyze command is defined in compound.py."""
-    compound_py = REPO_ROOT / "tools" / "dde" / "commands" / "compound.py"
+    compound_py = REPO_ROOT / "tools" / "oase" / "commands" / "compound.py"
     source = compound_py.read_text(encoding="utf-8")
     assert "def analyze_cmd" in source, "compound.py does not define analyze_cmd"
     # Verify it reads descriptors, alerts, and SA-score
@@ -250,7 +250,7 @@ _check(
 
 def test_compound_descriptors_exists():
     """The compound descriptors command is defined in compound.py."""
-    compound_py = REPO_ROOT / "tools" / "dde" / "commands" / "compound.py"
+    compound_py = REPO_ROOT / "tools" / "oase" / "commands" / "compound.py"
     source = compound_py.read_text(encoding="utf-8")
     assert "def descriptors_cmd" in source, (
         "compound.py does not define descriptors_cmd"
@@ -284,7 +284,7 @@ def test_small_molecule_with_sa_score():
         f"expected 'supported', got {result['evidence_status']!r}"
     )
     assert result["execution_outcome"] == "completed"
-    assert result["schema"] == "dde.evidence-assessment.v1"
+    assert result["schema"] == "oase.evidence-assessment.v1"
     assert "IC-001-r1" in result["concept_ref"]
 
     # Check findings
@@ -1087,13 +1087,13 @@ print("\n--- Default artifact-dir resolution for manufacturing (#23 regression) 
 def test_artifact_dir_manufacturing_registered():
     """ARTIFACT_DIRS must contain 'manufacturing' so that the default output
     path works without --out.  This was missing when #23 merged, causing
-    `dde manufacturing assess-stage0` to fail with 'unknown artifact class'
+    `oase manufacturing assess-stage0` to fail with 'unknown artifact class'
     on every invocation that didn't pass --out explicitly."""
-    from dde.core.context import ARTIFACT_DIRS
+    from oase.core.context import ARTIFACT_DIRS
 
     assert "manufacturing" in ARTIFACT_DIRS, (
         "'manufacturing' missing from ARTIFACT_DIRS — the default-output "
-        "path in `dde manufacturing assess-stage0` is broken"
+        "path in `oase manufacturing assess-stage0` is broken"
     )
     assert ARTIFACT_DIRS["manufacturing"] == "raw/manufacturing", (
         f"expected 'raw/manufacturing', got {ARTIFACT_DIRS['manufacturing']!r}"
@@ -1107,7 +1107,7 @@ _check(
 
 
 def test_manufacturing_cli_default_output_path():
-    """Run `dde manufacturing assess-stage0` via CliRunner WITHOUT --out.
+    """Run `oase manufacturing assess-stage0` via CliRunner WITHOUT --out.
 
     This is the exact code path that was broken: the command resolves its
     output directory via artifact_dir("manufacturing", None), which looks
@@ -1121,7 +1121,7 @@ def test_manufacturing_cli_default_output_path():
 
     try:
         from click.testing import CliRunner
-        from dde.cli import cli
+        from oase.cli import cli
 
         has_click = True
     except ImportError:
@@ -1133,7 +1133,7 @@ def test_manufacturing_cli_default_output_path():
         with tempfile.TemporaryDirectory() as td:
             project = Path(td) / "test-project"
             project.mkdir()
-            (project / ".dde").mkdir()
+            (project / ".oase").mkdir()
 
             # Write a concept record
             concept = _small_molecule_concept()
@@ -1170,12 +1170,12 @@ def test_manufacturing_cli_default_output_path():
         # click not installed — verify the core resolution path directly.
         # This is the call that manufacturing.py:99 makes; a KeyError here
         # is the exact bug this regression test exists to catch.
-        from dde.core.context import ProjectContext
+        from oase.core.context import ProjectContext
 
         with tempfile.TemporaryDirectory() as td:
             project = Path(td) / "test-project"
             project.mkdir()
-            (project / ".dde").mkdir()
+            (project / ".oase").mkdir()
 
             ctx = ProjectContext(root=project, source="test")
             target = ctx.artifact_dir("manufacturing", None)
@@ -1206,7 +1206,7 @@ def test_unrecognized_modality_with_entity_not_supported():
     certified as having a supported manufacturing path.
     """
     concept = {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": "IC-099",
         "revision": 1,
         "state": "active",
@@ -1249,7 +1249,7 @@ _check(
 def test_unrecognized_modality_null_entity_not_supported():
     """An unknown modality + null entity_ref must NOT be 'supported'."""
     concept = {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": "IC-100",
         "revision": 1,
         "state": "active",
@@ -1283,7 +1283,7 @@ _check(
 def test_known_biologic_modality_still_works():
     """A known biologic modality with entity_ref should still work."""
     concept = {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": "IC-101",
         "revision": 1,
         "state": "active",

@@ -36,20 +36,20 @@ import unittest
 
 from click.testing import CliRunner
 
-from dde.commands.allen import allen
-from dde.commands.allen import search_cmd as allen_search
-from dde.commands.alphafold import alphafold
-from dde.commands.alphafold import fetch as alphafold_fetch
-from dde.commands.dice import dice
-from dde.commands.dice import search_cmd as dice_search
-from dde.commands.expression import expression
-from dde.commands.expression import fetch_cmd as expression_fetch
-from dde.commands.genetics import fetch_cmd as genetics_fetch
-from dde.commands.genetics import genetics
-from dde.commands.patent import patent
-from dde.commands.patent import search_cmd as patent_search
-from dde.commands.trials import search_cmd as trials_search
-from dde.commands.trials import trials
+from oase.commands.allen import allen
+from oase.commands.allen import search_cmd as allen_search
+from oase.commands.alphafold import alphafold
+from oase.commands.alphafold import fetch as alphafold_fetch
+from oase.commands.dice import dice
+from oase.commands.dice import search_cmd as dice_search
+from oase.commands.expression import expression
+from oase.commands.expression import fetch_cmd as expression_fetch
+from oase.commands.genetics import fetch_cmd as genetics_fetch
+from oase.commands.genetics import genetics
+from oase.commands.patent import patent
+from oase.commands.patent import search_cmd as patent_search
+from oase.commands.trials import search_cmd as trials_search
+from oase.commands.trials import trials
 
 # (group, primary_name, alias_name, primary_function)
 ALIAS_TABLE = [

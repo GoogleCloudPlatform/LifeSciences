@@ -37,17 +37,17 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.concepts import (
+from oase.core.concepts import (
     CONCEPT_SCHEMA,
     check_charter_linkage,
     validate_concept,
 )
-from dde.core.errors import Refusal
+from oase.core.errors import Refusal
 
 # ---------------------------------------------------------------------------
 # Fixture

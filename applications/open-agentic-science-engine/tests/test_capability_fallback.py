@@ -41,7 +41,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.provenance import RELAY_CODES
+from oase.core.provenance import RELAY_CODES
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,7 +52,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory for CliRunner tests."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "hypotheses").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -72,7 +72,7 @@ def _make_hypothesis_set(project: Path, slug: str = "test-hyps") -> Path:
 def _adopt_hypothesis_set(project: Path, slug: str = "test-hyps") -> Path:
     """Adopt a hypothesis set and return the normalised artifact path."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     source_path = _make_hypothesis_set(project, slug)
     runner = CliRunner()
@@ -113,7 +113,7 @@ def test_adopted_set_analyze_no_strategy_fallback_relay() -> None:
     that entered the project through attestation.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -162,7 +162,7 @@ def test_adopted_set_no_fallback_fields_in_assessment() -> None:
     workflows.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -214,7 +214,7 @@ def test_adopted_set_no_fallback_fields_in_assessment() -> None:
 
 def test_capability_snapshot_captures_state() -> None:
     """get_capability_snapshot returns a dict of capability statuses."""
-    from dde.commands.doctor import get_capability_snapshot
+    from oase.commands.doctor import get_capability_snapshot
 
     snapshot = get_capability_snapshot()
 
@@ -223,7 +223,7 @@ def test_capability_snapshot_captures_state() -> None:
     )
 
     # Must contain the provisioned binaries
-    from dde.commands.doctor import _PROVISIONED_BINARIES
+    from oase.commands.doctor import _PROVISIONED_BINARIES
 
     for binary in _PROVISIONED_BINARIES:
         assert binary in snapshot, (
@@ -250,7 +250,7 @@ def test_capability_snapshot_captures_state() -> None:
 def test_capability_snapshot_in_analysis() -> None:
     """Analysis records include capability_state."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -297,7 +297,7 @@ def test_capability_snapshot_in_analysis() -> None:
 def test_capability_snapshot_in_sidecar() -> None:
     """Adopt sidecar includes capability_state."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -351,7 +351,7 @@ def test_adopt_sidecar_no_fallback_fields() -> None:
     capability_state is still recorded (informational).
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -416,9 +416,9 @@ def test_adopt_sidecar_no_fallback_fields() -> None:
 
 
 def test_doctor_json_includes_capability_snapshot() -> None:
-    """dde doctor --json includes a capability_snapshot field."""
+    """oase doctor --json includes a capability_snapshot field."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -480,7 +480,7 @@ def test_strategy_fallback_registered() -> None:
 
 def test_select_strategy_no_fallback_when_available() -> None:
     """select_strategy returns None fallback_info for always-available strategies."""
-    from dde.commands.hypothesis import select_strategy
+    from oase.commands.hypothesis import select_strategy
 
     # charter is always available (no binary/package requirements)
     actual, fallback_info = select_strategy("charter")
@@ -508,7 +508,7 @@ def test_old_sidecar_without_capability_state_treated_as_unknown() -> None:
     Schema migration: absent field must not read as 'no degradation'.
     """
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))

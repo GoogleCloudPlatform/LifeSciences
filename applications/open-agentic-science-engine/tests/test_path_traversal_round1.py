@@ -39,7 +39,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.paths import confine_path, sanitize_slug
+from oase.core.paths import confine_path, sanitize_slug
 
 # ---------------------------------------------------------------------------
 # Issue #252 — genetics.py: gene symbol in filename

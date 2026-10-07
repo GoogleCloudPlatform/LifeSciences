@@ -39,8 +39,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.errors import Refusal
-from dde.core.evidence import validate_decision
+from oase.core.errors import Refusal
+from oase.core.evidence import validate_decision
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,7 +67,7 @@ def _check(name: str, fn: Any) -> None:
 def _valid_decision(**overrides: Any) -> dict[str, Any]:
     """A minimal valid decision record."""
     record: dict[str, Any] = {
-        "schema": "dde.decision-record.v1",
+        "schema": "oase.decision-record.v1",
         "id": "DR-001",
         "action": "advance_with_budget",
         "affected_entity": {

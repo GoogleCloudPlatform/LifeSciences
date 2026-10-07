@@ -52,7 +52,7 @@ full. The short version is below.
 > files and why zero is a stop.
 >
 > Or it can examine a **real subject under a condition that forces agreement**. A
-> reproducibility loop that runs `dde pocket run` twice inside one second compares
+> reproducibility loop that runs `oase pocket run` twice inside one second compares
 > genuine numbers, prints them, and reports perfect determinism — because fpocket seeds
 > its volume from `time(NULL)` and the clock has not ticked. Nothing is empty and
 > nothing is faked. The comparison simply could not have come out any other way. There
@@ -185,13 +185,13 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde` on PATH and sets `DDE_TOOLS_HOME`. Without it, all
-`dde` commands will fail with "command not found."
+This puts `oase` on PATH and sets `OASE_TOOLS_HOME`. Without it, all
+`oase` commands will fail with "command not found."
 
 Then confirm your tools can actually give you an independent re-run:
 
 ```bash
-dde doctor
+oase doctor
 ```
 
 Look for the phase-2 contract line. It reads `N of N phase-2 command(s) latched offline,
@@ -205,7 +205,7 @@ in this order:
 
 > **Do not check `N` against a number written here.** `N` is however many phase-2
 > commands the CLI has today, and it goes up whenever a tool ships — it was 8 until
-> `dde pocket analyze` landed and made it 9. This page said `8 of 8` for exactly as
+> `oase pocket analyze` landed and made it 9. This page said `8 of 8` for exactly as
 > long as that stayed true, which is the wrong thing for a page to say: a reviewer who
 > compared the count against the number in the text would have read a healthy system as
 > a discrepancy. The invariant is that the two numbers **match each other**, not that
@@ -219,12 +219,12 @@ Then snapshot the evidence, so you can prove you did not alter it — and **coun
 because an empty snapshot compares equal to an empty snapshot:
 
 ```bash
-pre=$(find "$DDE_PROJECT/raw" -type f ! -path '*/reanalysis/*' -exec sha256sum {} \; | sort)
+pre=$(find "$OASE_PROJECT/raw" -type f ! -path '*/reanalysis/*' -exec sha256sum {} \; | sort)
 n_guarded=$(printf '%s\n' "$pre" | grep -c .)
-[ "$n_guarded" -gt 0 ] || echo "STOP: no evidence under \$DDE_PROJECT/raw"
+[ "$n_guarded" -gt 0 ] || echo "STOP: no evidence under \$OASE_PROJECT/raw"
 ```
 
-> **Zero files is a stop, not a pass.** If `DDE_PROJECT` is unset, points somewhere
+> **Zero files is a stop, not a pass.** If `OASE_PROJECT` is unset, points somewhere
 > else, or `raw/` is empty, `pre` and `post` are both empty and the comparison at the
 > Checkpoint reports *evidence intact* having examined nothing. The check that the whole
 > review rests on is the one that fails silently when it is pointed at nothing.
@@ -238,17 +238,17 @@ Then, for each cited Layer 0 artifact:
    `parameters` that produced it — so you can reconstruct the invocation without
    knowing the tool in advance.
 2. Re-run the deterministic phase, **writing to your own directory**. Which shape you
-   need depends on how the analyzer takes its input; `dde <tool> analyze --help`
+   need depends on how the analyzer takes its input; `oase <tool> analyze --help`
    settles it:
 
    **Identifier-based** — `genetics`, `expression`, `litref`, `alphafold analyze`.
    These also accept `--from`, which is where phase 1 *wrote*:
 
    ```bash
-   dde genetics analyze TP53 --out "$OUT"
-   dde expression analyze TP53 --out "$OUT"
-   dde litref analyze "10.1056/NEJMoa1505270" --out "$OUT"
-   dde alphafold analyze P06400 --out "$OUT"
+   oase genetics analyze TP53 --out "$OUT"
+   oase expression analyze TP53 --out "$OUT"
+   oase litref analyze "10.1056/NEJMoa1505270" --out "$OUT"
+   oase alphafold analyze P06400 --out "$OUT"
    ```
 
    `--from` defaults to the artifact-class directory, which is where the specialist's
@@ -260,16 +260,16 @@ Then, for each cited Layer 0 artifact:
    there is no `--from`:
 
    ```bash
-   dde coscientist analyze raw/hypotheses/<stem>.tournament.json --out "$OUT"
-   dde alphagenome analyze raw/genomics/<stem>.scores.json --out "$OUT"
-   dde pocket analyze raw/structures/<stem>.pockets.json --out "$OUT"
+   oase coscientist analyze raw/hypotheses/<stem>.tournament.json --out "$OUT"
+   oase alphagenome analyze raw/genomics/<stem>.scores.json --out "$OUT"
+   oase pocket analyze raw/structures/<stem>.pockets.json --out "$OUT"
    ```
 
    None of these re-fetch. They read from disk.
 
    > These two lists are examples, not an inventory. Tools ship, and a list of tools
    > written on a page is a cache of the CLI that goes stale without anyone noticing.
-   > **`dde <tool> analyze --help` is the authority**; if a tool you need is absent
+   > **`oase <tool> analyze --help` is the authority**; if a tool you need is absent
    > from the lists above, that means this page is behind, not that the tool is
    > unsupported.
 
@@ -277,7 +277,7 @@ Then, for each cited Layer 0 artifact:
    analyzer against the *stored* Layer 0 bytes — the same input the specialist's verdict
    came from. Re-running phase 1 fetches or computes new input, so a difference tells
    you nothing about their analysis: you changed the evidence and the verdict together.
-   For at least one tool it is not even the same experiment twice. `dde pocket run`
+   For at least one tool it is not even the same experiment twice. `oase pocket run`
    gets pocket volumes from a Monte Carlo integration that fpocket seeds from the clock
    with no seed flag, so two runs on one structure differ by a few percent — and two
    runs inside the same second are *identical*, because the seed has not ticked. A
@@ -359,7 +359,7 @@ that does not resolve.
 
 ### Phase C — the relay audit
 
-Run `dde relays` to print the registry. Enumerate `mandatory_relays` on **both**
+Run `oase relays` to print the registry. Enumerate `mandatory_relays` on **both**
 the sidecar and the `.analysis.json` — a code can appear on one and not the other.
 
 For each code present, this is the check that matters:
@@ -385,7 +385,7 @@ is a failure, and it is the most common one.
 Before you read the finding in full, re-take the snapshot from Phase A and compare:
 
 ```bash
-post=$(find "$DDE_PROJECT/raw" -type f ! -path '*/reanalysis/*' -exec sha256sum {} \; | sort)
+post=$(find "$OASE_PROJECT/raw" -type f ! -path '*/reanalysis/*' -exec sha256sum {} \; | sort)
 n_now=$(printf '%s\n' "$post" | grep -c .)
 if [ "$n_guarded" -eq 0 ] || [ "$n_now" -eq 0 ]; then
   echo "VOID — snapshot empty; the comparison proves nothing"

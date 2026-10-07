@@ -38,16 +38,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
 # Pre-import the modules under test so patch targets resolve correctly.
-from dde.commands import gwas as gwas_mod
-from dde.core import http as http_mod
-from dde.core.errors import Refusal
-from dde.core.paths import confine_path
+from oase.commands import gwas as gwas_mod
+from oase.core import http as http_mod
+from oase.core.errors import Refusal
+from oase.core.paths import confine_path
 
 # ===========================================================================
 # Issue #254 — ClinVar API key in E-utilities URLs
@@ -165,7 +165,7 @@ class TestClinvarApiKey:
             )
 
         # Verify the function still returns valid data
-        assert artifact["schema"] == "dde.gwas.v1"
+        assert artifact["schema"] == "oase.gwas.v1"
         assert artifact["query"]["gene"] == "TP53"
 
     def test_no_results_still_works(self):
@@ -198,7 +198,7 @@ class TestSiteOutputDirGuard:
         """Create a minimal OASE project directory."""
         project = base / "test-project"
         project.mkdir(parents=True, exist_ok=True)
-        (project / ".dde").mkdir(exist_ok=True)
+        (project / ".oase").mkdir(exist_ok=True)
         return project
 
     @staticmethod
@@ -212,7 +212,7 @@ class TestSiteOutputDirGuard:
         Raises Refusal if the output dir equals or contains the project root.
         Raises ArtifactError if the output dir escapes the project root.
         """
-        from dde.core.errors import ArtifactError
+        from oase.core.errors import ArtifactError
 
         out_path = Path(output_dir)
         if not out_path.is_absolute():
@@ -231,14 +231,14 @@ class TestSiteOutputDirGuard:
                 detail=f"resolved output directory {out_resolved} equals project root",
                 remedy="use a subdirectory such as '_site'",
             )
-        dde_dir = (project_resolved / ".dde").resolve()
-        if dde_dir.is_relative_to(out_resolved) and out_resolved != project_resolved:
+        oase_dir = (project_resolved / ".oase").resolve()
+        if oase_dir.is_relative_to(out_resolved) and out_resolved != project_resolved:
             raise Refusal(
-                "--output-dir must not contain the .dde control directory",
+                "--output-dir must not contain the .oase control directory",
                 detail=(
-                    f"resolved output directory {out_resolved} is a parent of {dde_dir}"
+                    f"resolved output directory {out_resolved} is a parent of {oase_dir}"
                 ),
-                remedy="use a subdirectory that does not contain .dde/",
+                remedy="use a subdirectory that does not contain .oase/",
             )
 
     def test_output_dir_dot_rejected(self, tmp_path: Path):

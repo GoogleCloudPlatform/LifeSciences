@@ -34,7 +34,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.envstamp import PROVISIONING_INPUTS, source_commit  # noqa: E402
+from oase.core.envstamp import PROVISIONING_INPUTS, source_commit  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,7 +61,7 @@ def _make_git_side_effect(responses: dict[tuple[str, ...], str | None]):
 
 
 def test_happy_path_reachable_on_non_main_ref():
-    """Commit reachable on origin/DDE — on_origin=True, remote_ref='origin/DDE'."""
+    """Commit reachable on origin/OASE — on_origin=True, remote_ref='origin/OASE'."""
     git_responses = {
         ("rev-parse", "HEAD"): "abc123",
         ("status", "--porcelain", "--", "."): "",
@@ -70,15 +70,15 @@ def test_happy_path_reachable_on_non_main_ref():
             "for-each-ref",
             "--format=%(refname)",
             "refs/remotes/origin/",
-        ): "refs/remotes/origin/main\nrefs/remotes/origin/DDE\n",
+        ): "refs/remotes/origin/main\nrefs/remotes/origin/OASE\n",
     }
 
-    # merge-base --is-ancestor: fail for origin/main (rc=1), succeed for origin/DDE (rc=0)
+    # merge-base --is-ancestor: fail for origin/main (rc=1), succeed for origin/OASE (rc=0)
     def run_side_effect(cmd, **kwargs):
         mock_result = MagicMock()
         if cmd[1:] == ["merge-base", "--is-ancestor", "abc123", "origin/main"]:
             mock_result.returncode = 1
-        elif cmd[1:] == ["merge-base", "--is-ancestor", "abc123", "origin/DDE"]:
+        elif cmd[1:] == ["merge-base", "--is-ancestor", "abc123", "origin/OASE"]:
             mock_result.returncode = 0
         else:
             mock_result.returncode = 1
@@ -86,15 +86,15 @@ def test_happy_path_reachable_on_non_main_ref():
 
     with (
         patch(
-            "dde.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
+            "oase.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
         ),
-        patch("dde.core.envstamp.subprocess.run", side_effect=run_side_effect),
+        patch("oase.core.envstamp.subprocess.run", side_effect=run_side_effect),
     ):
         result = source_commit(tree=Path("/fake/tree"))
 
     assert result["commit"] == "abc123"
     assert result["on_origin"] is True
-    assert result["remote_ref"] == "origin/DDE"
+    assert result["remote_ref"] == "origin/OASE"
     assert result["dirty"] is False
 
 
@@ -108,7 +108,7 @@ def test_not_reachable_on_any_ref():
             "for-each-ref",
             "--format=%(refname)",
             "refs/remotes/origin/",
-        ): "refs/remotes/origin/main\nrefs/remotes/origin/DDE\n",
+        ): "refs/remotes/origin/main\nrefs/remotes/origin/OASE\n",
     }
 
     def run_side_effect(cmd, **kwargs):
@@ -118,9 +118,9 @@ def test_not_reachable_on_any_ref():
 
     with (
         patch(
-            "dde.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
+            "oase.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
         ),
-        patch("dde.core.envstamp.subprocess.run", side_effect=run_side_effect),
+        patch("oase.core.envstamp.subprocess.run", side_effect=run_side_effect),
     ):
         result = source_commit(tree=Path("/fake/tree"))
 
@@ -139,7 +139,7 @@ def test_no_remote_refs_keeps_on_origin_none():
     }
 
     with patch(
-        "dde.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
+        "oase.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
     ):
         result = source_commit(tree=Path("/fake/tree"))
 
@@ -154,7 +154,7 @@ def test_no_git_all_none():
     def git_returns_none(*args, cwd):
         return None
 
-    with patch("dde.core.envstamp._git", side_effect=git_returns_none):
+    with patch("oase.core.envstamp._git", side_effect=git_returns_none):
         result = source_commit(tree=Path("/fake/tree"))
 
     assert result["commit"] is None
@@ -190,9 +190,9 @@ def test_subprocess_error_in_ref_loop_skips_ref():
 
     with (
         patch(
-            "dde.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
+            "oase.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
         ),
-        patch("dde.core.envstamp.subprocess.run", side_effect=run_side_effect),
+        patch("oase.core.envstamp.subprocess.run", side_effect=run_side_effect),
     ):
         result = source_commit(tree=Path("/fake/tree"))
 
@@ -223,9 +223,9 @@ def test_timeout_in_ref_loop_skips_ref():
 
     with (
         patch(
-            "dde.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
+            "oase.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
         ),
-        patch("dde.core.envstamp.subprocess.run", side_effect=run_side_effect),
+        patch("oase.core.envstamp.subprocess.run", side_effect=run_side_effect),
     ):
         result = source_commit(tree=Path("/fake/tree"))
 
@@ -243,7 +243,7 @@ def test_for_each_ref_failure_keeps_on_origin_none():
     }
 
     with patch(
-        "dde.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
+        "oase.core.envstamp._git", side_effect=_make_git_side_effect(git_responses)
     ):
         result = source_commit(tree=Path("/fake/tree"))
 

@@ -45,14 +45,14 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.controlstore import (
+from oase.core.controlstore import (
     CONTROL_DIR,
     ensure_control_dirs,
     read_record,
     write_record,
 )
-from dde.core.errors import Refusal
-from dde.core.evidence import (
+from oase.core.errors import Refusal
+from oase.core.evidence import (
     ACTIONS,
     EVIDENCE_STATUSES,
     EXECUTION_OUTCOMES,
@@ -86,7 +86,7 @@ def _check(name: str, fn: Any) -> None:
 def _make_project(base: Path) -> Path:
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -98,7 +98,7 @@ def _write_concept_to_disk(
     *,
     revision: int | None = None,
 ) -> Path:
-    """Write a concept record directly to .dde/control/concepts/.
+    """Write a concept record directly to .oase/control/concepts/.
 
     Since #74 has not yet landed (no concepts.py, no 'concept' record
     type in RECORD_TYPES), we write the file directly.  The default
@@ -113,7 +113,7 @@ def _write_concept_to_disk(
         filename = f"{concept_id}.json"
 
     data = {
-        "schema": "dde.intervention-concept.v1",
+        "schema": "oase.intervention-concept.v1",
         "id": concept_id,
         "revision": revision or 1,
         "state": "active",
@@ -136,7 +136,7 @@ def _write_concept_to_disk(
 def _step3_assessment() -> dict[str, Any]:
     """The worked example from design SS7 Step 3."""
     return {
-        "schema": "dde.evidence-assessment.v1",
+        "schema": "oase.evidence-assessment.v1",
         "id": "AR-001",
         "concept_ref": "IC-001-r1",
         "claim": "CDK4 shows loss-of-function intolerance",
@@ -161,7 +161,7 @@ def _step3_assessment() -> dict[str, Any]:
 def _valid_decision(**overrides: Any) -> dict[str, Any]:
     """A minimal valid decision record."""
     record: dict[str, Any] = {
-        "schema": "dde.decision-record.v1",
+        "schema": "oase.decision-record.v1",
         "id": "DR-001",
         "action": "advance_with_budget",
         "affected_entity": {
@@ -1086,7 +1086,7 @@ _check(
 def test_assessment_bad_schema():
     """Wrong schema string is rejected."""
     record = _step3_assessment()
-    record["schema"] = "dde.wrong.v1"
+    record["schema"] = "oase.wrong.v1"
     errors = validate_assessment(record)
     assert any("schema" in e for e in errors)
 
@@ -1268,10 +1268,10 @@ def test_ensure_control_dirs_creates_assessment_decision_dirs():
     with tempfile.TemporaryDirectory() as tmp:
         project = Path(tmp) / "proj"
         project.mkdir()
-        (project / ".dde").mkdir()
+        (project / ".oase").mkdir()
         ensure_control_dirs(project)
-        assert (project / ".dde" / "control" / "assessments").is_dir()
-        assert (project / ".dde" / "control" / "decisions").is_dir()
+        assert (project / ".oase" / "control" / "assessments").is_dir()
+        assert (project / ".oase" / "control" / "decisions").is_dir()
 
 
 _check(
@@ -1289,7 +1289,7 @@ print("\n--- Concept loader defense-in-depth ---")
 def test_concept_loader_rejects_malformed_id():
     """The default concept_loader rejects IDs that don't match IC-NNN,
     even if a file with that name exists on disk (defense-in-depth)."""
-    from dde.core.controlstore import _default_concept_loader
+    from oase.core.controlstore import _default_concept_loader
 
     with tempfile.TemporaryDirectory() as tmp:
         project = _make_project(Path(tmp))

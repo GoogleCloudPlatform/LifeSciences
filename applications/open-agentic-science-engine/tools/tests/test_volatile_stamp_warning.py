@@ -40,7 +40,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.provenance import (  # noqa: E402
+from oase.core.provenance import (  # noqa: E402
     _INTERESTING_VOLATILE_FIELDS,
     _capability_upgrades,
     _emit_volatile_stamp_warning,
@@ -60,7 +60,7 @@ def _base_record(**overrides: Any) -> dict[str, Any]:
         "source": "raw/structures/model.cif",
         "cli_version": "0.9.1",
         "cli_integrity": "abc1234",
-        "env_version": "dde-tools@0.9.1+ab12cd3",
+        "env_version": "oase-tools@0.9.1+ab12cd3",
         "timestamp": "2026-09-01T00:00:00Z",
         "threshold_set": "default",
         "thresholds_applied": {"pLDDT": 70},
@@ -84,13 +84,13 @@ def _write_record(path: Path, record: dict[str, Any]) -> None:
 
 def test_volatile_stamp_changes_detects_env_version():
     """Different env_version is detected."""
-    old = _base_record(env_version="dde-tools@0.9.1+ab12cd3")
-    new = _base_record(env_version="dde-tools@0.9.2+ef45gh6")
+    old = _base_record(env_version="oase-tools@0.9.1+ab12cd3")
+    new = _base_record(env_version="oase-tools@0.9.2+ef45gh6")
     changes = _volatile_stamp_changes(old, new)
     assert "env_version" in changes
     assert changes["env_version"] == (
-        "dde-tools@0.9.1+ab12cd3",
-        "dde-tools@0.9.2+ef45gh6",
+        "oase-tools@0.9.1+ab12cd3",
+        "oase-tools@0.9.2+ef45gh6",
     )
 
 
@@ -201,8 +201,8 @@ def test_emit_warning_format(tmp_path, capsys):
     path = tmp_path / "test.analysis.json"
     changes = {
         "env_version": (
-            "dde-tools@0.9.1+ab12cd3",
-            "dde-tools@0.9.2+ef45gh6",
+            "oase-tools@0.9.1+ab12cd3",
+            "oase-tools@0.9.2+ef45gh6",
         ),
     }
     _emit_volatile_stamp_warning(path, changes)
@@ -213,8 +213,8 @@ def test_emit_warning_format(tmp_path, capsys):
     assert "Not rewritten" in stderr
     assert "Provenance stamps differ" in stderr
     assert "env_version" in stderr
-    assert "dde-tools@0.9.1+ab12cd3" in stderr
-    assert "dde-tools@0.9.2+ef45gh6" in stderr
+    assert "oase-tools@0.9.1+ab12cd3" in stderr
+    assert "oase-tools@0.9.2+ef45gh6" in stderr
     assert "different toolchain conditions" in stderr
 
 
@@ -262,24 +262,24 @@ def test_emit_warning_capability_upgrade_note(tmp_path, capsys):
 def test_may_write_emits_warning_on_env_version_diff(tmp_path, capsys):
     """_may_write emits volatile stamp warning when env_version differs."""
     path = tmp_path / "test.analysis.json"
-    existing = _base_record(env_version="dde-tools@0.9.1+ab12cd3")
+    existing = _base_record(env_version="oase-tools@0.9.1+ab12cd3")
     new = _base_record(
-        env_version="dde-tools@0.9.2+ef45gh6",
+        env_version="oase-tools@0.9.2+ef45gh6",
         timestamp="2026-09-10T00:00:00Z",
         written_by="agent-beta",
     )
     _write_record(path, existing)
 
     # Mock _normalize_source to be a no-op (avoids project root lookup).
-    with patch("dde.core.provenance._normalize_source", side_effect=lambda s: s):
+    with patch("oase.core.provenance._normalize_source", side_effect=lambda s: s):
         result = _may_write(path, new)
 
     assert result is False  # record not rewritten
     captured = capsys.readouterr()
     stderr = captured.err
     assert "env_version" in stderr
-    assert "dde-tools@0.9.1+ab12cd3" in stderr
-    assert "dde-tools@0.9.2+ef45gh6" in stderr
+    assert "oase-tools@0.9.1+ab12cd3" in stderr
+    assert "oase-tools@0.9.2+ef45gh6" in stderr
 
 
 def test_may_write_emits_warning_on_capability_state_diff(tmp_path, capsys):
@@ -293,7 +293,7 @@ def test_may_write_emits_warning_on_capability_state_diff(tmp_path, capsys):
     )
     _write_record(path, existing)
 
-    with patch("dde.core.provenance._normalize_source", side_effect=lambda s: s):
+    with patch("oase.core.provenance._normalize_source", side_effect=lambda s: s):
         result = _may_write(path, new)
 
     assert result is False
@@ -313,7 +313,7 @@ def test_may_write_no_warning_when_stamps_same(tmp_path, capsys):
     )
     _write_record(path, existing)
 
-    with patch("dde.core.provenance._normalize_source", side_effect=lambda s: s):
+    with patch("oase.core.provenance._normalize_source", side_effect=lambda s: s):
         result = _may_write(path, new)
 
     assert result is False
@@ -332,7 +332,7 @@ def test_may_write_returns_false_exit_zero(tmp_path):
     new = _base_record(env_version="new", timestamp="now", written_by="x")
     _write_record(path, existing)
 
-    with patch("dde.core.provenance._normalize_source", side_effect=lambda s: s):
+    with patch("oase.core.provenance._normalize_source", side_effect=lambda s: s):
         result = _may_write(path, new)
 
     # _may_write returns False: the record is NOT rewritten, exit 0.
@@ -349,7 +349,7 @@ def test_may_write_suppress_warnings_no_output(tmp_path, capsys):
     new = _base_record(env_version="new", timestamp="now")
     _write_record(path, existing)
 
-    with patch("dde.core.provenance._normalize_source", side_effect=lambda s: s):
+    with patch("oase.core.provenance._normalize_source", side_effect=lambda s: s):
         result = _may_write(path, new, suppress_warnings=True)
 
     assert result is False
@@ -370,7 +370,7 @@ def test_may_write_timestamp_written_by_only_no_stamp_warning(tmp_path, capsys):
     )
     _write_record(path, existing)
 
-    with patch("dde.core.provenance._normalize_source", side_effect=lambda s: s):
+    with patch("oase.core.provenance._normalize_source", side_effect=lambda s: s):
         result = _may_write(path, new)
 
     assert result is False
@@ -397,7 +397,7 @@ def test_may_write_multiple_stamp_changes(tmp_path, capsys):
     )
     _write_record(path, existing)
 
-    with patch("dde.core.provenance._normalize_source", side_effect=lambda s: s):
+    with patch("oase.core.provenance._normalize_source", side_effect=lambda s: s):
         result = _may_write(path, new)
 
     assert result is False

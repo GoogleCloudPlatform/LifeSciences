@@ -21,13 +21,13 @@ Before starting, confirm:
 
 | Variable | Purpose | Notes |
 |---|---|---|
-| `DDE_VENV` | Override venv location | Default: `tools/.venv` |
-| `DDE_TOOLS_HOME` | Where the env stamp and `env.sh` land | Default: `/scion-volumes/tools` |
+| `OASE_VENV` | Override venv location | Default: `tools/.venv` |
+| `OASE_TOOLS_HOME` | Where the env stamp and `env.sh` land | Default: `/scion-volumes/tools` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | AlphaFold 3 (Vertex) access | Required for AF3 predictions |
 | `ALPHAGENOME_API_KEY` | AlphaGenome access | Required for AlphaGenome skills |
 
 > **Note:** The volume path `/scion-volumes/tools/` is an environment
-> default. Your deployment may use a different path — set `DDE_TOOLS_HOME`
+> default. Your deployment may use a different path — set `OASE_TOOLS_HOME`
 > to override. See [environment-specific notes](#7-environment-specific-notes).
 
 ---
@@ -81,12 +81,12 @@ source /scion-volumes/tools/env.sh
 ```
 
 > `env.sh` — not the venv's `activate` directly. `env.sh` also adds provisioned
-> binaries to `PATH` and sets `DDE_TOOLS_HOME`.
+> binaries to `PATH` and sets `OASE_TOOLS_HOME`.
 
 ### 3b. Doctor verification
 
 ```bash
-dde doctor --json
+oase doctor --json
 ```
 
 Checks that all tools, credentials, and dependencies are present. Any `"fail"`
@@ -104,11 +104,11 @@ Pushes all agent templates to the hub. Must complete before starting any agent.
 ### 3d. Program directory
 
 ```bash
-dde init <directory>
+oase init <directory>
 ```
 
-Creates the program root with `.dde/` marker and `raw/` tree. If continuing
-from a prior phase, the controller detects the existing `.dde/` and skips
+Creates the program root with `.oase/` marker and `raw/` tree. If continuing
+from a prior phase, the controller detects the existing `.oase/` and skips
 init.
 
 ### 3e. Start the Science Program Lead
@@ -144,7 +144,7 @@ After bootstrap completes, expect:
 
 ```bash
 source /scion-volumes/tools/env.sh
-dde doctor
+oase doctor
 ```
 
 - **`STOP`** verdict: a prerequisite is broken — fix before proceeding.
@@ -154,13 +154,13 @@ dde doctor
 ### Check program state
 
 ```bash
-ls -la <program-directory>/.dde/
+ls -la <program-directory>/.oase/
 ```
 
-The `.dde/` directory should contain:
+The `.oase/` directory should contain:
 
 ```
-.dde/
+.oase/
 ├── thresholds.yaml
 ├── program.yaml
 └── control/
@@ -180,8 +180,8 @@ The `.dde/` directory should contain:
 ### Continuing from a prior phase
 
 If continuing from a prior phase, the existing program directory is the source of
-truth. Point the controller at it — do not re-run `dde init`. The controller
-detects the existing `.dde/` marker and preserves the control state.
+truth. Point the controller at it — do not re-run `oase init`. The controller
+detects the existing `.oase/` marker and preserves the control state.
 
 ### External data (e.g., co-scientist results)
 
@@ -237,7 +237,7 @@ Common causes:
 ### Doctor FAIL
 
 ```bash
-dde doctor --json
+oase doctor --json
 ```
 
 Each failed check includes a `remedy` field. Common issues:
@@ -277,16 +277,16 @@ the brief. If the controller has stopped, check its output for the failure point
 
 The default tools home is `/scion-volumes/tools/`. This path is set by:
 
-1. The `DDE_TOOLS_HOME` environment variable (highest precedence)
+1. The `OASE_TOOLS_HOME` environment variable (highest precedence)
 2. The default compiled into `install.sh`
 
-If your deployment uses a different volume layout, set `DDE_TOOLS_HOME` before
+If your deployment uses a different volume layout, set `OASE_TOOLS_HOME` before
 starting the controller, or ensure the controller's environment includes it.
 
 ### Venv location
 
 The venv defaults to `tools/.venv` but can be placed on a shared volume via
-`DDE_VENV` so multiple agents use one environment without each building their
+`OASE_VENV` so multiple agents use one environment without each building their
 own copy.
 
 ### Pilot processes

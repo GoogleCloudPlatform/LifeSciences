@@ -18,4 +18,4 @@ agent_instructions: agents.md
 system_prompt: system-prompt.md
 
 # No skills needed — the bootstrapper uses CLI tools directly.
-# No env vars — DDE_PROJECT is discovered by .dde/ walk-up.
+# No env vars — OASE_PROJECT is discovered by .oase/ walk-up.

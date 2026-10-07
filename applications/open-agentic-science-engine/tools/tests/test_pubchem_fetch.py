@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for ``dde pubchem fetch`` — CID-to-compound data.
+"""Tests for ``oase pubchem fetch`` — CID-to-compound data.
 
 Issue #90: No CID-to-SMILES path inside the OASE tool surface.
 
 Asserts:
 1. Property endpoint parsing produces correct artifact fields.
 2. N/A SMILES triggers fallback to the full record endpoint.
-3. Artifact follows ``dde.pubchem-compound.v1`` schema shape.
+3. Artifact follows ``oase.pubchem-compound.v1`` schema shape.
 4. Sidecar written with tool="pubchem", subcommand="fetch".
 5. Multiple CIDs each produce their own artifact + sidecar.
 6. Invalid CID handling (404).
@@ -44,7 +44,7 @@ _module_patches.start()
 
 import unittest  # noqa: E402
 
-from dde.commands.pubchem import (  # noqa: E402
+from oase.commands.pubchem import (  # noqa: E402
     _build_compound_artifact,
     _extract_smiles_from_full_record,
     _needs_fallback,
@@ -151,7 +151,7 @@ def _run_fetch(
     http_side_effect: list[MagicMock],
     slug_override: str | None = None,
 ) -> tuple[int, str, dict[str, dict[str, Any]]]:
-    """Run ``dde pubchem fetch`` via CliRunner.
+    """Run ``oase pubchem fetch`` via CliRunner.
 
     Returns ``(exit_code, output, files)`` where *files* is a dict
     mapping filename → parsed JSON for every file under ``raw/compounds/``.
@@ -159,13 +159,13 @@ def _run_fetch(
     """
     from click.testing import CliRunner
 
-    from dde.cli import cli
+    from oase.cli import cli
 
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as td:
         project = Path(td) / "test-project"
         project.mkdir()
-        (project / ".dde").mkdir()
+        (project / ".oase").mkdir()
         compounds_dir = project / "raw" / "compounds"
         compounds_dir.mkdir(parents=True)
 
@@ -174,7 +174,7 @@ def _run_fetch(
             args.extend(["--name", slug_override])
         args.extend([str(c) for c in cids])
 
-        with patch("dde.core.http.request", side_effect=http_side_effect):
+        with patch("oase.core.http.request", side_effect=http_side_effect):
             result = runner.invoke(cli, args)
 
         # Read all produced files before the temp dir is cleaned up.
@@ -278,7 +278,7 @@ class TestBuildCompoundArtifact(unittest.TestCase):
             molecular_weight=30.07,
             source="property",
         )
-        self.assertEqual(art["schema"], "dde.pubchem-compound.v1")
+        self.assertEqual(art["schema"], "oase.pubchem-compound.v1")
 
     def test_all_fields_present(self):
         art = _build_compound_artifact(
@@ -356,7 +356,7 @@ class TestFetchPropertyEndpoint(unittest.TestCase):
 
         artifact = files.get("2244.pubchem-compound.artifact.json")
         self.assertIsNotNone(artifact, "artifact file not written")
-        self.assertEqual(artifact["schema"], "dde.pubchem-compound.v1")
+        self.assertEqual(artifact["schema"], "oase.pubchem-compound.v1")
         self.assertEqual(artifact["cid"], 2244)
         self.assertEqual(artifact["canonical_smiles"], "CC(=O)OC1=CC=CC=C1C(=O)O")
         self.assertEqual(artifact["inchikey"], "BSYNRYMUTXBXSQ-UHFFFAOYSA-N")
@@ -448,7 +448,7 @@ class TestFetchInvalidCID(unittest.TestCase):
         artifact = files.get("999999999.pubchem-compound.artifact.json")
         self.assertIsNotNone(artifact, "not-found artifact not written")
         self.assertTrue(artifact.get("_not_found"))
-        self.assertEqual(artifact["schema"], "dde.pubchem-compound.v1")
+        self.assertEqual(artifact["schema"], "oase.pubchem-compound.v1")
         self.assertEqual(artifact["cid"], 999999999)
 
     def test_not_found_sidecar_has_note(self):
@@ -486,7 +486,7 @@ class TestFetchSlugOverride(unittest.TestCase):
 
 
 class TestArtifactSchemaShape(unittest.TestCase):
-    """The artifact JSON strictly follows the dde.pubchem-compound.v1 schema."""
+    """The artifact JSON strictly follows the oase.pubchem-compound.v1 schema."""
 
     def test_exact_keys(self):
         resp = _make_http_response(_property_response(cid=2244))

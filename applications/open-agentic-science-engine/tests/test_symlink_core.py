@@ -37,7 +37,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.core.paths import is_safe_to_open
+from oase.core.paths import is_safe_to_open
 
 # ---------------------------------------------------------------------------
 # Fix 1: context.py — _write_if_missing() symlink write-through (#292)
@@ -49,8 +49,8 @@ class TestContextWriteIfMissingSymlink:
 
     def test_symlink_at_write_target_raises(self, tmp_path: Path) -> None:
         """A symlink at the write path must trigger ProjectRootError."""
-        from dde.core.context import _write_if_missing
-        from dde.core.errors import ProjectRootError
+        from oase.core.context import _write_if_missing
+        from oase.core.errors import ProjectRootError
 
         outside = tmp_path / "outside"
         outside.mkdir()
@@ -70,7 +70,7 @@ class TestContextWriteIfMissingSymlink:
 
     def test_regular_file_path_accepted(self, tmp_path: Path) -> None:
         """A regular (non-existent) path is accepted for writing."""
-        from dde.core.context import _write_if_missing
+        from oase.core.context import _write_if_missing
 
         path = tmp_path / "new-file.md"
         _write_if_missing(path, "# content\n")
@@ -95,11 +95,11 @@ class TestControlstoreConceptReadSymlink:
 
     def test_symlink_concept_json_returns_none(self, tmp_path: Path) -> None:
         """A symlinked concept JSON must return None (fail-closed)."""
-        from dde.core.controlstore import _default_concept_loader
+        from oase.core.controlstore import _default_concept_loader
 
         # Set up project structure.
         project_root = tmp_path / "project"
-        concepts_dir = project_root / ".dde" / "control" / "concepts"
+        concepts_dir = project_root / ".oase" / "control" / "concepts"
         concepts_dir.mkdir(parents=True)
 
         # Create real target outside project.
@@ -118,10 +118,10 @@ class TestControlstoreConceptReadSymlink:
 
     def test_symlink_unversioned_concept_returns_none(self, tmp_path: Path) -> None:
         """A symlinked unversioned concept (IC-NNN.json) must return None."""
-        from dde.core.controlstore import _default_concept_loader
+        from oase.core.controlstore import _default_concept_loader
 
         project_root = tmp_path / "project"
-        concepts_dir = project_root / ".dde" / "control" / "concepts"
+        concepts_dir = project_root / ".oase" / "control" / "concepts"
         concepts_dir.mkdir(parents=True)
 
         # Create real target outside project.
@@ -140,10 +140,10 @@ class TestControlstoreConceptReadSymlink:
 
     def test_regular_concept_json_accepted(self, tmp_path: Path) -> None:
         """A regular concept JSON file is read normally."""
-        from dde.core.controlstore import _default_concept_loader
+        from oase.core.controlstore import _default_concept_loader
 
         project_root = tmp_path / "project"
-        concepts_dir = project_root / ".dde" / "control" / "concepts"
+        concepts_dir = project_root / ".oase" / "control" / "concepts"
         concepts_dir.mkdir(parents=True)
 
         concept_file = concepts_dir / "IC-002-r1.json"
@@ -171,7 +171,7 @@ class TestControlstoreWriteRecordSymlink:
         outside.mkdir()
         target = outside / "stolen.json"
 
-        record_dir = tmp_path / ".dde" / "control" / "work-orders"
+        record_dir = tmp_path / ".oase" / "control" / "work-orders"
         record_dir.mkdir(parents=True)
 
         link = record_dir / "WO-001.json"
@@ -183,7 +183,7 @@ class TestControlstoreWriteRecordSymlink:
 
     def test_regular_record_path_is_safe(self, tmp_path: Path) -> None:
         """A non-existent regular path is safe."""
-        record_dir = tmp_path / ".dde" / "control" / "work-orders"
+        record_dir = tmp_path / ".oase" / "control" / "work-orders"
         record_dir.mkdir(parents=True)
         path = record_dir / "WO-002.json"
         assert is_safe_to_open(path)
@@ -203,7 +203,7 @@ class TestEnvVersionSymlink:
         import os
         from unittest import mock
 
-        from dde.core import env
+        from oase.core import env
 
         tools_dir = tmp_path / "tools"
         tools_dir.mkdir()
@@ -216,7 +216,7 @@ class TestEnvVersionSymlink:
         marker = tools_dir / "ENV_VERSION"
         marker.symlink_to(target)
 
-        with mock.patch.dict(os.environ, {"DDE_TOOLS_HOME": str(tools_dir)}):
+        with mock.patch.dict(os.environ, {"OASE_TOOLS_HOME": str(tools_dir)}):
             version = env.env_version()
 
         # Must NOT return the symlink target content.
@@ -229,7 +229,7 @@ class TestEnvVersionSymlink:
         import os
         from unittest import mock
 
-        from dde.core import env
+        from oase.core import env
 
         tools_dir = tmp_path / "tools"
         tools_dir.mkdir()
@@ -237,7 +237,7 @@ class TestEnvVersionSymlink:
         marker = tools_dir / "ENV_VERSION"
         marker.write_text("sha256:abcdef123456")
 
-        with mock.patch.dict(os.environ, {"DDE_TOOLS_HOME": str(tools_dir)}):
+        with mock.patch.dict(os.environ, {"OASE_TOOLS_HOME": str(tools_dir)}):
             version = env.env_version()
 
         assert version == "sha256:abcdef123456"
@@ -253,21 +253,21 @@ class TestPolicyProgramYamlSymlink:
 
     def test_symlink_program_yaml_raises(self, tmp_path: Path) -> None:
         """A symlinked program.yaml must raise SchemaError."""
-        from dde.core.errors import SchemaError
+        from oase.core.errors import SchemaError
 
         project_root = tmp_path / "project"
-        dde_dir = project_root / ".dde"
-        dde_dir.mkdir(parents=True)
+        oase_dir = project_root / ".oase"
+        oase_dir.mkdir(parents=True)
 
         outside = tmp_path / "outside"
         outside.mkdir()
         target = outside / "evil.yaml"
         target.write_text("program:\n  name: evil\n")
 
-        link = dde_dir / "program.yaml"
+        link = oase_dir / "program.yaml"
         link.symlink_to(target)
 
-        from dde.core.policy import load_program_config
+        from oase.core.policy import load_program_config
 
         try:
             load_program_config(project_root)
@@ -320,19 +320,19 @@ class TestThresholdsYamlSymlink:
 
     def test_symlink_thresholds_yaml_raises(self, tmp_path: Path) -> None:
         """A symlinked thresholds.yaml must raise ThresholdError."""
-        from dde.core.errors import ThresholdError
-        from dde.core.thresholds import _load_program_file
+        from oase.core.errors import ThresholdError
+        from oase.core.thresholds import _load_program_file
 
         project_root = tmp_path / "project"
-        dde_dir = project_root / ".dde"
-        dde_dir.mkdir(parents=True)
+        oase_dir = project_root / ".oase"
+        oase_dir.mkdir(parents=True)
 
         outside = tmp_path / "outside"
         outside.mkdir()
         target = outside / "evil.yaml"
         target.write_text("potency:\n  ic50_nm: 100\n")
 
-        link = dde_dir / "thresholds.yaml"
+        link = oase_dir / "thresholds.yaml"
         link.symlink_to(target)
 
         try:

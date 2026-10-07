@@ -12,7 +12,7 @@ anchoring is critical — these definitions are reused across reflection and ran
 agents to ensure scores are comparable.
 
 This protocol contributes records to a run that the supervisor ultimately
-publishes with `dde hypex analyze`; workers do not publish a separate result.
+publishes with `oase hypex analyze`; workers do not publish a separate result.
 
 ## Scoring Axes
 
@@ -36,10 +36,10 @@ Evaluates whether the proposed mechanism is consistent with existing evidence.
 
 **How to assess correctness:**
 
-1. **Automated citation verification (`dde cite verify`):**
+1. **Automated citation verification (`oase cite verify`):**
    Run automated citation verification on the hypothesis file:
    ```bash
-   dde cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
+   oase cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
    ```
    Read the resulting manifest (`<run-dir>/citations/H-XXXX.json`) to populate:
    - `verified_citations`: Extracted from manifest entries where `status == "verified"`.
@@ -56,7 +56,7 @@ Evaluates whether the proposed mechanism is consistent with existing evidence.
    - **Check quarantine triggers:** If `phantom_count >= 2`, OR `phantom_count / total_citations >= 0.50`, OR (`total_citations > 0` AND `verified_count == 0`), trigger immediate quarantine per the `safety-screen` skill.
    - **Unverified citations:** Citations with `status: "unverified"` (e.g., network error, timeout, upstream rate-limit) do NOT trigger phantom penalties; they are logged as unverified notes.
 
-3. **Verify claims against paper contents:** For verified citations, resolve identifiers with `dde litref resolve` and inspect the stored OASE literature artifacts as needed to confirm that the paper actually demonstrates what the hypothesis claims in its `note` field.
+3. **Verify claims against paper contents:** For verified citations, resolve identifiers with `oase litref resolve` and inspect the stored OASE literature artifacts as needed to confirm that the paper actually demonstrates what the hypothesis claims in its `note` field.
 4. **Search for contradicting evidence:** Search for contradicting evidence using terms designed to find counter-results (e.g., if the hypothesis claims "X increases Y", search for "X decreases Y" or "X no effect Y").
 5. **Check causal chain completeness:** Check whether the causal chain has gaps — are there steps that are assumed but not supported by any citation?
 6. **Evaluate evidence quality:** Consider the quality of the cited evidence: peer-reviewed > preprint > review article > conference abstract.
@@ -78,7 +78,7 @@ Evaluates how much the hypothesis adds beyond what is already known or published
 **How to assess novelty:**
 
 1. Search for prior art: use the hypothesis title and key mechanism terms as
-   search queries across `dde pubmed search` and `dde preprint search --source arxiv`.
+   search queries across `oase pubmed search` and `oase preprint search --source arxiv`.
 2. Check whether any of the cited papers already propose the same mechanism.
 3. Consider the *combination* — even if individual elements are known, the
    specific synthesis may be novel.
@@ -232,13 +232,13 @@ review pipeline — the standard pipeline starts at `full`.
 **Purpose:** Thorough evidence-based review with citation verification and
 literature search.
 
-**Tools:** `dde cite verify`, `dde cite analyze`, `dde litref resolve`,
-`dde pubmed search`, and `dde preprint search`.
+**Tools:** `oase cite verify`, `oase cite analyze`, `oase litref resolve`,
+`oase pubmed search`, and `oase preprint search`.
 
 **What to do:**
 1. **Verify citations:** Run automated citation verification on the hypothesis:
    ```bash
-   dde cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
+   oase cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
    ```
    Read the resulting manifest (`<run-dir>/citations/H-XXXX.json`) to populate:
    - `verified_citations`: Extracted from manifest entries where `status == "verified"`.
@@ -254,9 +254,9 @@ literature search.
    - **Score 1 assignment:** If the primary or core causal mechanism relies on a phantom citation, assign Correctness score 1.
    - **Quarantine check:** Check if quarantine triggers are met (`phantom_count >= 2`, OR `phantom_count / total_citations >= 0.50`, OR `total_citations > 0` AND `verified_count == 0`). If triggered, execute quarantine procedure per the `safety-screen` skill.
    - **Unverified citations:** Citations with `status: "unverified"` (e.g., network error, timeout, upstream rate-limit) do NOT trigger phantom penalties; record them as unverified notes.
-   - For verified citations, use `dde litref resolve <identifier>` and inspect the stored artifact to confirm the paper actually demonstrates what the hypothesis claims in its `note` field. If a paper does not support the claim, note as a key criticism.
+   - For verified citations, use `oase litref resolve <identifier>` and inspect the stored artifact to confirm the paper actually demonstrates what the hypothesis claims in its `note` field. If a paper does not support the claim, note as a key criticism.
 2. **Search for contradicting evidence:** Construct search queries designed to
-   find counter-evidence for the core mechanism. Use `dde pubmed search` with
+   find counter-evidence for the core mechanism. Use `oase pubmed search` with
    terms that negate the hypothesis (e.g., if the hypothesis claims A causes B,
    search for "A does not affect B" or "A inhibits B").
    - Record any contradicting papers in the `contradicting_evidence` array.
@@ -388,8 +388,8 @@ The required fields are:
 | `scores.constraint_compliance` | integer | Optional (required by convention for `full`, `deep`, `recurrent` if constraints exist). Compliance with `run.yaml.constraints` (1–5). Omit if no constraints declared. Feeds $S_{\text{comp}}$ in composite Elo. |
 | `verdict` | string | Summary assessment — 2–4 sentences covering the overall evaluation. |
 | `key_criticisms` | array | Specific, actionable concerns. Each item is a concrete criticism, not a vague complaint. |
-| `verified_citations` | array | `lit_id` values from the hypothesis evidence independently verified via `dde cite verify` / `dde litref resolve`. Empty array if review type is `initial`. |
-| `phantom_citations` | array | `lit_id` values identified as non-existent or fabricated via `dde cite verify`. Empty array if none found. |
+| `verified_citations` | array | `lit_id` values from the hypothesis evidence independently verified via `oase cite verify` / `oase litref resolve`. Empty array if review type is `initial`. |
+| `phantom_citations` | array | `lit_id` values identified as non-existent or fabricated via `oase cite verify`. Empty array if none found. |
 | `citation_manifest` | string | Relative path to the immutable citation manifest (e.g. `citations/H-0001.json`). |
 | `contradicting_evidence` | array | `lit_id` values of papers found during the review that contradict the hypothesis. Empty array if none found. |
 | `reviewer` | string | Name of the reviewing agent. |

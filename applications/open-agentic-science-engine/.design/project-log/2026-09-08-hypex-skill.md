@@ -3,7 +3,7 @@
 **Date:** 2026-09-08
 **Agent:** dev-hypex-skill
 **Branch:** scion/dev-hypex-skill
-**Task:** Create the interpretation contract for `dde hypex ingest` / `analyze`
+**Task:** Create the interpretation contract for `oase hypex ingest` / `analyze`
 
 ## What was done
 
@@ -35,7 +35,7 @@ analogue of `tournament-corpus` (the co-scientist reading guide).
    `max_suspect_citations`, `min_safety_score` — `get()` raises, task
    reports blocked. Stated as correct behaviour.
 
-6. **Assessment core**: `dde.hypothesis-assessment.v1` with
+6. **Assessment core**: `oase.hypothesis-assessment.v1` with
    `score.basis: "hypex-elo@1.0"` (differs from co-scientist's
    `"coscientist-elo@1.1"`), cross-strategy comparison in prose only.
 

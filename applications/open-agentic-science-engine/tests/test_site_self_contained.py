@@ -42,15 +42,15 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
 from click.testing import CliRunner
-from dde.cli import cli
-from dde.commands.site import viewer_url_for
-from dde.core.controlstore import (
+from oase.cli import cli
+from oase.commands.site import viewer_url_for
+from oase.core.controlstore import (
     ensure_control_dirs,
     write_record,
 )
@@ -66,7 +66,7 @@ def _make_project(base: Path, name: str = "proj") -> Path:
     """Create a minimal OASE project directory with control plane."""
     project = base / name
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -155,7 +155,7 @@ def _run_site_build(
     project: Path,
     extra_args: list[str] | None = None,
 ) -> Any:
-    """Invoke ``dde site build`` via click's test runner."""
+    """Invoke ``oase site build`` via click's test runner."""
     runner = CliRunner()
     args = ["--project", str(project), "site", "build"]
     if extra_args:
@@ -167,7 +167,7 @@ def _run_site_export(
     project: Path,
     extra_args: list[str] | None = None,
 ) -> Any:
-    """Invoke ``dde site export`` via click's test runner."""
+    """Invoke ``oase site export`` via click's test runner."""
     runner = CliRunner()
     args = ["--project", str(project), "site", "export"]
     if extra_args:
@@ -208,7 +208,7 @@ def _test(name: str):
 # Tests
 # ---------------------------------------------------------------------------
 
-_TMPBASE = Path(tempfile.mkdtemp(prefix="dde-test-site-sc-"))
+_TMPBASE = Path(tempfile.mkdtemp(prefix="oase-test-site-sc-"))
 
 
 # ---- viewer_url_for tests ----

@@ -33,9 +33,9 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from dde.commands.workorder import _find_critical_liabilities, _perform_commit
-from dde.core import controlstore
-from dde.core.errors import Refusal
+from oase.commands.workorder import _find_critical_liabilities, _perform_commit
+from oase.core import controlstore
+from oase.core.errors import Refusal
 
 # ---------------------------------------------------------------------------
 # _find_critical_liabilities tests

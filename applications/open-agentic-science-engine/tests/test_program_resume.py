@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Comprehensive end-to-end tests for ``dde program resume``.
+"""Comprehensive end-to-end tests for ``oase program resume``.
 
 Tests the cross-phase state import command that brings accepted work
 orders (and associated runs, contexts, validations) from a prior phase's
@@ -37,15 +37,15 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
 from click.testing import CliRunner
-from dde.cli import cli
-from dde.core import controlstore
-from dde.core.controlstore import (
+from oase.cli import cli
+from oase.core import controlstore
+from oase.core.controlstore import (
     CONTROL_DIR,
     ensure_control_dirs,
     next_id,
@@ -64,7 +64,7 @@ def _make_project(base: Path, name: str) -> Path:
     """Create a minimal OASE project directory with control plane."""
     project = base / name
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     ensure_control_dirs(project)
     return project
 
@@ -195,7 +195,7 @@ def _run_resume(
     source: str,
     extra_args: list[str] | None = None,
 ) -> Any:
-    """Invoke ``dde program resume`` via click's test runner.
+    """Invoke ``oase program resume`` via click's test runner.
 
     Returns the click test result.
     """
@@ -242,7 +242,7 @@ def _test(name: str):
 
 # We use a single tmpdir for the whole run — each test creates its own
 # sub-projects inside it.
-_TMPBASE = Path(tempfile.mkdtemp(prefix="dde-test-resume-"))
+_TMPBASE = Path(tempfile.mkdtemp(prefix="oase-test-resume-"))
 
 
 # ---- Test 1: Happy path ----
@@ -412,7 +412,7 @@ def test_empty_source():
 
 
 # ---- Test 5: Edge case — source path variants ----
-@_test("5. Source path variants — project root AND direct .dde/control/ path")
+@_test("5. Source path variants — project root AND direct .oase/control/ path")
 def test_source_path_variants():
     base = _TMPBASE / "t5"
     base.mkdir()
@@ -425,11 +425,11 @@ def test_source_path_variants():
     result_a = _run_resume(dest_a, str(source))
     assert result_a.exit_code == 0, f"project root path: exit {result_a.exit_code}"
 
-    # Variant B: using direct .dde/control/ path
+    # Variant B: using direct .oase/control/ path
     dest_b = _make_project(base, "phase2b")
-    control_path = str(source / ".dde" / "control")
+    control_path = str(source / ".oase" / "control")
     result_b = _run_resume(dest_b, control_path)
-    assert result_b.exit_code == 0, f".dde/control/ path: exit {result_b.exit_code}"
+    assert result_b.exit_code == 0, f".oase/control/ path: exit {result_b.exit_code}"
 
     # Both should have imported the same WO
     assert (dest_a / CONTROL_DIR / "work-orders" / "WO-001-r1.json").is_file(), (
@@ -441,7 +441,7 @@ def test_source_path_variants():
 
 
 # ---- Test 6: Edge case — invalid source ----
-@_test("6. Invalid source — non-existent path and path without .dde/control/")
+@_test("6. Invalid source — non-existent path and path without .oase/control/")
 def test_invalid_source():
     base = _TMPBASE / "t6"
     base.mkdir()
@@ -458,7 +458,7 @@ def test_invalid_source():
         f"non-existent path should fail, got exit {result_a.exit_code}"
     )
 
-    # 6b: Existing directory without .dde/control/
+    # 6b: Existing directory without .oase/control/
     no_control = base / "no-control-plane"
     no_control.mkdir()
     result_b = runner.invoke(
@@ -724,7 +724,7 @@ def _write_markdown_wo(directory: Path, filename: str, content: str) -> Path:
 
 
 def _make_md_source_with_control(base: Path, name: str) -> Path:
-    """Create a project with .dde/control/ for placing markdown files."""
+    """Create a project with .oase/control/ for placing markdown files."""
     project = _make_project(base, name)
     wo_dir = project / CONTROL_DIR / "work-orders"
     wo_dir.mkdir(parents=True, exist_ok=True)
@@ -792,13 +792,13 @@ def test_md_happy_path():
     assert "1 skipped" in result.output
 
 
-# ---- Test 14: Markdown-only source (no .dde/control/) ----
+# ---- Test 14: Markdown-only source (no .oase/control/) ----
 @_test("14. Markdown-only source — directory of .md files without control plane")
 def test_md_only_source():
     base = _TMPBASE / "t14"
     base.mkdir()
 
-    # Source is just a directory with markdown files, no .dde/control/.
+    # Source is just a directory with markdown files, no .oase/control/.
     source = base / "phase1-legacy"
     source.mkdir()
     _write_markdown_wo(source, "WO-001.md", _ACCEPTED_MD)
@@ -1211,7 +1211,7 @@ def _print_report():
     total = len(_results)
 
     print("\n" + "=" * 72)
-    print("TEST REPORT: dde program resume")
+    print("TEST REPORT: oase program resume")
     print("=" * 72)
     for name, status, detail in _results:
         icon = {"PASS": "✓", "FAIL": "✗", "ERROR": "⚠"}.get(status, "?")

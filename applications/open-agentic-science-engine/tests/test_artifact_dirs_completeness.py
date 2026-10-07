@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Systemic guard: every ARTIFACT_CLASS in dde/commands/ must be registered.
+"""Systemic guard: every ARTIFACT_CLASS in oase/commands/ must be registered.
 
 This is the test that prevents a fourth recurrence of issues #83, #85,
 and #131.  Each time, a command module declared an ARTIFACT_CLASS that
 was not present in ARTIFACT_DIRS, causing _find_layer0_artifacts() to
 return empty and citation checking to raise 'unknown artifact class'.
 
-The guard works by scanning every *.py file in dde/commands/ at test
+The guard works by scanning every *.py file in oase/commands/ at test
 time, extracting ARTIFACT_CLASS assignments via the AST, and asserting
 each value is resolvable through normalize_artifact_class + ARTIFACT_DIRS.
 """
@@ -37,13 +37,13 @@ _TOOLS_ROOT = Path(__file__).resolve().parent.parent / "tools"
 if str(_TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOOLS_ROOT))
 
-from dde.core.context import ARTIFACT_DIRS, normalize_artifact_class
+from oase.core.context import ARTIFACT_DIRS, normalize_artifact_class
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-_COMMANDS_DIR = _TOOLS_ROOT / "dde" / "commands"
+_COMMANDS_DIR = _TOOLS_ROOT / "oase" / "commands"
 
 
 def _discover_artifact_classes() -> list[tuple[str, str]]:
@@ -86,7 +86,7 @@ class TestArtifactDirsCompleteness:
     ) -> None:
         """Sanity check: the scanner must find at least one declaration."""
         assert discovered, (
-            "No ARTIFACT_CLASS declarations found in dde/commands/ — "
+            "No ARTIFACT_CLASS declarations found in oase/commands/ — "
             "the scanner is broken, not the registry"
         )
 
@@ -102,7 +102,7 @@ class TestArtifactDirsCompleteness:
         class'.
 
         Fix: add the missing class to ARTIFACT_DIRS in
-        dde/core/context.py.
+        oase/core/context.py.
         """
         unregistered: list[tuple[str, str]] = []
         for filename, cls in discovered:
@@ -118,7 +118,7 @@ class TestArtifactDirsCompleteness:
                 for filename, cls in unregistered
             )
             + "\n\nFix: add the missing class(es) to ARTIFACT_DIRS in "
-            "dde/core/context.py"
+            "oase/core/context.py"
         )
 
 
@@ -128,21 +128,21 @@ class TestArtifactDirsCompleteness:
 
 
 class TestNormalizeArtifactClass:
-    """normalize_artifact_class strips the dde. prefix correctly."""
+    """normalize_artifact_class strips the oase. prefix correctly."""
 
-    def test_strips_dde_prefix(self) -> None:
-        assert normalize_artifact_class("dde.genetics") == "genetics"
+    def test_strips_oase_prefix(self) -> None:
+        assert normalize_artifact_class("oase.genetics") == "genetics"
 
-    def test_strips_dde_prefix_compounds(self) -> None:
-        assert normalize_artifact_class("dde.compounds") == "compounds"
+    def test_strips_oase_prefix_compounds(self) -> None:
+        assert normalize_artifact_class("oase.compounds") == "compounds"
 
     def test_no_prefix_unchanged(self) -> None:
         assert normalize_artifact_class("genomics") == "genomics"
 
     def test_known_aliases_resolve(self) -> None:
-        """All known aliases (with dde. prefix) must resolve."""
+        """All known aliases (with oase. prefix) must resolve."""
         for cls in ARTIFACT_DIRS:
-            prefixed = f"dde.{cls}"
+            prefixed = f"oase.{cls}"
             normalized = normalize_artifact_class(prefixed)
             assert normalized in ARTIFACT_DIRS, (
                 f"normalize_artifact_class({prefixed!r}) = {normalized!r} "
@@ -159,14 +159,14 @@ class TestUnknownClassFinding:
     """An unknown artifact class must return a distinct finding, not empty."""
 
     def test_is_known_artifact_class_true_for_registered(self) -> None:
-        from dde.commands.validate import _is_known_artifact_class
+        from oase.commands.validate import _is_known_artifact_class
 
         assert _is_known_artifact_class("genomics") is True
         assert _is_known_artifact_class("compounds") is True
-        assert _is_known_artifact_class("dde.genomics") is True
+        assert _is_known_artifact_class("oase.genomics") is True
 
     def test_is_known_artifact_class_false_for_unknown(self) -> None:
-        from dde.commands.validate import _is_known_artifact_class
+        from oase.commands.validate import _is_known_artifact_class
 
         assert _is_known_artifact_class("nonexistent_class_xyz") is False
 
@@ -179,7 +179,7 @@ class TestUnknownClassFinding:
         """
         import tempfile
 
-        from dde.commands.validate import _find_layer0_artifacts
+        from oase.commands.validate import _find_layer0_artifacts
 
         with tempfile.TemporaryDirectory() as tmpdir:
             result = _find_layer0_artifacts(Path(tmpdir), "nonexistent_class_xyz")
@@ -191,7 +191,7 @@ class TestUnknownClassFinding:
         """
         import tempfile
 
-        from dde.commands.validate import _check_deliverables_exist
+        from oase.commands.validate import _check_deliverables_exist
 
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

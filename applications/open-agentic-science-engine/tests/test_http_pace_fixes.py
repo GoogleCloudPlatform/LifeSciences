@@ -31,7 +31,7 @@ import pytest
 # Ensure the tools package is importable.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
-from dde.core.http import _pace, _pace_disk
+from oase.core.http import _pace, _pace_disk
 
 # ---------------------------------------------------------------------------
 # Issue #290: Credential exposure in pace filenames
@@ -46,8 +46,8 @@ class TestCredentialExposureInPaceFilename:
         """A URL like http://user:secret@api.example.com/path must produce
         a pace filename based solely on 'api.example.com'."""
         with (
-            mock.patch("dde.core.http._PACE_DIR", tmp_path),
-            mock.patch("dde.core.http._PACE_TIER", "shared"),
+            mock.patch("oase.core.http._PACE_DIR", tmp_path),
+            mock.patch("oase.core.http._PACE_TIER", "shared"),
         ):
             _pace("http://user:secret@api.example.com/path", qps=1.0)
 
@@ -62,8 +62,8 @@ class TestCredentialExposureInPaceFilename:
     def test_url_with_credentials_and_port_uses_hostname(self, tmp_path):
         """Credentials AND a port must still resolve to just the hostname."""
         with (
-            mock.patch("dde.core.http._PACE_DIR", tmp_path),
-            mock.patch("dde.core.http._PACE_TIER", "shared"),
+            mock.patch("oase.core.http._PACE_DIR", tmp_path),
+            mock.patch("oase.core.http._PACE_TIER", "shared"),
         ):
             _pace("https://admin:p4ss@db.internal:8443/query", qps=1.0)
 
@@ -79,8 +79,8 @@ class TestCredentialExposureInPaceFilename:
     def test_url_without_credentials_unchanged(self, tmp_path):
         """A plain URL without credentials should still work correctly."""
         with (
-            mock.patch("dde.core.http._PACE_DIR", tmp_path),
-            mock.patch("dde.core.http._PACE_TIER", "shared"),
+            mock.patch("oase.core.http._PACE_DIR", tmp_path),
+            mock.patch("oase.core.http._PACE_TIER", "shared"),
         ):
             _pace("https://api.example.com/data", qps=1.0)
 
@@ -101,8 +101,8 @@ class TestTOCTOURaceInPaceDisk:
     def test_pace_disk_uses_o_nofollow(self, tmp_path):
         """os.open must be called with O_NOFOLLOW in its flags."""
         with (
-            mock.patch("dde.core.http._PACE_DIR", tmp_path),
-            mock.patch("dde.core.http.os.open", wraps=os.open) as mock_os_open,
+            mock.patch("oase.core.http._PACE_DIR", tmp_path),
+            mock.patch("oase.core.http.os.open", wraps=os.open) as mock_os_open,
         ):
             _pace_disk("safe.example.com", 1.0)
 
@@ -125,7 +125,7 @@ class TestTOCTOURaceInPaceDisk:
         symlink = tmp_path / "evil-link"
         symlink.symlink_to(target)
 
-        with mock.patch("dde.core.http._PACE_DIR", tmp_path):
+        with mock.patch("oase.core.http._PACE_DIR", tmp_path):
             # The is_safe_to_open check catches the symlink first and
             # falls back to memory pacing — no write to the target.
             original_content = target.read_text()

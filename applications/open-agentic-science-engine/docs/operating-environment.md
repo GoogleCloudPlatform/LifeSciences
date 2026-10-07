@@ -1,12 +1,12 @@
 # Operating Environment — Credential and Access Architecture
 
 This document states the actual credential and access mechanism for each
-external dependency dde's tools call. It exists so that an agent
-reading a `dde doctor` WARN can tell whether the check is describing a
+external dependency oase's tools call. It exists so that an agent
+reading a `oase doctor` WARN can tell whether the check is describing a
 real gap or the check's own blind spot, without rediscovering the
 deployment's architecture from first principles.
 
-This is not a troubleshooting guide and does not duplicate `dde
+This is not a troubleshooting guide and does not duplicate `oase
 doctor`'s job. Doctor does mechanical capability checks; this doc gives
 standing context for interpreting them.
 
@@ -24,10 +24,10 @@ is needed or used in this deployment.
 
 **Used by:**
 
-- `dde alphafold predict` — calls `aiplatform.init(project=...,
+- `oase alphafold predict` — calls `aiplatform.init(project=...,
   location=...)` with no explicit `credentials=` argument, relying
   entirely on the ADC chain (`alphafold.py`).
-- `dde alphagenome score-variant`, `predict-interval` (Vertex backend)
+- `oase alphagenome score-variant`, `predict-interval` (Vertex backend)
   — `_access_token()` tries `google.auth.default(scopes=[...])` first,
   then falls back to `gcloud auth print-access-token` if ADC is
   unavailable. The sidecar records which source was used
@@ -51,12 +51,12 @@ env-var check is the correct and only check.
 
 **Used by:**
 
-- `dde alphagenome ism` — the ISM command is pip-backend-only (the
+- `oase alphagenome ism` — the ISM command is pip-backend-only (the
   Vertex endpoint rejects `score_ism_variants` as an invalid request
   type). The command calls `_require_api_key()` which reads
   `os.environ.get("ALPHAGENOME_API_KEY")` and raises `CredentialError`
   if unset (`alphagenome.py`).
-- `dde alphagenome score-variant --backend pip` — also calls
+- `oase alphagenome score-variant --backend pip` — also calls
   `_require_api_key()`, though the pip backend for `score-variant` is
   not yet implemented.
 
@@ -73,7 +73,7 @@ chain.
 
 **Endpoint:** `https://alphafold.ebi.ac.uk/api/prediction`
 
-**Used by:** `dde alphafold fetch` (`alphafold.py`). Fetches mmCIF
+**Used by:** `oase alphafold fetch` (`alphafold.py`). Fetches mmCIF
 structures, PAE matrices, and API records by UniProt accession via
 `http.get_json()` and `http.get_bytes()` with no authentication
 parameters.
@@ -89,7 +89,7 @@ doctor; a fetch failure surfaces at call time.
 
 **Endpoint:** `https://rest.uniprot.org/uniprotkb`
 
-**Used by:** `dde alphafold fetch` (`alphafold.py`). Used internally
+**Used by:** `oase alphafold fetch` (`alphafold.py`). Used internally
 for canonical sequence length cross-checks — `_canonical_length()` calls
 `http.get_json()` with no authentication. A failure degrades the
 coverage warning to a weaker form but never blocks the fetch.
@@ -105,7 +105,7 @@ key, no auth header.
 
 **Endpoint:** `https://gnomad.broadinstitute.org/api`
 
-**Used by:** `dde genetics fetch` (`genetics.py`). Sends a GraphQL
+**Used by:** `oase genetics fetch` (`genetics.py`). Sends a GraphQL
 query via `http.request("POST", ...)` with only a `Content-Type:
 application/json` header — no authentication.
 
@@ -121,7 +121,7 @@ but its availability is not probed.
 
 **Endpoint:** `https://gtexportal.org/api/v2`
 
-**Used by:** `dde gtex fetch` (`gtex.py`). Calls `http.get_json()`
+**Used by:** `oase gtex fetch` (`gtex.py`). Calls `http.get_json()`
 and `http.request("GET", ...)` with no authentication parameters.
 
 **Doctor check:** None specific.
@@ -135,7 +135,7 @@ and `http.request("GET", ...)` with no authentication parameters.
 **Endpoint:** `https://www.proteinatlas.org` (per-gene JSON and
 `search_download.php`)
 
-**Used by:** `dde expression fetch` and `dde expression
+**Used by:** `oase expression fetch` and `oase expression
 fetch-single-cell` (`expression.py`). All requests go through
 `http.request("GET", ...)` and `http.get_json()` with no authentication
 parameters.
@@ -152,7 +152,7 @@ availability itself is not probed.
 
 **Endpoint:** `https://www.ebi.ac.uk/europepmc/webservices/rest/search`
 
-**Used by:** `dde litref resolve` (`litref.py`). Calls `http.request("GET", ...)`
+**Used by:** `oase litref resolve` (`litref.py`). Calls `http.request("GET", ...)`
 with no authentication parameters.
 
 **Doctor check:** None specific.
@@ -169,7 +169,7 @@ PubMed directly) and uses no API key.
 
 **Endpoint:** `https://clinicaltrials.gov/api/v2/studies`
 
-**Used by:** `dde litref resolve` (`litref.py`). Calls `http.request("GET", ...)`
+**Used by:** `oase litref resolve` (`litref.py`). Calls `http.request("GET", ...)`
 with no authentication parameters.
 
 **Doctor check:** None specific.
@@ -179,7 +179,7 @@ with no authentication parameters.
 ## Dependencies that are NOT in this codebase
 
 **PubChem:** Not called by any OASE tool. The issue (#181) mentioned
-PubChem in its enumeration, but no command in the `tools/dde/commands/`
+PubChem in its enumeration, but no command in the `tools/oase/commands/`
 tree makes an HTTP call to PubChem.
 
 ---

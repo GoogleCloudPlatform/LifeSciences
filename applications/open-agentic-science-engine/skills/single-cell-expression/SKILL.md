@@ -54,18 +54,18 @@ for a tissue, cell type, disease, or organism. Entry points include:
 - **Metadata only**: both tools return dataset/study metadata. Neither
   returns gene expression values. A search that finds DRG datasets does
   not tell you whether a specific gene is expressed in DRG neurons.
-- Run `dde doctor` before first use.
+- Run `oase doctor` before first use.
 
 ## 3. Tool invocations
 
 | Question | Run | Writes to |
 |---|---|---|
-| What CELLxGENE datasets match? | `dde cellxgene search <QUERY> [--tissue T] [--cell-type C] [--organism O] [--disease D]` | `raw/single-cell/<slug>.cellxgene.json`<br>`raw/single-cell/<slug>.cellxgene.artifact.json`<br>`raw/single-cell/<slug>.cellxgene.meta.json` |
-| What do the CELLxGENE results show? | `dde cellxgene analyze <QUERY>` | `raw/single-cell/<slug>.cellxgene.analysis.json` |
-| What SCP studies match? | `dde scp search <QUERY> [--max-results N]` | `raw/single-cell/<slug>.scp.json`<br>`raw/single-cell/<slug>.scp.meta.json` |
-| What do the SCP results show? | `dde scp analyze <QUERY>` | `raw/single-cell/<slug>.scp.analysis.json` |
-| What DISCO immune datasets match? | `dde disco search <QUERY> [--tissue T] [--disease D] [--species S]` | `raw/single-cell/<slug>.disco.json`<br>`raw/single-cell/<slug>.disco.artifact.json`<br>`raw/single-cell/<slug>.disco.meta.json` |
-| What do the DISCO results show? | `dde disco analyze <QUERY> [--tissue T] [--disease D]` | `raw/single-cell/<slug>.disco.analysis.json` |
+| What CELLxGENE datasets match? | `oase cellxgene search <QUERY> [--tissue T] [--cell-type C] [--organism O] [--disease D]` | `raw/single-cell/<slug>.cellxgene.json`<br>`raw/single-cell/<slug>.cellxgene.artifact.json`<br>`raw/single-cell/<slug>.cellxgene.meta.json` |
+| What do the CELLxGENE results show? | `oase cellxgene analyze <QUERY>` | `raw/single-cell/<slug>.cellxgene.analysis.json` |
+| What SCP studies match? | `oase scp search <QUERY> [--max-results N]` | `raw/single-cell/<slug>.scp.json`<br>`raw/single-cell/<slug>.scp.meta.json` |
+| What do the SCP results show? | `oase scp analyze <QUERY>` | `raw/single-cell/<slug>.scp.analysis.json` |
+| What DISCO immune datasets match? | `oase disco search <QUERY> [--tissue T] [--disease D] [--species S]` | `raw/single-cell/<slug>.disco.json`<br>`raw/single-cell/<slug>.disco.artifact.json`<br>`raw/single-cell/<slug>.disco.meta.json` |
+| What do the DISCO results show? | `oase disco analyze <QUERY> [--tissue T] [--disease D]` | `raw/single-cell/<slug>.disco.analysis.json` |
 
 Run `search` before `analyze`. `analyze` reads from disk and can be
 re-run without re-querying. All tools support `--json`, `--quiet`, and

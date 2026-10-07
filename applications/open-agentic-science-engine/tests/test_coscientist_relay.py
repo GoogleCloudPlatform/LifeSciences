@@ -35,7 +35,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.provenance import RELAY_CODES
+from oase.core.provenance import RELAY_CODES
 
 RELAY_CODE = "coscientist.review_recommendation_available"
 
@@ -89,7 +89,7 @@ def _make_tournament(
             }
         )
     return {
-        "schema": "dde.coscientist.v1",
+        "schema": "oase.coscientist.v1",
         "source_file": "test-export.json",
         "tournament": {
             "title": "Test Tournament",
@@ -132,7 +132,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory for CliRunner tests."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "hypotheses").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -225,7 +225,7 @@ def test_relay_code_registered() -> None:
 def test_relay_fires_when_recommendation_present() -> None:
     """analyze emits the relay when the recommendation section is present."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -267,7 +267,7 @@ def test_relay_fires_when_recommendation_present() -> None:
 def test_relay_absent_when_no_recommendation_heading() -> None:
     """analyze does NOT emit the relay when top_ideas_summary has no recommendation heading."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -307,7 +307,7 @@ def test_relay_absent_when_no_recommendation_heading() -> None:
 def test_relay_absent_when_report_empty() -> None:
     """analyze does NOT emit the relay when the report is empty."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -347,7 +347,7 @@ def test_relay_absent_when_report_empty() -> None:
 def test_relay_deduplicated_with_meta_sidecar() -> None:
     """Relay is not duplicated if already present in the meta sidecar."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))

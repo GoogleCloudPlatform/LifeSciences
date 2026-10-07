@@ -38,7 +38,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 # Detection marker injected into themed pages.
-THEME_MARKER = "<!-- dde-theme-system -->"
+THEME_MARKER = "<!-- oase-theme-system -->"
 
 # Google Fonts — one <link> tag loading all theme families.
 GOOGLE_FONTS_LINK = (
@@ -55,7 +55,7 @@ GOOGLE_FONTS_LINK = (
 # so the page never flashes in the wrong colours (FOUC prevention).
 FOUC_SCRIPT = (
     "<script>"
-    "(function(){var t=localStorage.getItem('dde-theme');"
+    "(function(){var t=localStorage.getItem('oase-theme');"
     "if(t)document.documentElement.setAttribute('data-theme',t)})()"
     "</script>"
 )
@@ -66,7 +66,7 @@ FOUC_SCRIPT = (
 
 THEME_CSS = """\
 <style>
-/* dde-theme-system */
+/* oase-theme-system */
 
 /* ---- Clean (default): light, sans-serif ---- */
 :root, [data-theme="clean"] {
@@ -302,11 +302,11 @@ nav a:hover, .nav a:hover {
 }
 
 /* Theme chooser widget */
-.dde-theme-chooser {
+.oase-theme-chooser {
   display: inline-block;
   margin-left: 1rem;
 }
-.dde-theme-chooser select {
+.oase-theme-chooser select {
   font-family: var(--font-family);
   font-size: 0.85rem;
   padding: 0.25rem 0.5rem;
@@ -316,15 +316,15 @@ nav a:hover, .nav a:hover {
   color: var(--text-primary);
   cursor: pointer;
 }
-.dde-theme-chooser select:hover {
+.oase-theme-chooser select:hover {
   border-color: var(--accent-color);
 }
 </style>"""
 
 # Theme chooser dropdown HTML.
 THEME_CHOOSER = (
-    '<span class="dde-theme-chooser">'
-    '<select id="dde-theme-select" aria-label="Choose theme">'
+    '<span class="oase-theme-chooser">'
+    '<select id="oase-theme-select" aria-label="Choose theme">'
     '<option value="clean">Clean</option>'
     '<option value="dark">Dark</option>'
     '<option value="serif">Serif</option>'
@@ -337,15 +337,15 @@ THEME_CHOOSER = (
 THEME_SCRIPT = """\
 <script>
 (function() {
-  var sel = document.getElementById('dde-theme-select');
+  var sel = document.getElementById('oase-theme-select');
   if (!sel) return;
-  var saved = localStorage.getItem('dde-theme') || 'clean';
+  var saved = localStorage.getItem('oase-theme') || 'clean';
   document.documentElement.setAttribute('data-theme', saved);
   sel.value = saved;
   sel.addEventListener('change', function() {
     var t = sel.value;
     document.documentElement.setAttribute('data-theme', t);
-    localStorage.setItem('dde-theme', t);
+    localStorage.setItem('oase-theme', t);
   });
 })();
 </script>"""

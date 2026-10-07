@@ -36,8 +36,8 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.errors import Refusal, SchemaError
-from dde.core.schema_registry import (
+from oase.core.errors import Refusal, SchemaError
+from oase.core.schema_registry import (
     FieldDef,
     get_schema,
     list_schemas,
@@ -62,23 +62,23 @@ class TestSchemaList:
 
     def test_list_includes_pk_study(self):
         ids = list_schemas()
-        assert "dde.pk-study.v1" in ids
+        assert "oase.pk-study.v1" in ids
 
     def test_list_includes_tox_repeat_dose(self):
         ids = list_schemas()
-        assert "dde.tox-repeat-dose.v1" in ids
+        assert "oase.tox-repeat-dose.v1" in ids
 
     def test_list_includes_tox_safety_pharm(self):
         ids = list_schemas()
-        assert "dde.tox-safety-pharm.v1" in ids
+        assert "oase.tox-safety-pharm.v1" in ids
 
     def test_list_includes_tox_genotox(self):
         ids = list_schemas()
-        assert "dde.tox-genotox.v1" in ids
+        assert "oase.tox-genotox.v1" in ids
 
     def test_list_includes_pk_ddi_input(self):
         ids = list_schemas()
-        assert "dde.pk-ddi-input.v1" in ids
+        assert "oase.pk-ddi-input.v1" in ids
 
     def test_list_is_sorted(self):
         ids = list_schemas()
@@ -94,11 +94,11 @@ class TestSchemaShow:
     """Test that schema show outputs a readable field table."""
 
     def test_show_pk_study_contains_header(self):
-        table = show_table("dde.pk-study.v1")
-        assert "Schema: dde.pk-study.v1" in table
+        table = show_table("oase.pk-study.v1")
+        assert "Schema: oase.pk-study.v1" in table
 
     def test_show_contains_field_names(self):
-        table = show_table("dde.pk-study.v1")
+        table = show_table("oase.pk-study.v1")
         assert "route" in table
         assert "species" in table
         assert "dose_mg_kg" in table
@@ -106,30 +106,30 @@ class TestSchemaShow:
         assert "concentrations" in table
 
     def test_show_contains_type_info(self):
-        table = show_table("dde.pk-study.v1")
+        table = show_table("oase.pk-study.v1")
         assert "string" in table
         assert "number" in table
 
     def test_show_contains_required_info(self):
-        table = show_table("dde.pk-study.v1")
+        table = show_table("oase.pk-study.v1")
         assert "yes" in table  # required fields
 
     def test_show_contains_enum_values(self):
-        table = show_table("dde.pk-study.v1")
+        table = show_table("oase.pk-study.v1")
         # route enum values should be visible
         assert "iv" in table
         assert "oral" in table
         assert "sc" in table
 
     def test_show_tox_repeat_dose_contains_species_enum(self):
-        table = show_table("dde.tox-repeat-dose.v1")
+        table = show_table("oase.tox-repeat-dose.v1")
         assert "rat" in table
         assert "mouse" in table
         assert "dog" in table
 
     def test_show_unknown_schema_raises(self):
         try:
-            show_table("dde.nonexistent.v99")
+            show_table("oase.nonexistent.v99")
             assert False, "Expected KeyError"
         except KeyError:
             pass
@@ -144,7 +144,7 @@ class TestSchemaShowJson:
     """Test that schema show --json outputs valid JSON."""
 
     def test_json_is_valid(self):
-        schema = get_schema("dde.pk-study.v1")
+        schema = get_schema("oase.pk-study.v1")
         assert schema is not None
         # Build the same JSON record the command would emit
         record = {
@@ -165,12 +165,12 @@ class TestSchemaShowJson:
         # Verify it's valid JSON by round-tripping
         text = json.dumps(record, indent=2)
         parsed = json.loads(text)
-        assert parsed["schema_id"] == "dde.pk-study.v1"
+        assert parsed["schema_id"] == "oase.pk-study.v1"
         assert isinstance(parsed["fields"], list)
         assert len(parsed["fields"]) > 0
 
     def test_json_contains_enum_values(self):
-        schema = get_schema("dde.pk-study.v1")
+        schema = get_schema("oase.pk-study.v1")
         assert schema is not None
         route_field = schema.get_field("route")
         assert route_field is not None
@@ -179,7 +179,7 @@ class TestSchemaShowJson:
         assert "oral" in route_field.enum_values
 
     def test_json_contains_required_flag(self):
-        schema = get_schema("dde.pk-study.v1")
+        schema = get_schema("oase.pk-study.v1")
         assert schema is not None
         route_field = schema.get_field("route")
         assert route_field is not None
@@ -199,47 +199,47 @@ class TestSchemaTemplate:
     """Test that schema template produces a valid skeleton."""
 
     def test_template_is_valid_json(self):
-        doc = make_template("dde.pk-study.v1")
+        doc = make_template("oase.pk-study.v1")
         # Round-trip through JSON serialization
         text = json.dumps(doc, indent=2)
         parsed = json.loads(text)
         assert isinstance(parsed, dict)
 
     def test_template_has_all_required_fields(self):
-        schema = get_schema("dde.pk-study.v1")
+        schema = get_schema("oase.pk-study.v1")
         assert schema is not None
-        doc = make_template("dde.pk-study.v1")
+        doc = make_template("oase.pk-study.v1")
         for f in schema.required_fields():
             assert f.name in doc, f"Required field {f.name!r} missing from template"
 
     def test_template_has_schema_tag(self):
-        doc = make_template("dde.pk-study.v1")
-        assert doc["schema"] == "dde.pk-study.v1"
+        doc = make_template("oase.pk-study.v1")
+        assert doc["schema"] == "oase.pk-study.v1"
 
     def test_template_enum_uses_first_value(self):
-        doc = make_template("dde.pk-study.v1")
+        doc = make_template("oase.pk-study.v1")
         # route should use the first sorted enum value
-        schema = get_schema("dde.pk-study.v1")
+        schema = get_schema("oase.pk-study.v1")
         route_field = schema.get_field("route")
         assert doc["route"] == route_field.enum_values[0]
 
     def test_template_string_uses_placeholder(self):
-        doc = make_template("dde.pk-study.v1")
+        doc = make_template("oase.pk-study.v1")
         assert doc["study_id"] == "<study_id>"
 
     def test_template_number_uses_zero(self):
-        doc = make_template("dde.pk-study.v1")
+        doc = make_template("oase.pk-study.v1")
         assert doc["dose_mg_kg"] == 0.0
 
     def test_template_optional_in_separate_block(self):
-        doc = make_template("dde.pk-study.v1")
+        doc = make_template("oase.pk-study.v1")
         assert "_optional" in doc
         assert "notes" in doc["_optional"]
         assert "blq_value" in doc["_optional"]
 
     def test_template_tox_repeat_dose(self):
-        doc = make_template("dde.tox-repeat-dose.v1")
-        assert doc["schema"] == "dde.tox-repeat-dose.v1"
+        doc = make_template("oase.tox-repeat-dose.v1")
+        assert doc["schema"] == "oase.tox-repeat-dose.v1"
         assert "study_id" in doc
         assert "species" in doc
         assert "route" in doc
@@ -249,7 +249,7 @@ class TestSchemaTemplate:
 
     def test_template_unknown_schema_raises(self):
         try:
-            make_template("dde.nonexistent.v99")
+            make_template("oase.nonexistent.v99")
             assert False, "Expected KeyError"
         except KeyError:
             pass
@@ -278,10 +278,10 @@ class TestSchemaErrorEnum:
 
     def test_pk_route_error_includes_accepted_values(self):
         """Test that pk.py route validation includes accepted values."""
-        from dde.commands.pk import _validate_study
+        from oase.commands.pk import _validate_study
 
         doc = {
-            "schema": "dde.pk-study.v1",
+            "schema": "oase.pk-study.v1",
             "study_id": "test",
             "species": "rat",
             "route": "rectal",  # invalid
@@ -299,10 +299,10 @@ class TestSchemaErrorEnum:
 
     def test_tox_glp_error_includes_accepted_values(self):
         """Test that tox.py glp_status validation includes accepted values."""
-        from dde.commands.tox import _validate_repeat_dose
+        from oase.commands.tox import _validate_repeat_dose
 
         doc = {
-            "schema": "dde.tox-repeat-dose.v1",
+            "schema": "oase.tox-repeat-dose.v1",
             "study_id": "test",
             "species": "rat",
             "route": "oral",
@@ -352,10 +352,10 @@ class TestSchemaErrorFuzzyMatch:
 
     def test_pk_route_suggests_nearest(self):
         """Test that pk.py route validation suggests nearest match."""
-        from dde.commands.pk import _validate_study
+        from oase.commands.pk import _validate_study
 
         doc = {
-            "schema": "dde.pk-study.v1",
+            "schema": "oase.pk-study.v1",
             "study_id": "test",
             "species": "rat",
             "route": "orla",  # close to "oral"
@@ -374,7 +374,7 @@ class TestSchemaErrorFuzzyMatch:
 
     def test_tox_severity_suggests_nearest(self):
         """Test that tox.py severity validation suggests nearest match."""
-        from dde.commands.tox import _validate_finding
+        from oase.commands.tox import _validate_finding
 
         finding = {
             "finding": "hepatocellular hypertrophy",
@@ -398,16 +398,16 @@ class TestSchemaErrorMissingField:
     """Test that missing-field errors list all required fields."""
 
     def test_validate_required_fields_raises(self):
-        doc = {"schema": "dde.pk-study.v1", "study_id": "test"}
+        doc = {"schema": "oase.pk-study.v1", "study_id": "test"}
         try:
-            validate_required_fields(doc, "dde.pk-study.v1")
+            validate_required_fields(doc, "oase.pk-study.v1")
             assert False, "Expected SchemaError"
         except SchemaError as exc:
             assert "missing required field" in exc.message
             assert "all required fields" in exc.detail
 
     def test_validate_required_fields_passes_complete(self):
-        schema = get_schema("dde.pk-study.v1")
+        schema = get_schema("oase.pk-study.v1")
         doc = {}
         for f in schema.required_fields():
             if f.const is not None:
@@ -428,14 +428,14 @@ class TestSchemaErrorMissingField:
                 doc[f.name] = "test"
 
         # Should not raise
-        validate_required_fields(doc, "dde.pk-study.v1")
+        validate_required_fields(doc, "oase.pk-study.v1")
 
     def test_pk_missing_field_lists_required(self):
         """Test that pk.py missing-field errors list required fields."""
-        from dde.commands.pk import _validate_study
+        from oase.commands.pk import _validate_study
 
         doc = {
-            "schema": "dde.pk-study.v1",
+            "schema": "oase.pk-study.v1",
             "study_id": "test",
             "species": "rat",
             # route is missing
@@ -476,7 +476,7 @@ class TestRegistryConsistency:
             assert schema.description, f"{sid} has empty description"
 
     def test_get_unknown_returns_none(self):
-        assert get_schema("dde.nonexistent.v99") is None
+        assert get_schema("oase.nonexistent.v99") is None
 
     def test_field_def_frozen(self):
         f = FieldDef("test", "string", True)

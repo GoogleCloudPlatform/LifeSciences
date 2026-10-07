@@ -51,7 +51,7 @@ tournament. Entry points include:
   record — do not pass the raw export to `analyze` or `show`.
 - **No authentication** needed — the tool reads local files only.
 - **No network** — `ingest`, `analyze`, and `show` are all offline.
-- Run `dde doctor` before first use. It ends with a verdict line:
+- Run `oase doctor` before first use. It ends with a verdict line:
   `STOP` means fix or report before running anything; `PROCEED` means
   work, and the grouped warnings tell you which commands would refuse,
   which results need careful reading, and which are the tooling lead's
@@ -62,9 +62,9 @@ tournament. Entry points include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| Normalise this tournament export | `dde coscientist ingest <EXPORT_FILE>` | `raw/hypotheses/<name>.tournament.json`<br>`raw/hypotheses/<name>.export.json`<br>`raw/hypotheses/<name>.meta.json` |
-| Is the ranking admissible? Which ideas are flagged? | `dde coscientist analyze <ARTIFACT>` | `raw/hypotheses/<name>.analysis.json` |
-| What does idea #N say? | `dde coscientist show <ARTIFACT> --rank N [--section S]` | `raw/hypotheses/<name>.idea-<label>.<section>.md` |
+| Normalise this tournament export | `oase coscientist ingest <EXPORT_FILE>` | `raw/hypotheses/<name>.tournament.json`<br>`raw/hypotheses/<name>.export.json`<br>`raw/hypotheses/<name>.meta.json` |
+| Is the ranking admissible? Which ideas are flagged? | `oase coscientist analyze <ARTIFACT>` | `raw/hypotheses/<name>.analysis.json` |
+| What does idea #N say? | `oase coscientist show <ARTIFACT> --rank N [--section S]` | `raw/hypotheses/<name>.idea-<label>.<section>.md` |
 
 Run `ingest` before `analyze` or `show`. `analyze` reads from disk and
 applies the `coscientist` threshold set. It can be re-run with

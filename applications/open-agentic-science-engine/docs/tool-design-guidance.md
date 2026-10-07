@@ -1,7 +1,7 @@
 # OASE Tool Design Guidance
 
 **Status**: v0.1. Expect revision after the pilot conversion (co-scientist, AlphaFold, AlphaGenome).
-**Purpose**: the standard for the OASE tools environment and the `dde` CLI — bootstrapping, the two artifact layers, output placement, thresholds, and stdout discipline.
+**Purpose**: the standard for the OASE tools environment and the `oase` CLI — bootstrapping, the two artifact layers, output placement, thresholds, and stdout discipline.
 **Companion**: [`skill-design-guidance.md`](skill-design-guidance.md). This document is **normative for the artifact contract**. The skill document references it rather than restating it.
 **Context**: [`oase-plan.md`](oase-plan.md) §5 and §7.
 
@@ -17,14 +17,14 @@ responsible agent skill — while their semantics are normative in
 
 | Tier | Owns | Produces |
 |---|---|---|
-| **1. Environment** | Dependencies, binaries, reference data, credential storage | Shared venv + lockfile; `dde doctor` |
-| **2. CLI (`dde`)** | Execution, rate limits and leases, retry, provenance stamping, artifact naming, threshold values, control-state validation, presentation builds | Layer 0 artifacts, sidecars and analyses; validated control records and presentation output |
+| **1. Environment** | Dependencies, binaries, reference data, credential storage | Shared venv + lockfile; `oase doctor` |
+| **2. CLI (`oase`)** | Execution, rate limits and leases, retry, provenance stamping, artifact naming, threshold values, control-state validation, presentation builds | Layer 0 artifacts, sidecars and analyses; validated control records and presentation output |
 | **3. Skill** | Routing, preconditions, invocation table, interpretation, anti-fabrication guard | Prose only |
 | **4. Template** | The capability grant (`skills:`), the questions a role owns, role-specific next actions and handoffs | `scion-agent.yaml` + `agents.md` |
 
 Tier 4 is easy to forget, and forgetting it is what pushes role-specific content into skills. One capability serves several specialists, so the skill must stay specialist-neutral. See `skill-design-guidance.md` §3.
 
-One rule holds the whole thing together: **the CLI is the execution surface, not the routing surface.** Forty tools behind one `--help` is not navigable, and a CLI has no progressive disclosure. An agent either knows the subcommand or it does not. Routing stays in skill descriptions, which are always in context and cost little. Never assume an agent will read `dde --help` to find its way.
+One rule holds the whole thing together: **the CLI is the execution surface, not the routing surface.** Forty tools behind one `--help` is not navigable, and a CLI has no progressive disclosure. An agent either knows the subcommand or it does not. Routing stays in skill descriptions, which are always in context and cost little. Never assume an agent will read `oase --help` to find its way.
 
 ### 1.1 Choosing the source: a canonical model, or a primary measurement?
 
@@ -167,7 +167,7 @@ a program that mixes them silently — but it means the cost of adding a tool is
 build. It is the partition. Schedule environment changes at program boundaries, do them
 deliberately and once, and do not add a tool mid-program because a specialist wanted it.
 
-### `dde doctor`
+### `oase doctor`
 
 Run it at agent start, from every template. It asserts that each declared tool is present and executable, that each required credential resolves, and that the environment version matches what the CLI expects. It reports what is missing and exits non-zero.
 
@@ -229,13 +229,13 @@ were negative-tested against synthetic records rather than assumed.
 Every tool that produces interpretable output splits into two subcommands.
 
 ```
-dde alphafold fetch P00520
+oase alphafold fetch P00520
   → raw/structures/AF-P00520-F1.cif
   → raw/structures/AF-P00520-F1.pae.json
   → raw/structures/AF-P00520-F1.meta.json      # provenance sidecar
   stdout: the three paths, nothing else
 
-dde alphafold analyze P00520
+oase alphafold analyze P00520
   → raw/structures/AF-P00520-F1.analysis.json  # structured verdict
   stdout: bounded summary (see §6)
 ```
@@ -430,23 +430,23 @@ Agents are unreliable about working directory. Upstream hit this and solved it w
 
 The CLI discovers the project root the way git does:
 
-1. `$DDE_PROJECT` if set, else
-2. walk up from CWD looking for a `.dde/` marker directory, else
+1. `$OASE_PROJECT` if set, else
+2. walk up from CWD looking for a `.oase/` marker directory, else
 3. fail with a clear error. Never silently write into CWD.
 
-**Prefer `.dde/` walk-up discovery over hardcoding `DDE_PROJECT`.** When each program gets its own scion project and the agent's workspace *is* the program directory, the `.dde/` marker in `/workspace` is found automatically — no `env:` block needed. Templates should omit `DDE_PROJECT` and let walk-up handle resolution:
+**Prefer `.oase/` walk-up discovery over hardcoding `OASE_PROJECT`.** When each program gets its own scion project and the agent's workspace *is* the program directory, the `.oase/` marker in `/workspace` is found automatically — no `env:` block needed. Templates should omit `OASE_PROJECT` and let walk-up handle resolution:
 
 ```yaml
-# DDE_PROJECT is resolved by .dde/ walk-up discovery by default.
+# OASE_PROJECT is resolved by .oase/ walk-up discovery by default.
 # Set it explicitly only when the agent's workspace is not the program
 # directory — e.g. when /workspace is the OASE repo:
 #   env:
-#     DDE_PROJECT: /workspace/program-hr-mbc
+#     OASE_PROJECT: /workspace/program-hr-mbc
 ```
 
 Walk-up also covers: a specialist working in a subdirectory, a reviewer operating on an archived program, or local development.
 
-**When `/workspace` is the OASE repo itself** — as it is during maintenance or development of OASE — it is not a program directory, and writing `raw/` into it would pollute the repo. The CLI detects this (via the `.dde-repo` marker) and refuses. In this case, set `DDE_PROJECT` to the program subdirectory (e.g. `/workspace/program-hr-mbc`). Add the program directory names to `.gitignore` as a second line of defence.
+**When `/workspace` is the OASE repo itself** — as it is during maintenance or development of OASE — it is not a program directory, and writing `raw/` into it would pollute the repo. The CLI detects this (via the `.oase-repo` marker) and refuses. In this case, set `OASE_PROJECT` to the program subdirectory (e.g. `/workspace/program-hr-mbc`). Add the program directory names to `.gitignore` as a second line of defence.
 
 ### Default directories
 
@@ -534,7 +534,7 @@ Four rules keep the mechanism honest:
    rejects an unregistered code. A code invented at a call site would escape the list
    that skill authors work from, and a registry is only useful if it is provably
    complete.
-3. **`dde relays` prints the registry.** Skill authors and reviewers work from one
+3. **`oase relays` prints the registry.** Skill authors and reviewers work from one
    list, not from prose that has since changed.
 4. **The empty case is meaningful.** A clean input emits no relays. A check that fires
    on everything is ignored.
@@ -692,7 +692,7 @@ Today the numbers that decide things — pLDDT > 75, LOEUF > 0.35, hERG > 30 µM
 Three-level resolution, most specific wins:
 
 1. **Defaults in CLI code**, as named constants with a version tag (`default@1.2`). This is where the five module constants in `analyze_plddt.py` land.
-2. **Program overrides** in `.dde/thresholds.yaml` at the project root. A CNS program and an oncology program should not share a hERG cutoff.
+2. **Program overrides** in `.oase/thresholds.yaml` at the project root. A CNS program and an oncology program should not share a hERG cutoff.
 3. **Invocation override** via flag, for sensitivity analysis. Recorded in the sidecar when used.
 
 Every `.analysis.json` names the `threshold_set` it applied. A Layer 1 finding can then cite not just a value but the criterion it was judged against. A stage gate can verify that the criterion was the program's, not a default somebody forgot to override.
@@ -762,7 +762,7 @@ than in place of it.
 
 **An unresolved threshold is a legitimate terminal state.** Where a source publishes no
 cutoff for a quantity, the tool must not supply one. It reports the value, reports the
-threshold as unresolved, and declines to classify; `dde doctor` lists what is
+threshold as unresolved, and declines to classify; `oase doctor` lists what is
 unresolved so the gap stays visible instead of being quietly filled. Two of the first
 five tools now have one — `low_confidence_ntpm` in `expression`, and
 `loeuf_unreliable_min_expected_lof` in `genetics`, where gnomAD publishes no
@@ -818,7 +818,7 @@ is sound: Schmidtke and Barril fitted a logistic model and 0.5 is genuinely
 where it separates their training set (tooling-lead's correction to an earlier
 draft of this section, which had blamed the cutoff).
 
-`dde pocket` is the worked example (tooling-lead, `0a594be`). The fpocket
+`oase pocket` is the worked example (tooling-lead, `0a594be`). The fpocket
 drug score, measured across crystal structures of two sites that carry marketed
 drugs:
 
@@ -870,7 +870,7 @@ Any dimension along which a skill would otherwise have to fork is a candidate to
 
 | Dimension | Moves to |
 |---|---|
-| Program | `.dde/thresholds.yaml` — solved here |
+| Program | `.oase/thresholds.yaml` — solved here |
 | Role | The template — questions owned and next actions |
 | Stage | The orchestrator's task dispatch |
 
@@ -1014,7 +1014,7 @@ this to fail? (Here: a run crossing a second boundary. Sleeping one second betwe
 is the whole fix.)
 
 **The mirror is worth the same attention: a check that could not have come out *green*
-is as vacuous, and costs more.** `dde doctor` gained a check that the provisioning
+is as vacuous, and costs more.** `oase doctor` gained a check that the provisioning
 tree had no uncommitted changes. It fired immediately, truthfully, and uselessly — five
 agents share this working tree, so `git status` is never clean, and the files that
 happened to be dirty were a doc and a checker script, neither of which has any bearing
@@ -1074,8 +1074,8 @@ Three outcomes that a shell chain must be able to tell apart:
 | Refusal | The input is under-specified; the tool will not choose | 9 | Pointless until the caller changes the input |
 | Failure | The tool could not run | 1–8 | May well succeed |
 
-`dde litref analyze` gets this right in substance: `ambiguous` exits non-zero, so
-`dde litref analyze X && ...` cannot proceed on a citation the tool declined to
+`oase litref analyze` gets this right in substance: `ambiguous` exits non-zero, so
+`oase litref analyze X && ...` cannot proceed on a citation the tool declined to
 resolve, while `not_found` exits 0 because "this record does not exist" is the finding
 we asked for. A refusal still writes its artifact and still prints its path.
 
@@ -1136,9 +1136,9 @@ put together for different reasons; the second is two states told apart by nothi
 their appearance. Both are failures to ask *why*, having asked only *what*.
 
 **The costliest instance found so far is a vacuous comparison** (template-builder,
-`32fe5be`). The reviewer's integrity check snapshotted `find "$DDE_PROJECT"/raw` before
+`32fe5be`). The reviewer's integrity check snapshotted `find "$OASE_PROJECT"/raw` before
 and after the review and printed `evidence intact` when the two agreed. With
-`DDE_PROJECT` unset, or pointing at the wrong place, or `raw/` empty, both snapshots
+`OASE_PROJECT` unset, or pointing at the wrong place, or `raw/` empty, both snapshots
 are the empty string, they compare equal, and it prints `evidence intact`. Verified in
 all three cases. That is the check the entire review rests on — every other claim a
 reviewer makes is conditional on *and I did not disturb the evidence* — and it reported
@@ -1217,8 +1217,8 @@ has two populations: the things it flags, and the pool it judges them against. A
 in the first is visible and self-correcting — someone investigates a false alarm and
 closes it. An error in the *pool* is silent and flips sign: **a false positive in the
 entitlement pool is a false negative in the finding.** `check_threshold_names.py` decided
-which threshold sets a skill may cite from by scanning for `dde <group>`, over the
-whole document. The sentence *all dde project artifacts* registered a tool group named
+which threshold sets a skill may cite from by scanning for `oase <group>`, over the
+whole document. The sentence *all oase project artifacts* registered a tool group named
 `project`. Harmless as it stood, because no module provides that group — but any prose
 sentence containing a *real* group name would have widened a skill's entitlement and
 waved through exactly the misplaced citation the tool exists to catch.
@@ -1245,7 +1245,7 @@ The direction of the failure is what makes this worth a separate entry
 towards a
 **false clean**: a broken system looks healthy. This one fails towards a **false alarm**:
 a healthy system looks broken. Their reviewer template hardcoded `8 of 8` for a `doctor`
-line; `dde pocket analyze` made it 9, so an auditor comparing the correct run against
+line; `oase pocket analyze` made it 9, so an auditor comparing the correct run against
 the page would open a discrepancy against a system that was working.
 
 That is not the milder of the two. **A false clean is discovered when something breaks; a
@@ -1310,7 +1310,7 @@ continue. Loud failure, silent response, and then a finding that looks normal.
 So the operative test is not how loud the failure is but **whether it reaches someone
 who will report it, at the moment they would otherwise be misled**. Loudness is a good
 proxy for that only where the reader is human and blocked. It is a poor one for
-everything in this repository that agents read more than people do — CLI output, `dde
+everything in this repository that agents read more than people do — CLI output, `oase
 doctor`'s advisories, skill text, artifact paths in a sidecar — and those are precisely
 the surfaces where the rule above would otherwise license skipping a gate.
 
@@ -1346,7 +1346,7 @@ substituter needs to make, which is the difference between a misreading that sur
 review and one that arrives pre-refuted.
 
 The generalisable part is **which** verdict gets the guard, because the instinct is
-backwards. `dde pocket` carried a full set of relays and every one of them guarded the
+backwards. `oase pocket` carried a full set of relays and every one of them guarded the
 **negative** verdict — the conformation caveat that fires when a score disappoints. The
 positive verdict went out bare, and the positive verdict is the one a role lacking an
 affinity tool reaches for. **Guard the direction someone would want to over-read, not the
@@ -1536,7 +1536,7 @@ agreement is a free, continuous check that parsing, column mapping and
 thresholds have not drifted, and it runs on every real analysis rather than only
 in tests.
 
-`dde expression analyze` does this: it recomputes the HPA specificity class
+`oase expression analyze` does this: it recomputes the HPA specificity class
 from the tissue profile and compares it with the curated label in the same
 record. A hardcoded tissue list that silently goes stale would break the
 agreement and be caught.
@@ -1545,9 +1545,9 @@ agreement and be caught.
 
 The AF3 endpoint is max-one-replica and returns 429 under concurrency. File locks do not help when specialists run in separate containers.
 
-This is the one place a small shared service is the right answer: a lease broker on the shared volume, or as an MCP service, where `dde alphafold predict` acquires, waits, or fails with a queue position. Without it, parallel specialists will collide, and the failure will look like a flaky tool rather than a design gap.
+This is the one place a small shared service is the right answer: a lease broker on the shared volume, or as an MCP service, where `oase alphafold predict` acquires, waits, or fails with a queue position. Without it, parallel specialists will collide, and the failure will look like a flaky tool rather than a design gap.
 
-The command named here was "dde af3 run" — no backticks, because it is not an
+The command named here was "oase af3 run" — no backticks, because it is not an
 instruction and never was one — until a checker compared the document with the built
 command tree. No such command has ever existed. Worth noting because of where it
 survived: a design document is exactly where a plausible command name lives longest,
@@ -1573,4 +1573,4 @@ since nobody runs a document.
 - [ ] stdout within budget; paths printed in a stable position
 - [ ] Non-zero exit with a reason on failure; no synthesized values on any path
 - [ ] Rate limit or lease handled by shared code
-- [ ] Registered in `dde doctor`
+- [ ] Registered in `oase doctor`

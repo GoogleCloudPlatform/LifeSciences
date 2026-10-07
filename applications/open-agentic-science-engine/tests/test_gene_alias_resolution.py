@@ -41,7 +41,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.gene import GeneResolution, resolve_gene
+from oase.core.gene import GeneResolution, resolve_gene
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,7 +92,7 @@ def test_official_symbol_resolves() -> None:
     # Clear cache before test
     resolve_gene.cache_clear()
 
-    with mock.patch("dde.core.gene.http.get_json") as mock_get:
+    with mock.patch("oase.core.gene.http.get_json") as mock_get:
         mock_get.return_value = response
         result = resolve_gene("BRCA1")
 
@@ -136,7 +136,7 @@ def test_alias_resolves_to_canonical() -> None:
             return alias_response  # LOR IS an alias
         return empty
 
-    with mock.patch("dde.core.gene.http.get_json") as mock_get:
+    with mock.patch("oase.core.gene.http.get_json") as mock_get:
         mock_get.side_effect = side_effect
         result = resolve_gene("LOR")
 
@@ -178,7 +178,7 @@ def test_previous_symbol_resolves() -> None:
             return prev_response
         return empty
 
-    with mock.patch("dde.core.gene.http.get_json") as mock_get:
+    with mock.patch("oase.core.gene.http.get_json") as mock_get:
         mock_get.side_effect = side_effect
         result = resolve_gene("OLD_NAME")
 
@@ -200,7 +200,7 @@ def test_ensembl_id_passes_through() -> None:
     """An Ensembl ID (ENSG...) passes through without HGNC lookup."""
     resolve_gene.cache_clear()
 
-    with mock.patch("dde.core.gene.http.get_json") as mock_get:
+    with mock.patch("oase.core.gene.http.get_json") as mock_get:
         result = resolve_gene("ENSG00000203782")
 
     # No API calls should have been made
@@ -239,7 +239,7 @@ def test_unknown_symbol_suggestions() -> None:
             return suggestion_response
         return empty
 
-    with mock.patch("dde.core.gene.http.get_json") as mock_get:
+    with mock.patch("oase.core.gene.http.get_json") as mock_get:
         mock_get.side_effect = side_effect
         result = resolve_gene("XYZNOTREAL")
 
@@ -267,7 +267,7 @@ def test_resolution_cached() -> None:
 
     resolve_gene.cache_clear()
 
-    with mock.patch("dde.core.gene.http.get_json") as mock_get:
+    with mock.patch("oase.core.gene.http.get_json") as mock_get:
         mock_get.return_value = response
         result1 = resolve_gene("TP53")
         result2 = resolve_gene("TP53")
@@ -287,7 +287,7 @@ def test_resolution_cached() -> None:
 
 def test_relay_fires_on_unresolved() -> None:
     """The gene.unresolved_symbol relay code is valid and fires."""
-    from dde.core.provenance import RELAY_CODES, relay
+    from oase.core.provenance import RELAY_CODES, relay
 
     # Verify the relay code is registered
     assert "gene.unresolved_symbol" in RELAY_CODES, (
@@ -347,7 +347,7 @@ def test_sidecar_records_resolution() -> None:
 
 def test_resolved_no_data_distinct_from_unresolved() -> None:
     """Verify that the relay codes for no-data vs unresolved are distinct."""
-    from dde.core.provenance import RELAY_CODES
+    from oase.core.provenance import RELAY_CODES
 
     # All three relay codes must exist
     assert "gene.unresolved_symbol" in RELAY_CODES
@@ -426,7 +426,7 @@ def test_expression_imports_resolve_gene() -> None:
     """expression module imports and uses resolve_gene from core.gene."""
     import inspect
 
-    from dde.commands import expression
+    from oase.commands import expression
 
     # Verify import
     assert hasattr(expression, "resolve_gene"), (
@@ -454,7 +454,7 @@ def test_expression_sidecar_has_gene_resolution_key() -> None:
     """expression.fetch_cmd passes gene_resolution in sidecar parameters."""
     import inspect
 
-    from dde.commands import expression
+    from oase.commands import expression
 
     source = inspect.getsource(expression.fetch_cmd.callback)
     # Verify Sidecar is constructed with gene_resolution in parameters dict
@@ -492,7 +492,7 @@ def test_genetics_imports_resolve_gene() -> None:
     """genetics module imports and uses resolve_gene from core.gene."""
     import inspect
 
-    from dde.commands import genetics
+    from oase.commands import genetics
 
     assert hasattr(genetics, "resolve_gene"), (
         "genetics module does not import resolve_gene"
@@ -522,7 +522,7 @@ def test_pathway_imports_resolve_gene() -> None:
     """pathway module imports and uses resolve_gene from core.gene."""
     import inspect
 
-    from dde.commands import pathway
+    from oase.commands import pathway
 
     assert hasattr(pathway, "resolve_gene"), (
         "pathway module does not import resolve_gene"
@@ -551,7 +551,7 @@ def test_expression_single_cell_imports_resolve_gene() -> None:
     """expression.fetch_single_cell_cmd also uses resolve_gene."""
     import inspect
 
-    from dde.commands import expression
+    from oase.commands import expression
 
     source = inspect.getsource(expression.fetch_single_cell_cmd.callback)
     assert "resolve_gene" in source, "fetch_single_cell_cmd does not call resolve_gene"

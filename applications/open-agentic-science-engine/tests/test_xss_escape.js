@@ -36,7 +36,7 @@ const path   = require('path');
 // tournament viewer, then verify all other viewers carry the same code.
 
 const VIEWERS_DIR = path.resolve(
-  __dirname, '..', 'tools', 'dde', 'site_templates', 'viewers'
+  __dirname, '..', 'tools', 'oase', 'site_templates', 'viewers'
 );
 
 const VIEWER_FILES = [

@@ -32,14 +32,14 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.validate import (
+from oase.commands.validate import (
     _check_analysis_citations,
     _check_deliverables_exist,
     _check_provenance_valid,
     _check_relay_coverage,
     _overall_verdict,
 )
-from dde.core.provenance import Sidecar, write_analysis
+from oase.core.provenance import Sidecar, write_analysis
 
 
 def _sha256(data: bytes) -> str:
@@ -746,7 +746,7 @@ def test_sidecar_to_dict_work_order_id() -> None:
     import os
 
     # With env var set
-    os.environ["DDE_WORK_ORDER_ID"] = "WO-TEST"
+    os.environ["OASE_WORK_ORDER_ID"] = "WO-TEST"
     try:
         sc = Sidecar(tool="test-tool", subcommand="fetch")
         d = sc.to_dict()
@@ -754,7 +754,7 @@ def test_sidecar_to_dict_work_order_id() -> None:
             f"Expected WO-TEST, got: {d.get('work_order_id')}"
         )
     finally:
-        del os.environ["DDE_WORK_ORDER_ID"]
+        del os.environ["OASE_WORK_ORDER_ID"]
 
     # Without env var
     sc2 = Sidecar(tool="test-tool", subcommand="fetch")
@@ -771,7 +771,7 @@ def test_write_analysis_work_order_id() -> None:
         root = Path(tmp)
         analysis_path = root / "test.analysis.json"
 
-        os.environ["DDE_WORK_ORDER_ID"] = "WO-TEST"
+        os.environ["OASE_WORK_ORDER_ID"] = "WO-TEST"
         try:
             write_analysis(
                 analysis_path,
@@ -782,7 +782,7 @@ def test_write_analysis_work_order_id() -> None:
                 assessment={"verdict": "pass"},
             )
         finally:
-            del os.environ["DDE_WORK_ORDER_ID"]
+            del os.environ["OASE_WORK_ORDER_ID"]
 
         data = json.loads(analysis_path.read_text(encoding="utf-8"))
         assert data["work_order_id"] == "WO-TEST", (

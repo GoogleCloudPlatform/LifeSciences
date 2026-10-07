@@ -34,7 +34,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core import provenance
+from oase.core import provenance
 
 # ---------------------------------------------------------------------------
 # Helper: project setup and canned PMC responses
@@ -45,7 +45,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "literature").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -171,7 +171,7 @@ def _mock_http_response(content: bytes, status_code: int = 200) -> mock.Mock:
 def test_fulltext_valid_pmcid() -> None:
     """A valid PMCID retrieves full text with correct schema and fields."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     xml_bytes = _pmc_fulltext_xml(
         pmcid="PMC1234567",
@@ -195,7 +195,7 @@ def test_fulltext_valid_pmcid() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubmed.http.get_bytes") as mock_get:
+        with mock.patch("oase.commands.pubmed.http.get_bytes") as mock_get:
             mock_get.return_value = xml_bytes
             result = runner.invoke(
                 cli,
@@ -217,7 +217,7 @@ def test_fulltext_valid_pmcid() -> None:
         assert artifact_path.is_file(), f"Artifact not found: {artifact_path}"
 
         artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-        assert artifact["schema"] == "dde.pubmed-fulltext.v1"
+        assert artifact["schema"] == "oase.pubmed-fulltext.v1"
         assert artifact["pmcid"] == "PMC1234567"
         assert artifact["title"] == "Machine Learning for Drug Discovery"
         assert len(artifact["authors"]) == 2
@@ -256,7 +256,7 @@ def test_fulltext_valid_pmcid() -> None:
 def test_fulltext_invalid_pmcid_format() -> None:
     """Invalid PMCID format raises a usage error."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
@@ -303,7 +303,7 @@ def test_fulltext_invalid_pmcid_format() -> None:
 def test_fulltext_unavailable() -> None:
     """Article not in OA subset fires pubmed.fulltext_unavailable."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     xml_bytes = _empty_pmc_response()
 
@@ -311,7 +311,7 @@ def test_fulltext_unavailable() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubmed.http.get_bytes") as mock_get:
+        with mock.patch("oase.commands.pubmed.http.get_bytes") as mock_get:
             mock_get.return_value = xml_bytes
             result = runner.invoke(
                 cli,
@@ -366,7 +366,7 @@ def test_relay_code_registered() -> None:
 
 def test_fulltext_nested_sections() -> None:
     """Nested <sec> elements produce separate section entries."""
-    from dde.commands.pubmed import _parse_fulltext_xml
+    from oase.commands.pubmed import _parse_fulltext_xml
 
     xml = (
         b'<?xml version="1.0" encoding="UTF-8"?>'

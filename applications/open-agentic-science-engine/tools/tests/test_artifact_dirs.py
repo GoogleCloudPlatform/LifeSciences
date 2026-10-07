@@ -18,7 +18,7 @@ Issue #83: ARTIFACT_CLASS values declared in command modules must be
     registered in ARTIFACT_DIRS — a missing entry causes 100% failure
     on the default path.
 
-Issue #85: Work orders use ``dde.*``-prefixed class names.  The lookup
+Issue #85: Work orders use ``oase.*``-prefixed class names.  The lookup
     must normalize the prefix, and an unknown class must raise rather
     than silently returning None.
 """
@@ -30,19 +30,19 @@ from pathlib import Path
 
 import pytest
 
-from dde.core.context import (
+from oase.core.context import (
     ARTIFACT_DIRS,
     ProjectContext,
     normalize_artifact_class,
     resolve_artifact_subdir,
 )
-from dde.core.errors import SchemaError
+from oase.core.errors import SchemaError
 
 # ---------------------------------------------------------------------------
 # Locate the commands directory relative to this test file.
 # ---------------------------------------------------------------------------
 
-_COMMANDS_DIR = Path(__file__).resolve().parent.parent / "dde" / "commands"
+_COMMANDS_DIR = Path(__file__).resolve().parent.parent / "oase" / "commands"
 
 
 def _collect_artifact_classes() -> list[tuple[str, str]]:
@@ -90,40 +90,40 @@ class TestAllArtifactClassesRegistered:
         )
 
 
-class TestDdePrefixNormalization:
-    """``dde.*`` prefixed class names must resolve the same as unprefixed."""
+class TestOasePrefixNormalization:
+    """``oase.*`` prefixed class names must resolve the same as unprefixed."""
 
     def test_normalize_strips_prefix(self) -> None:
-        assert normalize_artifact_class("dde.genetics") == "genetics"
+        assert normalize_artifact_class("oase.genetics") == "genetics"
 
     def test_normalize_leaves_unprefixed(self) -> None:
         assert normalize_artifact_class("genetics") == "genetics"
 
-    def test_normalize_only_strips_leading_dde(self) -> None:
-        # "xdde.genetics" should NOT be stripped — only leading "dde."
-        assert normalize_artifact_class("xdde.genetics") == "xdde.genetics"
+    def test_normalize_only_strips_leading_oase(self) -> None:
+        # "xoase.genetics" should NOT be stripped — only leading "oase."
+        assert normalize_artifact_class("xoase.genetics") == "xoase.genetics"
 
     def test_resolve_subdir_with_prefix(self) -> None:
-        """``resolve_artifact_subdir("dde.genetics")`` returns the same
+        """``resolve_artifact_subdir("oase.genetics")`` returns the same
         path as ``resolve_artifact_subdir("genetics")``."""
-        assert resolve_artifact_subdir("dde.genetics") == resolve_artifact_subdir(
+        assert resolve_artifact_subdir("oase.genetics") == resolve_artifact_subdir(
             "genetics"
         )
 
     def test_artifact_dir_with_prefix(self, tmp_path: Path) -> None:
-        """``artifact_dir("dde.genetics")`` returns the same path as
+        """``artifact_dir("oase.genetics")`` returns the same path as
         ``artifact_dir("genetics")``."""
         ctx = ProjectContext(root=tmp_path, source="test")
-        prefixed = ctx.artifact_dir("dde.genetics")
+        prefixed = ctx.artifact_dir("oase.genetics")
         unprefixed = ctx.artifact_dir("genetics")
         assert prefixed == unprefixed
 
     def test_all_known_classes_resolve_with_prefix(self) -> None:
-        """Every entry in ARTIFACT_DIRS resolves when prefixed with ``dde.``."""
+        """Every entry in ARTIFACT_DIRS resolves when prefixed with ``oase.``."""
         for cls in ARTIFACT_DIRS:
-            prefixed = f"dde.{cls}"
+            prefixed = f"oase.{cls}"
             assert resolve_artifact_subdir(prefixed) == ARTIFACT_DIRS[cls], (
-                f"dde.{cls} did not resolve to {ARTIFACT_DIRS[cls]}"
+                f"oase.{cls} did not resolve to {ARTIFACT_DIRS[cls]}"
             )
 
 
@@ -136,7 +136,7 @@ class TestUnknownClassRaises:
 
     def test_resolve_subdir_raises_with_prefix(self) -> None:
         with pytest.raises(SchemaError, match="unknown artifact class"):
-            resolve_artifact_subdir("dde.nonexistent")
+            resolve_artifact_subdir("oase.nonexistent")
 
     def test_artifact_dir_raises(self, tmp_path: Path) -> None:
         ctx = ProjectContext(root=tmp_path, source="test")
@@ -146,4 +146,4 @@ class TestUnknownClassRaises:
     def test_artifact_dir_raises_with_prefix(self, tmp_path: Path) -> None:
         ctx = ProjectContext(root=tmp_path, source="test")
         with pytest.raises(SchemaError, match="unknown artifact class"):
-            ctx.artifact_dir("dde.nonexistent")
+            ctx.artifact_dir("oase.nonexistent")

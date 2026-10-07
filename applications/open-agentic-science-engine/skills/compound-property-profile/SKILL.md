@@ -46,7 +46,7 @@ properties and structural alert profile. Entry points include:
   selected by heavy atom count, and the `compound.fragment_stripped`
   relay fires. Unparseable SMILES exits 9 (Refusal) — a different
   input string is the remedy.
-- **RDKit**: must be installed. Run `dde doctor` before first use.
+- **RDKit**: must be installed. Run `oase doctor` before first use.
   It ends with a verdict line: `STOP` means fix or report before
   running anything; `PROCEED` means work. Do not judge by the warning
   count; the verdict line grades them for you.
@@ -57,10 +57,10 @@ properties and structural alert profile. Entry points include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| Is this SMILES valid? What is the canonical form? | `dde compound validate <SMILES>` | `raw/compounds/<slug>.validate.json`<br>`raw/compounds/<slug>.validate.meta.json` |
-| What are the molecular descriptors? | `dde compound descriptors <SMILES>` | `raw/compounds/<slug>.descriptors.json`<br>`raw/compounds/<slug>.descriptors.meta.json` |
-| Does this compound hit any structural alerts? | `dde compound alerts <SMILES>` | `raw/compounds/<slug>.alerts.json`<br>`raw/compounds/<slug>.alerts.meta.json` |
-| Is this compound drug-like? | `dde compound analyze <SMILES>` | `raw/compounds/<slug>.analysis.json` |
+| Is this SMILES valid? What is the canonical form? | `oase compound validate <SMILES>` | `raw/compounds/<slug>.validate.json`<br>`raw/compounds/<slug>.validate.meta.json` |
+| What are the molecular descriptors? | `oase compound descriptors <SMILES>` | `raw/compounds/<slug>.descriptors.json`<br>`raw/compounds/<slug>.descriptors.meta.json` |
+| Does this compound hit any structural alerts? | `oase compound alerts <SMILES>` | `raw/compounds/<slug>.alerts.json`<br>`raw/compounds/<slug>.alerts.meta.json` |
+| Is this compound drug-like? | `oase compound analyze <SMILES>` | `raw/compounds/<slug>.analysis.json` |
 
 Run phase 1 (`validate`, `descriptors`, `alerts`) before phase 2
 (`analyze`). `analyze` reads from disk and can be re-run with different

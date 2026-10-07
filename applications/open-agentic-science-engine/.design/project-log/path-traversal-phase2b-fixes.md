@@ -10,7 +10,7 @@ Fixed 6 path traversal vulnerabilities across the OASE toolchain where
 user-controlled strings were interpolated into filesystem paths without
 sanitization, allowing `../` traversal to escape target directories.
 
-All fixes use the shared helper module `dde.core.paths` (from
+All fixes use the shared helper module `oase.core.paths` (from
 `scion/dev-paths-helper`), which provides `sanitize_slug()` for
 filename-safe slugs and `confine_path()` for directory confinement.
 

@@ -38,7 +38,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core.controlstore import _flatten_entry, normalize_deliverables  # noqa: E402
+from oase.core.controlstore import _flatten_entry, normalize_deliverables  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # _flatten_entry tests

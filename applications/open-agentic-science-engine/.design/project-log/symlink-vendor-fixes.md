@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-19
 **Issues:** #246, #247, #306, #307
-**Commit:** d59c45c on DDE branch
+**Commit:** d59c45c on OASE branch
 
 ## Summary
 

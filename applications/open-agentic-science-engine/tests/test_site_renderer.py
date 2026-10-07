@@ -38,12 +38,12 @@ import traceback
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ to sys.path so dde is importable
+# Bootstrap — add tools/ to sys.path so oase is importable
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.commands.site import (
+from oase.commands.site import (
     _add_heading_ids,
     _dedent_tables,
     _rewrite_md_links,
@@ -370,7 +370,7 @@ def test_data_uri_image_blocked():
     html = _render_pipeline(md)
     assert "data:" not in html, f"data: URI survived: {html!r}"
     # Also verify the direct sanitizer catches data: URIs at HTML level
-    from dde.commands.site import _sanitize_external_urls
+    from oase.commands.site import _sanitize_external_urls
 
     raw_html = '<img src="data:image/svg+xml;base64,PHN2Zy8+" alt="">'
     sanitized, _warnings = _sanitize_external_urls(raw_html)
@@ -436,7 +436,7 @@ def test_multiple_external_images_all_blocked():
 
 def test_sanitize_returns_warnings():
     """_sanitize_external_urls returns a warning per blocked URL."""
-    from dde.commands.site import _sanitize_external_urls
+    from oase.commands.site import _sanitize_external_urls
 
     html_in = (
         '<img src="https://evil.com/x.gif" alt=""><img src="images/ok.png" alt="">'

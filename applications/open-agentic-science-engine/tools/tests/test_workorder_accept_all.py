@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for `dde workorder accept-all` and site build prerequisite check (#108).
+"""Tests for `oase workorder accept-all` and site build prerequisite check (#108).
 
 Covers:
   - accept-all validates all WOs and reports status
@@ -35,13 +35,13 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.site import _check_all_accepted  # noqa: E402
-from dde.commands.workorder import (  # noqa: E402
+from oase.commands.site import _check_all_accepted  # noqa: E402
+from oase.commands.workorder import (  # noqa: E402
     _list_latest_work_orders,
     _try_accept_single,
 )
-from dde.core import controlstore  # noqa: E402
-from dde.core.errors import ArtifactError  # noqa: E402
+from oase.core import controlstore  # noqa: E402
+from oase.core.errors import ArtifactError  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -49,9 +49,9 @@ from dde.core.errors import ArtifactError  # noqa: E402
 
 
 def _make_project(tmp_path: Path) -> Path:
-    """Create a minimal project layout with .dde marker and control dirs."""
+    """Create a minimal project layout with .oase marker and control dirs."""
     project = tmp_path / "project"
-    (project / ".dde").mkdir(parents=True)
+    (project / ".oase").mkdir(parents=True)
     controlstore.ensure_control_dirs(project)
     return project
 
@@ -200,12 +200,12 @@ def test_accept_single_committed_with_passing_validation(tmp_path):
     )
 
     with mock.patch(
-        "dde.commands.workorder._try_accept_single.__module__",
+        "oase.commands.workorder._try_accept_single.__module__",
         create=True,
     ):
         # We need to mock the validate import inside _try_accept_single.
         with mock.patch(
-            "dde.commands.validate._perform_validation",
+            "oase.commands.validate._perform_validation",
             return_value=mock_return,
         ):
             result = _try_accept_single(project, record)
@@ -237,7 +237,7 @@ def test_accept_single_committed_with_failing_validation(tmp_path):
     )
 
     with mock.patch(
-        "dde.commands.validate._perform_validation",
+        "oase.commands.validate._perform_validation",
         return_value=mock_return,
     ):
         result = _try_accept_single(project, record)
@@ -270,7 +270,7 @@ def test_accept_single_no_override_on_failure(tmp_path):
     )
 
     with mock.patch(
-        "dde.commands.validate._perform_validation",
+        "oase.commands.validate._perform_validation",
         return_value=mock_return,
     ):
         result = _try_accept_single(project, record)

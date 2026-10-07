@@ -225,7 +225,7 @@ if command -v git >/dev/null 2>&1; then
 else
     miss "git"
     info "        Not needed to BUILD the environment. Needed for it to be"
-    info "        accountable: dde env stamp records the commit the"
+    info "        accountable: oase env stamp records the commit the"
     info "        environment was provisioned from, and doctor checks that"
     info "        commit is reachable from a remote. Without git every"
     info "        artifact records an environment nobody can reproduce."
@@ -389,7 +389,7 @@ probe "https://github.com/" "github.com (vina release, fpocket source tarball)"
 
 head_ "Disk"
 
-TARGET="${DDE_TOOLS_HOME:-/scion-volumes/tools}"
+TARGET="${OASE_TOOLS_HOME:-/scion-volumes/tools}"
 PROBE_DIR="$TARGET"
 while [ ! -d "$PROBE_DIR" ] && [ "$PROBE_DIR" != "/" ]; do
     PROBE_DIR="$(dirname "$PROBE_DIR")"
@@ -479,7 +479,7 @@ if [ "$FAILED" = 0 ] && [ -z "$MISSING_PKGS" ]; then
         exit 2
     fi
     printf '\033[1;32mREADY\033[0m — run:  ./install.sh\n'
-    printf 'Then verify with `dde doctor` and read its exit code.\n'
+    printf 'Then verify with `oase doctor` and read its exit code.\n'
     exit 0
 fi
 

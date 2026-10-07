@@ -199,12 +199,12 @@ check, and the auditor compares its own output against itself. The
     OUT=raw/reanalysis/$(date +%F)-$SCION_AGENT_SLUG
 
     # Identifier-based (genetics, expression, litref, alphafold analyze):
-    dde genetics analyze TP53 --out "$OUT"
+    oase genetics analyze TP53 --out "$OUT"
 
     # Path-based (coscientist, alphagenome, alphafold analyze-prediction):
-    dde coscientist analyze raw/hypotheses/<stem>.tournament.json --out "$OUT"
+    oase coscientist analyze raw/hypotheses/<stem>.tournament.json --out "$OUT"
 
-Run `dde <tool> analyze --help` to confirm which shape a command
+Run `oase <tool> analyze --help` to confirm which shape a command
 uses. `$SCION_AGENT_SLUG` is set in the agent environment. Use it in
 preference to a literal `<agent>` placeholder.
 

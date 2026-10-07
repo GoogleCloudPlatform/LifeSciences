@@ -35,7 +35,7 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.core import provenance
+from oase.core import provenance
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -46,7 +46,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "genomics").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -57,7 +57,7 @@ def _write_gwas_artifact(
     associations: list[dict[str, Any]],
     source: str = "opentargets",
 ) -> Path:
-    """Write a canned dde.gwas.v1 artifact for the analyze command."""
+    """Write a canned oase.gwas.v1 artifact for the analyze command."""
     slug = gene.lower()
     artifact_path = project / "raw" / "genomics" / f"{slug}.gwas-{source}.artifact.json"
 
@@ -70,7 +70,7 @@ def _write_gwas_artifact(
             seen.add(name)
 
     artifact = {
-        "schema": "dde.gwas.v1",
+        "schema": "oase.gwas.v1",
         "query": {"gene": gene.upper(), "source": source},
         "summary": {
             "n_associations": len(associations),
@@ -90,7 +90,7 @@ def _write_gwas_artifact(
 def test_genetic_association_score_in_output() -> None:
     """Analyze output includes genetic_association_score per association."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     associations = [
         {
@@ -177,7 +177,7 @@ def test_genetic_association_score_in_output() -> None:
 def test_composite_not_genetic_relay() -> None:
     """opentargets.composite_not_genetic fires when composite passes, genetic fails."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     # score=0.42 >= 0.1 (default threshold) but genetic_association=0.05 < 0.1
     associations = [
@@ -240,7 +240,7 @@ def test_composite_not_genetic_relay() -> None:
 def test_no_relay_when_genetic_passes() -> None:
     """No composite_not_genetic relay when genetic_association also passes."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     # Both overall and genetic_association >= threshold
     associations = [
@@ -298,7 +298,7 @@ def test_no_relay_when_genetic_passes() -> None:
 def test_disease_filter_match() -> None:
     """--disease-filter finds matching disease and reports score."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     associations = [
         {
@@ -369,7 +369,7 @@ def test_disease_filter_match() -> None:
 def test_disease_filter_no_match() -> None:
     """--disease-filter reports NO MATCH when disease not in associations."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     associations = [
         {

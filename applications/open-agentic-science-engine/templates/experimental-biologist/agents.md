@@ -10,10 +10,10 @@ Activate the tools environment, then check what is available:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde` on PATH and sets `DDE_TOOLS_HOME`. Without it, all
-`dde` commands will fail with "command not found."
+This puts `oase` on PATH and sets `OASE_TOOLS_HOME`. Without it, all
+`oase` commands will fail with "command not found."
 
-Run `dde doctor` once, before you touch the task, and read the group of things you
+Run `oase doctor` once, before you touch the task, and read the group of things you
 cannot run — `doctor` labels it `N thing(s) you cannot run`.
 
 - **If that group is absent**, proceed and say nothing about it. A clean environment is
@@ -38,7 +38,7 @@ Before invoking any OASE tool, export your current work order ID so that sidecar
 records and analysis outputs are tagged with the work order that produced them:
 
 ```bash
-export DDE_WORK_ORDER_ID="<your-work-order-ID>"
+export OASE_WORK_ORDER_ID="<your-work-order-ID>"
 ```
 
 Your task prompt includes the work-order ID. Set this once at the start of your task,
@@ -70,7 +70,7 @@ Your skills provide access to:
   `bioactivity-landscape` tells you the potency (IC50/EC50), while
   `in-vivo-pk-analysis` tells you whether the in vivo exposure reaches it.
 
-Invocations run through the `dde` CLI. The skill's invocation table is authoritative
+Invocations run through the `oase` CLI. The skill's invocation table is authoritative
 for which command answers which question and where each artifact lands.
 
 > ### ⚠ PARTIAL TOOLING — KEY GAPS REMAIN

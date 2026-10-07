@@ -35,10 +35,10 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.validate import (
+from oase.commands.validate import (
     _check_deliverables_exist,
 )
-from dde.core.controlstore import normalize_deliverables
+from oase.core.controlstore import normalize_deliverables
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -93,9 +93,9 @@ def test_consumed_class_satisfies_layer0_classes() -> None:
 
         deliverables = normalize_deliverables(
             {
-                "layer_0_classes": ["dde.structures"],
+                "layer_0_classes": ["oase.structures"],
                 "consumes": [
-                    {"artifact_class": "dde.structures", "from_work_order": "WO-001"},
+                    {"artifact_class": "oase.structures", "from_work_order": "WO-001"},
                 ],
                 "layer_1": [],
             }
@@ -107,7 +107,7 @@ def test_consumed_class_satisfies_layer0_classes() -> None:
         # Verify consumed_satisfied is recorded.
         consumed = result["detail"].get("consumed_satisfied", [])
         assert len(consumed) == 1
-        assert consumed[0]["class"] == "dde.structures"
+        assert consumed[0]["class"] == "oase.structures"
         assert "WO-001" in consumed[0]["satisfied_by"]
         print("  PASS: consumed class satisfies layer_0_classes")
 
@@ -126,9 +126,9 @@ def test_non_consumed_missing_class_fails() -> None:
 
         deliverables = normalize_deliverables(
             {
-                "layer_0_classes": ["dde.structures", "dde.compounds"],
+                "layer_0_classes": ["oase.structures", "oase.compounds"],
                 "consumes": [
-                    {"artifact_class": "dde.structures", "from_work_order": "WO-001"},
+                    {"artifact_class": "oase.structures", "from_work_order": "WO-001"},
                 ],
                 "layer_1": [],
             }
@@ -144,7 +144,7 @@ def test_non_consumed_missing_class_fails() -> None:
         # consumed_satisfied should still be recorded even when overall is fail.
         consumed = result["detail"].get("consumed_satisfied", [])
         assert len(consumed) == 1
-        assert consumed[0]["class"] == "dde.structures"
+        assert consumed[0]["class"] == "oase.structures"
         print("  PASS: non-consumed missing class still fails")
 
 
@@ -161,9 +161,9 @@ def test_consumed_artifacts_keep_original_wo_id() -> None:
 
         deliverables = normalize_deliverables(
             {
-                "layer_0_classes": ["dde.structures"],
+                "layer_0_classes": ["oase.structures"],
                 "consumes": [
-                    {"artifact_class": "dde.structures", "from_work_order": "WO-001"},
+                    {"artifact_class": "oase.structures", "from_work_order": "WO-001"},
                 ],
                 "layer_1": [],
             }
@@ -206,8 +206,8 @@ def test_optional_class_absent_passes() -> None:
 
         deliverables = normalize_deliverables(
             {
-                "layer_0_classes": ["dde.structures"],
-                "layer_0_classes_optional": ["dde.genomics"],
+                "layer_0_classes": ["oase.structures"],
+                "layer_0_classes_optional": ["oase.genomics"],
                 "layer_1": [],
             }
         )
@@ -218,7 +218,7 @@ def test_optional_class_absent_passes() -> None:
         # Verify optional class is recorded as absent.
         opt = result["detail"].get("layer_0_classes_optional", [])
         assert len(opt) == 1
-        assert opt[0]["class"] == "dde.genomics"
+        assert opt[0]["class"] == "oase.genomics"
         assert opt[0]["status"] == "absent"
         print("  PASS: optional class absent -> pass with info")
 
@@ -259,8 +259,8 @@ def test_optional_class_present_passes() -> None:
 
         deliverables = normalize_deliverables(
             {
-                "layer_0_classes": ["dde.structures"],
-                "layer_0_classes_optional": ["dde.genomics"],
+                "layer_0_classes": ["oase.structures"],
+                "layer_0_classes_optional": ["oase.genomics"],
                 "layer_1": [],
             }
         )
@@ -270,7 +270,7 @@ def test_optional_class_present_passes() -> None:
         # Verify optional class is recorded as present.
         opt = result["detail"].get("layer_0_classes_optional", [])
         assert len(opt) == 1
-        assert opt[0]["class"] == "dde.genomics"
+        assert opt[0]["class"] == "oase.genomics"
         assert opt[0]["status"] == "present"
         print("  PASS: optional class present -> pass")
 
@@ -288,9 +288,9 @@ def test_cross_wo_citation_recorded() -> None:
 
         deliverables = normalize_deliverables(
             {
-                "layer_0_classes": ["dde.structures"],
+                "layer_0_classes": ["oase.structures"],
                 "consumes": [
-                    {"artifact_class": "dde.structures", "from_work_order": "WO-001"},
+                    {"artifact_class": "oase.structures", "from_work_order": "WO-001"},
                 ],
                 "layer_1": [],
             }
@@ -304,7 +304,7 @@ def test_cross_wo_citation_recorded() -> None:
             f"expected cross_wo_citations, got {result['detail']}"
         )
         citation = citations[0]
-        assert citation["class"] == "dde.structures"
+        assert citation["class"] == "oase.structures"
         assert "WO-001" in citation["from_work_orders"]
         print("  PASS: cross-WO citation recorded")
 

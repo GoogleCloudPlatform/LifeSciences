@@ -36,8 +36,8 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.trials import _analyze_trials
-from dde.core.provenance import RELAY_CODES
+from oase.commands.trials import _analyze_trials
+from oase.core.provenance import RELAY_CODES
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,7 +53,7 @@ def _make_study(
     """Build a minimal study dict matching the shape _extract_study returns."""
     if phases is None:
         phases = ["PHASE2"]
-    from dde.commands.trials import _phase_label
+    from oase.commands.trials import _phase_label
 
     return {
         "nct_id": nct_id,
@@ -96,7 +96,7 @@ def _run_analyze(
     relays: list[dict[str, str]] = []
 
     def add_relay(code: str, message: str) -> None:
-        from dde.core.provenance import relay
+        from oase.core.provenance import relay
 
         if not any(r["code"] == code for r in relays):
             relays.append(relay(code, message))

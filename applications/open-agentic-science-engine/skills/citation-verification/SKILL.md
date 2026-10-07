@@ -21,8 +21,8 @@ A file (JSON, Markdown, or text) containing citations or references.
 
 | Question | Run | Writes to |
 |---|---|---|
-| Are the citations in this document real? | `dde cite verify <FILE>` | `raw/literature/<slug>.citations.json` |
-| What is the verification assessment? | `dde cite analyze --from raw/literature/` | `raw/literature/<slug>.analysis.json` |
+| Are the citations in this document real? | `oase cite verify <FILE>` | `raw/literature/<slug>.citations.json` |
+| What is the verification assessment? | `oase cite analyze --from raw/literature/` | `raw/literature/<slug>.analysis.json` |
 
 ## 4. Interpretation contract
 

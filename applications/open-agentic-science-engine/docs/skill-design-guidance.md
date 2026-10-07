@@ -104,7 +104,7 @@ Nine things make up a skill. Six are scoped to the tool and do not vary by role:
 
 Two vary by role: which question is being asked, and what happens next. One varies by program: the threshold.
 
-That last one is the precedent. Thresholds vary by program, so they moved out of the skill into `.dde/thresholds.yaml`. Nobody forked a skill per program. Question and consequence vary by role, so they move out too — into the template. The `skills:` list in `scion-agent.yaml` is the capability grant. The always-loaded descriptions do the routing.
+That last one is the precedent. Thresholds vary by program, so they moved out of the skill into `.oase/thresholds.yaml`. Nobody forked a skill per program. Question and consequence vary by role, so they move out too — into the template. The `skills:` list in `scion-agent.yaml` is the capability grant. The always-loaded descriptions do the routing.
 
 Bake a role into a skill and one cluster becomes four skills. Each restates the same invocation table and the same output paths. Four copies of the artifact contract is four chances for it to drift. A drifted invocation table makes an agent guess a path, then invent what it would have found there.
 
@@ -174,9 +174,9 @@ This section connects the skill to the CLI. Write it as a table: question, comma
 
 | Question | Run | Writes to |
 |---|---|---|
-| How confident is the fold? | `dde alphafold fetch <UNIPROT>`<br>`dde alphafold analyze <UNIPROT>` | `raw/structures/AF-<id>.cif`<br>`raw/structures/AF-<id>.meta.json`<br>`raw/structures/AF-<id>.analysis.json` |
-| Is there an experimental structure? | `dde pdb search --uniprot <UNIPROT>` | `raw/structures/pdb-search-<id>.json` |
-| Is the pocket druggable? | `dde fpocket run raw/structures/AF-<id>.cif` | `raw/structures/AF-<id>.pockets.json`<br>`raw/structures/AF-<id>.pockets.analysis.json` |
+| How confident is the fold? | `oase alphafold fetch <UNIPROT>`<br>`oase alphafold analyze <UNIPROT>` | `raw/structures/AF-<id>.cif`<br>`raw/structures/AF-<id>.meta.json`<br>`raw/structures/AF-<id>.analysis.json` |
+| Is there an experimental structure? | `oase pdb search --uniprot <UNIPROT>` | `raw/structures/pdb-search-<id>.json` |
+| Is the pocket druggable? | `oase fpocket run raw/structures/AF-<id>.cif` | `raw/structures/AF-<id>.pockets.json`<br>`raw/structures/AF-<id>.pockets.analysis.json` |
 
 Run `fetch` before `analyze`. `analyze` reads from disk and can be re-run without re-querying.
 ```
@@ -185,7 +185,7 @@ Three rules:
 
 1. **Every capability the skill claims needs a row.** No row means the skill must not claim it. An agent asked for a pocket volume with no pocket tool will produce a plausible invented number.
 2. **Show the paths.** The agent must not guess where output went. It should cite the path in a Layer 1 finding without re-deriving it. Everything in the table lands under `raw/`. Model outputs, sidecars, and `.analysis.json` are all Layer 0.
-3. **Do not restate `--help`.** Give two or three canonical invocations. `dde <tool> --help` is the option reference. A second copy will drift.
+3. **Do not restate `--help`.** Give two or three canonical invocations. `oase <tool> --help` is the option reference. A second copy will drift.
 
 ### 4.5 Interpretation contract
 
@@ -195,7 +195,7 @@ Include:
 
 - **Mandatory relays.** Warnings that must reach the report unchanged. Isoform substitution is the model case — analyzing an isoform instead of the canonical sequence invalidates everything downstream.
 
-  **Name the code, not the warning text.** Relays carry registered codes such as `afdb.partial_coverage`, emitted top-level in the sidecar and `.analysis.json`. Cite the code and state what it obliges the specialist to do. Do not restate the message: prose is reworded between builds, and a skill that matched on the old wording goes quietly stale. This is the same rule as thresholds, for the same reason — cite the name, let the CLI own the value. Run `dde relays` for the registry, and see [`tool-design-guidance.md`](tool-design-guidance.md) §5.1.
+  **Name the code, not the warning text.** Relays carry registered codes such as `afdb.partial_coverage`, emitted top-level in the sidecar and `.analysis.json`. Cite the code and state what it obliges the specialist to do. Do not restate the message: prose is reworded between builds, and a skill that matched on the old wording goes quietly stale. This is the same rule as thresholds, for the same reason — cite the name, let the CLI own the value. Run `oase relays` for the registry, and see [`tool-design-guidance.md`](tool-design-guidance.md) §5.1.
 
   A relay is an instruction, not a caveat. `afdb.partial_coverage` does not mean "mention that coverage is partial"; it means the confidence metrics describe the modelled region, so any claim about the protein must be scoped to that region or withheld.
 - **Synthesis rules.** How to combine outputs across the grouped tools into one judgment.
@@ -226,7 +226,7 @@ Two parts.
 
 | Content | Where it belongs | Why |
 |---|---|---|
-| Install instructions | Shared environment; `dde doctor` | If it is not installed, fail loudly. Do not let the agent improvise a fix. |
+| Install instructions | Shared environment; `oase doctor` | If it is not installed, fail loudly. Do not let the agent improvise a fix. |
 | Endpoint URLs, project IDs | CLI environment config | `pharma_skills` ships two hardcoded endpoints with mismatched project numbers. This failure is not hypothetical. |
 | Threshold values | CLI config, stamped into output | Must be program-configurable and testable. |
 | API parameter enumerations | `references/`, loaded on demand, or `--help` | Progressive disclosure keeps the always-loaded surface small. |

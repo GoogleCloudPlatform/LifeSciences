@@ -32,10 +32,10 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from dde.commands.alphafold import _AF3_TEMPLATES, _af3_template, _parse_cif_plddt
-from dde.commands.docking import _grid_size_warning
-from dde.commands.pocket import _detect_non_protein_chains
-from dde.core.errors import UsageError
+from oase.commands.alphafold import _AF3_TEMPLATES, _af3_template, _parse_cif_plddt
+from oase.commands.docking import _grid_size_warning
+from oase.commands.pocket import _detect_non_protein_chains
+from oase.core.errors import UsageError
 
 # ---------------------------------------------------------------------------
 # Item 1 — Per-residue pLDDT fixtures
@@ -202,7 +202,7 @@ class TestPerResiduePlddt(unittest.TestCase):
 
     def test_empty_cif_raises(self):
         """A CIF with no atom records raises SchemaError."""
-        from dde.core.errors import SchemaError
+        from oase.core.errors import SchemaError
 
         with self.assertRaises(SchemaError):
             _parse_cif_plddt(EMPTY_CIF)
@@ -399,13 +399,13 @@ class TestNonProteinRelay(unittest.TestCase):
 
     def test_relay_code_registered(self):
         """The fpocket.ligand_present_in_input relay code is registered."""
-        from dde.core.provenance import RELAY_CODES
+        from oase.core.provenance import RELAY_CODES
 
         self.assertIn("fpocket.ligand_present_in_input", RELAY_CODES)
 
     def test_relay_code_builds(self):
         """A relay with the registered code can be built."""
-        from dde.core.provenance import relay
+        from oase.core.provenance import relay
 
         record = relay(
             "fpocket.ligand_present_in_input",
@@ -416,7 +416,7 @@ class TestNonProteinRelay(unittest.TestCase):
 
     def test_unregistered_relay_rejects(self):
         """An unregistered relay code raises KeyError."""
-        from dde.core.provenance import relay
+        from oase.core.provenance import relay
 
         with self.assertRaises(KeyError):
             relay("fpocket.nonexistent_code", "test")

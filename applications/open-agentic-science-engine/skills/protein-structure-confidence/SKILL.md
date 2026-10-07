@@ -59,7 +59,7 @@ include:
 - **Cost**: AFDB fetch is a free public API call. AF3 prediction consumes
   H100 time on the Vertex dedicated endpoint; a cold start adds up to
   several minutes.
-- Run `dde doctor` before first use. It ends with a verdict line:
+- Run `oase doctor` before first use. It ends with a verdict line:
   `STOP` means fix or report before running anything; `PROCEED` means
   work, and the grouped warnings tell you which commands would refuse,
   which results need careful reading, and which are the tooling lead's
@@ -72,8 +72,8 @@ include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| What predicted structure exists for this protein? | `dde alphafold fetch <UNIPROT>` | `raw/structures/AF-<id>-F1.cif`<br>`raw/structures/AF-<id>-F1.pae.json`<br>`raw/structures/AF-<id>-F1.afdb.json`<br>`raw/structures/AF-<id>-F1.meta.json` |
-| How confident is the fold, and where are the domains? | `dde alphafold analyze <UNIPROT>` | `raw/structures/AF-<id>-F1.alphafold.analysis.json` |
+| What predicted structure exists for this protein? | `oase alphafold fetch <UNIPROT>` | `raw/structures/AF-<id>-F1.cif`<br>`raw/structures/AF-<id>-F1.pae.json`<br>`raw/structures/AF-<id>-F1.afdb.json`<br>`raw/structures/AF-<id>-F1.meta.json` |
+| How confident is the fold, and where are the domains? | `oase alphafold analyze <UNIPROT>` | `raw/structures/AF-<id>-F1.alphafold.analysis.json` |
 
 Run `fetch` before `analyze`. `analyze` reads from disk and can be re-run
 with different thresholds without re-querying AFDB.
@@ -82,8 +82,8 @@ with different thresholds without re-querying AFDB.
 
 | Question | Run | Writes to |
 |---|---|---|
-| What does this complex look like? | `dde alphafold predict --input <JSON>` | `raw/structures/AF3-<name>.cif`<br>`raw/structures/AF3-<name>.summary.json`<br>`raw/structures/AF3-<name>.plddt.json`<br>`raw/structures/AF3-<name>.pae.json`<br>`raw/structures/AF3-<name>.response.json`<br>`raw/structures/AF3-<name>.request.json`<br>`raw/structures/AF3-<name>.meta.json` |
-| How confident is the complex interface? | `dde alphafold analyze-prediction <SUMMARY>` | `raw/structures/AF3-<name>.alphafold.analysis.json` |
+| What does this complex look like? | `oase alphafold predict --input <JSON>` | `raw/structures/AF3-<name>.cif`<br>`raw/structures/AF3-<name>.summary.json`<br>`raw/structures/AF3-<name>.plddt.json`<br>`raw/structures/AF3-<name>.pae.json`<br>`raw/structures/AF3-<name>.response.json`<br>`raw/structures/AF3-<name>.request.json`<br>`raw/structures/AF3-<name>.meta.json` |
+| How confident is the complex interface? | `oase alphafold analyze-prediction <SUMMARY>` | `raw/structures/AF3-<name>.alphafold.analysis.json` |
 
 `predict` blocks until the endpoint returns or the deadline expires
 (default 30 minutes). `analyze-prediction` reads the stored
@@ -229,7 +229,7 @@ proceed on an assumed result.
   the deadline. A timeout after exhausting the deadline is a real
   failure; a 429 during warm-up is not. Signal
   `sciontool status blocked "AF3 prediction in progress"` before
-  invoking `dde alphafold predict` so the stall detector does not
+  invoking `oase alphafold predict` so the stall detector does not
   false-positive on the wait.
 - **Docking scores in a disordered region.** If the pLDDT verdict or
   advisory restricts downstream work to ordered domains, docking into

@@ -4,7 +4,7 @@ How the project curator builds, post-processes, and verifies the navigable HTML 
 
 ## When to Build
 
-Trigger `dde site build` whenever the source material has changed in a way that should be reflected on the site:
+Trigger `oase site build` whenever the source material has changed in a way that should be reflected on the site:
 
 - A new work order has been accepted
 - Program state documents have been updated
@@ -17,13 +17,13 @@ Trigger `dde site build` whenever the source material has changed in a way that 
 ### Basic Build
 
 ```bash
-dde site build
+oase site build
 ```
 
 By default, `raw/` artifacts are copied into `_site/raw/` so the built site is self-contained. Viewer `?file=` URLs resolve within the site directory. To disable bundling and revert to the previous layout where viewers reference `raw/` outside the site tree, pass `--no-bundle-raw`:
 
 ```bash
-dde site build --no-bundle-raw
+oase site build --no-bundle-raw
 ```
 
 ### With Retrospectives (Scion Environments)
@@ -31,7 +31,7 @@ dde site build --no-bundle-raw
 When running inside a Scion-managed environment, retrospectives live on the shared volume. Pass them explicitly so the build can include them:
 
 ```bash
-dde site build --retrospectives-dir /scion-volumes/scratchpad/projects/<program>/retrospectives/
+oase site build --retrospectives-dir /scion-volumes/scratchpad/projects/<program>/retrospectives/
 ```
 
 ### Output
@@ -144,7 +144,7 @@ The site includes 13 auto-wired specialized HTML viewers for scientific data fil
 
 ## Post-Build Processing
 
-After `dde site build` completes and before verification, run a post-build orchestrator to fix known rendering gaps in the build output. Every fix script must be **idempotent** — safe to re-run after every build without accumulating changes.
+After `oase site build` completes and before verification, run a post-build orchestrator to fix known rendering gaps in the build output. Every fix script must be **idempotent** — safe to re-run after every build without accumulating changes.
 
 ### Why This Phase Exists
 
@@ -174,7 +174,7 @@ The build tool renders markdown to HTML deterministically but does not handle ev
 ### Invoking Post-Build Processing
 
 ```bash
-dde site build
+oase site build
 python3 postbuild.py _site/
 # then verify and serve
 ```
@@ -216,7 +216,7 @@ When content is owned by this program, fix the source markdown so the correction
 Run [`references/fix_infra_refs.py`](references/fix_infra_refs.py) after each build to detect infrastructure details that leaked into generated HTML. The script scans only — it does not modify files. Review its output and apply edits using the strategy table above.
 
 ```bash
-dde site build
+oase site build
 python3 postbuild.py _site/
 python3 references/fix_infra_refs.py _site/
 ```
@@ -233,14 +233,14 @@ After post-build processing, verify:
 
 ## Exporting a Relocatable Archive
 
-`dde site export` packages the built site into a standalone `.zip` archive suitable for upload to any static file host.
+`oase site export` packages the built site into a standalone `.zip` archive suitable for upload to any static file host.
 
 ```bash
-dde site export
-dde site export -o custom-name.zip
+oase site export
+oase site export -o custom-name.zip
 ```
 
-- Prerequisite: run `dde site build` first. The command validates that `index.html` exists in the site directory.
+- Prerequisite: run `oase site build` first. The command validates that `index.html` exists in the site directory.
 - Default output: `<project-slug>-site.zip` in the project root.
 - The archive contains the full `_site/` tree with `index.html` at the archive root. Hidden files and directories are excluded.
 - Uses `--site-dir` to override the default `_site` source directory.
@@ -251,9 +251,9 @@ dde site export -o custom-name.zip
 Exported archives reference external CDN resources by default (Google Fonts, 3Dmol.js, Plotly.js, highlight.js). When opened offline or on restricted networks, viewers may not function correctly. Run [`references/fix_localize_cdn.py`](references/fix_localize_cdn.py) as a post-build step to download these resources into a local `vendor/` directory and rewrite HTML references to use local paths:
 
 ```bash
-dde site build
+oase site build
 python3 fix_localize_cdn.py _site/
-dde site export
+oase site export
 ```
 
 The script is idempotent and creates a `vendor/manifest.json` listing all localized resources. See the table below for the known CDN dependencies:
@@ -304,10 +304,10 @@ Share the returned URL with stakeholders. Use `sciontool expose --list` to see a
 
 ### 3. Iterative rebuild-and-serve
 
-For iterative workflows (rebuild → post-process → verify → revise), keep the server running and rebuild in place. Each `dde site build` followed by `python3 postbuild.py _site/` regenerates `_site/` and the served content updates immediately — no server restart required. The agent can stay retained for revisions in this mode.
+For iterative workflows (rebuild → post-process → verify → revise), keep the server running and rebuild in place. Each `oase site build` followed by `python3 postbuild.py _site/` regenerates `_site/` and the served content updates immediately — no server restart required. The agent can stay retained for revisions in this mode.
 
 ## What This Skill Does NOT Cover
 
-- **GCS publishing.** The `dde site export` command produces archives suitable for static hosting, but GCS-specific publishing workflow is handled by the `web-builder` template's `gcs-static-site` skill. This skill covers generation, export, and local serving/exposure in Scion environments, not production hosting.
+- **GCS publishing.** The `oase site export` command produces archives suitable for static hosting, but GCS-specific publishing workflow is handled by the `web-builder` template's `gcs-static-site` skill. This skill covers generation, export, and local serving/exposure in Scion environments, not production hosting.
 - **Viewer development.** Viewers are checked into the repo and are not modified at build time.
 - **Content authorship.** The agent prepares markdown content before building; the CLI renders it deterministically.

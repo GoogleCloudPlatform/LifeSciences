@@ -45,7 +45,7 @@ def _make_project(base: Path) -> Path:
     """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
-    (project / ".dde").mkdir(exist_ok=True)
+    (project / ".oase").mkdir(exist_ok=True)
     (project / "raw" / "literature").mkdir(parents=True, exist_ok=True)
     return project
 
@@ -98,7 +98,7 @@ def _efetch_xml_with_articles() -> bytes:
 def test_zero_results_per_term_counts() -> None:
     """When search returns 0 results, per-term counts are reported."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     # Main search returns 0 results; per-term counts show individual terms have hits
     term_counts = {
@@ -120,7 +120,9 @@ def test_zero_results_per_term_counts() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubmed.http.get_json", side_effect=mock_get_json):
+        with mock.patch(
+            "oase.commands.pubmed.http.get_json", side_effect=mock_get_json
+        ):
             result = runner.invoke(
                 cli,
                 [
@@ -163,7 +165,7 @@ def test_zero_results_per_term_counts() -> None:
 def test_zero_results_genuinely_empty() -> None:
     """When all individual terms also have 0 results, reason is 'no_results'."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     def mock_get_json(url: str, **kwargs: Any) -> Any:
         if "rettype=count" not in url:
@@ -174,7 +176,9 @@ def test_zero_results_genuinely_empty() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubmed.http.get_json", side_effect=mock_get_json):
+        with mock.patch(
+            "oase.commands.pubmed.http.get_json", side_effect=mock_get_json
+        ):
             result = runner.invoke(
                 cli,
                 [
@@ -207,7 +211,7 @@ def test_zero_results_genuinely_empty() -> None:
 def test_results_found_no_per_term_counts() -> None:
     """When search returns results, no per-term diagnostics are added."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     def mock_get_json(url: str, **kwargs: Any) -> Any:
         return _esearch_json(count=1, id_list=["12345"])
@@ -217,9 +221,9 @@ def test_results_found_no_per_term_counts() -> None:
         runner = CliRunner()
 
         with (
-            mock.patch("dde.commands.pubmed.http.get_json", side_effect=mock_get_json),
+            mock.patch("oase.commands.pubmed.http.get_json", side_effect=mock_get_json),
             mock.patch(
-                "dde.commands.pubmed.http.get_bytes",
+                "oase.commands.pubmed.http.get_bytes",
                 return_value=_efetch_xml_with_articles(),
             ),
         ):
@@ -256,7 +260,7 @@ def test_results_found_no_per_term_counts() -> None:
 def test_per_term_count_api_error() -> None:
     """API errors during per-term count produce count=-1, not a crash."""
     from click.testing import CliRunner
-    from dde.cli import cli
+    from oase.cli import cli
 
     call_count = 0
 
@@ -273,7 +277,9 @@ def test_per_term_count_api_error() -> None:
         project = _make_project(Path(td))
         runner = CliRunner()
 
-        with mock.patch("dde.commands.pubmed.http.get_json", side_effect=mock_get_json):
+        with mock.patch(
+            "oase.commands.pubmed.http.get_json", side_effect=mock_get_json
+        ):
             result = runner.invoke(
                 cli,
                 [

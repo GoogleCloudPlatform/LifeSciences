@@ -20,9 +20,9 @@ venv/
 # Build-time artifact observed from `pip install -e .` in this checkout
 # (setuptools writes a same-named console-script wrapper into the source
 # tree as a side effect during the editable build; harmless, but it must
-# never be re-tracked now that #215 replaced the real tools/dde-cli
+# never be re-tracked now that #215 replaced the real tools/oase-cli
 # shim with a pip-managed entry point).
-tools/dde-cli
+tools/oase-cli
 
 # Downloaded tool binaries
 tools/bin/

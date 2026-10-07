@@ -1,6 +1,6 @@
-# dde CLI — Tool Index
+# oase CLI — Tool Index
 
-Every `dde` subcommand falls into one of two categories:
+Every `oase` subcommand falls into one of two categories:
 
 1. **Vendor process / control-plane tools** — orchestration machinery around
    work orders, validation, runs, and environment management.  These are tools
@@ -26,7 +26,7 @@ lifecycle?"
 | `doctor` | Assert tools, credentials and environment version. Exits non-zero if broken. |
 | `site` | Deterministic site build from accepted work-order deliverables. |
 | `relays` | List mandatory-relay codes and their emission sites. |
-| `init` | Create a program directory with a .dde/ marker and raw/ tree. |
+| `init` | Create a program directory with a .oase/ marker and raw/ tree. |
 
 `wo` is an alias for `workorder`, not a separate tool.
 

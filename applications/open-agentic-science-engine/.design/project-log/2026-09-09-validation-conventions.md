@@ -115,9 +115,9 @@ new hash and compare consistently.
 
 ## Files Changed
 
-- `tools/dde/commands/validate.py` — all 9 checks, severity model, overall verdict
-- `tools/dde/core/controlstore.py` — `normalize_deliverables` rewrite for classes split
-- `tools/dde/commands/workorder.py` — `pass_with_warnings` handling in accept
+- `tools/oase/commands/validate.py` — all 9 checks, severity model, overall verdict
+- `tools/oase/core/controlstore.py` — `normalize_deliverables` rewrite for classes split
+- `tools/oase/commands/workorder.py` — `pass_with_warnings` handling in accept
 - `tools/pyproject.toml` — `jsonpath-ng>=1.6` dependency
 - `tools/requirements.txt` — `jsonpath-ng>=1.6` dependency
 - `skills/artifact-conventions/SKILL.md` — convention documentation

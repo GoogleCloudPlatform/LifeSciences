@@ -17,13 +17,13 @@ description: >
 
 | Strategy | Command | Layer 0 schema | Availability |
 |---|---|---|---|
-| **Sponsor** | `dde hypothesis adopt --origin sponsor` | `dde.hypothesis-set.v1` | Always available |
-| **Charter** | `dde hypothesis adopt --origin charter` | `dde.hypothesis-set.v1` | Always available |
-| **Co-Scientist** | `dde coscientist ingest` | `dde.coscientist.v1` | Requires a Co-Scientist export file |
-| **Hypex** | `hypex-supervisor` work order, then `dde hypex ingest` | `dde.hypex.v1` | Requires OASE-provisioned Hypex tools, templates, and supervisor lease |
+| **Sponsor** | `oase hypothesis adopt --origin sponsor` | `oase.hypothesis-set.v1` | Always available |
+| **Charter** | `oase hypothesis adopt --origin charter` | `oase.hypothesis-set.v1` | Always available |
+| **Co-Scientist** | `oase coscientist ingest` | `oase.coscientist.v1` | Requires a Co-Scientist export file |
+| **Hypex** | `hypex-supervisor` work order, then `oase hypex ingest` | `oase.hypex.v1` | Requires OASE-provisioned Hypex tools, templates, and supervisor lease |
 
 Each strategy writes its own vendor-native Layer 0 artifact. The shared
-contract is `dde.hypothesis-assessment.v1`, emitted by each strategy's
+contract is `oase.hypothesis-assessment.v1`, emitted by each strategy's
 `analyze` command. **There is no single score comparable across
 strategies.** `score` is an object carrying `{value, basis}` or `null`;
 cross-strategy comparison is a judgement the program lead makes in prose.
@@ -32,11 +32,11 @@ cross-strategy comparison is a judgement the program lead makes in prose.
 
 | If the starting material is... | Use | Why |
 |---|---|---|
-| A sponsor-supplied list of hypotheses | `dde hypothesis adopt --origin sponsor` | Honest provenance; attestation recorded |
-| Hypotheses authored in the program charter | `dde hypothesis adopt --origin charter` | Same mechanism, charter-specific infix |
-| A Co-Scientist tournament export | `dde coscientist ingest` | Existing validated pipeline with ELO ranking |
+| A sponsor-supplied list of hypotheses | `oase hypothesis adopt --origin sponsor` | Honest provenance; attestation recorded |
+| Hypotheses authored in the program charter | `oase hypothesis adopt --origin charter` | Same mechanism, charter-specific infix |
+| A Co-Scientist tournament export | `oase coscientist ingest` | Existing validated pipeline with ELO ranking |
 | A need for adversarial hypothesis exploration | `hypex-supervisor` work order | Multi-epoch tournament with review panel, proximity, and evolution |
-| A published hypothesis set (paper, prior program) | `dde hypothesis adopt --origin publication` or `--origin prior-program` | Requires `--cite` for the source reference |
+| A published hypothesis set (paper, prior program) | `oase hypothesis adopt --origin publication` or `--origin prior-program` | Requires `--cite` for the source reference |
 
 ## 3. Tool invocations
 
@@ -44,20 +44,20 @@ cross-strategy comparison is a judgement the program lead makes in prose.
 
 ```bash
 # Phase 1: adopt the hypothesis set
-dde hypothesis adopt hypotheses.json \
+oase hypothesis adopt hypotheses.json \
   --origin sponsor \
   --attest "Provided by Dr. Smith on 2026-09-01 as starting material for the CDK4 program" \
   [--cite DOI:10.1234/example]
 
 # Phase 2: assess the adopted set
-dde hypothesis analyze raw/hypotheses/<slug>.adopted.json
+oase hypothesis analyze raw/hypotheses/<slug>.adopted.json
 ```
 
 ### Co-Scientist (unchanged)
 
 ```bash
-dde coscientist ingest export.json [--top N]
-dde coscientist analyze raw/hypotheses/cs-<session>.tournament.json
+oase coscientist ingest export.json [--top N]
+oase coscientist analyze raw/hypotheses/cs-<session>.tournament.json
 ```
 
 ## 4. Mandatory relays
@@ -69,7 +69,7 @@ dde coscientist analyze raw/hypotheses/cs-<session>.tournament.json
 
 ## 5. The no-silent-substitution rule
 
-**If the sponsor named a strategy and `dde doctor` reports it unavailable,
+**If the sponsor named a strategy and `oase doctor` reports it unavailable,
 the lead reports blocked. It does NOT silently substitute another.**
 
 A substituted strategy produces a differently-shaped artifact with a
@@ -80,7 +80,7 @@ not match what the sponsor expected.
 Check availability:
 
 ```bash
-dde doctor --json | jq '.checks[] | select(.name | startswith("hypothesis strategy"))'
+oase doctor --json | jq '.checks[] | select(.name | startswith("hypothesis strategy"))'
 ```
 
 ## 6. Threshold sets
@@ -93,12 +93,12 @@ dde doctor --json | jq '.checks[] | select(.name | startswith("hypothesis strate
 
 ## 7. Assessment output
 
-Every strategy's `analyze` emits the shared `dde.hypothesis-assessment.v1`
+Every strategy's `analyze` emits the shared `oase.hypothesis-assessment.v1`
 core:
 
 ```json
 {
-  "schema": "dde.hypothesis-assessment.v1",
+  "schema": "oase.hypothesis-assessment.v1",
   "strategy": "adopted | coscientist | hypex",
   "source_artifact": "raw/hypotheses/...",
   "source_sha256": "...",

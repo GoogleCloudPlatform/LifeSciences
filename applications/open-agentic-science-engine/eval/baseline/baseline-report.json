@@ -111,7 +111,7 @@
         },
         {
           "path": "raw/hypotheses/eval-001-hypotheses.adopted.json",
-          "schema": "dde.hypothesis-set.v1"
+          "schema": "oase.hypothesis-set.v1"
         }
       ],
       "repeated_operations": 0,
@@ -162,7 +162,7 @@
       "artifacts_produced": [
         {
           "path": "raw/pocket/synthetic-kinase-Y.fpocket.json",
-          "schema": "dde.pocket-druggability.v1"
+          "schema": "oase.pocket-druggability.v1"
         },
         {
           "path": "raw/pocket/synthetic-kinase-Y.fpocket.meta.json",
@@ -214,7 +214,7 @@
       "artifacts_produced": [
         {
           "path": "raw/structures/synthetic-enzyme-Z.alphafold.json",
-          "schema": "dde.structure-confidence.v1"
+          "schema": "oase.structure-confidence.v1"
         },
         {
           "path": "raw/structures/synthetic-enzyme-Z.alphafold.meta.json",
@@ -407,7 +407,7 @@
         },
         {
           "path": "raw/hypotheses/eval-007-hypotheses.analysis.json",
-          "schema": "dde.hypothesis-assessment.v1"
+          "schema": "oase.hypothesis-assessment.v1"
         }
       ],
       "repeated_operations": 0,

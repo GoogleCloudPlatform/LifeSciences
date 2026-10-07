@@ -31,7 +31,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from dde.core import provenance
+from oase.core import provenance
 
 # ---------------------------------------------------------------------------
 # record_type_from_schema
@@ -42,32 +42,34 @@ class TestRecordTypeFromSchema:
     """Test that schema tags produce the correct record type."""
 
     def test_tox_margins(self):
-        assert provenance.record_type_from_schema("dde.tox-margins.v1") == "tox-margins"
+        assert (
+            provenance.record_type_from_schema("oase.tox-margins.v1") == "tox-margins"
+        )
 
     def test_tox_genotox_assessment(self):
         assert (
-            provenance.record_type_from_schema("dde.tox-genotox-assessment.v1")
+            provenance.record_type_from_schema("oase.tox-genotox-assessment.v1")
             == "tox-genotox-assessment"
         )
 
     def test_tox_safety_pharm(self):
         assert (
-            provenance.record_type_from_schema("dde.tox-safety-pharm.v1")
+            provenance.record_type_from_schema("oase.tox-safety-pharm.v1")
             == "tox-safety-pharm"
         )
 
     def test_pk_nca(self):
-        assert provenance.record_type_from_schema("dde.pk-nca.v1") == "pk-nca"
+        assert provenance.record_type_from_schema("oase.pk-nca.v1") == "pk-nca"
 
     def test_pk_scaling(self):
-        assert provenance.record_type_from_schema("dde.pk-scaling.v1") == "pk-scaling"
+        assert provenance.record_type_from_schema("oase.pk-scaling.v1") == "pk-scaling"
 
     def test_pk_ddi(self):
-        assert provenance.record_type_from_schema("dde.pk-ddi.v1") == "pk-ddi"
+        assert provenance.record_type_from_schema("oase.pk-ddi.v1") == "pk-ddi"
 
     def test_selectivity_panel(self):
         assert (
-            provenance.record_type_from_schema("dde.selectivity-panel.v1")
+            provenance.record_type_from_schema("oase.selectivity-panel.v1")
             == "selectivity-panel"
         )
 
@@ -77,7 +79,7 @@ class TestRecordTypeFromSchema:
 
     def test_fallback_no_version(self):
         assert (
-            provenance.record_type_from_schema("dde.tox-margins") == "dde.tox-margins"
+            provenance.record_type_from_schema("oase.tox-margins") == "oase.tox-margins"
         )
 
 
@@ -111,9 +113,9 @@ class TestNoCollision:
     def test_tox_margins_vs_genotox(self):
         """tox-margins and tox-genotox-assessment for the same entity."""
         stem = "mc-klk5-lead-02"
-        margins_type = provenance.record_type_from_schema("dde.tox-margins.v1")
+        margins_type = provenance.record_type_from_schema("oase.tox-margins.v1")
         genotox_type = provenance.record_type_from_schema(
-            "dde.tox-genotox-assessment.v1"
+            "oase.tox-genotox-assessment.v1"
         )
         margins_name = f"{stem}.{margins_type}.analysis.json"
         genotox_name = f"{stem}.{genotox_type}.analysis.json"
@@ -125,9 +127,9 @@ class TestNoCollision:
         """All three tox schemas produce distinct filenames."""
         stem = "compound-x"
         schemas = [
-            "dde.tox-margins.v1",
-            "dde.tox-genotox-assessment.v1",
-            "dde.tox-safety-pharm.v1",
+            "oase.tox-margins.v1",
+            "oase.tox-genotox-assessment.v1",
+            "oase.tox-safety-pharm.v1",
         ]
         names = {
             f"{stem}.{provenance.record_type_from_schema(s)}.analysis.json"
@@ -138,7 +140,7 @@ class TestNoCollision:
     def test_pk_three_way(self):
         """All three pk schemas produce distinct filenames."""
         stem = "study-123"
-        schemas = ["dde.pk-nca.v1", "dde.pk-scaling.v1", "dde.pk-ddi.v1"]
+        schemas = ["oase.pk-nca.v1", "oase.pk-scaling.v1", "oase.pk-ddi.v1"]
         names = {
             f"{stem}.{provenance.record_type_from_schema(s)}.analysis.json"
             for s in schemas
@@ -176,7 +178,7 @@ class TestCrossWOOverwrite:
         provenance.allow_overwrite_cross_wo(False)
 
         try:
-            with mock.patch.dict(os.environ, {"DDE_WORK_ORDER_ID": "WO-002"}):
+            with mock.patch.dict(os.environ, {"OASE_WORK_ORDER_ID": "WO-002"}):
                 with pytest.raises(provenance.Refusal) as exc_info:
                     provenance.write_analysis(
                         analysis_path,
@@ -202,7 +204,7 @@ class TestCrossWOOverwrite:
         provenance.allow_overwrite_cross_wo(True)
 
         try:
-            with mock.patch.dict(os.environ, {"DDE_WORK_ORDER_ID": "WO-002"}):
+            with mock.patch.dict(os.environ, {"OASE_WORK_ORDER_ID": "WO-002"}):
                 result = provenance.write_analysis(
                     analysis_path,
                     source="test-source",
@@ -228,7 +230,7 @@ class TestCrossWOOverwrite:
         provenance.allow_overwrite_cross_wo(True)
 
         try:
-            with mock.patch.dict(os.environ, {"DDE_WORK_ORDER_ID": "WO-002"}):
+            with mock.patch.dict(os.environ, {"OASE_WORK_ORDER_ID": "WO-002"}):
                 provenance.write_analysis(
                     analysis_path,
                     source="test-source",
@@ -260,7 +262,7 @@ class TestCrossWOOverwrite:
         provenance.allow_overwrite_cross_wo(False)
 
         try:
-            with mock.patch.dict(os.environ, {"DDE_WORK_ORDER_ID": "WO-001"}):
+            with mock.patch.dict(os.environ, {"OASE_WORK_ORDER_ID": "WO-001"}):
                 # Should not raise — same WO
                 result = provenance.write_analysis(
                     analysis_path,
@@ -284,9 +286,9 @@ class TestCrossWOOverwrite:
         provenance.allow_overwrite_cross_wo(False)
 
         try:
-            # No DDE_WORK_ORDER_ID set → current_wo is None → no cross-WO issue
+            # No OASE_WORK_ORDER_ID set → current_wo is None → no cross-WO issue
             with mock.patch.dict(os.environ, {}, clear=True):
-                os.environ.pop("DDE_WORK_ORDER_ID", None)
+                os.environ.pop("OASE_WORK_ORDER_ID", None)
                 result = provenance.write_analysis(
                     analysis_path,
                     source="test-source",

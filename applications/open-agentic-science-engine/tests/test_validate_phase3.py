@@ -32,14 +32,14 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.validate import (
+from oase.commands.validate import (
     _check_deliverables_exist,
     _check_paths_resolve,
     _check_relay_coverage,
     _check_report_headings,
     _collect_relay_codes,
 )
-from dde.core.controlstore import normalize_deliverables
+from oase.core.controlstore import normalize_deliverables
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -155,26 +155,26 @@ def test_report_headings_missing_ref_and_variant() -> None:
 def test_required_classes_backward_compat() -> None:
     """layer_0_classes maps to required_classes in normalize_deliverables."""
     deliverables = {
-        "layer_0_classes": ["dde.alphafold", "dde.fpocket"],
+        "layer_0_classes": ["oase.alphafold", "oase.fpocket"],
         "layer_1": ["findings/report.md"],
     }
     normalized = normalize_deliverables(deliverables)
     # required_classes should be populated
     assert "required_classes" in normalized
-    assert normalized["required_classes"] == ["dde.alphafold", "dde.fpocket"]
+    assert normalized["required_classes"] == ["oase.alphafold", "oase.fpocket"]
     # layer_0_classes backward compat
-    assert normalized["layer_0_classes"] == ["dde.alphafold", "dde.fpocket"]
+    assert normalized["layer_0_classes"] == ["oase.alphafold", "oase.fpocket"]
     print("  PASS: normalize_deliverables — layer_0_classes → required_classes")
 
 
 def test_required_classes_from_layer_0() -> None:
     """layer_0 (shortest alias) maps to required_classes."""
     deliverables = {
-        "layer_0": ["dde.alphafold"],
+        "layer_0": ["oase.alphafold"],
     }
     normalized = normalize_deliverables(deliverables)
-    assert normalized["required_classes"] == ["dde.alphafold"]
-    assert normalized["layer_0_classes"] == ["dde.alphafold"]
+    assert normalized["required_classes"] == ["oase.alphafold"]
+    assert normalized["layer_0_classes"] == ["oase.alphafold"]
     assert "layer_0" not in normalized
     print("  PASS: normalize_deliverables — layer_0 → required_classes")
 
@@ -182,12 +182,12 @@ def test_required_classes_from_layer_0() -> None:
 def test_required_classes_takes_priority() -> None:
     """required_classes takes priority over layer_0_classes."""
     deliverables = {
-        "required_classes": ["dde.fpocket"],
-        "layer_0_classes": ["dde.alphafold"],  # should be dropped
+        "required_classes": ["oase.fpocket"],
+        "layer_0_classes": ["oase.alphafold"],  # should be dropped
     }
     normalized = normalize_deliverables(deliverables)
-    assert normalized["required_classes"] == ["dde.fpocket"]
-    assert normalized["layer_0_classes"] == ["dde.fpocket"]
+    assert normalized["required_classes"] == ["oase.fpocket"]
+    assert normalized["layer_0_classes"] == ["oase.fpocket"]
     print("  PASS: normalize_deliverables — required_classes priority")
 
 
@@ -195,7 +195,7 @@ def test_authorized_classes_missing_ok() -> None:
     """Missing authorized class does not cause a failure in _check_deliverables_exist."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        # Create structures dir with an artifact (dde.structures is recognized)
+        # Create structures dir with an artifact (oase.structures is recognized)
         art_dir = root / "raw" / "structures"
         art_dir.mkdir(parents=True)
         _write(art_dir / "model.pdb", "ATOM mock")
@@ -212,11 +212,11 @@ def test_authorized_classes_missing_ok() -> None:
                 }
             ),
         )
-        # dde.genomics dir does NOT exist (authorized but missing → ok)
+        # oase.genomics dir does NOT exist (authorized but missing → ok)
         deliverables = normalize_deliverables(
             {
-                "required_classes": ["dde.structures"],
-                "authorized_classes": ["dde.genomics"],
+                "required_classes": ["oase.structures"],
+                "authorized_classes": ["oase.genomics"],
                 "layer_1": [],
             }
         )
@@ -250,9 +250,9 @@ def test_not_applicable_skip() -> None:
         deliverables = normalize_deliverables(
             {
                 "required_classes": [
-                    "dde.structures",
+                    "oase.structures",
                     {
-                        "class": "dde.genomics",
+                        "class": "oase.genomics",
                         "not_applicable": "no target-CID pathway",
                     },
                 ],
@@ -264,7 +264,7 @@ def test_not_applicable_skip() -> None:
         # Verify skipped entry is reported
         na_detail = result["detail"].get("not_applicable", [])
         assert len(na_detail) == 1
-        assert na_detail[0]["class"] == "dde.genomics"
+        assert na_detail[0]["class"] == "oase.genomics"
         assert "no target-CID pathway" in na_detail[0]["reason"]
         print("  PASS: not_applicable → skip with reason")
 
@@ -273,17 +273,17 @@ def test_not_applicable_preserved_in_normalization() -> None:
     """not_applicable dicts are preserved in required_classes, not flattened."""
     deliverables = {
         "required_classes": [
-            "dde.alphafold",
-            {"class": "dde.pubchem-annotation", "not_applicable": "reason"},
+            "oase.alphafold",
+            {"class": "oase.pubchem-annotation", "not_applicable": "reason"},
         ],
     }
     normalized = normalize_deliverables(deliverables)
     req = normalized["required_classes"]
-    assert req[0] == "dde.alphafold"
+    assert req[0] == "oase.alphafold"
     assert isinstance(req[1], dict)
     assert req[1]["not_applicable"] == "reason"
     # layer_0_classes should have both as strings
-    assert "dde.pubchem-annotation" in normalized["layer_0_classes"]
+    assert "oase.pubchem-annotation" in normalized["layer_0_classes"]
     print("  PASS: not_applicable preserved in required_classes")
 
 
@@ -323,7 +323,7 @@ def test_relay_label_format_ok() -> None:
         )
         root = _setup_relay_project(tmp, content, code)
         deliverables = {
-            "layer_0_classes": ["dde.compounds"],
+            "layer_0_classes": ["oase.compounds"],
             "layer_1": ["findings/report.md"],
         }
         result = _check_relay_coverage(root, deliverables)
@@ -340,7 +340,7 @@ def test_relay_found_no_label() -> None:
         content = f"# Report\n\nWe addressed the relay {code} in this section.\n"
         root = _setup_relay_project(tmp, content, code)
         deliverables = {
-            "layer_0_classes": ["dde.compounds"],
+            "layer_0_classes": ["oase.compounds"],
             "layer_1": ["findings/report.md"],
         }
         result = _check_relay_coverage(root, deliverables)
@@ -362,7 +362,7 @@ def test_relay_not_found() -> None:
         content = "# Report\n\nNo mention of the relay code.\n"
         root = _setup_relay_project(tmp, content, code)
         deliverables = {
-            "layer_0_classes": ["dde.compounds"],
+            "layer_0_classes": ["oase.compounds"],
             "layer_1": ["findings/report.md"],
         }
         result = _check_relay_coverage(root, deliverables)
@@ -390,7 +390,7 @@ def test_collect_relay_codes_helper() -> None:
             ],
         }
         _write(art_dir / "mol.meta.json", json.dumps(meta))
-        deliverables = {"layer_0_classes": ["dde.compounds"]}
+        deliverables = {"layer_0_classes": ["oase.compounds"]}
         codes = _collect_relay_codes(root, deliverables)
         assert codes == {"relay.one", "relay.two"}
         print("  PASS: _collect_relay_codes extracts codes")

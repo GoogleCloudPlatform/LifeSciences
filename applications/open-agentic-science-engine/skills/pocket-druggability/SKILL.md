@@ -50,7 +50,7 @@ in a protein structure. Entry points include:
   `run`. Do not pass the raw structure to `analyze`.
 - **fpocket on PATH**: `run` requires the fpocket binary. If missing,
   the tool fails with a `DependencyError` and a remedy pointing to
-  `tools/install.sh`. Run `dde doctor` before first use. It ends
+  `tools/install.sh`. Run `oase doctor` before first use. It ends
   with a verdict line: `STOP` means fix or report before running
   anything; `PROCEED` means work, and the grouped warnings tell you
   which commands would refuse, which results need careful reading, and
@@ -63,9 +63,9 @@ in a protein structure. Entry points include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| What pockets does this structure have? | `dde pocket run <STRUCTURE>` | `raw/structures/<stem>.pockets.json`<br>`raw/structures/<stem>.pockets.meta.json`<br>`raw/structures/<stem>_fpocket/` (full fpocket tree) |
-| Is this structure druggable? | `dde pocket analyze <POCKETS_RECORD>` | `raw/structures/<stem>.pocket.analysis.json` |
-| Is there a pocket at this interface? | `dde pocket analyze <POCKETS_RECORD> --near A:145,A:146,B:12` | `raw/structures/<stem>.pocket.analysis.json` |
+| What pockets does this structure have? | `oase pocket run <STRUCTURE>` | `raw/structures/<stem>.pockets.json`<br>`raw/structures/<stem>.pockets.meta.json`<br>`raw/structures/<stem>_fpocket/` (full fpocket tree) |
+| Is this structure druggable? | `oase pocket analyze <POCKETS_RECORD>` | `raw/structures/<stem>.pocket.analysis.json` |
+| Is there a pocket at this interface? | `oase pocket analyze <POCKETS_RECORD> --near A:145,A:146,B:12` | `raw/structures/<stem>.pocket.analysis.json` |
 
 Run `run` before `analyze`. `analyze` reads from disk and applies the
 `pocket` threshold set. It can be re-run with different thresholds

@@ -1,5 +1,5 @@
 # Host requirements for the OASE tools environment.
-# Read by `dde env plan` and `bootstrap-preflight.sh`.
+# Read by `oase env plan` and `bootstrap-preflight.sh`.
 # One requirement per line: category, name, and why.
 #
 # Categories: toolchain, library, binary, python, network

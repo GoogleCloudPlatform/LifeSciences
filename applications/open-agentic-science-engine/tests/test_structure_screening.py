@@ -62,7 +62,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from dde.commands.structure_screening import (
+from oase.commands.structure_screening import (
     PocketResult,
     ScreenBudget,
     StructureCandidate,
@@ -72,7 +72,7 @@ from dde.commands.structure_screening import (
     classify_structure_source,
     screen_structures,
 )
-from dde.core.evidence import validate_assessment
+from oase.core.evidence import validate_assessment
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1345,7 +1345,7 @@ _check(
 # ---------------------------------------------------------------------------
 print("\n--- Pocket analysis output parsing ---")
 
-from dde.commands.structure_screening import _parse_pocket_analysis
+from oase.commands.structure_screening import _parse_pocket_analysis
 
 
 def test_parse_pocket_analysis_druggable():
@@ -1547,10 +1547,10 @@ def test_parsed_analysis_to_assessment_record():
     This tests the real data path: pocket analysis JSON → PocketResult →
     assessment record. No hand-crafted PocketResult fixtures — the
     PocketResult is built by _parse_pocket_analysis from a realistic
-    analysis file matching what ``dde pocket analyze`` actually writes."""
+    analysis file matching what ``oase pocket analyze`` actually writes."""
     import tempfile
 
-    # Realistic analysis output matching dde pocket analyze's format
+    # Realistic analysis output matching oase pocket analyze's format
     analysis_data = {
         "source": "raw/structures/CDK2-2W1D.pockets.json",
         "threshold_set": "pocket@1.0",
@@ -1654,7 +1654,7 @@ print("\n--- Integration: real pocket_runner via CliRunner ---")
 def test_make_pocket_runner_requires_click():
     """make_pocket_runner requires click to be installed.
     Tests the import path and validates the function signature."""
-    from dde.commands.structure_screening import make_pocket_runner
+    from oase.commands.structure_screening import make_pocket_runner
 
     # The function itself is importable regardless of click.
     # Calling it requires click.testing.CliRunner.
@@ -1692,7 +1692,7 @@ def test_cli_command_registration():
     for library use but the CLI command is not defined."""
     try:
         import click
-        from dde.commands.structure_screening import structure_screen
+        from oase.commands.structure_screening import structure_screen
 
         assert isinstance(structure_screen, click.Group), (
             f"structure_screen should be a click.Group, got {type(structure_screen)}"
@@ -1704,7 +1704,7 @@ def test_cli_command_registration():
     except ImportError:
         # Without click, structure_screen is not defined — verify the
         # import of library functions still works
-        from dde.commands.structure_screening import screen_structures
+        from oase.commands.structure_screening import screen_structures
 
         assert callable(screen_structures)
         print("    (click not installed — library import verified)")

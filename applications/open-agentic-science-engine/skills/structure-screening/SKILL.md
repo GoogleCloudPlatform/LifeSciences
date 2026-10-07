@@ -63,20 +63,20 @@ duplicate it. The relationship is:
 
 | Question | Run | Writes to |
 |---|---|---|
-| Screen structures for druggable pockets | `dde structure-screen run <STRUCTURE>... --concept-ref IC-NNN --modality small_molecule` | Evidence assessment records (stdout / `--json`) |
-| Screen with site-specific query | `dde structure-screen run <STRUCTURE>... --concept-ref IC-NNN --modality small_molecule --near A:145,A:146` | Evidence assessment records with site relevance |
-| Screen with custom budget | `dde structure-screen run <STRUCTURE>... --concept-ref IC-NNN --modality small_molecule --max-structures 3 --max-seconds 120` | Budget-bounded assessment records |
+| Screen structures for druggable pockets | `oase structure-screen run <STRUCTURE>... --concept-ref IC-NNN --modality small_molecule` | Evidence assessment records (stdout / `--json`) |
+| Screen with site-specific query | `oase structure-screen run <STRUCTURE>... --concept-ref IC-NNN --modality small_molecule --near A:145,A:146` | Evidence assessment records with site relevance |
+| Screen with custom budget | `oase structure-screen run <STRUCTURE>... --concept-ref IC-NNN --modality small_molecule --max-structures 3 --max-seconds 120` | Budget-bounded assessment records |
 
-The `structure-screen run` command internally invokes `dde pocket run`
-then `dde pocket analyze` for each candidate structure within the
-screen budget. It produces `dde.evidence-assessment.v1` records with
+The `structure-screen run` command internally invokes `oase pocket run`
+then `oase pocket analyze` for each candidate structure within the
+screen budget. It produces `oase.evidence-assessment.v1` records with
 relay codes and scoping preserved from the underlying pocket analysis.
 
 Options:
 
 - `--concept-ref` (required): concept reference (IC-NNN) the screen is for.
 - `--modality` (required): intervention modality (`small_molecule`, `molecular_glue`, `antibody`, etc.). Non-pocket-relevant modalities produce a `not_yet_applicable` assessment immediately.
-- `--near`: residues defining the intervention site (CHAIN:RESNUM, comma-separated). Passed through to `dde pocket analyze --near`.
+- `--near`: residues defining the intervention site (CHAIN:RESNUM, comma-separated). Passed through to `oase pocket analyze --near`.
 - `--source`: structure source type (`pdb`, `alphafold_db`, `existing_model`). Default: `pdb`.
 - `--experimental/--no-experimental`: whether structures are experimental. Auto-detected from source type if omitted.
 - `--max-structures`: maximum structures to evaluate (default: 5).
@@ -123,8 +123,8 @@ justification.
 
 For each candidate structure within the screen budget:
 
-1. Run `dde pocket run <STRUCTURE>` to detect pockets.
-2. Run `dde pocket analyze <POCKETS_RECORD>` to judge tractability.
+1. Run `oase pocket run <STRUCTURE>` to detect pockets.
+2. Run `oase pocket analyze <POCKETS_RECORD>` to judge tractability.
 3. If site residues are known, use `--near` to assess the specific
    intervention site.
 
@@ -140,7 +140,7 @@ relevance to the intended intervention site.**
 
 ### Step 5: Produce evidence assessment records
 
-For each evaluated structure, produce a `dde.evidence-assessment.v1`
+For each evaluated structure, produce a `oase.evidence-assessment.v1`
 record that:
 
 - Carries the evidence status mapped from the pocket verdict
@@ -200,7 +200,7 @@ relay carrying the calibration numbers.
 
 Following this workflow produces:
 
-- One or more `dde.evidence-assessment.v1` records per target,
+- One or more `oase.evidence-assessment.v1` records per target,
   one per evaluated structure.
 - Each record carries the evidence status, relay codes, provenance,
   confidence, and rationale.

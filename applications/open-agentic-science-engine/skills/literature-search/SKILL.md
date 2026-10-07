@@ -8,7 +8,7 @@ description: >
   retrieving full-text articles, or when searching preprint servers for
   recent work. Do not use to verify that a specific citation exists (use
   citation-verification), to search cancer genomics databases (use
-  dde cbioportal), or to assess whether a paper supports a claim.
+  oase cbioportal), or to assess whether a paper supports a claim.
 ---
 
 ## 1. When to use, and when not
@@ -34,7 +34,7 @@ literature. Entry points include:
 
 - You need to verify that a specific PMID, DOI, or NCT number resolves
   to a real record → `citation-verification`.
-- You need cancer genomics study data → `dde cbioportal search`.
+- You need cancer genomics study data → `oase cbioportal search`.
 - You need to count how many papers support a specific claim — a keyword
   search counts matches, not evidence.
 
@@ -42,20 +42,20 @@ literature. Entry points include:
 
 | Question type | Command | Skill |
 |---|---|---|
-| What has been published on a topic? | `dde pubmed search` | this skill |
-| What does the result set look like? | `dde pubmed analyze` | this skill |
-| Fetch full text of a PMC article | `dde pubmed fulltext` | this skill |
-| Find recent preprints (physics, CS, math) | `dde preprint search --source arxiv` | this skill |
-| Find recent preprints (biology, life sciences) | `dde preprint search --source biorxiv` | this skill |
-| Verify a citation (PMID, DOI, NCT) exists | `dde cite verify` | citation-verification |
-| Resolve a literature identifier | `dde litref resolve` | citation-resolution |
-| Find cancer genomics studies | `dde cbioportal search` | (genomics) |
+| What has been published on a topic? | `oase pubmed search` | this skill |
+| What does the result set look like? | `oase pubmed analyze` | this skill |
+| Fetch full text of a PMC article | `oase pubmed fulltext` | this skill |
+| Find recent preprints (physics, CS, math) | `oase preprint search --source arxiv` | this skill |
+| Find recent preprints (biology, life sciences) | `oase preprint search --source biorxiv` | this skill |
+| Verify a citation (PMID, DOI, NCT) exists | `oase cite verify` | citation-verification |
+| Resolve a literature identifier | `oase litref resolve` | citation-resolution |
+| Find cancer genomics studies | `oase cbioportal search` | (genomics) |
 
 ## 2. Preconditions
 
 - **Query input**: a PubMed search string. Supports PubMed syntax:
   keywords, MeSH terms, Boolean operators (AND, OR, NOT), and field
-  tags ([Title], [Author], etc.). `dde pubmed search --help` for
+  tags ([Title], [Author], etc.). `oase pubmed search --help` for
   details.
 - **No authentication** needed — NCBI E-utilities are public.
 - **Rate limiting**: NCBI allows 3 requests/sec without an API key.
@@ -67,30 +67,30 @@ literature. Entry points include:
   that use different terminology, are indexed under different MeSH
   headings, or are not yet indexed. The `search_not_exhaustive` relay
   carries this caveat.
-- Run `dde doctor` before first use.
+- Run `oase doctor` before first use.
 
 ## 3. Tool invocations
 
 | Question | Run | Writes to |
 |---|---|---|
-| What has been published on this topic? | `dde pubmed search <QUERY> [--max-results N] [--sort relevance\|date]` | `raw/literature/<slug>.esearch.json`<br>`raw/literature/<slug>.efetch.xml`<br>`raw/literature/<slug>.pubmed-search.json`<br>`raw/literature/<slug>.meta.json` |
-| What does the result set look like? | `dde pubmed analyze <QUERY>` | `raw/literature/<slug>.pubmed-search.analysis.json` |
-| Fetch full text of a PMC article | `dde pubmed fulltext <PMCID>` | `raw/literature/<pmcid>.fulltext.json` |
-| Find preprints on a topic (arXiv) | `dde preprint search --source arxiv <QUERY>` | `raw/literature/<slug>.preprint-search.json` |
-| Find bioRxiv preprints on a topic | `dde preprint search --source biorxiv <QUERY>` | `raw/literature/<slug>.preprint-search.json` |
+| What has been published on this topic? | `oase pubmed search <QUERY> [--max-results N] [--sort relevance\|date]` | `raw/literature/<slug>.esearch.json`<br>`raw/literature/<slug>.efetch.xml`<br>`raw/literature/<slug>.pubmed-search.json`<br>`raw/literature/<slug>.meta.json` |
+| What does the result set look like? | `oase pubmed analyze <QUERY>` | `raw/literature/<slug>.pubmed-search.analysis.json` |
+| Fetch full text of a PMC article | `oase pubmed fulltext <PMCID>` | `raw/literature/<pmcid>.fulltext.json` |
+| Find preprints on a topic (arXiv) | `oase preprint search --source arxiv <QUERY>` | `raw/literature/<slug>.preprint-search.json` |
+| Find bioRxiv preprints on a topic | `oase preprint search --source biorxiv <QUERY>` | `raw/literature/<slug>.preprint-search.json` |
 
 Run `search` before `analyze`. `analyze` reads from disk and produces
 summary statistics without network access.
 
 ### When to prefer preprint over pubmed
 
-Use `dde preprint search --source arxiv` when looking for recent,
+Use `oase preprint search --source arxiv` when looking for recent,
 not-yet-peer-reviewed work — preprints appear on arXiv days after
 submission, whereas PubMed indexes peer-reviewed publications which
-may lag months behind. Use `dde preprint search --source biorxiv`
+may lag months behind. Use `oase preprint search --source biorxiv`
 when looking for recent biology and life-sciences preprints — bioRxiv
 covers wet-lab biology, genomics, neuroscience, and related fields
-that arXiv does not. Use `dde pubmed search` when looking for
+that arXiv does not. Use `oase pubmed search` when looking for
 peer-reviewed literature with MeSH indexing, journal provenance, and
 the quality signal that peer review provides.
 
@@ -219,10 +219,10 @@ proceed on an assumed result.
 
 ---
 
-## 6. PubMed via BigQuery (`dde pubmed-bq`)
+## 6. PubMed via BigQuery (`oase pubmed-bq`)
 
-In addition to the NCBI E-utilities path (`dde pubmed`), this skill
-covers `dde pubmed-bq`, which queries the PubMed dataset hosted on
+In addition to the NCBI E-utilities path (`oase pubmed`), this skill
+covers `oase pubmed-bq`, which queries the PubMed dataset hosted on
 Google BigQuery. BigQuery enables SQL-based filtering with larger
 result sets, date range filters, and journal filters.
 
@@ -240,15 +240,15 @@ result sets, date range filters, and journal filters.
   Credentials (`gcloud auth application-default login` or
   `GOOGLE_APPLICATION_CREDENTIALS`).
 - **Dataset**: defaults to `bigquery-public-data.nih_nlm.pubmed`.
-  Override with `--bq-dataset` or `$DDE_PUBMED_BQ_DATASET`.
+  Override with `--bq-dataset` or `$OASE_PUBMED_BQ_DATASET`.
 - **Dependency**: `google-cloud-bigquery>=3.0` must be installed.
 
 ### Tool invocations
 
 | Question | Run | Writes to |
 |---|---|---|
-| Search PubMed via BigQuery | `dde pubmed-bq search <QUERY> [--max-results N] [--year-from Y] [--year-to Y] [--journal J] [--bq-dataset D]` | `raw/literature/<slug>.pubmed-bq.json`<br>`raw/literature/<slug>.pubmed-bq.meta.json` |
-| Summarise BigQuery results | `dde pubmed-bq analyze <QUERY>` | `raw/literature/<slug>.pubmed-bq.analysis.json` |
+| Search PubMed via BigQuery | `oase pubmed-bq search <QUERY> [--max-results N] [--year-from Y] [--year-to Y] [--journal J] [--bq-dataset D]` | `raw/literature/<slug>.pubmed-bq.json`<br>`raw/literature/<slug>.pubmed-bq.meta.json` |
+| Summarise BigQuery results | `oase pubmed-bq analyze <QUERY>` | `raw/literature/<slug>.pubmed-bq.analysis.json` |
 
 Run `search` before `analyze`. `analyze` reads from disk and produces
 summary statistics (year distribution, journal distribution, abstract
@@ -262,7 +262,7 @@ keyword frequency) without network access.
 
 ### Interpretation
 
-The same interpretation contract from `dde pubmed` (section 4) applies:
+The same interpretation contract from `oase pubmed` (section 4) applies:
 results are a keyword-based sample, not a comprehensive survey. The
 `search_not_exhaustive` relay must be satisfied. The retrieval-vs-total
 gap applies here as well — `--max-results` caps the retrieval.
@@ -271,15 +271,15 @@ gap applies here as well — `--max-results` caps the retrieval.
 
 ## 7. Related genomics commands
 
-For cancer genomics data, use `dde cbioportal search` and
-`dde cbioportal analyze`. cBioPortal aggregates genomic data from
+For cancer genomics data, use `oase cbioportal search` and
+`oase cbioportal analyze`. cBioPortal aggregates genomic data from
 large-scale cancer studies (TCGA, AACR GENIE, institutional cohorts).
 Artifacts land under `raw/expression/`.
 
 | Question | Run | Writes to |
 |---|---|---|
-| What cancer genomics studies match a query? | `dde cbioportal search <QUERY> [--cancer-type T] [--study S] [--max-results N]` | `raw/expression/<slug>.cbioportal-search.json`<br>`raw/expression/<slug>.cbioportal.meta.json` |
-| What do the cBioPortal results show? | `dde cbioportal analyze <ARTIFACT>` | `raw/expression/<slug>.cbioportal-search.analysis.json` |
+| What cancer genomics studies match a query? | `oase cbioportal search <QUERY> [--cancer-type T] [--study S] [--max-results N]` | `raw/expression/<slug>.cbioportal-search.json`<br>`raw/expression/<slug>.cbioportal.meta.json` |
+| What do the cBioPortal results show? | `oase cbioportal analyze <ARTIFACT>` | `raw/expression/<slug>.cbioportal-search.analysis.json` |
 
 cBioPortal is a cancer genomics resource, not a literature database.
 Results are study-level metadata (study ID, name, cancer type, sample

@@ -232,10 +232,10 @@ using OASE's citation and literature commands:
 
 ```bash
 # Verify the complete Hypex evidence array
-dde cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
+oase cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
 
 # Resolve any PMID, arXiv identifier, or DOI into an OASE literature artifact
-dde litref resolve <identifier> --json
+oase litref resolve <identifier> --json
 ```
 
 Check that each cited paper actually supports the claim made in the hypothesis's

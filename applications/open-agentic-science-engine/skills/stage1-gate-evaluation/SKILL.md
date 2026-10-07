@@ -29,9 +29,9 @@ Do not use this skill when:
 
 Before starting, confirm:
 
-1. The gate policy record exists in `.dde/control/policies/` and is the
-   version referenced in `.dde/program.yaml` under `gate_policies.stage_1`.
-2. The concept records under evaluation exist in `.dde/control/concepts/`.
+1. The gate policy record exists in `.oase/control/policies/` and is the
+   version referenced in `.oase/program.yaml` under `gate_policies.stage_1`.
+2. The concept records under evaluation exist in `.oase/control/concepts/`.
 3. Assessment records (AR-NNN) exist for the relevant evidence.
 4. Threshold sets referenced by policy requirements are loaded and
    resolvable via `thresholds.py`.
@@ -48,7 +48,7 @@ current revision.
 
 Load the Stage 1 gate policy at the version specified in
 `program.yaml` → `gate_policies.stage_1`. If no version is specified,
-check `.dde/control/policies/` for the latest version with
+check `.oase/control/policies/` for the latest version with
 `stage: 1`.
 
 ### Step 3: Filter applicable requirements
@@ -143,7 +143,7 @@ values (non-empty `unresolved` list in the snapshot):
 
 The skill produces:
 
-1. A policy freeze snapshot (SNAP-NNN.json) in `.dde/control/snapshots/`
+1. A policy freeze snapshot (SNAP-NNN.json) in `.oase/control/snapshots/`
 2. A gate document from the target-nomination-package template
 3. A decision record (DR-NNN) if a decision is made
 

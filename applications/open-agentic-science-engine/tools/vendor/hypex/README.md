@@ -20,10 +20,10 @@ Go module dependencies are fetched at build time via `go mod download`;
 `go.mod` and `go.sum` in each tool directory pin the exact dependency versions
 and checksums. Network access is already required during provisioning.
 
-The OASE patch level is `dde.2`: the small change in
+The OASE patch level is `oase.2`: the small change in
 `hypothesis-explorer/tools/hypex/cmd/root.go` makes the schema default resolve
 from the OASE tools installation while retaining the upstream source-tree
 fallback. The OASE-installed `prox` launcher calls the upstream Click entry
 point directly because `prox.cli` is not an executable Python module.
 Literature tooling is intentionally not vendored: that capability is owned by
-the `dde` CLI and OASE's literature skills.
+the `oase` CLI and OASE's literature skills.

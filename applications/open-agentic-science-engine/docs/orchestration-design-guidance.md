@@ -182,7 +182,7 @@ scientific layer.
 The default layout is:
 
 ```text
-.dde/
+.oase/
 |-- thresholds.yaml
 |-- program.yaml
 `-- control/
@@ -202,7 +202,7 @@ The default layout is:
 - `publish-state.json` records which accepted artifact revision was last rendered
   and deployed.
 
-Control records are machine-readable and written through the `dde` CLI. Agents
+Control records are machine-readable and written through the `oase` CLI. Agents
 must not emulate state transitions with ad hoc markdown edits. The CLI validates
 schemas, legal transitions, identities, timestamps, and referential integrity.
 
@@ -371,7 +371,7 @@ default build path must be deterministic and idempotent:
 - fail the build on broken required links or schema violations
 - record the successfully published revision in `publish-state.json`
 
-This belongs in `dde site build`, `dde site validate`, and the configured
+This belongs in `oase site build`, `oase site validate`, and the configured
 deployment command, supervised by the Research Operations Controller.
 
 A Project Curator agent is optional. Use it only for editorial work that requires
@@ -519,7 +519,7 @@ way round, and it still costs a discarded review.
 The silent load failure is a separate defect, and mitigating it is not fixing
 it. The repair is to make it loud: check that every skill URI a template
 declares actually resolves, in the same mechanical way `tools/check_invocations.py`
-checks that every `dde ...` command in the repo resolves. Until that check
+checks that every `oase ...` command in the repo resolves. Until that check
 exists, treat every duplication justified by "the skill might not load" as a
 stopgap with the repair named next to it, not as a settled placement.
 
@@ -557,7 +557,7 @@ Template: `research-operations-controller`. Placement as built, 2026-08-18.
 
 | Behaviour | Owns | Placement |
 |---|---|---|
-| Program bootstrap | Initialize program configuration, control state, artifact directories, and environment checks | Body §3, over `dde init` and `dde doctor` |
+| Program bootstrap | Initialize program configuration, control state, artifact directories, and environment checks | Body §3, over `oase init` and `oase doctor` |
 | Work-order supervision | Validate, queue, dispatch, monitor, retry, block, and close agent runs | Body §4–§6 |
 | Artifact contract validation | Check deliverables, provenance, checksums, warnings, paths, and layer boundaries | Body §8, over the `artifact-conventions` grant |
 | Resource and long-run management | Manage dependencies, leases, concurrency, external waits, and retry policy | Body §6 |
@@ -567,7 +567,7 @@ Grants: `artifact-conventions`, plus `artifact-durability` and `agent-state-cont
 
 Publication is the one entry that passes the §8.0 test for a skill: it is occasional,
 and a publish is self-evidently in play or not. It is in the body only because there is
-nothing yet to package — `dde site build` does not exist, and the sole current
+nothing yet to package — `oase site build` does not exist, and the sole current
 instruction is that publication is unavailable and must not be faked by hand or
 delegated to a curator. **Move it to a skill when the CLI lands**, not before; a skill
 whose entire content is "this does not work yet" is worse than a line in the body,
@@ -785,7 +785,7 @@ however long it takes someone to wonder. *"Retires when this role's skill list
 holds a docking or affinity skill — check `scion-agent.yaml`"* can be evaluated
 in ten seconds by whoever next reads the page. The same distinction applies to
 the standing caveats an instrument prints: of six upstream advisories in
-`dde doctor`, all six said how to work around the fault and only one said
+`oase doctor`, all six said how to work around the fault and only one said
 what would end it, which is the state in which a live warning and a warning
 nobody has re-checked in a year are indistinguishable.
 
@@ -799,7 +799,7 @@ test that names its owner is an assigned check; an unrunnable test that says
 nothing is a dead one that looks alive.*
 
 Where the tool can tell which reader it has, it should say so rather than make
-the reader work it out: `dde doctor` resolves the credential and prints
+the reader work it out: `oase doctor` resolves the credential and prints
 either *"you can run this here"* or *"not runnable here — this test belongs to
 whoever holds the key"* (`704c4f3`). The general form is the one template-builder
 named in review: a rule states a condition, an instrument states which side of
@@ -837,7 +837,7 @@ The controller classifies failures before acting:
 | Class | Example | Controller action |
 |---|---|---|
 | Transient infrastructure | Rate limit, network reset, preempted container | Retry within recorded policy; preserve each run |
-| Persistent infrastructure | Missing credential, failed `dde doctor`, unavailable binary | Block and report the exact prerequisite |
+| Persistent infrastructure | Missing credential, failed `oase doctor`, unavailable binary | Block and report the exact prerequisite |
 | Contract failure | Missing sidecar, broken link, report in wrong layer | Return for correction; do not send for scientific acceptance |
 | Scientific block | Required input does not exist, assay cannot distinguish hypotheses | Escalate to science lead; do not substitute a different question |
 | Critical scientific alert | Safety breach or invalidating contradiction | Pause affected dependents when policy says so and interrupt the science lead |

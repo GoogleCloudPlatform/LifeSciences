@@ -27,13 +27,13 @@ Activate the tools environment:
 source /scion-volumes/tools/env.sh
 ```
 
-This puts `dde`, `hypex`, `elo`, and `prox` on PATH and sets `DDE_TOOLS_HOME`.
+This puts `oase`, `hypex`, `elo`, and `prox` on PATH and sets `OASE_TOOLS_HOME`.
 Without it, all tool commands will fail with "command not found."
 
 Then run a health check:
 
 ```bash
-dde doctor --json
+oase doctor --json
 ```
 
 Verify that `elo` and `hypex` are available.

@@ -17,9 +17,9 @@
 Scan generated HTML for infrastructure-detail leakage.
 
 Reports findings for the web-builder to act on — does NOT modify any files.
-Run after ``dde site build`` and post-build processing:
+Run after ``oase site build`` and post-build processing:
 
-    dde site build
+    oase site build
     python3 postbuild.py _site/
     python3 references/fix_infra_refs.py _site/
 

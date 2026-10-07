@@ -11,7 +11,7 @@
 >   how tools are grouped into capabilities, and how skills route to tool invocations.
 >   One capability serves several roles, so skills stay specialist-neutral.
 > - [`tool-design-guidance.md`](tool-design-guidance.md) — the tools environment, the
->   `dde` CLI, and the artifact contract (paths, provenance sidecars, thresholds,
+>   `oase` CLI, and the artifact contract (paths, provenance sidecars, thresholds,
 >   output discipline). **Normative for anything artifact-related**; §5 below defers
 >   to it on specifics.
 
@@ -53,7 +53,7 @@ The quality of the work order and its immutable context snapshot determines whet
 
 ### 2.5 Computation in Tools, Judgment in Skills
 
-Anything that can be computed belongs in the `dde` CLI. Anything that constitutes a threshold belongs in its configuration. What remains in a skill is the part a model cannot get from tool output alone: whether to run the tool, and what the result licenses the specialist to claim.
+Anything that can be computed belongs in the `oase` CLI. Anything that constitutes a threshold belongs in its configuration. What remains in a skill is the part a model cannot get from tool output alone: whether to run the tool, and what the result licenses the specialist to claim.
 
 This division exists for a specific reason. Principle 2.1 — lean roles that don't re-teach domain knowledge — combined with an output contract that demands quantitative evidence, produces a fabrication risk whenever a specialist is asked for a number it has no tool to compute. A model asked for a pocket volume with no pocket-detection tool will produce a plausible one. The mitigations are structural, not exhortative:
 
@@ -240,7 +240,7 @@ Three dimensions vary independently, and each has a different home:
 | Tool | The capability skill |
 | Role | The template — the `skills:` grant, the questions owned, the handoffs |
 | Stage | The Science Program Lead's work order (principle 2.4) |
-| Program and modality | `.dde/thresholds.yaml`, and which skills the template grants |
+| Program and modality | `.oase/thresholds.yaml`, and which skills the template grants |
 
 Stage is deliberately not templated. Ten roles across four stages would be forty templates. Principle 2.4 already solves this: the specialist is ephemeral, and the stage-specific question arrives in the work order.
 
@@ -284,14 +284,14 @@ The boundary between Layer 0 and Layer 1 is the boundary between *computed* and 
 
 ### 5.2 Project Filesystem Layout
 
-The program directory is identified to the CLI by `.dde/` walk-up discovery
-(preferred) or by setting `DDE_PROJECT` explicitly. In a standalone program
+The program directory is identified to the CLI by `.oase/` walk-up discovery
+(preferred) or by setting `OASE_PROJECT` explicitly. In a standalone program
 workspace, the program directory is `/workspace`. When `/workspace` is the
-OASE repo itself, point `DDE_PROJECT` at the program subdirectory.
+OASE repo itself, point `OASE_PROJECT` at the program subdirectory.
 
 ```
-project-<name>/                       # program root (resolved via .dde/ walk-up or $DDE_PROJECT)
-├── .dde/                          # Configuration and the operational control plane
+project-<name>/                       # program root (resolved via .oase/ walk-up or $OASE_PROJECT)
+├── .oase/                          # Configuration and the operational control plane
 │   ├── thresholds.yaml               # Program gate criteria; overrides CLI defaults
 │   ├── program.yaml                  # Identity, stage, policy versions, approval boundaries
 │   └── control/                      # Machine-written records; not a sixth artifact layer
@@ -325,7 +325,7 @@ project-<name>/                       # program root (resolved via .dde/ walk-up
     └── program-summary.md
 ```
 
-The contents of `.dde/control/` are specified in
+The contents of `.oase/control/` are specified in
 [`orchestration-design-guidance.md`](orchestration-design-guidance.md) §4. That
 document owns the control-plane layout; this one does not restate it.
 
@@ -397,12 +397,12 @@ Every factual claim in a report links to its supporting artifact:
 
 These links serve double duty: they provide audit trails for scientific rigor, and they give the deterministic presentation builder its drill-down navigation structure.
 
-The five artifact layers do not include work orders, run state, retry history, or publication state. Those records belong to the operational control plane under `.dde/control/`. They are auditable but are not scientific citation sources. See [`orchestration-design-guidance.md`](orchestration-design-guidance.md) §4.
+The five artifact layers do not include work orders, run state, retry history, or publication state. Those records belong to the operational control plane under `.oase/control/`. They are auditable but are not scientific citation sources. See [`orchestration-design-guidance.md`](orchestration-design-guidance.md) §4.
 
 ### 5.5 Project Website and Dashboards
 
 The website and dashboards are deterministic projections of accepted artifacts. The
-`dde` CLI builds them, and the Research Operations Controller supervises the build.
+`oase` CLI builds them, and the Research Operations Controller supervises the build.
 The layer hierarchy becomes the navigation structure: executive summary → program
 state → specialist findings → raw data. Draft, rejected, and mechanically invalid
 findings stay out of the default stakeholder view.
@@ -535,11 +535,11 @@ open-agentic-science-engine/
 │   └── <science capability skills>/   # Grouping test: skill-design-guidance §2
 │                                      #   e.g. protein-structure-confidence,
 │                                      #        target-genetic-evidence
-├── tools/                             # The dde CLI and its environment
+├── tools/                             # The oase CLI and its environment
 │   ├── install.sh                     # Provisions the shared environment
 │   ├── requirements.txt
 │   ├── pyproject.toml                 # PEP 621 packaging; console_scripts entry point
-│   └── dde/
+│   └── oase/
 │       ├── cli.py                     # Click entry point; one group per tool
 │       ├── common.py                  # Shared group and state plumbing
 │       ├── core/                      # context, env, errors, http, output,
@@ -580,7 +580,7 @@ upstream skills.
 
 The CLI is a Python package installed as an editable `console_scripts` entry point
 via `pip install --no-deps -e .` (see `pyproject.toml`). `install.sh` handles this
-automatically, producing a `dde` command in the venv bin that works correctly
+automatically, producing a `oase` command in the venv bin that works correctly
 in subshells and shell loops. One module per tool, and one subcommand per phase.
 Shared concerns — project-root resolution, HTTP and retry,
 provenance, thresholds, and output limits — live in `core/` so that no command can
@@ -607,11 +607,11 @@ description: "Structural biologist for protein structure analysis, druggability 
 agent_instructions: agents.md
 system_prompt: system-prompt.md
 
-# DDE_PROJECT is resolved by .dde/ walk-up discovery by default.
+# OASE_PROJECT is resolved by .oase/ walk-up discovery by default.
 # Set it explicitly only when the agent's workspace is not the program
 # directory — e.g. when /workspace is the OASE repo:
 #   env:
-#     DDE_PROJECT: /workspace/program-hr-mbc
+#     OASE_PROJECT: /workspace/program-hr-mbc
 
 skills:
   - uri: "https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications/open-agentic-science-engine/skills/protein-structure-confidence"
@@ -641,9 +641,9 @@ liabilities, prior structural findings, and the specific question to answer.
 
 ## Available Tools
 
-All computation runs through the `dde` CLI. Your skills tell you which
+All computation runs through the `oase` CLI. Your skills tell you which
 subcommands to use for a given question and where their output lands; run
-`dde doctor` at startup to confirm the environment is intact.
+`oase doctor` at startup to confirm the environment is intact.
 
 Do not compute structural metrics yourself. If a tool you need is unavailable,
 report the task as blocked — do not estimate.
@@ -709,11 +709,11 @@ The existing `pharma_skills` repository contains ~490 files with ~168 agent skil
 
 ### 8.1 Two things to carry forward with care
 
-**The unified CLI is the right execution surface, but not in its legacy shape.** An earlier version of this plan proposed MCP servers (`pharma-data-mcp`, `pharma-compute-mcp`) as the tooling direction. That has been superseded: a single `dde` CLI gives one place for credential resolution, rate limiting, retry, provenance stamping, and artifact naming, without the per-agent server lifecycle MCP requires. MCP remains the right answer for genuinely *stateful, shared* services — most concretely a lease broker for single-flight endpoints like AlphaFold 3, where file locks don't help because specialists run in separate containers. For general HTTP rate limits (NCBI, PubChem, etc.), cross-container pacing is handled via flock on a shared filesystem volume (#59, #68), making a full lease broker unnecessary for this case.
+**The unified CLI is the right execution surface, but not in its legacy shape.** An earlier version of this plan proposed MCP servers (`pharma-data-mcp`, `pharma-compute-mcp`) as the tooling direction. That has been superseded: a single `oase` CLI gives one place for credential resolution, rate limiting, retry, provenance stamping, and artifact naming, without the per-agent server lifecycle MCP requires. MCP remains the right answer for genuinely *stateful, shared* services — most concretely a lease broker for single-flight endpoints like AlphaFold 3, where file locks don't help because specialists run in separate containers. For general HTTP rate limits (NCBI, PubChem, etc.), cross-container pacing is handled via flock on a shared filesystem volume (#59, #68), making a full lease broker unnecessary for this case.
 
 **The legacy CLI's interface shape is a cautionary example, not a template.** `pharma_cli.py` collapses query and interpretation into a single invocation that emits both the raw payload and the finding. That shape is a large part of why fabrication in it is undetectable: there is no point at which raw data exists independently of the claim made about it. Several of its `compute` subcommands never open their inputs at all and emit a hardcoded pass verdict. Anything adapted from that repository must be read as a specification of intent, not as working code, and must be verified to actually perform the computation it reports. The same applies to any routine producing synthetic values in place of a real model call.
 
-**The same defect class appeared in OASE's own first CLI.** The single-file `dde_cli.py` bound to minified JSON keys that no real Co-Scientist export uses. Its `overview` subcommand printed a plausible, well-formatted tournament report with the entire top-ideas table missing, and exited 0. Nothing downstream could detect the loss. The legacy code was removed after all subcommands were ported to the two-phase model with shape-based field resolution; the lesson is preserved here.
+**The same defect class appeared in OASE's own first CLI.** The single-file `oase_cli.py` bound to minified JSON keys that no real Co-Scientist export uses. Its `overview` subcommand printed a plausible, well-formatted tournament report with the entire top-ideas table missing, and exited 0. Nothing downstream could detect the loss. The legacy code was removed after all subcommands were ported to the two-phase model with shape-based field resolution; the lesson is preserved here.
 
 This first-party case carries more weight than the inherited one. The fault is not confined to code OASE did not write, and no amount of reading found it — it appeared when the tool ran against a real export. Two rules follow. Treat "the tool ran and printed something plausible" as unverified until an artifact exists that a reviewer can re-read. Resolve data by shape rather than by a name that carries no meaning, and raise on absence rather than rendering an empty result.
 
@@ -727,9 +727,9 @@ This first-party case carries more weight than the inherited one. The fault is n
 
 3. **Wet-lab integration boundaries:** OASE's specialist agents reason about experiments and interpret results, but the physical experimental work happens outside the system. How does data from real lab instruments (plate readers, SPR, crystallography) flow into the Layer 0 raw artifacts? This interfaces with LIMS/lab automation tooling.
 
-4. **Enterprise policy extensibility:** The current material includes Sobi-specific policies (FcRn thresholds, haematology focus). How should OASE support pluggable enterprise policy modules for different organizations? Program-level thresholds already have a mechanism (`.dde/thresholds.yaml`); an organization-level layer beneath it is the likely shape.
+4. **Enterprise policy extensibility:** The current material includes Sobi-specific policies (FcRn thresholds, haematology focus). How should OASE support pluggable enterprise policy modules for different organizations? Program-level thresholds already have a mechanism (`.oase/thresholds.yaml`); an organization-level layer beneath it is the likely shape.
 
-5. **Lease broker implementation:** The Research Operations Controller owns resource scheduling policy, and `dde` invocations must acquire leases for single-flight resources such as AlphaFold 3. This is now load-bearing rather than theoretical: `dde alphafold predict` serializes callers with an `fcntl` lock, which holds only within one container. Specialists run in separate containers, so cross-container collisions are unsolved and the endpoint returns 429 under concurrency. Whether the shared broker is a shared-volume service or an MCP service remains unsettled. Direct specialist coordination and ad hoc file locks are not an acceptable end state. *Note:* General HTTP rate-limit coordination (NCBI, PubChem, etc.) is now handled by flock on a shared filesystem volume (#59, #68); the lease broker question is scoped to truly single-flight endpoints (AF3) where only one concurrent request is permitted.
+5. **Lease broker implementation:** The Research Operations Controller owns resource scheduling policy, and `oase` invocations must acquire leases for single-flight resources such as AlphaFold 3. This is now load-bearing rather than theoretical: `oase alphafold predict` serializes callers with an `fcntl` lock, which holds only within one container. Specialists run in separate containers, so cross-container collisions are unsolved and the endpoint returns 429 under concurrency. Whether the shared broker is a shared-volume service or an MCP service remains unsettled. Direct specialist coordination and ad hoc file locks are not an acceptable end state. *Note:* General HTTP rate-limit coordination (NCBI, PubChem, etc.) is now handled by flock on a shared filesystem volume (#59, #68); the lease broker question is scoped to truly single-flight endpoints (AF3) where only one concurrent request is permitted.
 
 6. **Upstream skill provenance:** Converting science-skills into the OASE pattern changes their execution model, which makes it a fork rather than a wrapper. Upstream is effectively dormant, so the maintenance cost is low, but each converted skill should record its upstream commit and license (Apache 2.0 for code, CC-BY 4.0 for materials). The mechanism for that is not yet defined.
 
@@ -744,7 +744,7 @@ invocation that does not exist, and a template cannot grant a skill nobody has w
 
 | Step | Work | Complete when |
 |---|---|---|
-| **1. Tooling** | The `dde` package and its `core/` modules, `doctor`, `init`, the control-plane commands, and the three pilot tools | Each pilot tool writes Layer 0 artifacts with sidecars, and `analyze` re-runs from disk |
+| **1. Tooling** | The `oase` package and its `core/` modules, `doctor`, `init`, the control-plane commands, and the three pilot tools | Each pilot tool writes Layer 0 artifacts with sidecars, and `analyze` re-runs from disk |
 | **2. Skills** | Convert the pilot tools into capability skills; write the orchestration skills | A specialist can route to an invocation without guessing a path |
 | **3. Templates** | Add the controller and reviewer templates; replace the upstream skill grants with OASE grants | No template grants an upstream URI, and no template names a tool it cannot invoke |
 

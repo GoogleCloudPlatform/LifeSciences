@@ -54,22 +54,22 @@ points include:
   is a property of the gene, not a fetch failure.
 - **GTEx gene resolution**: GTEx is exact-match only. Ambiguous symbols
   are refused. GTEx outputs use Gencode IDs, not gene symbols.
-- Run `dde doctor` before first use.
+- Run `oase doctor` before first use.
 
 ## 3. Tool invocations
 
 | Question | Run | Writes to |
 |---|---|---|
-| What is this gene's gnomAD constraint? | `dde genetics fetch <SYMBOL>` | `raw/genomics/<SYMBOL>.gnomad-constraint.json`<br>`raw/genomics/<SYMBOL>.gnomad-constraint.meta.json` |
-| Is loss of function tolerated? | `dde genetics analyze <SYMBOL>` | `raw/genomics/<SYMBOL>.gnomad-constraint.analysis.json` |
-| What disease associations exist (Open Targets)? | `dde gwas search <GENE> --source opentargets` | `raw/genomics/<slug>.gwas-opentargets.json`<br>`raw/genomics/<slug>.gwas-opentargets.artifact.json`<br>`raw/genomics/<slug>.gwas-opentargets.meta.json` |
-| Are the associations significant? | `dde gwas analyze <GENE> --source opentargets` | `raw/genomics/<slug>.gwas-opentargets.analysis.json` |
-| What GWAS Catalog associations exist? | `dde gwas search <GENE> --source gwas-catalog` | `raw/genomics/<slug>.gwas-gwas-catalog.json`<br>`raw/genomics/<slug>.gwas-gwas-catalog.artifact.json`<br>`raw/genomics/<slug>.gwas-gwas-catalog.meta.json` |
-| Are the GWAS hits genome-wide significant? | `dde gwas analyze <GENE> --source gwas-catalog` | `raw/genomics/<slug>.gwas-gwas-catalog.analysis.json` |
-| What ClinVar classifications exist? | `dde gwas search <GENE> --source clinvar` | `raw/genomics/<slug>.gwas-clinvar.json`<br>`raw/genomics/<slug>.gwas-clinvar.artifact.json`<br>`raw/genomics/<slug>.gwas-clinvar.meta.json` |
-| Are there pathogenic variants? | `dde gwas analyze <GENE> --source clinvar` | `raw/genomics/<slug>.gwas-clinvar.analysis.json` |
-| What is this gene's whole-blood expression? | `dde gtex fetch <GENE>` | `raw/gtex/<GENCODE_ID>.gtex.json`<br>`raw/gtex/<GENCODE_ID>.meta.json` |
-| What does the expression level mean? | `dde gtex analyze <GENE>` | `raw/gtex/<GENCODE_ID>.analysis.json` |
+| What is this gene's gnomAD constraint? | `oase genetics fetch <SYMBOL>` | `raw/genomics/<SYMBOL>.gnomad-constraint.json`<br>`raw/genomics/<SYMBOL>.gnomad-constraint.meta.json` |
+| Is loss of function tolerated? | `oase genetics analyze <SYMBOL>` | `raw/genomics/<SYMBOL>.gnomad-constraint.analysis.json` |
+| What disease associations exist (Open Targets)? | `oase gwas search <GENE> --source opentargets` | `raw/genomics/<slug>.gwas-opentargets.json`<br>`raw/genomics/<slug>.gwas-opentargets.artifact.json`<br>`raw/genomics/<slug>.gwas-opentargets.meta.json` |
+| Are the associations significant? | `oase gwas analyze <GENE> --source opentargets` | `raw/genomics/<slug>.gwas-opentargets.analysis.json` |
+| What GWAS Catalog associations exist? | `oase gwas search <GENE> --source gwas-catalog` | `raw/genomics/<slug>.gwas-gwas-catalog.json`<br>`raw/genomics/<slug>.gwas-gwas-catalog.artifact.json`<br>`raw/genomics/<slug>.gwas-gwas-catalog.meta.json` |
+| Are the GWAS hits genome-wide significant? | `oase gwas analyze <GENE> --source gwas-catalog` | `raw/genomics/<slug>.gwas-gwas-catalog.analysis.json` |
+| What ClinVar classifications exist? | `oase gwas search <GENE> --source clinvar` | `raw/genomics/<slug>.gwas-clinvar.json`<br>`raw/genomics/<slug>.gwas-clinvar.artifact.json`<br>`raw/genomics/<slug>.gwas-clinvar.meta.json` |
+| Are there pathogenic variants? | `oase gwas analyze <GENE> --source clinvar` | `raw/genomics/<slug>.gwas-clinvar.analysis.json` |
+| What is this gene's whole-blood expression? | `oase gtex fetch <GENE>` | `raw/gtex/<GENCODE_ID>.gtex.json`<br>`raw/gtex/<GENCODE_ID>.meta.json` |
+| What does the expression level mean? | `oase gtex analyze <GENE>` | `raw/gtex/<GENCODE_ID>.analysis.json` |
 
 Run `fetch`/`search` before `analyze`. `analyze` reads from disk and
 can be re-run without re-querying. All tools support `--json`,
@@ -145,7 +145,7 @@ sidecar records this.
 - **measured** — a median TPM value exists. Classification into
   expression tiers (not_expressed, low, moderate, high) is only applied
   when program-level threshold overrides are set in
-  `.dde/thresholds.yaml`. By default, all `gtex-expression`
+  `.oase/thresholds.yaml`. By default, all `gtex-expression`
   thresholds are **UNRESOLVED** — GTEx publishes no expression-level
   cutoffs, and HPA nTPM cutoffs do not transfer (different
   normalization). Do not invent expression-level cutoffs.
@@ -169,7 +169,7 @@ where you read it:
 
 - `mandatory_relays` — the key in persisted artifact files
   (`.analysis.json`, `.meta.json`). This is the authoritative
-  representation and what `dde validate` checks.
+  representation and what `oase validate` checks.
 - `relays` — the key in CLI stdout JSON output (`--json` flag). The
   two names refer to the same data.
 

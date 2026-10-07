@@ -36,13 +36,13 @@ import sys
 from pathlib import Path
 
 # Ensure the tools package is importable from OASE root.
-_DDE_ROOT = Path(__file__).resolve().parent.parent
-_TOOLS_DIR = _DDE_ROOT / "tools"
+_OASE_ROOT = Path(__file__).resolve().parent.parent
+_TOOLS_DIR = _OASE_ROOT / "tools"
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 # Ensure the OASE root is importable (for eval package).
-if str(_DDE_ROOT) not in sys.path:
-    sys.path.insert(0, str(_DDE_ROOT))
+if str(_OASE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_OASE_ROOT))
 
 from eval.fixtures.definitions import (  # noqa: E402
     ALL_FIXTURES,
@@ -53,7 +53,7 @@ from eval.harness import run_all_fixtures  # noqa: E402
 
 def main() -> int:
     """Run the baseline evaluation and write reports."""
-    baseline_dir = _DDE_ROOT / "eval" / "baseline"
+    baseline_dir = _OASE_ROOT / "eval" / "baseline"
     baseline_dir.mkdir(parents=True, exist_ok=True)
 
     # Run all fixtures
@@ -80,10 +80,10 @@ def main() -> int:
         "completed": report.completed_fixtures,
         "total": report.total_fixtures,
         "command": "PYTHONPATH=tools python3 -m eval.run_baseline",
-        "working_directory": str(_DDE_ROOT),
+        "working_directory": str(_OASE_ROOT),
         "outputs": [
-            str(json_path.relative_to(_DDE_ROOT)),
-            str(md_path.relative_to(_DDE_ROOT)),
+            str(json_path.relative_to(_OASE_ROOT)),
+            str(md_path.relative_to(_OASE_ROOT)),
         ],
     }
     manifest_path = baseline_dir / "run-manifest.json"

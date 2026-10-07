@@ -52,7 +52,7 @@ exist when no database was actually consulted.
 
 **Fix**: After the registry-file loop, validate that `sources_queried`
 is non-empty. If not, raise `ArtifactError` with a message directing the
-user to run `dde compreg resolve` first.
+user to run `oase compreg resolve` first.
 
 ## Tests
 
@@ -74,4 +74,4 @@ All tests in `tests/test_relay_omission_batch1.py`:
 - `pytest` — all 6 tests pass
 - Note: `pytest` and `ruff` required manual installation in the environment;
   numpy, pyyaml, click were also installed as transitive dependencies of the
-  dde CLI
+  oase CLI

@@ -89,7 +89,7 @@ points include:
   path is not implemented).
 - **Organism**: defaults to `HOMO_SAPIENS`. Also supports
   `MUS_MUSCULUS`.
-- Run `dde doctor` before first use. It ends with a verdict line:
+- Run `oase doctor` before first use. It ends with a verdict line:
   `STOP` means fix or report before running anything; `PROCEED` means
   work, and the grouped warnings tell you which commands would refuse,
   which results need careful reading, and which are the tooling lead's
@@ -102,8 +102,8 @@ points include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| What is this variant's regulatory effect? | `dde alphagenome score-variant --chrom <C> --pos <P> --ref <R> --alt <A> [--window <W>] [--scorer <S>] [--output-type <T>...]` | `raw/genomics/<chrom>-<pos>-<ref>-<alt>.scores.json`<br>`raw/genomics/<chrom>-<pos>-<ref>-<alt>.response.ndjson`<br>`raw/genomics/<chrom>-<pos>-<ref>-<alt>.request.json`<br>`raw/genomics/<chrom>-<pos>-<ref>-<alt>.meta.json` |
-| How strong is the effect? | `dde alphagenome analyze <SCORES_PATH> [--quantile-significance <V>]` | `raw/genomics/<chrom>-<pos>-<ref>-<alt>.analysis.json` |
+| What is this variant's regulatory effect? | `oase alphagenome score-variant --chrom <C> --pos <P> --ref <R> --alt <A> [--window <W>] [--scorer <S>] [--output-type <T>...]` | `raw/genomics/<chrom>-<pos>-<ref>-<alt>.scores.json`<br>`raw/genomics/<chrom>-<pos>-<ref>-<alt>.response.ndjson`<br>`raw/genomics/<chrom>-<pos>-<ref>-<alt>.request.json`<br>`raw/genomics/<chrom>-<pos>-<ref>-<alt>.meta.json` |
+| How strong is the effect? | `oase alphagenome analyze <SCORES_PATH> [--quantile-significance <V>]` | `raw/genomics/<chrom>-<pos>-<ref>-<alt>.analysis.json` |
 
 Run `score-variant` before `analyze`. `analyze` reads the stored
 `.scores.json` and applies the `alphagenome-variant-effect` threshold
@@ -121,7 +121,7 @@ call.
 
 | Question | Run | Writes to |
 |---|---|---|
-| What is the predicted regulatory activity across this interval? | `dde alphagenome predict-interval --interval <I> --strand <S> [--output-type <T>...]` | `raw/genomics/<chrom>-<start>-<end>.tracks.json`<br>`raw/genomics/<chrom>-<start>-<end>.tracks.npz`<br>`raw/genomics/<chrom>-<start>-<end>.tracks.response.ndjson`<br>`raw/genomics/<chrom>-<start>-<end>.tracks.request.json`<br>`raw/genomics/<chrom>-<start>-<end>.tracks.meta.json` |
+| What is the predicted regulatory activity across this interval? | `oase alphagenome predict-interval --interval <I> --strand <S> [--output-type <T>...]` | `raw/genomics/<chrom>-<start>-<end>.tracks.json`<br>`raw/genomics/<chrom>-<start>-<end>.tracks.npz`<br>`raw/genomics/<chrom>-<start>-<end>.tracks.response.ndjson`<br>`raw/genomics/<chrom>-<start>-<end>.tracks.request.json`<br>`raw/genomics/<chrom>-<start>-<end>.tracks.meta.json` |
 
 The tensor is stored as `.npz` (compressed NumPy). The `.tracks.json`
 index carries track metadata and references the `.npz`; open the index
@@ -130,7 +130,7 @@ first.
 #### Cell-type expression prediction
 
 ```
-dde alphagenome predict-interval --interval <I> --strand <S> --output-type RNA_SEQ
+oase alphagenome predict-interval --interval <I> --strand <S> --output-type RNA_SEQ
 ```
 
 **What it returns**: a [positions x tracks] tensor across 667 RNA-seq
@@ -159,8 +159,8 @@ not a filter on the returned tracks.
 
 | Question | Run | Writes to |
 |---|---|---|
-| Which positions in this element are functionally important? | `dde alphagenome ism --interval <I>` | **Not yet implemented** — requires `ALPHAGENOME_API_KEY` (pip backend only). |
-| What motifs does the ISM scan reveal? | `dde alphagenome analyze-ism <ARTIFACT>` | **Blocked** — the `alphagenome-ism` threshold set has unresolved cutoffs with no cited source. |
+| Which positions in this element are functionally important? | `oase alphagenome ism --interval <I>` | **Not yet implemented** — requires `ALPHAGENOME_API_KEY` (pip backend only). |
+| What motifs does the ISM scan reveal? | `oase alphagenome analyze-ism <ARTIFACT>` | **Blocked** — the `alphagenome-ism` threshold set has unresolved cutoffs with no cited source. |
 
 ISM is not available for planning.
 

@@ -15,7 +15,7 @@
 """Tests for cross-WO consumes block in deliverables_exist (#87 Phase 1).
 
 Covers:
-  - _build_consumes_map: valid entries, empty, malformed, dde.* prefix normalization
+  - _build_consumes_map: valid entries, empty, malformed, oase.* prefix normalization
   - deliverables_exist with consumes: consumed WO artifacts present → pass
   - deliverables_exist with consumes: consumed WO artifacts absent → fail
   - deliverables_exist without consumes: behavior unchanged
@@ -32,12 +32,12 @@ TOOLS_DIR = Path(__file__).resolve().parent.parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
-from dde.commands.validate import (  # noqa: E402
+from oase.commands.validate import (  # noqa: E402
     _build_consumes_map,
     _check_deliverables_exist,
 )
-from dde.core.controlstore import normalize_deliverables  # noqa: E402
-from dde.core.provenance import Sidecar  # noqa: E402
+from oase.core.controlstore import normalize_deliverables  # noqa: E402
+from oase.core.provenance import Sidecar  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -45,9 +45,9 @@ from dde.core.provenance import Sidecar  # noqa: E402
 
 
 def _make_project(tmp_path: Path, artifact_class: str = "structures") -> Path:
-    """Create a minimal project layout with .dde marker and artifact dir."""
+    """Create a minimal project layout with .oase marker and artifact dir."""
     project = tmp_path / "project"
-    (project / ".dde").mkdir(parents=True)
+    (project / ".oase").mkdir(parents=True)
     (project / "raw" / artifact_class).mkdir(parents=True)
     return project
 
@@ -71,8 +71,8 @@ def _write_sidecar_for(
     """Write a production sidecar for *artifact_path* tagged to *wo_id*."""
     import os
 
-    old_env = os.environ.get("DDE_WORK_ORDER_ID")
-    os.environ["DDE_WORK_ORDER_ID"] = wo_id
+    old_env = os.environ.get("OASE_WORK_ORDER_ID")
+    os.environ["OASE_WORK_ORDER_ID"] = wo_id
     try:
         sc = Sidecar(tool="test-tool", subcommand="fetch")
         sc.add_output(artifact_path)
@@ -81,9 +81,9 @@ def _write_sidecar_for(
         return sidecar_path
     finally:
         if old_env is None:
-            os.environ.pop("DDE_WORK_ORDER_ID", None)
+            os.environ.pop("OASE_WORK_ORDER_ID", None)
         else:
-            os.environ["DDE_WORK_ORDER_ID"] = old_env
+            os.environ["OASE_WORK_ORDER_ID"] = old_env
 
 
 # ---------------------------------------------------------------------------
@@ -133,11 +133,11 @@ def test_build_consumes_map_malformed():
     assert _build_consumes_map(deliverables) == {}
 
 
-def test_build_consumes_map_dde_prefix_normalization():
-    """dde.* prefix on artifact_class is stripped by normalize_artifact_class."""
+def test_build_consumes_map_oase_prefix_normalization():
+    """oase.* prefix on artifact_class is stripped by normalize_artifact_class."""
     deliverables = {
         "consumes": [
-            {"artifact_class": "dde.structures", "from_work_order": "WO-002"},
+            {"artifact_class": "oase.structures", "from_work_order": "WO-002"},
         ],
     }
     result = _build_consumes_map(deliverables)
@@ -250,7 +250,7 @@ def test_deliverables_exist_consumes_plus_own_artifacts(tmp_path):
 def test_normalize_deliverables_preserves_consumes():
     """normalize_deliverables passes through consumes field unchanged."""
     consumes = [
-        {"artifact_class": "dde.structures", "from_work_order": "WO-002"},
+        {"artifact_class": "oase.structures", "from_work_order": "WO-002"},
     ]
     deliverables = {
         "layer_0_classes": ["structures"],

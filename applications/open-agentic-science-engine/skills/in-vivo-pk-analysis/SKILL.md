@@ -44,17 +44,17 @@ or project human dose parameters. Entry points include:
 ## 2. Preconditions
 
 - **Input (NCA path)**: a JSON file matching schema
-  `dde.pk-study.v1` for `ingest`, containing species, route,
+  `oase.pk-study.v1` for `ingest`, containing species, route,
   dose, time points, and concentrations. At least 3 time points
   required.
 - **Input (DDI path)**: a JSON file matching schema
-  `dde.pk-ddi-input.v1` for `ddi`, containing compound_id,
+  `oase.pk-ddi-input.v1` for `ddi`, containing compound_id,
   cmax_unbound, and per-isoform CYP inhibition data with Ki or
   IC50 values in matching units.
 - **scipy/numpy**: recommended for numerical stability in linear
   regression (terminal phase fitting, allometric regression). The
   tool falls back to manual computation if unavailable.
-- **Environment**: run `dde doctor` before first use. It ends
+- **Environment**: run `oase doctor` before first use. It ends
   with a verdict line: `STOP` means fix or report before running
   anything; `PROCEED` means work. Do not judge by the warning
   count; the verdict line grades them for you.
@@ -65,11 +65,11 @@ or project human dose parameters. Entry points include:
 
 | Question | Run | Writes to |
 |---|---|---|
-| Parse and validate a PK study | `dde pk ingest <input_file>` | `raw/pk/{study_id}.pk-study.json`<br>`raw/pk/{study_id}.pk-study.meta.json` |
-| Compute NCA parameters | `dde pk nca <study_file>` | `raw/pk/{study_id}.pk-nca.json`<br>`raw/pk/{study_id}.pk-nca.meta.json` |
-| Scale animal PK to human | `dde pk scale <nca_files...>` | `raw/pk/{compound_id}.pk-scaling.json`<br>`raw/pk/{compound_id}.pk-scaling.meta.json` |
-| Predict DDI risk | `dde pk ddi <input_file>` | `raw/pk/{compound_id}.pk-ddi.json`<br>`raw/pk/{compound_id}.pk-ddi.meta.json` |
-| Apply thresholds and produce verdict | `dde pk analyze <path>` | `raw/pk/{stem}.pk.analysis.json` |
+| Parse and validate a PK study | `oase pk ingest <input_file>` | `raw/pk/{study_id}.pk-study.json`<br>`raw/pk/{study_id}.pk-study.meta.json` |
+| Compute NCA parameters | `oase pk nca <study_file>` | `raw/pk/{study_id}.pk-nca.json`<br>`raw/pk/{study_id}.pk-nca.meta.json` |
+| Scale animal PK to human | `oase pk scale <nca_files...>` | `raw/pk/{compound_id}.pk-scaling.json`<br>`raw/pk/{compound_id}.pk-scaling.meta.json` |
+| Predict DDI risk | `oase pk ddi <input_file>` | `raw/pk/{compound_id}.pk-ddi.json`<br>`raw/pk/{compound_id}.pk-ddi.meta.json` |
+| Apply thresholds and produce verdict | `oase pk analyze <path>` | `raw/pk/{stem}.pk.analysis.json` |
 
 Run phase 1 (`ingest`, `nca`, `scale`, `ddi`) before phase 2
 (`analyze`). `analyze` reads from disk and can be re-run with
@@ -105,7 +105,7 @@ depend on the artifact type:
 The `therapeutic_exposure_adequacy` threshold in `pk-parameters@1.0`
 is UNRESOLVED -- no universal default exists. **Do not invent a
 value.** A program-specific value must be set in
-`.dde/thresholds.yaml` before exposure adequacy assessments can
+`.oase/thresholds.yaml` before exposure adequacy assessments can
 be made. The analysis records this gap explicitly.
 
 Thresholds are cited by name. The values in force are in the
@@ -206,7 +206,7 @@ estimate, and do not proceed on an assumed result.
 - **Inventing a therapeutic_exposure_adequacy value.** This
   threshold is UNRESOLVED. The analysis records the gap. Do not
   supply a plausible number -- the program must set one in
-  `.dde/thresholds.yaml` with a recorded justification.
+  `.oase/thresholds.yaml` with a recorded justification.
 - **Mixing IV and non-IV NCA files in allometric scaling.** IV
   produces CL and Vd; non-IV produces CL/F and Vd/F. The tool
   refuses this, but do not attempt to combine them manually.

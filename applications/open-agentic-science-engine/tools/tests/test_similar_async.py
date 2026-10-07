@@ -50,14 +50,14 @@ _module_patches = patch.dict(
 )
 _module_patches.start()
 
-from dde.commands.similar import (  # noqa: E402
+from oase.commands.similar import (  # noqa: E402
     _build_artifact,
     _classify_results,
     _poll_pubchem_listkey,
     _pubchem_similarity,
 )
-from dde.core import http  # noqa: E402
-from dde.core.errors import ArtifactError  # noqa: E402
+from oase.core import http  # noqa: E402
+from oase.core.errors import ArtifactError  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -211,7 +211,7 @@ class TestPubChemAsyncPolling(unittest.TestCase):
             return responses[min(call_count - 1, len(responses) - 1)]
 
         with (
-            patch("dde.commands.similar.http.get_json", side_effect=mock_get_json),
+            patch("oase.commands.similar.http.get_json", side_effect=mock_get_json),
             patch("time.sleep"),
             patch("time.monotonic", side_effect=[0.0, 1.0, 2.0, 3.0]),
         ):
@@ -236,7 +236,7 @@ class TestPubChemAsyncPolling(unittest.TestCase):
             return result
 
         with (
-            patch("dde.commands.similar.http.get_json", side_effect=mock_get_json),
+            patch("oase.commands.similar.http.get_json", side_effect=mock_get_json),
             patch("time.sleep"),
             patch("time.monotonic", side_effect=[0.0, 1.0, 2.0, 3.0, 4.0]),
         ):
@@ -255,7 +255,7 @@ class TestPubChemAsyncPolling(unittest.TestCase):
         times = [0.0] + [float(i) for i in range(1, 200)]
 
         with (
-            patch("dde.commands.similar.http.get_json", side_effect=mock_get_json),
+            patch("oase.commands.similar.http.get_json", side_effect=mock_get_json),
             patch("time.sleep"),
             patch("time.monotonic", side_effect=times),
         ):
@@ -271,7 +271,7 @@ class TestPubChemAsyncPolling(unittest.TestCase):
             return {"Fault": {"Message": "Server Error"}}
 
         with (
-            patch("dde.commands.similar.http.get_json", side_effect=mock_get_json),
+            patch("oase.commands.similar.http.get_json", side_effect=mock_get_json),
             patch("time.sleep"),
             patch("time.monotonic", side_effect=[0.0, 1.0]),
         ):
@@ -308,7 +308,7 @@ class TestPubChemSimilarityAsync(unittest.TestCase):
             return {}
 
         with (
-            patch("dde.commands.similar.http.get_json", side_effect=mock_get_json),
+            patch("oase.commands.similar.http.get_json", side_effect=mock_get_json),
             patch("time.sleep"),
             patch("time.monotonic", side_effect=[0.0, 1.0, 2.0]),
         ):
@@ -332,7 +332,7 @@ class TestPubChemSimilarityAsync(unittest.TestCase):
                 return props
             return {}
 
-        with patch("dde.commands.similar.http.get_json", side_effect=mock_get_json):
+        with patch("oase.commands.similar.http.get_json", side_effect=mock_get_json):
             hits = _pubchem_similarity("CCO", threshold=0.85, max_results=20)
 
         self.assertEqual(len(hits), 1)
@@ -345,7 +345,7 @@ class TestPubChemSimilarityAsync(unittest.TestCase):
         def mock_get_json(url, **kwargs):
             return direct
 
-        with patch("dde.commands.similar.http.get_json", side_effect=mock_get_json):
+        with patch("oase.commands.similar.http.get_json", side_effect=mock_get_json):
             hits = _pubchem_similarity("CCO", threshold=0.85, max_results=20)
 
         self.assertEqual(hits, [])
@@ -552,7 +552,7 @@ class TestLegacyArtifactCompat(unittest.TestCase):
     def test_missing_search_status_defaults_to_completed(self):
         """Legacy artifacts (no search_status) classify normally."""
         legacy = {
-            "schema": "dde.similar.v1",
+            "schema": "oase.similar.v1",
             "query": {"smiles": "CCO"},
             "summary": {"n_hits": 0, "closest_match": None},
             "hits": [],
@@ -595,19 +595,19 @@ class TestRelayRegistration(unittest.TestCase):
 
     def test_search_incomplete_registered(self):
         """similar.search_incomplete is a registered relay code."""
-        from dde.core.provenance import RELAY_CODES
+        from oase.core.provenance import RELAY_CODES
 
         self.assertIn("similar.search_incomplete", RELAY_CODES)
 
     def test_all_backends_failed_registered(self):
         """similar.all_backends_failed is a registered relay code."""
-        from dde.core.provenance import RELAY_CODES
+        from oase.core.provenance import RELAY_CODES
 
         self.assertIn("similar.all_backends_failed", RELAY_CODES)
 
     def test_relay_function_accepts_new_codes(self):
         """provenance.relay() accepts the new codes without raising."""
-        from dde.core.provenance import relay
+        from oase.core.provenance import relay
 
         r1 = relay("similar.search_incomplete", "test message")
         self.assertEqual(r1["code"], "similar.search_incomplete")
@@ -634,7 +634,7 @@ class TestPubChemTolerates202(unittest.TestCase):
                 return {"IdentifierList": {"CID": []}}
             return {}
 
-        with patch("dde.commands.similar.http.get_json", side_effect=mock_get_json):
+        with patch("oase.commands.similar.http.get_json", side_effect=mock_get_json):
             _pubchem_similarity("CCO", threshold=0.85, max_results=20)
 
         self.assertIn("tolerate_status", kwargs_captured)
