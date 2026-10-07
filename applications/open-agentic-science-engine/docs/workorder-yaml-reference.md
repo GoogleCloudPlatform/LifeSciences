@@ -133,13 +133,17 @@ It moves through its own state machine from creation to a terminal state. Each
 arrow represents a legal transition.
 
 ```
-(new) ──► queued ──► starting ──► running ──┬──► succeeded
-                                            │
-                                            ├──► failed
-                                            │
-                                            ├──► blocked
-                                            │
-                                            └──► cancelled
+(new) ──► queued ──► starting ──┬──► running ──┬──► succeeded
+                                │              │
+                                │              ├──► failed
+                                │              │
+                                │              ├──► blocked
+                                │              │
+                                │              └──► cancelled
+                                │
+                                ├──► failed
+                                ├──► blocked
+                                └──► cancelled
 ```
 
 ### Transition table
@@ -148,7 +152,7 @@ arrow represents a legal transition.
 |------------------------|---------------|
 | *(initial — no state)* | `queued` |
 | `queued`               | `starting` |
-| `starting`             | `running` |
+| `starting`             | `running` through `oase run preflight`; `failed`, `blocked`, `cancelled` through `oase run transition` |
 | `running`              | `succeeded`, `failed`, `blocked`, `cancelled` |
 
 ### Terminal states (no outgoing transitions)
@@ -161,15 +165,20 @@ arrow represents a legal transition.
 ### Transition mode
 
 All run transitions are explicit CLI invocations — no transition is automatic.
-A new run is created in the `queued` state by `oase run create <WO-ID>`, and
-every subsequent transition is performed with
-`oase run transition <RUN-ID> <STATE>`.
+A new run is created in the `queued` state by `oase run create <WO-ID>`. The
+controller transitions it to `starting`, then the newly started specialist must
+execute `oase run preflight` as its first tool command. Successful execution proves
+that a real command traversed the specialist harness's tool hook, records the
+harness and runtime version, and transitions the run to `running`. The generic
+`oase run transition` command deliberately refuses `starting -> running` because a
+controller-side state change cannot prove specialist runtime health.
 
 ### Commands
 
 | Command | Effect |
 |---------|--------|
 | `oase run create <WO-ID>` | Creates a new run targeting the latest committed revision, in `queued` state. |
+| `oase run preflight <RUN-ID> --harness <name> --runtime-version <version>` | Called from the specialist as its first tool command; records runtime identity and transitions `starting` to `running`. |
 | `oase run transition <RUN-ID> <STATE>` | Advances the run to `<STATE>` if the transition is legal. |
 
 If you attempt an illegal transition, `oase run transition` exits with code 9
