@@ -28,7 +28,7 @@ All of the following fields are **required**:
 | `mechanism` | string | — | Proposed causal mechanism explaining the claim. |
 | `predictions` | array of strings | Min 1 item | Observable, testable predictions that follow from the hypothesis. |
 | `experiments` | array of objects | Min 1 item | Proposed experiments to test the hypothesis (see below). |
-| `evidence` | array of objects | Min 1 item | Literature evidence with DDE-resolved record IDs (see below). |
+| `evidence` | array of objects | Min 1 item | Literature evidence with OASE-resolved record IDs (see below). |
 | `focus_area` | string | — | Research focus area this hypothesis belongs to. |
 | `lineage` | object | — | Evolutionary lineage tracking (see below). |
 | `status` | string | Enum: `proposed`, `reviewed`, `active`, `merged`, `retired`, `quarantined` | Current lifecycle status. Use `"proposed"` for new hypotheses. |
@@ -76,7 +76,7 @@ Each evidence item links a literature record to the hypothesis:
 
 | Field | Type | Values | Description |
 |---|---|---|---|
-| `lit_id` | string | — | Literature record identifier from DDE search/resolve results (e.g., `PMID:38012345`, `arXiv:2301.12345v2`, `10.1101/2024.01.01.573838`). |
+| `lit_id` | string | — | Literature record identifier from OASE search/resolve results (e.g., `PMID:38012345`, `arXiv:2301.12345v2`, `10.1101/2024.01.01.573838`). |
 | `role` | string | `supports`, `constrains`, `contradicts` | Relationship of this evidence to the hypothesis. |
 | `note` | string | — | Brief explanation of relevance — what the cited paper shows and why it matters. |
 
@@ -140,7 +140,7 @@ Every hypothesis you produce must meet these minimum requirements:
 3. **At least 1 experiment.** With concrete design, readout, and difficulty
    estimate.
 4. **At least 1 evidence item with a `lit_id`.** Every factual claim needs a
-   literature citation. The `lit_id` must be a real record ID from a DDE search
+   literature citation. The `lit_id` must be a real record ID from an OASE search
    results — never fabricate IDs.
 5. **Falsifiable statement.** The `statement` must be a claim that could be
    proven wrong by experiment.
@@ -171,7 +171,7 @@ hypex add-hypothesis [file|-] --run <run-id> --run-dir <run-base>
 | `-` | Read hypothesis JSON from stdin |
 | `--run` | **Required.** Run ID to add the hypothesis to |
 | `--run-dir` | Base directory containing runs (default: `/scion-volumes/executions`) |
-| `--schema-dir` | Directory containing JSON schemas (defaults to DDE's provisioned Hypex schemas) |
+| `--schema-dir` | Directory containing JSON schemas (defaults to OASE's provisioned Hypex schemas) |
 
 ### What It Does
 

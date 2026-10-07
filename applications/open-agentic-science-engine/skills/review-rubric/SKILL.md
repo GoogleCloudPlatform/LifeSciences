@@ -56,7 +56,7 @@ Evaluates whether the proposed mechanism is consistent with existing evidence.
    - **Check quarantine triggers:** If `phantom_count >= 2`, OR `phantom_count / total_citations >= 0.50`, OR (`total_citations > 0` AND `verified_count == 0`), trigger immediate quarantine per the `safety-screen` skill.
    - **Unverified citations:** Citations with `status: "unverified"` (e.g., network error, timeout, upstream rate-limit) do NOT trigger phantom penalties; they are logged as unverified notes.
 
-3. **Verify claims against paper contents:** For verified citations, resolve identifiers with `dde litref resolve` and inspect the stored DDE literature artifacts as needed to confirm that the paper actually demonstrates what the hypothesis claims in its `note` field.
+3. **Verify claims against paper contents:** For verified citations, resolve identifiers with `dde litref resolve` and inspect the stored OASE literature artifacts as needed to confirm that the paper actually demonstrates what the hypothesis claims in its `note` field.
 4. **Search for contradicting evidence:** Search for contradicting evidence using terms designed to find counter-results (e.g., if the hypothesis claims "X increases Y", search for "X decreases Y" or "X no effect Y").
 5. **Check causal chain completeness:** Check whether the causal chain has gaps — are there steps that are assumed but not supported by any citation?
 6. **Evaluate evidence quality:** Consider the quality of the cited evidence: peer-reviewed > preprint > review article > conference abstract.
@@ -290,7 +290,7 @@ literature search.
 
 **Purpose:** Focused safety assessment using the dual-use rubric.
 
-**Tools:** None required (reasoning-based), but DDE literature tools are available for
+**Tools:** None required (reasoning-based), but OASE literature tools are available for
 context.
 
 **What to do:**

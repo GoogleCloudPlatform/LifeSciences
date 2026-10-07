@@ -25,7 +25,7 @@ three functions:
 ## Why
 
 This is Phase 1 of fixing 16 path-traversal and symlink-exploitation
-vulnerabilities identified across the DDE toolchain.  By centralising path
+vulnerabilities identified across the OASE toolchain.  By centralising path
 safety logic in one well-tested module, subsequent phases can replace ad-hoc
 checks with calls to these shared functions, reducing duplication and the
 risk of inconsistent or incomplete guards.

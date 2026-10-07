@@ -90,7 +90,7 @@ _VOLATILE_ANALYSIS_FIELDS = (
     "written_by",
     # cli_integrity is derived from `git describe --dirty --always`.
     # Without tags it is a bare commit SHA that changes on every commit
-    # to DDE — a provenance stamp, not scientific content.
+    # to OASE — a provenance stamp, not scientific content.
     "cli_integrity",
     # cli_modified / cli_modified_note record whether the toolchain had
     # uncommitted changes.  Conditional: absent when clean, present when
@@ -826,7 +826,7 @@ RELAY_CODES: dict[str, str] = {
         "The hypothesis set was attested by a human, not retrieved by a "
         "tool. Its provenance chain terminates at the attestation. Quote "
         "the attestation verbatim in any finding that rests on this "
-        "artifact, and do not describe the set as DDE-derived."
+        "artifact, and do not describe the set as OASE-derived."
     ),
     "hypothesis.unranked_set": (
         "This set carries no ranking. Array position is input order, not "
@@ -932,7 +932,7 @@ def relay(code: str, message: str) -> dict[str, str]:
 
 
 def record_type_from_schema(schema: str) -> str:
-    """Extract the record type from a DDE schema tag.
+    """Extract the record type from an OASE schema tag.
 
     Schema format: ``dde.{record_type}.v{version}``
 
@@ -951,7 +951,7 @@ def record_type_from_schema(schema: str) -> str:
 
 
 def record_type_from_filename(filename: str) -> str | None:
-    """Extract the record type from a DDE artifact filename.
+    """Extract the record type from an OASE artifact filename.
 
     Filename format: ``{stem}.{record_type}.json``
 
@@ -1095,7 +1095,7 @@ class Sidecar:
         if tc.modified:
             record["cli_modified"] = True
             record["cli_modified_note"] = (
-                "DDE source has uncommitted modifications. Artifacts may not "
+                "OASE source has uncommitted modifications. Artifacts may not "
                 "be reproducible under the declared cli_version."
             )
         record.update(self.extra)
@@ -1256,7 +1256,7 @@ def write_analysis(
     if tc.modified:
         record["cli_modified"] = True
         record["cli_modified_note"] = (
-            "DDE source has uncommitted modifications. Artifacts may not "
+            "OASE source has uncommitted modifications. Artifacts may not "
             "be reproducible under the declared cli_version."
         )
     if mandatory_relays:

@@ -22,8 +22,8 @@ Resolution order:
   2. walk up from CWD looking for a `.dde/` marker directory
   3. fail loudly — never silently write into CWD
 
-Additionally, the dde repo itself is refused as a project root. In
-development /workspace *is* the dde repo, and writing raw/ into it
+Additionally, the OASE repo itself is refused as a project root. In
+development /workspace *is* the OASE repo, and writing raw/ into it
 would pollute the repository.
 """
 
@@ -36,7 +36,7 @@ from pathlib import Path
 from .errors import ProjectRootError, SchemaError
 from .paths import is_safe_to_open
 
-# Marker placed at the root of the dde *source repo*. Its presence
+# Marker placed at the root of the OASE *source repo*. Its presence
 # means "this directory is the toolchain, not a drug program".
 REPO_MARKER = ".dde-repo"
 
@@ -157,7 +157,7 @@ def _looks_like_dde_repo(path: Path) -> bool:
 
 
 def resolve_project(explicit: str | os.PathLike | None = None) -> ProjectContext:
-    """Resolve the dde project root, or raise ProjectRootError."""
+    """Resolve the OASE project root, or raise ProjectRootError."""
     if explicit is not None:
         root = Path(explicit).expanduser().resolve()
         source = "--project"
@@ -184,7 +184,7 @@ def resolve_project(explicit: str | os.PathLike | None = None) -> ProjectContext
             return _validate(candidate, f"{PROJECT_MARKER}/ walk-up")
 
     raise ProjectRootError(
-        "could not resolve the dde project root",
+        "could not resolve the OASE project root",
         detail=f"no {PROJECT_MARKER}/ directory found in {here} or any parent, "
         "and DDE_PROJECT is not set",
         remedy=(
@@ -195,10 +195,10 @@ def resolve_project(explicit: str | os.PathLike | None = None) -> ProjectContext
 
 
 def _validate(root: Path, source: str) -> ProjectContext:
-    """Refuse the dde source repo; refuse unwritable roots."""
+    """Refuse the OASE source repo; refuse unwritable roots."""
     if _looks_like_dde_repo(root):
         raise ProjectRootError(
-            f"refusing to use the dde source repo as a project root: {root}",
+            f"refusing to use the OASE source repo as a project root: {root}",
             detail=(
                 "writing raw/ here would pollute the repository. This is the "
                 "development case called out in tool-design-guidance.md §4."
@@ -232,7 +232,7 @@ def _write_if_missing(path: Path, content: str) -> None:
         path.write_text(content, encoding="utf-8")
 
 
-# Findings sub-disciplines mirroring the canonical layout (dde-plan.md §findings).
+# Findings sub-disciplines mirroring the canonical layout (oase-plan.md §findings).
 FINDINGS_SUBDIRS: list[str] = [
     "structural-biology",
     "computational-biology",
@@ -252,7 +252,7 @@ PROGRAM_STATE_FILES: dict[str, str] = {
     "open-questions.md": "# Open Questions\n\nOutstanding questions requiring resolution.\n",
 }
 
-# Gate stage directories created under gates/ (dde-plan.md §gates).
+# Gate stage directories created under gates/ (oase-plan.md §gates).
 GATE_STAGES: list[str] = [
     "stage1-intervention-validation",
     "stage2-starting-matter-declaration",
@@ -270,7 +270,7 @@ def init_project(path: str | os.PathLike) -> Path:
     root = Path(path).expanduser().resolve()
     if _looks_like_dde_repo(root):
         raise ProjectRootError(
-            f"refusing to initialise a program inside the dde source repo: {root}",
+            f"refusing to initialise a program inside the OASE source repo: {root}",
             remedy="choose a directory outside the repo",
         )
     (root / PROJECT_MARKER).mkdir(parents=True, exist_ok=True)

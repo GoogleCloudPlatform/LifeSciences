@@ -1,9 +1,9 @@
-# DDE Tool Design Guidance
+# OASE Tool Design Guidance
 
 **Status**: v0.1. Expect revision after the pilot conversion (co-scientist, AlphaFold, AlphaGenome).
-**Purpose**: the standard for the dde tools environment and the `dde` CLI — bootstrapping, the two artifact layers, output placement, thresholds, and stdout discipline.
+**Purpose**: the standard for the OASE tools environment and the `dde` CLI — bootstrapping, the two artifact layers, output placement, thresholds, and stdout discipline.
 **Companion**: [`skill-design-guidance.md`](skill-design-guidance.md). This document is **normative for the artifact contract**. The skill document references it rather than restating it.
-**Context**: [`dde-plan.md`](dde-plan.md) §5 and §7.
+**Context**: [`oase-plan.md`](oase-plan.md) §5 and §7.
 
 The CLI also enforces work-order schemas, legal run-state transitions, mechanical
 artifact intake, and deterministic presentation builds. Those operational commands
@@ -36,7 +36,7 @@ applied to the pilot's candidate list.
 
 **They are adopted as tie-breakers, not as gates** (Preston, 2026-08-18, Group B
 item 5, option B). The reason is a limit on the evidence behind them: the pilot
-exercises a small subset of the program types dde will run, so a test that
+exercises a small subset of the program types OASE will run, so a test that
 looks decisive across the pilot's candidates may be decisive only about the
 pilot. A tie-breaker that turns out to be wrong for a new program type is
 argued with. A gate that turns out to be wrong for a new program type blocks
@@ -146,7 +146,7 @@ This matters more than it looks. An agent that can install packages can silently
 
 A venv carries compiled extensions built against a specific Python minor version, glibc, and CPU architecture. If agent containers diverge on any of those, the shared venv fails. Sometimes loudly, sometimes not.
 
-Either every dde template uses one base image, or the venv path is keyed: `/scion-volumes/tools/py3.12-x86_64/.venv`.
+Either every OASE template uses one base image, or the venv path is keyed: `/scion-volumes/tools/py3.12-x86_64/.venv`.
 
 ### Rule 3 — know what the venv cannot carry
 
@@ -439,14 +439,14 @@ The CLI discovers the project root the way git does:
 ```yaml
 # DDE_PROJECT is resolved by .dde/ walk-up discovery by default.
 # Set it explicitly only when the agent's workspace is not the program
-# directory — e.g. when /workspace is the dde repo:
+# directory — e.g. when /workspace is the OASE repo:
 #   env:
 #     DDE_PROJECT: /workspace/program-hr-mbc
 ```
 
 Walk-up also covers: a specialist working in a subdirectory, a reviewer operating on an archived program, or local development.
 
-**When `/workspace` is the dde repo itself** — as it is during maintenance or development of dde — it is not a program directory, and writing `raw/` into it would pollute the repo. The CLI detects this (via the `.dde-repo` marker) and refuses. In this case, set `DDE_PROJECT` to the program subdirectory (e.g. `/workspace/program-hr-mbc`). Add the program directory names to `.gitignore` as a second line of defence.
+**When `/workspace` is the OASE repo itself** — as it is during maintenance or development of OASE — it is not a program directory, and writing `raw/` into it would pollute the repo. The CLI detects this (via the `.dde-repo` marker) and refuses. In this case, set `DDE_PROJECT` to the program subdirectory (e.g. `/workspace/program-hr-mbc`). Add the program directory names to `.gitignore` as a second line of defence.
 
 ### Default directories
 
@@ -747,7 +747,7 @@ record three things with it rather than one:
 - **The number.**
 - **The data version it applies to.** `LOEUF < 0.45` is a statement about gnomAD v4.
 - **The purpose the source recommended it for.** gnomAD offers `< 0.45` "for the
-  interpretation of Mendelian disease cases". DDE uses constraint to reason about
+  interpretation of Mendelian disease cases". OASE uses constraint to reason about
   target safety, which is a different question. The threshold is still the right one
   to use; what must not happen is the transposition going unrecorded. That is the
   work `gnomad.constraint_is_not_safety` does, and why it is a relay rather than a
@@ -1087,7 +1087,7 @@ name has one. The code must therefore be assigned once in the shared error hiera
 not per subcommand, or the same outcome will exit differently depending on which tool
 produced it.
 
-In dde that code is **9**, carried by `Refusal` in `core/errors.py`, and raised by
+In OASE that code is **9**, carried by `Refusal` in `core/errors.py`, and raised by
 every resolution step that finds no exact match or more than one: `litref analyze` on
 an ambiguous name, `expression fetch` on an ambiguous or unknown symbol, `genetics
 fetch` on a symbol gnomAD rejects, `alphafold analyze` on an ambiguous isoform. Skills

@@ -24,7 +24,7 @@ Covers:
   - thresholds.py: thresholds.yaml read via symlink (#302)
 
 Run with:
-    cd applications/DDE
+    cd applications/open-agentic-science-engine
     python -m pytest tests/test_symlink_core.py -v
 """
 

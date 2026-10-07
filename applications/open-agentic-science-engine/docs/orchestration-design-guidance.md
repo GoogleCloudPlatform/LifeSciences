@@ -1,11 +1,11 @@
-# DDE Orchestration Design Guidance
+# OASE Orchestration Design Guidance
 
 **Status**: v0.1. Expect revision after the pilot program.
 **Purpose**: the normative design for end-to-end program orchestration: decision
 authority, work dispatch, agent supervision, artifact intake, scientific review,
 stage transitions, and publication.
 **Companions**:
-[`dde-plan.md`](dde-plan.md),
+[`oase-plan.md`](oase-plan.md),
 [`skill-design-guidance.md`](skill-design-guidance.md), and
 [`tool-design-guidance.md`](tool-design-guidance.md).
 
@@ -13,7 +13,7 @@ stage transitions, and publication.
 
 ## 1. The orchestration boundary
 
-DDE has two different kinds of orchestration:
+OASE has two different kinds of orchestration:
 
 1. **Scientific orchestration** decides what the program should learn next and
    what the accumulated evidence licenses the program to conclude.
@@ -25,7 +25,7 @@ cohort-oriented and must preserve a coherent view of the whole program. Agent
 supervision is event-oriented and must handle retries, timeouts, resource limits,
 and malformed deliverables without consuming the science lead's reasoning context.
 
-DDE therefore uses two persistent roles, but only one decision authority:
+OASE therefore uses two persistent roles, but only one decision authority:
 
 - The **Science Program Lead** is the user-facing orchestrator and the sole owner
   of scientific direction and program decisions.
@@ -132,7 +132,7 @@ A work order records:
 | `stage` and `cycle` | Current program stage and DMTA or equivalent cohort |
 | `context` | Bounded artifact links plus a checksummed context snapshot |
 | `dependencies` | Accepted findings or completed work orders required first |
-| `capabilities` | Expected DDE capability skills, when constraints are needed |
+| `capabilities` | Expected OASE capability skills, when constraints are needed |
 | `deliverables` | Expected Layer 1 paths and any required Layer 0 classes |
 | `acceptance_criteria` | What makes the answer decision-useful, not a gate verdict |
 | `alert_policy` | Structured conditions that require immediate escalation |
@@ -597,11 +597,11 @@ a missing document, not a wrong one.
 
 - Scientific knowledge about interpreting a tool result stays in the corresponding
   science capability skill.
-- DDE-specific orchestration semantics belong in the orchestration behaviours
+- OASE-specific orchestration semantics belong in the orchestration behaviours
   above, placed in a template body or a skill by the §8.0 test — not automatically in
   a skill.
 - Generic Scion command syntax and agent-management behavior come from platform
-  skills; do not copy them into DDE skills.
+  skills; do not copy them into OASE skills.
 - Schemas, legal state transitions, retries, locks, validation, and rendering belong
   in CLI code, not prose.
 - Role authority, forbidden actions, and who receives an escalation belong in the
@@ -690,7 +690,7 @@ property of the role, not of the skill. By the §8.0 placement test the content
 is role-specific, so it belongs in the template body.
 
 **Nor can the CLI carry it, and that is worth stating because the CLI carries
-the neighbouring guard so well** (tooling-lead). DDE's tools are already
+the neighbouring guard so well** (tooling-lead). OASE's tools are already
 structurally proof against *fabrication*: a refusal exits 9, a phase-2 latch
 will not invent the input it is missing, and no command will produce a number
 whose computation did not happen. None of that touches *substitution*, because

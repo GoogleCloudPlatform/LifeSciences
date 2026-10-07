@@ -1,6 +1,6 @@
-# DDE: Agentic Pre-Clinical Pharmaceutical R&D System
+# OASE: Open Agentic Science Engine — Agentic Pre-Clinical Pharmaceutical R&D System
 
-> **Companion guidance.** This document describes *what* dde is and how it is
+> **Companion guidance.** This document describes *what* OASE is and how it is
 > organized. Three companion documents are normative for *how* its orchestration,
 > skills, and tools are built:
 >
@@ -15,9 +15,9 @@
 >   output discipline). **Normative for anything artifact-related**; §5 below defers
 >   to it on specifics.
 
-## 1. What DDE Is
+## 1. What OASE Is
 
-DDE is a packaged repository that bootstraps an agentic system for end-to-end pre-clinical pharmaceutical research and development. Built on scion (an agent orchestration platform), it provides the agent templates, skills, tools, and artifact conventions needed to stand up a coordinated multi-agent research team for any drug discovery program.
+Open Agentic Science Engine (OASE) is a packaged repository that bootstraps an agentic system for end-to-end pre-clinical pharmaceutical research and development. Built on scion (an agent orchestration platform), it provides the agent templates, skills, tools, and artifact conventions needed to stand up a coordinated multi-agent research team for any drug discovery program.
 
 Each research project gets its own agent team and project folder. The process begins by creating a Science Program Lead and giving it a scientific objective — a disease indication, a target hypothesis, a modality. The lead creates a persistent Research Operations Controller, then issues scientific work orders as the program evolves. The controller supervises ephemeral specialist agents and maintains the operational control plane; the science lead accepts evidence, coordinates the four stages of pre-clinical R&D, and maintains the structured project state that serves as its decision surface.
 
@@ -27,9 +27,9 @@ Each research project gets its own agent team and project folder. The process be
 
 ### 2.1 Don't Re-teach the LLM What It Already Knows
 
-Modern LLMs already possess deep knowledge of pharmaceutical R&D — professional quality standards, scientific reasoning frameworks, and domain expertise across structural biology, medicinal chemistry, ADMET science, and more. Role definitions in dde are deliberately lean: a short persona trigger activates the right parametric knowledge, available tools tell the agent what it can invoke, and output contracts tell it what format to report in. The stage-specific question comes from the Science Program Lead's work order, not from hundreds of lines of re-taught domain knowledge.
+Modern LLMs already possess deep knowledge of pharmaceutical R&D — professional quality standards, scientific reasoning frameworks, and domain expertise across structural biology, medicinal chemistry, ADMET science, and more. Role definitions in OASE are deliberately lean: a short persona trigger activates the right parametric knowledge, available tools tell the agent what it can invoke, and output contracts tell it what format to report in. The stage-specific question comes from the Science Program Lead's work order, not from hundreds of lines of re-taught domain knowledge.
 
-A structural biologist agent definition doesn't explain what pLDDT is or how to check for crystal packing artifacts — the LLM already knows. It says: "You are a structural biologist. You have access to these tools. Report findings in this format." The expertise and professional standards come from the model's training; the tools and formats come from dde.
+A structural biologist agent definition doesn't explain what pLDDT is or how to check for crystal packing artifacts — the LLM already knows. It says: "You are a structural biologist. You have access to these tools. Report findings in this format." The expertise and professional standards come from the model's training; the tools and formats come from OASE.
 
 ### 2.2 Invariant Structure, Dynamic Content
 
@@ -211,7 +211,7 @@ and this table is the only mapping:
 | Specialist roles | The role name, in lower case, with hyphens |
 
 Do not introduce a third name for the same role. "Orchestrator" alone is ambiguous,
-because dde has two orchestrating roles with different authority. Use the role name
+because OASE has two orchestrating roles with different authority. Use the role name
 in prose and the directory name in configuration.
 
 ### Cross-Stage Role Participation
@@ -287,7 +287,7 @@ The boundary between Layer 0 and Layer 1 is the boundary between *computed* and 
 The program directory is identified to the CLI by `.dde/` walk-up discovery
 (preferred) or by setting `DDE_PROJECT` explicitly. In a standalone program
 workspace, the program directory is `/workspace`. When `/workspace` is the
-dde repo itself, point `DDE_PROJECT` at the program subdirectory.
+OASE repo itself, point `DDE_PROJECT` at the program subdirectory.
 
 ```
 project-<name>/                       # program root (resolved via .dde/ walk-up or $DDE_PROJECT)
@@ -476,10 +476,10 @@ The ratio adapts to the program stage: relaxed cadence in early exploration (Sta
 
 ---
 
-## 7. DDE Repository Structure
+## 7. OASE Repository Structure
 
 ```
-dde/
+open-agentic-science-engine/
 ├── templates/                         # Scion agent templates
 │   ├── science-program-lead/          # Science Program Lead; user entry point
 │   │   ├── scion-agent.yaml
@@ -563,7 +563,7 @@ dde/
 │   └── layer4-executive/
 │       └── program-summary.md
 ├── docs/
-│   ├── dde-plan.md                 # This document
+│   ├── oase-plan.md                 # This document
 │   ├── orchestration-design-guidance.md
 │   ├── skill-design-guidance.md
 │   ├── tool-design-guidance.md
@@ -609,7 +609,7 @@ system_prompt: system-prompt.md
 
 # DDE_PROJECT is resolved by .dde/ walk-up discovery by default.
 # Set it explicitly only when the agent's workspace is not the program
-# directory — e.g. when /workspace is the dde repo:
+# directory — e.g. when /workspace is the OASE repo:
 #   env:
 #     DDE_PROJECT: /workspace/program-hr-mbc
 
@@ -670,13 +670,13 @@ still preventing a specialist from claiming a capability it has no way to exerci
 
 Agent templates reference skills through three mechanisms:
 
-1. **DDE skills** (shared across roles): `https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications/open-agentic-science-engine/skills/artifact-conventions` — the report format and linking conventions that all specialists follow. Skill names must match the directory names in `skills/` exactly.
+1. **OASE skills** (shared across roles): `https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications/open-agentic-science-engine/skills/artifact-conventions` — the report format and linking conventions that all specialists follow. Skill names must match the directory names in `skills/` exactly.
 
 2. **Local template skills** (role-specific): Skills in the template's own `skills/` directory when a workflow is not reusable or published. Shared orchestration capabilities belong in `skills/` rather than copied between the Science Program Lead and the Research Operations Controller.
 
 3. **External skills** (from the broader scion ecosystem): Any published skill that a role might benefit from.
 
-Use one URI scheme. `gh://` resolution is the current scheme for all dde skills.
+Use one URI scheme. `gh://` resolution is the current scheme for all OASE skills.
 
 ### 7.3 Project Bootstrapping
 
@@ -695,9 +695,9 @@ Starting a new research project:
 
 ## 8. Relationship to the Legacy `pharma_skills` Repository
 
-The existing `pharma_skills` repository contains ~490 files with ~168 agent skills and 57 tool skills. It represents comprehensive domain coverage across all four pre-clinical stages. DDE draws on this material but restructures it according to the principles above:
+The existing `pharma_skills` repository contains ~490 files with ~168 agent skills and 57 tool skills. It represents comprehensive domain coverage across all four pre-clinical stages. OASE draws on this material but restructures it according to the principles above:
 
-| Legacy Approach | DDE Approach |
+| Legacy Approach | OASE Approach |
 |---|---|
 | ~200 lines per role skill re-teaching domain procedures | ~20 lines: persona trigger + tools + output contract |
 | Procedural workflows baked into role definitions | Stage-specific questions come from Science Program Lead work orders; professional method comes from LLM knowledge |
@@ -713,31 +713,31 @@ The existing `pharma_skills` repository contains ~490 files with ~168 agent skil
 
 **The legacy CLI's interface shape is a cautionary example, not a template.** `pharma_cli.py` collapses query and interpretation into a single invocation that emits both the raw payload and the finding. That shape is a large part of why fabrication in it is undetectable: there is no point at which raw data exists independently of the claim made about it. Several of its `compute` subcommands never open their inputs at all and emit a hardcoded pass verdict. Anything adapted from that repository must be read as a specification of intent, not as working code, and must be verified to actually perform the computation it reports. The same applies to any routine producing synthetic values in place of a real model call.
 
-**The same defect class appeared in dde's own first CLI.** The single-file `dde_cli.py` bound to minified JSON keys that no real Co-Scientist export uses. Its `overview` subcommand printed a plausible, well-formatted tournament report with the entire top-ideas table missing, and exited 0. Nothing downstream could detect the loss. The legacy code was removed after all subcommands were ported to the two-phase model with shape-based field resolution; the lesson is preserved here.
+**The same defect class appeared in OASE's own first CLI.** The single-file `dde_cli.py` bound to minified JSON keys that no real Co-Scientist export uses. Its `overview` subcommand printed a plausible, well-formatted tournament report with the entire top-ideas table missing, and exited 0. Nothing downstream could detect the loss. The legacy code was removed after all subcommands were ported to the two-phase model with shape-based field resolution; the lesson is preserved here.
 
-This first-party case carries more weight than the inherited one. The fault is not confined to code dde did not write, and no amount of reading found it — it appeared when the tool ran against a real export. Two rules follow. Treat "the tool ran and printed something plausible" as unverified until an artifact exists that a reviewer can re-read. Resolve data by shape rather than by a name that carries no meaning, and raise on absence rather than rendering an empty result.
+This first-party case carries more weight than the inherited one. The fault is not confined to code OASE did not write, and no amount of reading found it — it appeared when the tool ran against a real export. Two rules follow. Treat "the tool ran and printed something plausible" as unverified until an artifact exists that a reviewer can re-read. Resolve data by shape rather than by a name that carries no meaning, and raise on absence rather than rendering an empty result.
 
 ---
 
 ## 9. Open Design Questions
 
-1. **Modality-specific specialist roles:** The four abstract stages accommodate all modalities, but certain programs require specialists not yet templated (antibody engineer, sequence designer, gene therapy vector engineer). Should dde ship with modality-specific specialist templates, or should these be added as extension packs?
+1. **Modality-specific specialist roles:** The four abstract stages accommodate all modalities, but certain programs require specialists not yet templated (antibody engineer, sequence designer, gene therapy vector engineer). Should OASE ship with modality-specific specialist templates, or should these be added as extension packs?
 
 2. **Multi-program portfolio:** When an organization runs multiple drug programs simultaneously, is there a portfolio-level orchestrator above the individual program orchestrators? This would handle resource allocation, competitive intelligence, and strategic portfolio decisions.
 
-3. **Wet-lab integration boundaries:** DDE's specialist agents reason about experiments and interpret results, but the physical experimental work happens outside the system. How does data from real lab instruments (plate readers, SPR, crystallography) flow into the Layer 0 raw artifacts? This interfaces with LIMS/lab automation tooling.
+3. **Wet-lab integration boundaries:** OASE's specialist agents reason about experiments and interpret results, but the physical experimental work happens outside the system. How does data from real lab instruments (plate readers, SPR, crystallography) flow into the Layer 0 raw artifacts? This interfaces with LIMS/lab automation tooling.
 
-4. **Enterprise policy extensibility:** The current material includes Sobi-specific policies (FcRn thresholds, haematology focus). How should dde support pluggable enterprise policy modules for different organizations? Program-level thresholds already have a mechanism (`.dde/thresholds.yaml`); an organization-level layer beneath it is the likely shape.
+4. **Enterprise policy extensibility:** The current material includes Sobi-specific policies (FcRn thresholds, haematology focus). How should OASE support pluggable enterprise policy modules for different organizations? Program-level thresholds already have a mechanism (`.dde/thresholds.yaml`); an organization-level layer beneath it is the likely shape.
 
 5. **Lease broker implementation:** The Research Operations Controller owns resource scheduling policy, and `dde` invocations must acquire leases for single-flight resources such as AlphaFold 3. This is now load-bearing rather than theoretical: `dde alphafold predict` serializes callers with an `fcntl` lock, which holds only within one container. Specialists run in separate containers, so cross-container collisions are unsolved and the endpoint returns 429 under concurrency. Whether the shared broker is a shared-volume service or an MCP service remains unsettled. Direct specialist coordination and ad hoc file locks are not an acceptable end state. *Note:* General HTTP rate-limit coordination (NCBI, PubChem, etc.) is now handled by flock on a shared filesystem volume (#59, #68); the lease broker question is scoped to truly single-flight endpoints (AF3) where only one concurrent request is permitted.
 
-6. **Upstream skill provenance:** Converting science-skills into the dde pattern changes their execution model, which makes it a fork rather than a wrapper. Upstream is effectively dormant, so the maintenance cost is low, but each converted skill should record its upstream commit and license (Apache 2.0 for code, CC-BY 4.0 for materials). The mechanism for that is not yet defined.
+6. **Upstream skill provenance:** Converting science-skills into the OASE pattern changes their execution model, which makes it a fork rather than a wrapper. Upstream is effectively dormant, so the maintenance cost is low, but each converted skill should record its upstream commit and license (Apache 2.0 for code, CC-BY 4.0 for materials). The mechanism for that is not yet defined.
 
 ---
 
 ## 10. Near-Term Sequence
 
-DDE is built in the order **tools → skills → templates**, against a three-tool
+OASE is built in the order **tools → skills → templates**, against a three-tool
 pilot. The order follows the tier ownership in
 [`tool-design-guidance.md`](tool-design-guidance.md) §1. A skill cannot name an
 invocation that does not exist, and a template cannot grant a skill nobody has written.
@@ -746,7 +746,7 @@ invocation that does not exist, and a template cannot grant a skill nobody has w
 |---|---|---|
 | **1. Tooling** | The `dde` package and its `core/` modules, `doctor`, `init`, the control-plane commands, and the three pilot tools | Each pilot tool writes Layer 0 artifacts with sidecars, and `analyze` re-runs from disk |
 | **2. Skills** | Convert the pilot tools into capability skills; write the orchestration skills | A specialist can route to an invocation without guessing a path |
-| **3. Templates** | Add the controller and reviewer templates; replace the upstream skill grants with dde grants | No template grants an upstream URI, and no template names a tool it cannot invoke |
+| **3. Templates** | Add the controller and reviewer templates; replace the upstream skill grants with OASE grants | No template grants an upstream URI, and no template names a tool it cannot invoke |
 
 The templates in the repo today grant `google-deepmind/science-skills` URIs directly.
 That is the state before conversion. Step 3 replaces those grants.

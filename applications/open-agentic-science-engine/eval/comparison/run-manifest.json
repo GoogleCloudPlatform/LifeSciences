@@ -25,7 +25,7 @@
   "stage0_total": 8,
   "scope_limitation": "Evidence reuse (#77) is P2 and out of scope \u2014 only baseline vs. Stage 0 bounded triage is compared.",
   "command": "PYTHONPATH=tools python3 -m eval.run_comparison",
-  "working_directory": "/workspace/applications/DDE",
+  "working_directory": "/workspace/applications/open-agentic-science-engine",
   "outputs": [
     "eval/comparison/stage0-report.json",
     "eval/comparison/comparison-report.json",

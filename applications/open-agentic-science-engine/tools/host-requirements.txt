@@ -1,4 +1,4 @@
-# Host requirements for the dde tools environment.
+# Host requirements for the OASE tools environment.
 # Read by `dde env plan` and `bootstrap-preflight.sh`.
 # One requirement per line: category, name, and why.
 #

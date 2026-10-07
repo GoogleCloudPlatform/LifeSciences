@@ -1,4 +1,4 @@
-# DDE Evaluation Baseline Report
+# OASE Evaluation Baseline Report
 
 **Evaluation version**: 1.0
 **Run timestamp**: 2026-09-08T15:07:57Z
@@ -186,5 +186,5 @@ This baseline establishes the following measurable properties of the current wor
 
 All fixtures are synthetic, clearly labeled as such in their definitions.
 No real program data or patient data is used.
-Fixture provenance is documented in `applications/DDE/eval/fixtures/definitions.py`.
+Fixture provenance is documented in `applications/open-agentic-science-engine/eval/fixtures/definitions.py`.
 

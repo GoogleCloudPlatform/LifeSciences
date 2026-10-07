@@ -47,7 +47,7 @@ from dde.core.errors import Refusal
 
 
 def _make_project(base: Path) -> Path:
-    """Create a minimal dde project directory."""
+    """Create a minimal OASE project directory."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
     (project / ".dde").mkdir(exist_ok=True)

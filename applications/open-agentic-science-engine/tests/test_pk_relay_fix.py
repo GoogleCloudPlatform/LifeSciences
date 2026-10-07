@@ -47,7 +47,7 @@ from dde.core.provenance import RELAY_CODES
 
 
 def _make_project(base: Path) -> Path:
-    """Create a minimal dde project directory for CliRunner tests."""
+    """Create a minimal OASE project directory for CliRunner tests."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
     (project / ".dde").mkdir(exist_ok=True)

@@ -22,7 +22,7 @@ Covers:
   - site.py: shutil.copytree follows symlinks (#207)
 
 Run with:
-    cd applications/DDE
+    cd applications/open-agentic-science-engine
     python -m pytest tests/test_symlink_fixes.py -v
 """
 

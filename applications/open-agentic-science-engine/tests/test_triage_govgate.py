@@ -28,7 +28,7 @@ then ``.dde/`` walk-up) and catches the resulting exception when no
 project context is available at all.
 
 Run with:
-    cd /workspace/applications/DDE && PYTHONPATH=tools python3 tests/test_triage_govgate.py
+    cd /workspace/applications/open-agentic-science-engine && PYTHONPATH=tools python3 tests/test_triage_govgate.py
 
 Exit 0 = all tests passed, exit 1 = at least one failure.
 """
@@ -77,7 +77,7 @@ def _check(name: str, fn: Any) -> None:
 
 
 def _make_project(base: Path) -> Path:
-    """Create a minimal DDE project directory with .dde/ and control dirs."""
+    """Create a minimal OASE project directory with .dde/ and control dirs."""
     project = base / "test-project"
     project.mkdir(parents=True, exist_ok=True)
     (project / ".dde").mkdir(exist_ok=True)

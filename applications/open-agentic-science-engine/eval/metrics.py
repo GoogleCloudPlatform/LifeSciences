@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Measurement collection for the DDE evaluation harness.
+"""Measurement collection for the OASE evaluation harness.
 
 Every rate metric carries an explicit denominator per issue #82
 acceptance criteria.  No metric is a bare count without context.
@@ -296,7 +296,7 @@ class BaselineReport:
         path.parent.mkdir(parents=True, exist_ok=True)
         summary = self.summary_metrics()
         lines: list[str] = []
-        lines.append("# DDE Evaluation Baseline Report")
+        lines.append("# OASE Evaluation Baseline Report")
         lines.append("")
         lines.append(f"**Evaluation version**: {self.eval_version}")
         lines.append(f"**Run timestamp**: {self.run_timestamp}")
@@ -417,7 +417,7 @@ class BaselineReport:
         lines.append("No real program data or patient data is used.")
         lines.append(
             "Fixture provenance is documented in "
-            "`applications/DDE/eval/fixtures/definitions.py`."
+            "`applications/open-agentic-science-engine/eval/fixtures/definitions.py`."
         )
         lines.append("")
 

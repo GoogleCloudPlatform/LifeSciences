@@ -25,8 +25,8 @@ raised, `manifest_present` stays `False` and the relay fires correctly.
 
 ## Files Changed
 
-- `applications/DDE/tools/dde/commands/hypex.py` — moved `manifest_present = True` after `_read_json_file` succeeds
-- `applications/DDE/tests/test_relay_omission_batch3.py` — regression test (3 tests)
+- `applications/open-agentic-science-engine/tools/dde/commands/hypex.py` — moved `manifest_present = True` after `_read_json_file` succeeds
+- `applications/open-agentic-science-engine/tests/test_relay_omission_batch3.py` — regression test (3 tests)
 
 ## Tests
 

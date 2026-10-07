@@ -386,7 +386,7 @@ proceed on an assumed result.
   `balanced`, ±90 at `focus_on_breakthroughs`). It is not an ELO. Do
   not write it into a field named `elo` or compare it against an ELO
   threshold.
-- **Silently collapsing the v2 loop to one epoch.** The DDE Hypex contract is
+- **Silently collapsing the v2 loop to one epoch.** The OASE Hypex contract is
   multi-epoch. A run may stop after one epoch only when an explicit budget or
   error condition requires finalization, and its termination reason must say
   so. Do not label such a run converged or substitute the retired pilot flow.

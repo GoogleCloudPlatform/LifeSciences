@@ -24,7 +24,7 @@ Covers:
   - validate.py: findings_integrity symlink guard (#283)
 
 Run with:
-    cd applications/DDE
+    cd applications/open-agentic-science-engine
     python -m pytest tests/test_symlink_commands.py -v
 """
 

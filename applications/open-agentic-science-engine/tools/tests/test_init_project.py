@@ -19,7 +19,7 @@ Covers:
 - Re-init preserves existing file content (idempotency)
 - _write_if_missing does not overwrite existing content
 - _write_if_missing raises ProjectRootError when path is a directory
-- Init into a dde source repo raises ProjectRootError
+- Init into an OASE source repo raises ProjectRootError
 """
 
 from __future__ import annotations
@@ -182,7 +182,7 @@ class TestWriteIfMissing(unittest.TestCase):
 
 
 class TestInitProjectRejectsRepo(unittest.TestCase):
-    """Init into a dde source repo raises ProjectRootError."""
+    """Init into an OASE source repo raises ProjectRootError."""
 
     def setUp(self):
         import tempfile
@@ -202,7 +202,7 @@ class TestInitProjectRejectsRepo(unittest.TestCase):
 
     def test_heuristic_repo_detection_rejected(self):
         """The heuristic backstop also rejects directories that look like
-        the dde source repo (docs/tool-design-guidance.md + tools/)."""
+        the OASE source repo (docs/tool-design-guidance.md + tools/)."""
         (self.repo / "docs").mkdir()
         (self.repo / "docs" / "tool-design-guidance.md").write_text(
             "", encoding="utf-8"

@@ -5,7 +5,7 @@
 
 ## Summary
 
-Fixed eight path traversal vulnerabilities across the DDE toolchain using
+Fixed eight path traversal vulnerabilities across the OASE toolchain using
 the shared `sanitize_slug()` and `confine_path()` helpers from
 `dde.core.paths`. All fixes follow the same pattern established in
 Round 1: user-controlled input is sanitized before it enters filesystem

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Evaluation fixtures for DDE workflow baseline measurement.
+"""Evaluation fixtures for OASE workflow baseline measurement.
 
 Every fixture documents its provenance (synthetic or derived from
 available artifacts) per issue #82 acceptance criteria.

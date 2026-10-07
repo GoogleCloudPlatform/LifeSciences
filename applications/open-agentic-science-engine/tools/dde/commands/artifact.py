@@ -15,10 +15,10 @@
 """`dde artifact` — artifact management commands.
 
 Provides ``dde artifact register`` for assigning provenance sidecars to
-files produced outside the DDE tool surface (e.g. files fetched from
+files produced outside the OASE tool surface (e.g. files fetched from
 external APIs).  The sidecar is machine-generated with
 ``type: "registration"`` so it is clearly distinguishable from
-production sidecars written by DDE tools.
+production sidecars written by OASE tools.
 
 Provides ``dde artifact classes`` for discovering every registered
 artifact class, its target directory, and which command group produces

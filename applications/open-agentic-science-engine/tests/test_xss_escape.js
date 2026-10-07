@@ -17,11 +17,11 @@
 'use strict';
 
 /**
- * Tests for the escapeHtml() XSS mitigation function used across DDE viewer
+ * Tests for the escapeHtml() XSS mitigation function used across OASE viewer
  * templates.  The function is defined identically in all five viewer HTML
  * files added/patched by PR #237 (issues #225-#230).
  *
- * Run:  node applications/DDE/tests/test_xss_escape.js
+ * Run:  node applications/open-agentic-science-engine/tests/test_xss_escape.js
  */
 
 const assert = require('assert');

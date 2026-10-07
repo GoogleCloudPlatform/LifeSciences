@@ -23,7 +23,7 @@ The result is cached for the session so the subprocess runs at most once
 per process.  Every call site — sidecar writing, doctor, the CLI startup
 warning — reads the same cached value.
 
-Issue #127: specialists patched installed DDE source mid-run during the
+Issue #127: specialists patched installed OASE source mid-run during the
 pilot campaign. 5 files modified, 29 insertions, all sidecars still
 claimed unmodified `cli_version: 0.3.0`.  This module makes the
 condition visible instead of silent.

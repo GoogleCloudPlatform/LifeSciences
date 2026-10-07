@@ -39,7 +39,7 @@ class TestCheckProjectFromEnvVar(unittest.TestCase):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.root = Path(self._tmpdir.name) / "program"
         self.root.mkdir()
-        # Project must be writable and not look like the dde repo
+        # Project must be writable and not look like the OASE repo
         (self.root / ".dde").mkdir()
 
     def tearDown(self):

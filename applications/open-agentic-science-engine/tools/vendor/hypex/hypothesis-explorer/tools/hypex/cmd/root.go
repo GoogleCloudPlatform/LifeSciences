@@ -50,7 +50,7 @@ partial writes. Concurrent ID allocation is safe via filesystem locking.`,
 // defaultRunsDir is the default base directory for runs.
 const defaultRunsDir = "/scion-volumes/executions"
 
-// defaultSchemaDir resolves schemas installed beside the executable by DDE's
+// defaultSchemaDir resolves schemas installed beside the executable by OASE's
 // bootstrapper. The source-tree fallback keeps upstream development commands
 // working from the repository root.
 func defaultSchemaDir() string {

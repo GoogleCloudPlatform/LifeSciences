@@ -178,7 +178,7 @@ clear evidence-based weaknesses to fix.
    # Cross-domain PubMed search
    dde pubmed search "<distant field mechanism>[MeSH Terms] AND <target system>[MeSH Terms]" --max-results 15
 
-   # Broad exploration for unexpected connections (DDE fan-out)
+   # Broad exploration for unexpected connections (OASE fan-out)
    dde pubmed search "<phenomenon> <distant field keyword>" --max-results 15
    dde preprint search --source arxiv "<phenomenon> <distant field keyword>" --max-results 10
    dde preprint search --source biorxiv "<phenomenon> <distant field keyword>" --max-results 10

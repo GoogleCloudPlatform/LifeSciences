@@ -19,7 +19,7 @@
 #298: Incomplete Step 5 pre-validation permits partial writes.
 
 Run with:
-    cd applications/DDE && PYTHONPATH=tools python3 tests/test_program_govgate_295_298.py
+    cd applications/open-agentic-science-engine && PYTHONPATH=tools python3 tests/test_program_govgate_295_298.py
 
 Exit 0 = all tests passed, exit 1 = at least one failure.
 """
@@ -56,7 +56,7 @@ _NOW = "2026-09-19T12:00:00Z"
 
 
 def _make_project(base: Path, name: str) -> Path:
-    """Create a minimal dde project directory with control plane."""
+    """Create a minimal OASE project directory with control plane."""
     project = base / name
     project.mkdir(parents=True, exist_ok=True)
     (project / ".dde").mkdir(exist_ok=True)

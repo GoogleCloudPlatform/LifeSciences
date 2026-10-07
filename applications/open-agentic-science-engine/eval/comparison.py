@@ -183,7 +183,7 @@ class ComparisonReport:
         path.parent.mkdir(parents=True, exist_ok=True)
         lines: list[str] = []
 
-        lines.append("# DDE Evaluation Comparison Report — Baseline vs. Stage 0")
+        lines.append("# OASE Evaluation Comparison Report — Baseline vs. Stage 0")
         lines.append("")
         lines.append(f"**Evaluation version**: {self.eval_version}")
         lines.append(f"**Baseline run**: {self.baseline_timestamp}")
@@ -325,11 +325,11 @@ class ComparisonReport:
         )
         lines.append(
             "Fixture provenance is documented in "
-            "`applications/DDE/eval/fixtures/definitions.py`."
+            "`applications/open-agentic-science-engine/eval/fixtures/definitions.py`."
         )
         lines.append(
             "Baseline data is from "
-            "`applications/DDE/eval/baseline/baseline-report.json` "
+            "`applications/open-agentic-science-engine/eval/baseline/baseline-report.json` "
             "(Phase 1 output, frozen — not regenerated or modified)."
         )
         lines.append("")

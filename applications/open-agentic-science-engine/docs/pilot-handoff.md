@@ -7,7 +7,7 @@ change them.
 
 This document answers one question: **what is the first pilot actually able to do, and
 how should a report from it be read?** It does not describe the design — the design is in
-[`dde-plan.md`](dde-plan.md), which is the source of truth, with the README as a
+[`oase-plan.md`](oase-plan.md), which is the source of truth, with the README as a
 high-level recap.
 
 ---

@@ -6,7 +6,7 @@
 
 ## Summary
 
-Implemented Stage 0 progressive manufacturing assessment for the DDE
+Implemented Stage 0 progressive manufacturing assessment for the OASE
 toolkit.  The assessment evaluates production-platform fit for
 intervention concepts based on modality, delivery assumptions, and
 entity reference (SMILES, sequence, or construct).

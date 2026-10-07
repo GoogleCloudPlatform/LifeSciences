@@ -448,7 +448,7 @@ def read_record(
     Parameters
     ----------
     project_root:
-        Path to the dde project root.
+        Path to the OASE project root.
     record_type:
         One of ``"work-order"``, ``"context"``, ``"run"``, ``"validation"``.
     identifier:
@@ -552,7 +552,7 @@ def write_record(
     Parameters
     ----------
     project_root:
-        Path to the dde project root.
+        Path to the OASE project root.
     record_type:
         One of the keys in ``RECORD_TYPES``.
     identifier:
@@ -624,7 +624,7 @@ def list_records(
     Parameters
     ----------
     project_root:
-        Path to the dde project root.
+        Path to the OASE project root.
     record_type:
         One of ``"work-order"``, ``"context"``, ``"run"``, ``"validation"``.
     filter_fn:
@@ -720,7 +720,7 @@ def write_publish_state(project_root: str | Path, data: dict[str, Any]) -> Path:
     Parameters
     ----------
     project_root:
-        Path to the dde project root.
+        Path to the OASE project root.
     data:
         The publish-state dict.
 
@@ -762,7 +762,7 @@ def next_id(project_root: str | Path, record_type: str) -> str:
     Parameters
     ----------
     project_root:
-        Path to the dde project root.
+        Path to the OASE project root.
     record_type:
         ``"work-order"``, ``"run"``, or ``"concept"``.
 

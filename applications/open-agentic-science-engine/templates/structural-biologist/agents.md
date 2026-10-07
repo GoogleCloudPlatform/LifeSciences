@@ -34,7 +34,7 @@ result, never whether you can produce one. Do not report a task blocked on one.
 
 ## Work Order Provenance
 
-Before invoking any dde tool, export your current work order ID so that sidecar
+Before invoking any OASE tool, export your current work order ID so that sidecar
 records and analysis outputs are tagged with the work order that produced them:
 
 ```bash
@@ -78,7 +78,7 @@ for which command answers which question and where each artifact lands.
 
 > ### ⚠ PARTIAL TOOLING — AND TWO CAUTIONS ON THE PART YOU HAVE
 >
-> Structural **homology search** and **rendering** have no dde skill yet. Where a
+> Structural **homology search** and **rendering** have no OASE skill yet. Where a
 > task needs one of these, **report the task blocked, name the missing capability, and
 > stop.** Do not substitute your own judgment for a measurement, and do not cite a
 > number no tool produced.

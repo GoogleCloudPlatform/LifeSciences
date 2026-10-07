@@ -13,7 +13,7 @@
 # limitations under the License.
 
 schema_version: "1"
-description: "Short-lived agent that provisions the DDE tools environment, runs doctor verification, and reports readiness"
+description: "Short-lived agent that provisions the OASE tools environment, runs doctor verification, and reports readiness"
 agent_instructions: agents.md
 system_prompt: system-prompt.md
 

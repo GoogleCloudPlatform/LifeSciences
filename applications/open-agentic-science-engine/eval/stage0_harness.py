@@ -22,7 +22,7 @@ structures as the baseline harness.
 This module does NOT modify the existing baseline artifacts, fixture
 definitions, or tools.  It measures the Stage 0 workflow as-is.
 
-Usage (from the DDE application root):
+Usage (from the OASE application root):
 
     PYTHONPATH=tools python3 -m eval.run_comparison
 """
@@ -251,7 +251,7 @@ def run_all_fixtures_stage0() -> BaselineReport:
         run_timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
 
-    print(f"DDE Stage 0 Evaluation Harness v{report.eval_version}")
+    print(f"OASE Stage 0 Evaluation Harness v{report.eval_version}")
     print(f"Run timestamp: {report.run_timestamp}")
     print(f"Fixtures to run: {len(ALL_FIXTURES)}")
     print("=" * 60)

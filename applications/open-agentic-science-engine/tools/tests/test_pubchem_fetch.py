@@ -14,7 +14,7 @@
 
 """Tests for ``dde pubchem fetch`` — CID-to-compound data.
 
-Issue #90: No CID-to-SMILES path inside the DDE tool surface.
+Issue #90: No CID-to-SMILES path inside the OASE tool surface.
 
 Asserts:
 1. Property endpoint parsing produces correct artifact fields.

@@ -2,9 +2,9 @@
 
 Agentic pre-clinical pharmaceutical R&D system built on [Scion](https://github.com/GoogleCloudPlatform/scion).
 
-DDE provides the agent templates, skills, tools, and artifact conventions needed to stand up a coordinated multi-agent research team for any drug discovery program. Give the Science Program Lead a scientific objective — a disease indication, a target hypothesis, a modality — and it directs the program through versioned scientific work orders. A persistent Research Operations Controller supervises ephemeral specialists, validates their artifacts, and publishes accepted results. The science lead keeps sole authority over evidence acceptance and program decisions.
+OASE provides the agent templates, skills, tools, and artifact conventions needed to stand up a coordinated multi-agent research team for any drug discovery program. Give the Science Program Lead a scientific objective — a disease indication, a target hypothesis, a modality — and it directs the program through versioned scientific work orders. A persistent Research Operations Controller supervises ephemeral specialists, validates their artifacts, and publishes accepted results. The science lead keeps sole authority over evidence acceptance and program decisions.
 
-This README covers project setup, configuration, and architectural overview. [**docs/dde-plan.md**](docs/dde-plan.md) is the source of truth for the design.
+This README covers project setup, configuration, and architectural overview. [**docs/oase-plan.md**](docs/oase-plan.md) is the source of truth for the design.
 
 ---
 
@@ -35,9 +35,9 @@ Once deployment completes, open the Cloud Run IAP proxy URL in your browser to a
 
 ### Part 2: Bootstrapping the Project
 
-After your Scion Hub is running, create a GCP service account for DDE agents and configure the `open-agentic-science-engine` project workspace in the Scion web UI.
+After your Scion Hub is running, create a GCP service account for OASE agents and configure the `open-agentic-science-engine` project workspace in the Scion web UI.
 
-#### 1. Create a GCP Service Account for DDE Agents
+#### 1. Create a GCP Service Account for OASE Agents
 
 Scion assigns GCP identities to agents via [metadata server emulation (`169.254.169.254`)](https://googlecloudplatform.github.io/scion/hosted/single-node/auth/#gcp-identity--metadata-emulation) rather than distributing static JSON keys. When an agent requests Application Default Credentials (ADC), its `sciontool` sidecar proxies the token request to the Scion Hub, which impersonates the assigned service account via the IAM Service Account Credentials API.
 
@@ -46,7 +46,7 @@ Before registering a service account in the Scion UI, create the agent service a
 ```bash
 export PROJECT_ID="your-gcp-project-id"
 export HUB_NAME="your-scion-hub-name"   # e.g. dev or my-hub (from Part 1)
-export AGENT_SA_NAME="dde-agent-sa"
+export AGENT_SA_NAME="oase-agent-sa"
 export AGENT_SA_EMAIL="${AGENT_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 export HUB_SA_EMAIL="scion-hub-${HUB_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
@@ -58,7 +58,7 @@ gcloud services enable \
 
 # 2. Create the agent service account
 gcloud iam service-accounts create "${AGENT_SA_NAME}" \
-  --display-name="DDE Agent Service Account" \
+  --display-name="OASE Agent Service Account" \
   --project="${PROJECT_ID}"
 
 # 3. Grant the agent service account access to Vertex AI (models, AlphaFold 3, AlphaGenome)
@@ -100,70 +100,62 @@ Once the `open-agentic-science-engine` workspace is created, click the **Setting
 
 ![Project Overview - Settings](docs/images/03-project-overview-settings.png)
 
-#### 4. Configure Default Harness to `antigravity`
+#### 4. Register the Existing GCP Service Account
 
-In **open-agentic-science-engine Settings**, under the **Configuration** -> **General** tab:
-1. Set **Default Harness Config** to `antigravity (antigravity)` so new agents use the Antigravity harness by default.
-2. Click **Save Configuration**.
-
-![Project Settings - Default Harness Config](docs/images/04-project-settings-harness.png)
-
-#### 5. Register the Existing GCP Service Account
-
-Scroll down to the **Resources** section (*Project-scoped resources available to agents*) and select the **GCP Service Accounts** tab:
+In **open-agentic-science-engine Settings**, scroll down to the **Resources** section (*Project-scoped resources available to agents*) and select the **GCP Service Accounts** tab:
 1. Click **+ Register Existing**:
 
-![Project Resources - Register Existing GCP Service Account](docs/images/05-project-resources-service-account.png)
+![Project Resources - Register Existing GCP Service Account](docs/images/04-project-resources-service-account.png)
 
-2. In the **Register GCP Service Account** dialog, enter your **Service Account Email** (`dde-agent-sa@<PROJECT_ID>.iam.gserviceaccount.com`). The **GCP Project ID** will be auto-detected from the email. Click **Register**:
+2. In the **Register GCP Service Account** dialog, enter your **Service Account Email** (`oase-agent-sa@<PROJECT_ID>.iam.gserviceaccount.com`). The **GCP Project ID** will be auto-detected from the email. Click **Register**:
 
-![Register GCP Service Account Dialog](docs/images/06-register-service-account-dialog.png)
+![Register GCP Service Account Dialog](docs/images/05-register-service-account-dialog.png)
 
-#### 6. Assign the Default Service Account in Auth & Security
+#### 5. Assign the Default Service Account in Auth & Security
 
 Scroll back up to **Configuration** and select the **Auth & Security** tab:
 1. Set **Default Service Account** to **Assign Service Account**.
-2. Under **Service Account**, select the `dde-agent-sa@<PROJECT_ID>.iam.gserviceaccount.com` service account you registered.
+2. Under **Service Account**, select the `oase-agent-sa@<PROJECT_ID>.iam.gserviceaccount.com` service account you registered.
 3. Click **Save Configuration**.
 
-![Configuration - Auth & Security Assign Service Account](docs/images/07-auth-security-assign-service-account.png)
+![Configuration - Auth & Security Assign Service Account](docs/images/06-auth-security-assign-service-account.png)
 
-#### 7. Add the `tools` Shared Directory
+#### 6. Add the `tools` Shared Directory
 
 In the **Resources** section, select the **Shared Directories** tab and click **+ Add Directory**:
 
-![Resources - Shared Directories](docs/images/08-resources-shared-directories.png)
+![Resources - Shared Directories](docs/images/07-resources-shared-directories.png)
 
 In the **Add Shared Directory** dialog, set **Name** to `tools` (leave **Read-only** and **Mount in workspace** unchecked so it mounts read-write at `/scion-volumes/tools`) and click **Create**:
 
-![Add Shared Directory - tools](docs/images/09-shared-directory-tools.png)
+![Add Shared Directory - tools](docs/images/08-shared-directory-tools.png)
 
-#### 8. Import Agent Templates
+#### 7. Import Agent Templates
 
 In the **Resources** section, select the **Templates** tab:
 1. Select **Import from URL**.
-2. Provide the GitHub URL for the DDE templates:
+2. Provide the GitHub URL for the OASE templates:
    ```text
    https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications/open-agentic-science-engine/templates
    ```
 
 3. Click **Import Templates**:
 
-![Resources - Import Templates from URL](docs/images/10-resources-templates-import-url.png)
+![Resources - Import Templates from URL](docs/images/09-resources-templates-import-url.png)
 
 4. In the **Select Templates to Import** dialog, check **Select All** (`22 of 22 selected`) and click **Import Selected (22)**:
 
-![Select Templates to Import](docs/images/11-select-templates-to-import.png)
+![Select Templates to Import](docs/images/10-select-templates-to-import.png)
 
-#### 9. Create and Start the `controller` Agent
+#### 8. Create and Start the `controller` Agent
 
 1. In the left navigation sidebar under **MANAGEMENT**, select **Agents**:
 
-![Sidebar - Select Agents](docs/images/12-sidebar-select-agents.png)
+![Sidebar - Select Agents](docs/images/11-sidebar-select-agents.png)
 
 2. Click **+ Create Agent**:
 
-![Agents - Create Agent](docs/images/13-agents-create-agent.png)
+![Agents - Create Agent](docs/images/12-agents-create-agent.png)
 
 3. In the **Create Agent** form:
    - Set **Agent Name** to `controller`.
@@ -172,21 +164,21 @@ In the **Resources** section, select the **Templates** tab:
    - Uncheck **Notify me on important agent state changes**.
    - Click **Start**:
 
-![Create Agent - controller](docs/images/14-create-agent-controller.png)
+![Create Agent - controller](docs/images/13-create-agent-controller.png)
 
-#### 10. Open Chat and Set `controller` as the Thread Default Agent
+#### 9. Open Chat and Set `controller` as the Thread Default Agent
 
 1. Once the `controller` agent is running, click **Chat** in the top navigation bar:
 
-![Agent Running - Select Chat](docs/images/15-agent-running-select-chat.png)
+![Agent Running - Select Chat](docs/images/14-agent-running-select-chat.png)
 
 2. In the **Projects** panel on the left, expand **OPEN-AGENTIC-SCIENCE-ENGINE**, click the three dots (`⋮`) menu, select **+ NEW THREAD**, and name the thread `operations`:
 
-![Scion Chat - New Thread](docs/images/16-chat-new-thread.png)
+![Scion Chat - New Thread](docs/images/15-chat-new-thread.png)
 
 3. At the bottom-left of the chat panel (above the message input box), click **`no agent`** and select **`controller`** as the thread default agent:
 
-![Scion Chat - Set Thread Default Agent to controller](docs/images/17-chat-thread-default-agent.png)
+![Scion Chat - Set Thread Default Agent to controller](docs/images/16-chat-thread-default-agent.png)
 
 You can now message the `controller` directly in this thread with a program directive to bootstrap the tools environment and launch the Science Program Lead (see [`docs/quickstart-pilot.md`](docs/quickstart-pilot.md)).
 
@@ -227,7 +219,7 @@ that order, never up.
 **Snapshot — 2026-08-18, decays from that moment.** The pilot tools (co-scientist,
 AlphaFold, AlphaGenome) are built, and further tool groups have landed since; `dde
 doctor` lists what is actually callable. Nine skills exist. All twelve templates,
-including the controller and the reviewer, grant dde capability skills — the earlier
+including the controller and the reviewer, grant OASE capability skills — the earlier
 state, in which templates granted upstream `science-skills` URIs directly, is gone.
 Coverage is uneven by role rather than uniformly early: some roles hold several
 capability skills, some hold one, and some hold none and will report blocked by design.
@@ -240,7 +232,7 @@ Read the URIs, not the counts, and decide per skill which kind it is. The per-ro
 picture is in each template's `scion-agent.yaml` and, for the planning view, in
 `templates/science-program-lead/agents.md` §9.
 
-The three guidance documents are v0.1. The pilot is expected to change them. See [dde-plan.md §10](docs/dde-plan.md).
+The three guidance documents are v0.1. The pilot is expected to change them. See [oase-plan.md §10](docs/oase-plan.md).
 
 ## How It Works
 
@@ -264,7 +256,7 @@ Before the four invariant stages begin, a program acquires its initial hypothesi
 
 ### The Four Invariant Stages
 
-DDE follows the pre-clinical drug discovery value chain. The stages are invariant and modality-independent. What happens within each stage is dynamic — which roles participate, which workflows execute, and how work is sequenced all depend on the evolving scientific context.
+OASE follows the pre-clinical drug discovery value chain. The stages are invariant and modality-independent. What happens within each stage is dynamic — which roles participate, which workflows execute, and how work is sequenced all depend on the evolving scientific context.
 
 | Stage | Objective | Gate question |
 |---|---|---|
@@ -273,7 +265,7 @@ DDE follows the pre-clinical drug discovery value chain. The stages are invarian
 | **3. Multiparameter Optimization** | Evolve starting matter into entities that meet efficacy, safety, and developability needs together | Does an optimized entity meet all critical quality attributes? |
 | **4. Demonstrate Human Readiness** | Produce the safety, efficacy, pharmacology, and regulatory package for first-in-human studies | Is the risk-benefit acceptable for human dosing? |
 
-Gate criteria are named constants with program overrides in `.dde/thresholds.yaml`. Every analysis output records the threshold set it applied. Thresholds never live in prose, because prose cannot be enforced, versioned, or varied per program. See [dde-plan.md §3](docs/dde-plan.md) for the criteria and how they vary by modality.
+Gate criteria are named constants with program overrides in `.dde/thresholds.yaml`. Every analysis output records the threshold set it applied. Thresholds never live in prose, because prose cannot be enforced, versioned, or varied per program. See [oase-plan.md §3](docs/oase-plan.md) for the criteria and how they vary by modality.
 
 ## Agent Roles
 
@@ -293,11 +285,11 @@ Specialist roles are stage-agnostic. Each definition describes *who the speciali
 | **Preclinical Toxicologist** | GLP toxicology study design, NOAEL determination, safety pharmacology, risk assessment. |
 | **Regulatory Scientist** | IND dossier assembly, GLP compliance, CMC documentation, regulatory strategy. |
 | **Project Curator** | Optional editorial role for executive narrative or new stakeholder views. Deterministic tools maintain site synchronization. |
-| **Hypex Supervisor** | Runs DDE's bounded multi-epoch hypothesis-exploration subgraph and publishes its native datastore through `dde hypex ingest` and `analyze`. |
+| **Hypex Supervisor** | Runs OASE's bounded multi-epoch hypothesis-exploration subgraph and publishes its native datastore through `dde hypex ingest` and `analyze`. |
 
 ## Design Principles
 
-Six principles shape the system. [dde-plan.md §2](docs/dde-plan.md) gives the reasoning behind each.
+Six principles shape the system. [oase-plan.md §2](docs/oase-plan.md) gives the reasoning behind each.
 
 - **Do not re-teach the LLM what it knows.** Role templates give a persona trigger, a capability grant, and an output contract — not re-taught domain knowledge.
 - **Invariant structure, dynamic content.** The four stages are fixed. Everything within them is selected by the Science Program Lead from the evolving context.
@@ -327,9 +319,9 @@ Orchestration records — work orders, run history, publication state — live i
 ## Repository Structure
 
 ```
-dde/
+open-agentic-science-engine/
 ├── templates/          # Scion agent templates, one directory per role
-├── skills/             # DDE skills, one directory per capability
+├── skills/             # OASE skills, one directory per capability
 ├── tools/              # The dde CLI and its environment
 │   ├── BOOTSTRAP.md    # Blank directory to working CLI, incl. container prereqs
 │   ├── bootstrap-preflight.sh   # Can this container build it? Run before install.sh
@@ -346,7 +338,7 @@ dde/
 └── README.md
 ```
 
-[dde-plan.md §7](docs/dde-plan.md) shows the target structure, including the directories that steps 2 and 3 add.
+[oase-plan.md §7](docs/oase-plan.md) shows the target structure, including the directories that steps 2 and 3 add.
 
 Each agent template contains three files:
 
@@ -441,7 +433,7 @@ Command groups today: `alphafold`, `alphagenome`, `coscientist`,
 `relays`. The single-file CLI that predated the two-phase contract has
 been deleted after all subcommands were ported to the two-phase model.
 The silent-failure defect it contained is documented in
-`docs/dde-plan.md` §8.1.
+`docs/oase-plan.md` §8.1.
 
 ## Working in a shared checkout
 
@@ -485,9 +477,9 @@ adopted by whoever commits next.
 
 ## Design Documentation
 
-- **[docs/dde-plan.md](docs/dde-plan.md)** — the source of truth: stages, roles, artifact architecture, repository structure, and the build sequence.
+- **[docs/oase-plan.md](docs/oase-plan.md)** — the source of truth: stages, roles, artifact architecture, repository structure, and the build sequence.
 - **[docs/orchestration-design-guidance.md](docs/orchestration-design-guidance.md)** — normative for the authority model and the end-to-end orchestration contract: work orders, control state, agent lifecycle, validation, scientific acceptance, escalation, and publication.
-- **[docs/skill-design-guidance.md](docs/skill-design-guidance.md)** — normative for writing dde skills. Skills own *when* to run something, *what* to run, *where* results land, and *what they mean*. Tools group into capabilities rather than one skill per tool, so skills stay specialist-neutral.
+- **[docs/skill-design-guidance.md](docs/skill-design-guidance.md)** — normative for writing OASE skills. Skills own *when* to run something, *what* to run, *where* results land, and *what they mean*. Tools group into capabilities rather than one skill per tool, so skills stay specialist-neutral.
 - **[docs/tool-design-guidance.md](docs/tool-design-guidance.md)** — normative for the tools environment, the CLI, and the artifact contract: two-phase invocation, provenance sidecars, threshold configuration, and output discipline.
 - **[docs/pilot-handoff.md](docs/pilot-handoff.md)** — not normative, and the one to read first if you are inheriting this repository: what the first pilot can actually do, which refusals are designed behaviour rather than defects, and how to triage a report from a pilot team.
 

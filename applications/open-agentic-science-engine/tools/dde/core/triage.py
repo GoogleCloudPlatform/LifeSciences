@@ -720,7 +720,7 @@ def run_triage(
     query_terms_by_concept:
         Map of concept_ref -> query term for differentiation assessment.
     project_root:
-        Path to the DDE project root (for CLI commands and record
+        Path to the OASE project root (for CLI commands and record
         persistence).  When set, triage assessment and decision records
         are persisted through the real ``write_record()`` path.
     accepted_concept_ref:

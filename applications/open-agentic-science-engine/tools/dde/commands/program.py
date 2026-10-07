@@ -67,8 +67,8 @@ def _resolve_source(source: str) -> Path:
     Raises
     ------
     ArtifactError
-        If the path is not a readable directory or does not contain a
-        dde control plane.
+        If the path is not a readable directory or does not contain an
+        OASE control plane.
     """
     path = Path(source).resolve()
     if not path.is_dir():

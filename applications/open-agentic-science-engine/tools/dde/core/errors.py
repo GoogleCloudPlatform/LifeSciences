@@ -51,7 +51,7 @@ class DDEError(Exception):
 
 
 class ProjectRootError(DDEError):
-    """The dde project root could not be resolved, or is not writable."""
+    """The OASE project root could not be resolved, or is not writable."""
 
     exit_code = 2
 

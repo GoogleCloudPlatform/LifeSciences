@@ -1497,7 +1497,7 @@ def _check_unrecognized_json(
                     "file": str(child.relative_to(project_root)),
                     "message": (
                         f"File '{child.name}' is not a recognized analysis or "
-                        "raw artifact type. If it was produced by a DDE command, "
+                        "raw artifact type. If it was produced by an OASE command, "
                         "this may be a toolchain bug."
                     ),
                 }

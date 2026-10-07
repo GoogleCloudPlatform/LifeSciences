@@ -7,7 +7,7 @@
 ## Summary
 
 Fixed DOM-based XSS vulnerabilities in 5 HTML viewer template files under
-`applications/DDE/tools/dde/site_templates/viewers/`. All shared the same
+`applications/open-agentic-science-engine/tools/dde/site_templates/viewers/`. All shared the same
 root-cause pattern: using `innerHTML` to insert data values derived from
 JSON input without HTML escaping.
 

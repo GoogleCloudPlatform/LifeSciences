@@ -47,7 +47,7 @@ Run 3–5 turns total, depending on complexity.
 Present the hypothesis in its initial form:
 
 - State the core claim and mechanism.
-- Present supporting evidence with identifiers returned by DDE literature commands.
+- Present supporting evidence with identifiers returned by OASE literature commands.
 - List the testable predictions.
 - Propose initial experiments.
 

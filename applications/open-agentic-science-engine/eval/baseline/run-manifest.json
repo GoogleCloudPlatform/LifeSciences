@@ -31,7 +31,7 @@
   "completed": 8,
   "total": 8,
   "command": "PYTHONPATH=tools python3 -m eval.run_baseline",
-  "working_directory": "/workspace/applications/DDE",
+  "working_directory": "/workspace/applications/open-agentic-science-engine",
   "outputs": [
     "eval/baseline/baseline-report.json",
     "eval/baseline/baseline-report.md"

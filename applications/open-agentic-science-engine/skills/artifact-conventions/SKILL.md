@@ -1,6 +1,6 @@
 # Artifact Conventions
 
-Standard report format, headings, and linking conventions for all dde project artifacts.
+Standard report format, headings, and linking conventions for all OASE project artifacts.
 
 ## Project Filesystem
 

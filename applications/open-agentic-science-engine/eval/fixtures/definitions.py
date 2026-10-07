@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Fixture definitions for the DDE evaluation harness.
+"""Fixture definitions for the OASE evaluation harness.
 
 Each fixture documents:
   - scenario: what workflow situation it represents

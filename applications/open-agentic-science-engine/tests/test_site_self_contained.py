@@ -63,7 +63,7 @@ _NOW = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _make_project(base: Path, name: str = "proj") -> Path:
-    """Create a minimal dde project directory with control plane."""
+    """Create a minimal OASE project directory with control plane."""
     project = base / name
     project.mkdir(parents=True, exist_ok=True)
     (project / ".dde").mkdir(exist_ok=True)

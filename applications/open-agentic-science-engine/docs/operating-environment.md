@@ -158,7 +158,7 @@ with no authentication parameters.
 **Doctor check:** None specific.
 
 Note: The issue's mention of `PUBMED_API_KEY` refers to a BioCompass
-context, not to dde. DDE's own `litref.py` queries Europe PMC (not
+context, not to OASE. OASE's own `litref.py` queries Europe PMC (not
 PubMed directly) and uses no API key.
 
 ---
@@ -178,7 +178,7 @@ with no authentication parameters.
 
 ## Dependencies that are NOT in this codebase
 
-**PubChem:** Not called by any dde tool. The issue (#181) mentioned
+**PubChem:** Not called by any OASE tool. The issue (#181) mentioned
 PubChem in its enumeration, but no command in the `tools/dde/commands/`
 tree makes an HTTP call to PubChem.
 

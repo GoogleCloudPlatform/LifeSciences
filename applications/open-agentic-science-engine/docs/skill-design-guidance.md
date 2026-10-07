@@ -1,9 +1,9 @@
-# DDE Skill Design Guidance
+# OASE Skill Design Guidance
 
 **Status**: v0.1. Expect revision after the pilot conversion (co-scientist, AlphaFold, AlphaGenome).
-**Purpose**: the standard for writing dde skills, and the reference for converting `google-deepmind/science-skills` one at a time.
+**Purpose**: the standard for writing OASE skills, and the reference for converting `google-deepmind/science-skills` one at a time.
 **Companion**: [`tool-design-guidance.md`](tool-design-guidance.md). That document is normative for paths, sidecars, and thresholds.
-**Context**: [`dde-plan.md`](dde-plan.md) §5 and §7.
+**Context**: [`oase-plan.md`](oase-plan.md) §5 and §7.
 
 This document's specialist-neutral grouping rule applies to **science capability
 skills**. Procedural orchestration skills may bind to the Science Program Lead or
@@ -14,9 +14,9 @@ placement rules are defined in
 
 ---
 
-## 1. What a dde skill is
+## 1. What an OASE skill is
 
-A dde science skill is a routing and interpretation contract for a **capability** — a group of tools that share the rules for reading their results.
+An OASE science skill is a routing and interpretation contract for a **capability** — a group of tools that share the rules for reading their results.
 
 A skill is not a manual for a tool. A skill is also not the property of one specialist. The same capability serves different roles, asking different questions, at different stages. The role-specific part belongs in the template. See §3.
 
@@ -40,7 +40,7 @@ What remains is what a model cannot get from the tool output alone: whether to r
 
 ## 2. Group by shared interpretation contract; name by capability
 
-Upstream science-skills uses one skill per database. That fits a general-purpose corpus, where any user might want gnomAD alone. DDE is a pipeline. Its tools cluster.
+Upstream science-skills uses one skill per database. That fits a general-purpose corpus, where any user might want gnomAD alone. OASE is a pipeline. Its tools cluster.
 
 ### Grouping test
 
@@ -73,7 +73,7 @@ Do not group tools because they belong to the same scientific field. Foldseek an
 
 ### Expected count
 
-Applied across the corpus, the grouping test should give **8 to 12 dde skills**, not a 1:1 conversion of the ~38 upstream skills.
+Applied across the corpus, the grouping test should give **8 to 12 OASE skills**, not a 1:1 conversion of the ~38 upstream skills.
 
 That number is an outcome of applying the test, not a target. At 30, the test is not being applied. At 4, contexts are being merged that do not share an interpretation contract.
 
@@ -240,11 +240,11 @@ Two parts.
 
 In order:
 
-1. **Decide the capability.** Does this become its own dde skill, or fold into a group? Most database skills fold. Then list every role that could use it. If the list has more than one name, make sure no part of the skill assumes only the first.
+1. **Decide the capability.** Does this become its own OASE skill, or fold into a group? Most database skills fold. Then list every role that could use it. If the list has more than one name, make sure no part of the skill assumes only the first.
 2. **Move the scripts into the CLI** as `<tool> fetch` and `<tool> analyze` subcommands. Keep the logic. Change the I/O contract per `tool-design-guidance.md`.
 3. **Lift threshold constants out of the script** into CLI config. `analyze_plddt.py` has five module constants. Those become named, overridable, and cited in output.
 4. **Keep the interpretation prose.** The upstream `## Interpreting the Output` sections are the valuable content and mostly survive intact.
-5. **Rewrite the description** with a negative clause naming dde siblings, not upstream skill names.
+5. **Rewrite the description** with a negative clause naming OASE siblings, not upstream skill names.
 6. **Build the invocation table** from the new CLI subcommands.
 7. **Delete** prerequisites, install steps, and the license side-effect block. Handle licensing once, centrally.
 8. **Record provenance.** Upstream repo, commit, and license, in frontmatter or a `NOTICE`. Upstream is Apache 2.0 for code and CC-BY 4.0 for materials. Attribution is required and cheap.

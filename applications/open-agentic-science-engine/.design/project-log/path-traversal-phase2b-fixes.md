@@ -6,7 +6,7 @@
 
 ## Summary
 
-Fixed 6 path traversal vulnerabilities across the DDE toolchain where
+Fixed 6 path traversal vulnerabilities across the OASE toolchain where
 user-controlled strings were interpolated into filesystem paths without
 sanitization, allowing `../` traversal to escape target directories.
 

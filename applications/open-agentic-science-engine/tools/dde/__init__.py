@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""dde — the execution surface for dde agent tooling.
+"""dde — the execution surface for OASE agent tooling.
 
 The CLI owns execution, rate limits and leases, retry, provenance
 stamping, artifact naming, and threshold values. Routing lives in skill

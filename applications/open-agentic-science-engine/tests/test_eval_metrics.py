@@ -39,7 +39,7 @@ import traceback
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Bootstrap — add tools/ and DDE root to sys.path
+# Bootstrap — add tools/ and OASE root to sys.path
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
@@ -543,7 +543,7 @@ def test_markdown_report_writes():
 
         assert md_path.is_file(), "Markdown file not created"
         content = md_path.read_text()
-        assert "# DDE Evaluation Baseline Report" in content
+        assert "# OASE Evaluation Baseline Report" in content
         assert "Aggregate Metrics" in content
         assert "Per-Fixture Results" in content
         assert "Regression Criteria" in content

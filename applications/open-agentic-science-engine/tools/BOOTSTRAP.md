@@ -1,4 +1,4 @@
-# Bootstrapping a dde tools environment
+# Bootstrapping an OASE tools environment
 
 For an agent standing in a blank directory in a fresh container, told to
 make the `dde` CLI work. It covers what has to be installed in *your
@@ -10,7 +10,7 @@ Read the rest if the preflight says it is not, or if anything fails.
 
 ---
 
-> **The DDE tools live on `main` in the `applications/open-agentic-science-engine` directory.**
+> **The OASE tools live on `main` in the `applications/open-agentic-science-engine` directory.**
 >
 > ```bash
 > git clone https://github.com/GoogleCloudPlatform/LifeSciences.git
@@ -242,7 +242,7 @@ absent exactly when artifacts are being produced by a partial one.
 
 ### Hypex is vendored and built during provisioning
 
-DDE owns the Hypex deployment source under `tools/vendor/hypex/`. The
+OASE owns the Hypex deployment source under `tools/vendor/hypex/`. The
 bootstrapper does not clone the standalone Hypex repository and no binary is
 committed to this repository. `install.sh` uses the deployment's Go 1.26.1+
 toolchain to build `hypex` and `elo` from source (dependencies resolved via

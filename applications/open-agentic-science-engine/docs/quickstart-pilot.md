@@ -1,6 +1,6 @@
 # Pilot Bootstrapping Quickstart
 
-Start a dde program from a blank environment. One user action; everything else
+Start an OASE program from a blank environment. One user action; everything else
 is automated by the controller.
 
 ---

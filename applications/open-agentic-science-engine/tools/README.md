@@ -52,7 +52,7 @@ lifecycle?"
 | `gtex` | GTEx whole-blood median gene expression (RNA-seq, TPM). |
 | `gwas` | GWAS and disease association lookup. |
 | `homology` | Structural homology search via RCSB PDB BLAST. |
-| `hypex` | Normalize and analyze a completed DDE Hypex exploration run. |
+| `hypex` | Normalize and analyze a completed OASE Hypex exploration run. |
 | `litref` | Resolve a cited paper or trial to a real record — or fail. |
 | `mmp` | Matched molecular pair analysis (RDKit BRICS). |
 | `mpo` | Multiparameter optimization scoring. |
@@ -70,7 +70,7 @@ lifecycle?"
 > **Note on `dossier`:** classified as a science tool despite touching
 > regulatory process — it assesses the completeness of *scientific*
 > deliverables (compound/tox/pk artifacts) for a regulatory purpose, not the
-> dde tool orchestration process itself.
+> OASE tool orchestration process itself.
 
 ---
 

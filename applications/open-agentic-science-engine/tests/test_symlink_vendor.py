@@ -21,7 +21,7 @@ Covers:
   - validate.go: DirEntry symlink following (#306) — conceptual Python test
 
 Run with:
-    cd applications/DDE
+    cd applications/open-agentic-science-engine
     python -m pytest tests/test_symlink_vendor.py -v
 """
 

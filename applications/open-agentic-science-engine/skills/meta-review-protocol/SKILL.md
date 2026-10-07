@@ -191,7 +191,7 @@ A good steering memo:
 
 Produce a comprehensive research report when the system converges or the
 exploration budget is exhausted. This is the primary deliverable of the
-DDE Hypex subgraph — it should be well-structured, evidence-based,
+OASE Hypex subgraph — it should be well-structured, evidence-based,
 and actionable for a research team planning follow-up experiments.
 
 ### Input
@@ -228,13 +228,13 @@ top 10:
 #### Step 2: Verify Evidence (Top 10 Only)
 
 For each hypothesis in the top 10, independently verify its key evidence claims
-using DDE's citation and literature commands:
+using OASE's citation and literature commands:
 
 ```bash
 # Verify the complete Hypex evidence array
 dde cite verify <run-dir>/hypotheses/H-XXXX.json --out raw/citations
 
-# Resolve any PMID, arXiv identifier, or DOI into a DDE literature artifact
+# Resolve any PMID, arXiv identifier, or DOI into an OASE literature artifact
 dde litref resolve <identifier> --json
 ```
 
@@ -386,7 +386,7 @@ learned, what guidance was most effective, what patterns persisted]
 A good final report:
 - Ranks hypotheses by the standings the tool emits, not by the author's subjective preference
 - Includes Elo trajectories showing how rankings evolved across epochs
-- Independently verifies citations for all top-10 hypotheses using DDE citation tooling
+- Independently verifies citations for all top-10 hypotheses using OASE citation tooling
 - Distinguishes between verified and unverified claims with clear markers
 - Identifies unresolved contradictions between hypotheses, not just within them
 - Provides an experimental roadmap that is prioritized and phased

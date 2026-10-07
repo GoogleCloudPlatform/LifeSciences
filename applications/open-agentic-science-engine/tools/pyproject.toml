@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# DDE CLI packaging — PEP 621.
+# OASE CLI packaging — PEP 621.
 #
 # The entry point is `dde = "dde.cli:main"`, which replaces the
 # hand-rolled dde-cli shim that install.sh used to symlink into the
@@ -32,7 +32,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dde"
 version = "0.3.0"  # Keep in sync with CLI_VERSION in dde/core/env.py
-description = "Execution surface for dde agent tooling"
+description = "Execution surface for OASE agent tooling"
 requires-python = ">=3.11"
 
 # Core CLI dependencies — mirrors tools/requirements.txt.

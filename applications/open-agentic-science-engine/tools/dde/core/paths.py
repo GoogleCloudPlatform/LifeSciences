@@ -15,7 +15,7 @@
 """Security helpers for path confinement and slug sanitization.
 
 These utilities are the shared foundation for preventing path-traversal and
-symlink-exploitation vulnerabilities across the DDE toolchain.  Every
+symlink-exploitation vulnerabilities across the OASE toolchain.  Every
 command that builds a filesystem path from user-controlled input should
 use ``confine_path`` and/or ``sanitize_slug`` rather than rolling its own
 checks.

@@ -34,7 +34,7 @@ result, never whether you can produce one. Do not report a task blocked on one.
 
 ## Work Order Provenance
 
-Before invoking any dde tool, export your current work order ID so that sidecar
+Before invoking any OASE tool, export your current work order ID so that sidecar
 records and analysis outputs are tagged with the work order that produced them:
 
 ```bash

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Bootstrap preflight — can this container build the dde tools
+# Bootstrap preflight — can this container build the OASE tools
 # environment, and if not, exactly what is it missing?
 #
 # Run this BEFORE ./install.sh. It writes nothing, installs nothing,
@@ -233,7 +233,7 @@ else
 fi
 
 # Hypex's Go modules declare this minimum toolchain. The source and module
-# dependencies are vendored in DDE, so this check does not access the network.
+# dependencies are vendored in OASE, so this check does not access the network.
 HYPEX_GO_VERSION="1.26.1"
 if command -v go >/dev/null 2>&1; then
     GOV="$(GOTOOLCHAIN=local go env GOVERSION 2>/dev/null)"

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""DDE Evaluation Harness — baseline measurement of workflow quality.
+"""OASE Evaluation Harness — baseline measurement of workflow quality.
 
 Measures process quality (cost, time, evidence handling) against a
 defined fixture set without asserting fabricated gold labels.  Designed

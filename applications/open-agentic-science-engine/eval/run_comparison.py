@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run the DDE evaluation comparison — Stage 0 vs. baseline.
+"""Run the OASE evaluation comparison — Stage 0 vs. baseline.
 
-Usage (from applications/DDE/):
+Usage (from applications/open-agentic-science-engine/):
 
     PYTHONPATH=tools python3 -m eval.run_comparison
 

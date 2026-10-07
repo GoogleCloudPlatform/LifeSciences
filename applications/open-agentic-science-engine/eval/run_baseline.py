@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run the DDE evaluation baseline and produce reports.
+"""Run the OASE evaluation baseline and produce reports.
 
-Usage (from applications/DDE/):
+Usage (from applications/open-agentic-science-engine/):
 
     PYTHONPATH=tools python3 -m eval.run_baseline
 
@@ -35,12 +35,12 @@ import json
 import sys
 from pathlib import Path
 
-# Ensure the tools package is importable from DDE root.
+# Ensure the tools package is importable from OASE root.
 _DDE_ROOT = Path(__file__).resolve().parent.parent
 _TOOLS_DIR = _DDE_ROOT / "tools"
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
-# Ensure the DDE root is importable (for eval package).
+# Ensure the OASE root is importable (for eval package).
 if str(_DDE_ROOT) not in sys.path:
     sys.path.insert(0, str(_DDE_ROOT))
 

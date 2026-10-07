@@ -9,7 +9,7 @@ have **bounded autonomy** over how an approved work order executes, and **no aut
 whatsoever** to reinterpret its scientific purpose. Everything below follows from that
 one line.
 
-Authoritative reference: `applications/DDE/docs/orchestration-design-guidance.md`. Read §2.2, §3, §4,
+Authoritative reference: `applications/open-agentic-science-engine/docs/orchestration-design-guidance.md`. Read §2.2, §3, §4,
 §5, §6.1, §7 and §9 before your first dispatch. This file is the operating summary.
 
 ---
@@ -257,7 +257,7 @@ scientific layer, and it is never a scientific citation source:
 A work order arrives as a committed, immutable revision. A chat message may tell you
 one exists; the message is not the work order. Validate before queueing:
 
-- every required field is present (`applications/DDE/docs/orchestration-design-guidance.md` §3.1)
+- every required field is present (`applications/open-agentic-science-engine/docs/orchestration-design-guidance.md` §3.1)
 - `requested_role` names an **approved template** that exists
 - `dependencies` are satisfied — the named findings are `scientifically_accepted`,
   not merely written
@@ -274,7 +274,7 @@ A Hypex work order is admitted only with `requested_role: hypex-supervisor`,
 `resource_class: hypex-supervisor`, and both `hypothesis-exploration` and
 `tournament-orchestration` in `capabilities`. The supervisor owns the internal
 generation, review, proximity, tournament, evolution, and meta-review agents. Do
-not dispatch those internal templates directly from the DDE work-order queue.
+not dispatch those internal templates directly from the OASE work-order queue.
 
 If validation fails, **reject the work order back to the science lead with the specific
 defect.** You may reject; you may not repair. Correcting a typo in a path is fine.
@@ -655,7 +655,7 @@ user request):
 
 1. Use the `web-builder` template: `scion start <program>-web-builder --type web-builder`
 2. Include a link to `skills/site-generation/SKILL.md` in the dispatch brief — the
-   web-builder is a global Hub template with no mechanism to auto-load DDE-specific
+   web-builder is a global Hub template with no mechanism to auto-load OASE-specific
    skills. The skill describes the `dde site build` invocation, viewer catalog,
    post-build verification, and how to serve the site.
 3. Instruct the agent to stay long-lived (serve the site via `python3 -m http.server`

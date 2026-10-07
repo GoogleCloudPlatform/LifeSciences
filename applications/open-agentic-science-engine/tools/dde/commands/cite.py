@@ -107,7 +107,7 @@ def _slug(stem: str) -> str:
 
 
 def _extract_structured(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract from a JSON document with a DDE or Hypex citation array."""
+    """Extract from a JSON document with an OASE or Hypex citation array."""
     citations = (
         data.get("citations") or data.get("references") or data.get("evidence") or []
     )

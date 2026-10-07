@@ -107,7 +107,7 @@ from .core.toolchain import check_integrity
 )
 @click.pass_context
 def cli(ctx: click.Context, project_override: str | None) -> None:
-    """dde — execution surface for dde agent tooling.
+    """dde — execution surface for OASE agent tooling.
 
     Artifacts land under the program directory, resolved from
     $DDE_PROJECT or a .dde/ marker — never from the current
@@ -123,7 +123,7 @@ def cli(ctx: click.Context, project_override: str | None) -> None:
             n = len(tc.modified_files)
             file_word = "file" if n == 1 else "files"
             print(
-                f"Warning: DDE source has uncommitted modifications"
+                f"Warning: OASE source has uncommitted modifications"
                 f" ({n} {file_word}). Run 'dde doctor' for details.",
                 file=sys.stderr,
             )
@@ -134,7 +134,7 @@ def cli(ctx: click.Context, project_override: str | None) -> None:
 def init(directory: str) -> None:
     """Create a program directory with full artifact layer structure."""
     root = init_project(directory)
-    click.echo(f"Initialised dde program at {root}")
+    click.echo(f"Initialised OASE program at {root}")
     click.echo(f"  export DDE_PROJECT={root}")
 
 

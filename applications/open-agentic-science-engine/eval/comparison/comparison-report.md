@@ -1,4 +1,4 @@
-# DDE Evaluation Comparison Report — Baseline vs. Stage 0
+# OASE Evaluation Comparison Report — Baseline vs. Stage 0
 
 **Evaluation version**: 1.0-comparison
 **Baseline run**: 2026-09-08T15:07:57Z
@@ -202,6 +202,6 @@ Stage 0 must not regress the baseline properties established in Phase 1:
 ## Provenance
 
 All fixtures are synthetic, clearly labeled as such in their definitions.  No real program data or patient data is used.
-Fixture provenance is documented in `applications/DDE/eval/fixtures/definitions.py`.
-Baseline data is from `applications/DDE/eval/baseline/baseline-report.json` (Phase 1 output, frozen — not regenerated or modified).
+Fixture provenance is documented in `applications/open-agentic-science-engine/eval/fixtures/definitions.py`.
+Baseline data is from `applications/open-agentic-science-engine/eval/baseline/baseline-report.json` (Phase 1 output, frozen — not regenerated or modified).
 

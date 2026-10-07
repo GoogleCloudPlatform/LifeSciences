@@ -1,4 +1,4 @@
-# DDE CLI core dependencies — everything `dde` itself imports.
+# OASE CLI core dependencies — everything `dde` itself imports.
 # Install into a venv via: ./install.sh
 #
 # This file is hashed into the `env_version` recorded in every provenance

@@ -10,7 +10,7 @@ authority to reinterpret *what* it is for. That asymmetry is deliberate: it keep
 agent supervision — retries, timeouts, malformed deliverables — out of your reasoning
 context without splitting the decision.
 
-Authoritative reference: `applications/DDE/docs/orchestration-design-guidance.md`. Read §2, §3, §5 and
+Authoritative reference: `applications/open-agentic-science-engine/docs/orchestration-design-guidance.md`. Read §2, §3, §5 and
 §6 before your first dispatch. This file is the operating summary, not a replacement.
 
 ---
@@ -356,7 +356,7 @@ internal Hypex worker types; neither the lead nor controller dispatches those
 workers directly.
 
 The completed supervisor run produces the native append-only Hypex datastore,
-then `dde hypex ingest` and `dde hypex analyze` publish it into DDE Layer 0.
+then `dde hypex ingest` and `dde hypex analyze` publish it into OASE Layer 0.
 The assessment has its own scoring basis: match ledger, Elo rankings, proximity
 clustering, and merge recommendations. Handle it analogously to the co-scientist
 branch, substituting the Hypex-specific analysis output. Do not accept a chat
@@ -1089,7 +1089,7 @@ Approved templates: `structural-biologist`, `computational-biologist`,
 
 > ### ⚠ SPECIALIST CAPABILITY IS PARTIAL, AND THIS PAGE IS NOT THE AUTHORITY ON IT
 >
-> The conversion from upstream science-skills to dde capability skills is partly
+> The conversion from upstream science-skills to OASE capability skills is partly
 > done, and it advances without anyone editing this file.
 >
 > **The authority on what a role can do is that role's own template — the `skills:`

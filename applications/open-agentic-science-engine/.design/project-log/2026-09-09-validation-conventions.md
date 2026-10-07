@@ -7,7 +7,7 @@
 ## Summary
 
 Implemented seven interrelated issues forming the "Validation Convention Cluster"
-for the DDE mechanical validator. The work was executed in three sequential phases,
+for the OASE mechanical validator. The work was executed in three sequential phases,
 each independently reviewed by code-reviewer, test-engineer, and security-auditor
 agents before integration.
 

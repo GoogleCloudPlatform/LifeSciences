@@ -6,7 +6,7 @@
 
 ## Summary
 
-Fixed 7 path traversal vulnerabilities across the DDE toolchain. Each fix
+Fixed 7 path traversal vulnerabilities across the OASE toolchain. Each fix
 applies the existing `sanitize_slug()` and/or `confine_path()` helpers from
 `dde.core.paths` to user-controlled input before it reaches path construction.
 

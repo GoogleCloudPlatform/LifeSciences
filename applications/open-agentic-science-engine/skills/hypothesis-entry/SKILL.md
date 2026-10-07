@@ -1,7 +1,7 @@
 ---
 name: hypothesis-entry
 description: >
-  Hypothesis entry: how hypotheses enter a DDE science program. Four strategies
+  Hypothesis entry: how hypotheses enter an OASE science program. Four strategies
   exist, each producing a Layer 0 artifact under raw/hypotheses/ with
   its own schema and threshold set. Use this skill when planning or
   executing hypothesis entry — deciding which strategy to use, running
@@ -20,7 +20,7 @@ description: >
 | **Sponsor** | `dde hypothesis adopt --origin sponsor` | `dde.hypothesis-set.v1` | Always available |
 | **Charter** | `dde hypothesis adopt --origin charter` | `dde.hypothesis-set.v1` | Always available |
 | **Co-Scientist** | `dde coscientist ingest` | `dde.coscientist.v1` | Requires a Co-Scientist export file |
-| **Hypex** | `hypex-supervisor` work order, then `dde hypex ingest` | `dde.hypex.v1` | Requires DDE-provisioned Hypex tools, templates, and supervisor lease |
+| **Hypex** | `hypex-supervisor` work order, then `dde hypex ingest` | `dde.hypex.v1` | Requires OASE-provisioned Hypex tools, templates, and supervisor lease |
 
 Each strategy writes its own vendor-native Layer 0 artifact. The shared
 contract is `dde.hypothesis-assessment.v1`, emitted by each strategy's
@@ -64,7 +64,7 @@ dde coscientist analyze raw/hypotheses/cs-<session>.tournament.json
 
 | Relay code | Kind | Fires when | Obligation |
 |---|---|---|---|
-| `hypothesis.adopted_not_generated` | Qualifier | Every adoption | Quote the attestation verbatim in any finding that rests on this artifact. Do not describe the set as DDE-derived. |
+| `hypothesis.adopted_not_generated` | Qualifier | Every adoption | Quote the attestation verbatim in any finding that rests on this artifact. Do not describe the set as OASE-derived. |
 | `hypothesis.unranked_set` | Qualifier | Every adopted set analysis | Array position is input order, not preference. Do not present as a leaderboard. |
 
 ## 5. The no-silent-substitution rule

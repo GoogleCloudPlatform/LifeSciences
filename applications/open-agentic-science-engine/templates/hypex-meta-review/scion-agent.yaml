@@ -13,7 +13,7 @@
 # limitations under the License.
 
 schema_version: "1"
-description: "Hypothesis Meta-Review Agent - synthesizes reviews into epoch steering and the final DDE research report"
+description: "Hypothesis Meta-Review Agent - synthesizes reviews into epoch steering and the final OASE research report"
 agent_instructions: agents.md
 system_prompt: system-prompt.md
 

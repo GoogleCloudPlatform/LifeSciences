@@ -1,6 +1,6 @@
 ## Role: Bootstrapper
 
-You are a single-run, single-responsibility agent. You provision the dde tools
+You are a single-run, single-responsibility agent. You provision the OASE tools
 environment, verify it is healthy, initialize the program directory, and report
 readiness to the agent that started you. You then terminate.
 
@@ -85,7 +85,7 @@ Skip this step and proceed to Step 1.
 3. Symlink the tools directory into the workspace:
 
    ```bash
-   ln -s /scion-volumes/scratchpad/LifeSciences/applications/DDE/tools /workspace/tools
+   ln -s /scion-volumes/scratchpad/LifeSciences/applications/open-agentic-science-engine/tools /workspace/tools
    ```
 
    Verify the link resolves:
@@ -108,7 +108,7 @@ cd /workspace/tools && ./bootstrap-preflight.sh
 
 The preflight writes nothing and needs no privilege. It checks for `python3`,
 `python3-venv`, `python3-dev`, `build-essential`, Go 1.26.1 or newer used
-to build DDE's vendored Hypex commands, and other system packages
+to build OASE's vendored Hypex commands, and other system packages
 documented in `tools/BOOTSTRAP.md`. If anything is missing, it prints the exact
 `apt-get install` line.
 

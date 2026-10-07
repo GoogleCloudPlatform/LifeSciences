@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""DDE Evaluation Harness — replay fixtures through the current workflow.
+"""OASE Evaluation Harness — replay fixtures through the current workflow.
 
-This module runs each fixture definition through the DDE control-plane
+This module runs each fixture definition through the OASE control-plane
 CLI and collects measurements.  It does NOT modify any existing tools,
 templates, or skills — it measures the current workflow as-is.
 
-Usage (from the DDE application root):
+Usage (from the OASE application root):
 
     PYTHONPATH=tools python3 -m eval.run_baseline
 
@@ -67,7 +67,7 @@ from .metrics import BaselineReport, FixtureMetrics  # noqa: E402
 
 
 def _make_project(base: Path, name: str = "eval-project") -> Path:
-    """Create a minimal dde project directory with control plane."""
+    """Create a minimal OASE project directory with control plane."""
     project = base / name
     project.mkdir(parents=True, exist_ok=True)
     (project / ".dde").mkdir(exist_ok=True)
@@ -744,7 +744,7 @@ def run_all_fixtures() -> BaselineReport:
         run_timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
 
-    print(f"DDE Evaluation Harness v{report.eval_version}")
+    print(f"OASE Evaluation Harness v{report.eval_version}")
     print(f"Run timestamp: {report.run_timestamp}")
     print(f"Fixtures to run: {len(ALL_FIXTURES)}")
     print("=" * 60)

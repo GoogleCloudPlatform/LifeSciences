@@ -6,7 +6,7 @@ description: Supervisor run protocol — state machine, worker lifecycle, budget
 # Run Protocol (v2)
 
 This skill defines the supervisor's protocol for orchestrating a research
-exploration run. The DDE port uses multi-epoch looping, evolution, meta-review
+exploration run. The OASE port uses multi-epoch looping, evolution, meta-review
 steering, convergence detection, and a finalization phase. The initial
 generation-through-tournament sequence is followed by the v2 states and epoch
 loop; the retired single-epoch pilot is not a fallback mode.
@@ -34,7 +34,7 @@ that advances to the next state.
 | REVIEW_EVOLVED | Review evolved variants (recurrent mode) | 1 `hypex-reflection` |
 | TOURNAMENT_REMATCH | Evolved variants compete; mandatory parent rematches | 1–3 `hypex-tournament` |
 | META | Produce per-epoch steering memo | 1 `hypex-meta-review` |
-| FINALIZE | Task meta-review agent for final report, then publish DDE artifacts | 1 `hypex-meta-review` |
+| FINALIZE | Task meta-review agent for final report, then publish OASE artifacts | 1 `hypex-meta-review` |
 | DONE | Signal completion | None |
 
 ---
@@ -162,18 +162,18 @@ header:
 
 ---
 
-## DDE Subgraph Boundary
+## OASE Subgraph Boundary
 
-The Hypex supervisor is dispatched from a DDE work order and remains the one
+The Hypex supervisor is dispatched from an OASE work order and remains the one
 accountable agent at the controller boundary. It must maintain
 `meta/roster.ndjson`, `meta/progress.json`, coordinated shared pacing, and
 `meta/termination.json` throughout the state machine. Worker messages carry
-the DDE run ID and absolute run directory.
+the OASE run ID and absolute run directory.
 
 Before FINALIZE completes, the supervisor runs `dde hypex ingest <run-dir>`
-and `dde hypex analyze <artifact>` so the tournament enters DDE as a Layer 0
+and `dde hypex analyze <artifact>` so the tournament enters OASE as a Layer 0
 `dde.hypex.v1` artifact plus `dde.hypothesis-assessment.v1` analysis. Only
-those DDE artifact paths, the final Hypex report path, and the termination
+those OASE artifact paths, the final Hypex report path, and the termination
 summary cross back to the research-operations controller.
 
 ---
@@ -189,7 +189,7 @@ focus areas.
 
 ### Actions
 
-1. **Parse the research goal** from the DDE work order supplied by the
+1. **Parse the research goal** from the OASE work order supplied by the
    dispatching controller. A direct launch may use a command like:
 
    ```
@@ -913,7 +913,7 @@ EOF
 ## State: FINALIZE (new in v2)
 
 **Purpose:** Task the meta-review agent to produce the final research report,
-then publish the completed run into DDE's Layer 0 artifact model.
+then publish the completed run into OASE's Layer 0 artifact model.
 
 ### Entry Condition
 
@@ -956,7 +956,7 @@ then publish the completed run into DDE's Layer 0 artifact model.
    ls ${ARTIFACT_PATH}/<run-id>/report/final.md
    ```
 
-5. **Write `meta/termination.json`, then publish through DDE:**
+5. **Write `meta/termination.json`, then publish through OASE:**
 
    ```bash
    hypex validate --run <run-id> --run-dir "${ARTIFACT_PATH}"
@@ -964,7 +964,7 @@ then publish the completed run into DDE's Layer 0 artifact model.
    dde hypex analyze <raw-hypex-artifact> --json
    ```
 
-6. **Report the final report and DDE artifact paths to the dispatching agent.**
+6. **Report the final report and OASE artifact paths to the dispatching agent.**
 
 ### Error Handling
 
@@ -976,7 +976,7 @@ then publish the completed run into DDE's Layer 0 artifact model.
 ### Exit Condition
 
 - Final report written to `report/final.md` (or fallback summary written).
-- DDE artifacts verified and report delivered to the dispatching agent.
+- OASE artifacts verified and report delivered to the dispatching agent.
 
 ---
 

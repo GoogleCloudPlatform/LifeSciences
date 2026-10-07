@@ -17,7 +17,7 @@
 Orchestrates the computational validation pipeline for proposed analog
 compounds: validate → prepare-3d → dock → ADMET predict → rank.
 
-This is a workflow command that chains existing dde tools rather than
+This is a workflow command that chains existing OASE tools rather than
 reimplementing their logic.  Each analog is run through as many pipeline
 steps as available, with graceful fallback when tools are missing.
 

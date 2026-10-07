@@ -109,7 +109,7 @@ def _check_python(report: Report) -> None:
 def _check_toolchain_integrity(report: Report) -> None:
     """Is the CLI running from unmodified source?
 
-    Issue #127: specialists patched installed DDE source mid-run.
+    Issue #127: specialists patched installed OASE source mid-run.
     Sidecars generated afterward claimed unmodified cli_version.
     This check makes the condition visible at doctor time.
     """
@@ -145,7 +145,7 @@ def _check_toolchain_integrity(report: Report) -> None:
         report.add(
             "toolchain integrity",
             WARN,
-            f"DDE source has uncommitted modifications ({tc.integrity}): "
+            f"OASE source has uncommitted modifications ({tc.integrity}): "
             f"{file_list}{suffix}",
             "artifacts produced now will carry cli_modified: true in their "
             "sidecar. Commit or stash the changes, or set DDE_NO_DIRTY_WARNING=1 "
@@ -511,7 +511,7 @@ def _check_packages(report: Report) -> None:
 #: around a tool that is not there.
 #:
 #: Each entry is ``(purpose, remedy)``. Every declared tool is provisioned by
-#: DDE; availability is an observed runtime state, not a release-plan flag.
+#: OASE; availability is an observed runtime state, not a release-plan flag.
 _PROVISIONED_BINARIES = {
     "fpocket": (
         "pocket detection — `dde pocket run` cannot answer tractability",
@@ -1160,7 +1160,7 @@ def _check_hypothesis_strategies(report: Report) -> None:
 
     # Hypex requires the complete three-tool volume + templates + lease.
     # Derive provisioning status from _PROVISIONED_BINARIES so the binary
-    # and strategy checks cannot disagree about whether DDE owns the tools.
+    # and strategy checks cannot disagree about whether OASE owns the tools.
     missing = []
     for tool in ("hypex", "elo", "prox"):
         path = shutil.which(tool)
@@ -1188,7 +1188,7 @@ def _check_hypothesis_strategies(report: Report) -> None:
         report.add(
             "hypothesis strategy: hypex",
             OK,
-            "available (hypex tools + DDE ingest/analyze; requires templates and a lease)",
+            "available (hypex tools + OASE ingest/analyze; requires templates and a lease)",
         )
     else:
         report.add(
