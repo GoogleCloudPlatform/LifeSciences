@@ -69,6 +69,10 @@ _YAML_REQUIRED_FIELDS = [
     "report_to",
 ]
 
+_YAML_OPTIONAL_FIELD_TYPES = {
+    "liability_justification": dict,
+}
+
 # Fields the CLI manages; never overwritten from YAML input.
 _CLI_MANAGED_FIELDS = {"id", "revision", "state", "created_at", "committed_at"}
 
@@ -147,6 +151,16 @@ def _validate_yaml_fields(data: dict[str, Any]) -> None:
             f"missing required fields in YAML input: {', '.join(missing)}",
             remedy="add the missing fields to the YAML file",
         )
+    _validate_optional_yaml_fields(data)
+
+
+def _validate_optional_yaml_fields(data: dict[str, Any]) -> None:
+    """Validate optional YAML content fields when supplied."""
+    for field, expected_type in _YAML_OPTIONAL_FIELD_TYPES.items():
+        if field in data and not isinstance(data[field], expected_type):
+            raise SchemaError(
+                f"{field} must be a mapping, got {type(data[field]).__name__}",
+            )
 
 
 def _resolve_yaml_path(project_root: Path, from_file: str) -> Path:
@@ -315,6 +329,9 @@ def create_cmd(
     }
     for field in _YAML_REQUIRED_FIELDS:
         record[field] = data[field]
+    for field in _YAML_OPTIONAL_FIELD_TYPES:
+        if field in data:
+            record[field] = data[field]
     record["created_at"] = _utc_now()
     record["committed_at"] = None
 
@@ -402,9 +419,13 @@ def update_cmd(
     # Read YAML input.
     yaml_path = _resolve_yaml_path(project.root, from_file)
     data = _load_yaml(yaml_path)
+    _validate_optional_yaml_fields(data)
 
     # Update content fields (never touch CLI-managed fields).
     for field in _YAML_REQUIRED_FIELDS:
+        if field in data:
+            record[field] = data[field]
+    for field in _YAML_OPTIONAL_FIELD_TYPES:
         if field in data:
             record[field] = data[field]
 
@@ -654,6 +675,9 @@ def revise_cmd(
         "state": "proposed",
     }
     for field in _YAML_REQUIRED_FIELDS:
+        if field in latest:
+            record[field] = latest[field]
+    for field in _YAML_OPTIONAL_FIELD_TYPES:
         if field in latest:
             record[field] = latest[field]
     record["created_at"] = _utc_now()
