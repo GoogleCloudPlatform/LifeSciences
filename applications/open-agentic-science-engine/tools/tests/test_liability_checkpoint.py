@@ -180,7 +180,7 @@ def _make_proposed_wo(project_root: Path, wo_id: str = "WO-001", **extra: Any) -
         "context": {"content": "background", "artifact_links": []},
         "dependencies": [],
         "capabilities": [],
-        "deliverables": {"layer_0_classes": ["test"]},
+        "deliverables": {"layer_0_classes": ["literature"]},
         "acceptance_criteria": {"criteria": "pass"},
         "alert_policy": {"on_fail": "notify"},
         "priority": "normal",

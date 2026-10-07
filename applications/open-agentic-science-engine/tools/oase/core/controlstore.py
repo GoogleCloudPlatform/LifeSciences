@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from .concepts import validate_concept
+from .context import ARTIFACT_DIRS, normalize_artifact_class
 from .errors import ArtifactError, Refusal, SchemaError
 from .evidence import validate_assessment, validate_decision
 from .paths import is_safe_to_open
@@ -243,6 +244,40 @@ def normalize_deliverables(deliverables: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _declared_artifact_classes(
+    deliverables: dict[str, Any],
+) -> list[tuple[str, str]]:
+    """Return artifact classes declared by a work order and their locations."""
+    normalized = normalize_deliverables(deliverables)
+    declared: list[tuple[str, str]] = []
+
+    for field in (
+        "required_classes",
+        "authorized_classes",
+        "layer_0_classes_optional",
+    ):
+        entries = normalized.get(field, [])
+        if not isinstance(entries, list):
+            continue
+        for index, entry in enumerate(entries):
+            declared.append(
+                (f"deliverables.{field}[{index}]", _flatten_entry(entry, "class"))
+            )
+
+    consumes = normalized.get("consumes", [])
+    if isinstance(consumes, list):
+        for index, entry in enumerate(consumes):
+            if isinstance(entry, dict) and "artifact_class" in entry:
+                declared.append(
+                    (
+                        f"deliverables.consumes[{index}].artifact_class",
+                        str(entry["artifact_class"]),
+                    )
+                )
+
+    return declared
+
+
 def _validate_work_order(data: dict[str, Any]) -> list[str]:
     """Return a list of validation error strings (empty if valid)."""
     required = [
@@ -299,6 +334,15 @@ def _validate_work_order(data: dict[str, Any]) -> list[str]:
                 f"{field} must be {expected_type.__name__}, "
                 f"got {type(data[field]).__name__}"
             )
+
+    deliverables = data.get("deliverables")
+    if isinstance(deliverables, dict):
+        for location, artifact_class in _declared_artifact_classes(deliverables):
+            if normalize_artifact_class(artifact_class) not in ARTIFACT_DIRS:
+                errors.append(
+                    f"{location} uses unknown artifact class {artifact_class!r}; "
+                    f"known classes: {', '.join(sorted(ARTIFACT_DIRS))}"
+                )
 
     return errors
 
