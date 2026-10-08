@@ -23,10 +23,10 @@ dependencies = [
     "aiohttp>=3.13.4",
     "gcsfs>=2024.11.0",
     "google-adk[gcp,otel-gcp]>=2.9.2,<3.0.0",
-    "google-cloud-aiplatform[agent-engines]>=1.156.0,<2.0.0",
+    "google-cloud-aiplatform[agent-engines]>=2.4.0,<2.5.0",
     "google-cloud-logging>=3.12.0,<4.0.0",
     "opentelemetry-resourcedetector-gcp<=1.12.0a0",
-    "protobuf>=6.31.1,<7.0.0",
+    "protobuf>=7.36.2,<7.37.0",
 ]
 
 [dependency-groups]
