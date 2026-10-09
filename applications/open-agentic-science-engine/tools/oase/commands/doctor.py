@@ -822,15 +822,11 @@ def _check_pacing(report: Report) -> None:
 
 
 def _check_gwas_catalog(report: Report) -> None:
-    """Probe the GWAS Catalog REST API base URL for reachability.
+    """Probe the supported GWAS Catalog REST API v2 metadata endpoint.
 
-    A lightweight connectivity check — hits the API root, not a full gene
+    A lightweight connectivity check — hits metadata, not a full gene
     query. Reports CAVEAT (not CAPABILITY) because the GWAS Catalog being
     down does not prevent other tools from working.
-
-    Added for issue #47: the ``associations/search/findByGene`` endpoint
-    was removed; this check surfaces whether the API itself is reachable,
-    separate from whether the specific endpoint exists.
     """
     try:
         import requests as _requests
@@ -844,19 +840,14 @@ def _check_gwas_catalog(report: Report) -> None:
         )
         return
 
-    api_url = "https://www.ebi.ac.uk/gwas/rest/api"
+    api_url = "https://www.ebi.ac.uk/gwas/rest/api/v2/metadata"
     try:
         resp = _requests.get(api_url, timeout=10)
         if resp.status_code == 200:
             report.add(
                 "gwas catalog api",
-                WARN,
-                f"{api_url} reachable, but associations/search/findByGene "
-                "endpoint has been removed by EBI",
-                "use --source opentargets or --source clinvar for gene-disease "
-                "association queries; --source gwas-catalog will fail with a "
-                "clear error message",
-                kind=CAVEAT,
+                OK,
+                f"GWAS Catalog REST API v2 reachable ({api_url})",
             )
         else:
             report.add(
