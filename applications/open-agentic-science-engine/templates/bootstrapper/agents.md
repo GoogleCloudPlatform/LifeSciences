@@ -50,42 +50,47 @@ Skip this step and proceed to Step 1.
 **If `/workspace/tools/install.sh` does not exist:** clone the repository and make
 `tools/` available.
 
-1. Verify GitHub authentication is available:
-
-   ```bash
-   gh auth status
-   ```
-
-   If this fails, check whether `GITHUB_TOKEN` is set. If neither is available, STOP
-   and report — the clone requires authentication and none is configured.
-
-2. Clone the repository to the shared scratchpad volume:
+1. Clone the repository to the shared scratchpad volume:
 
    **If `/scion-volumes/scratchpad/LifeSciences` already exists:** the clone from
    a previous container is still present on the shared volume. Skip the clone and
    run `git -C /scion-volumes/scratchpad/LifeSciences pull` to freshen it.
 
-   If the pull fails, STOP and report the error. Nothing downstream can proceed
-   without the tools directory.
+   If the pull fails (for example, if an earlier run left behind an obsolete or
+   inaccessible remote origin), remove the directory and re-clone:
+
+   ```bash
+   rm -rf /scion-volumes/scratchpad/LifeSciences
+   git clone https://github.com/GoogleCloudPlatform/LifeSciences.git /scion-volumes/scratchpad/LifeSciences
+   ```
 
    **Otherwise:**
 
    ```bash
-   gh repo clone scion-frontiers/LifeSciences /scion-volumes/scratchpad/LifeSciences
+   git clone https://github.com/GoogleCloudPlatform/LifeSciences.git /scion-volumes/scratchpad/LifeSciences
    ```
 
    Clone to the scratchpad volume, not into `/workspace` — this ensures the clone
    survives the bootstrapper's container being deleted and is reusable by other agents.
 
-   If your task prompt specifies a different repo URL, use that instead of the default.
+   **If your task prompt specifies a different repo URL (e.g., a private fork):**
+   use that instead of the default.
+   - For SSH URLs: ensure SSH keys are mounted and run `git clone git@github.com:...`.
+   - For HTTPS URLs requiring authentication with a `GITHUB_TOKEN` in the environment:
+
+     ```bash
+     git -c http.extraHeader="Authorization: Bearer ${GITHUB_TOKEN}" clone <repo-url> /scion-volumes/scratchpad/LifeSciences
+     ```
+
+     *(Alternatively, `gh repo clone <repo>` may be used if `gh` is installed and authenticated.)*
 
    If the clone fails, STOP and report the error. Nothing downstream can proceed
    without the tools directory.
 
-3. Symlink the tools directory into the workspace:
+2. Symlink the tools directory into the workspace:
 
    ```bash
-   ln -s /scion-volumes/scratchpad/LifeSciences/applications/open-agentic-science-engine/tools /workspace/tools
+   ln -sfn /scion-volumes/scratchpad/LifeSciences/applications/open-agentic-science-engine/tools /workspace/tools
    ```
 
    Verify the link resolves:
