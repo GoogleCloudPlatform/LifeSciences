@@ -255,12 +255,18 @@ An execution attempt has its own lifecycle:
 
 ```text
 queued -> starting -> running -> succeeded | failed | blocked | cancelled
+                    \-> failed | blocked | cancelled
 ```
 
 `succeeded` means the specialist returned its declared deliverables. It does not
 mean the artifact contract passed or the science was accepted. Resuming a blocked
 task or retrying a failed run creates a new run record under the same work-order
 revision. Changing the scientific task requires a new committed revision.
+
+A run remains `starting` until the specialist itself completes `oase run preflight`
+through its tool hook. That canary records the harness and runtime version and
+transitions the run to `running`. A startup attempt whose tool hook cannot execute
+the canary may transition directly from `starting` to a terminal state.
 
 A mechanical correction within a run is an operational annotation, not a new run.
 The run record may carry a `correction_count` field; individual correction events
@@ -272,14 +278,15 @@ The run record may carry a `correction_count` field; individual correction event
 1. The science lead reads Layer 2 state and issues a committed work order.
 2. The controller validates it, resolves dependencies, and queues it.
 3. The controller starts a specialist with the work order and context snapshot.
-4. The specialist runs tools, writes Layer 0 artifacts, and submits a Layer 1
+4. The specialist completes runtime preflight and the run becomes `running`.
+5. The specialist runs tools, writes Layer 0 artifacts, and submits a Layer 1
    finding.
-5. The controller performs mechanical artifact validation.
-6. When required, the controller dispatches an independent scientific reviewer.
-7. The science lead accepts, rejects, or requests revision of the interpretation.
-8. On acceptance, the science lead updates Layer 2 state and records the decision
+6. The controller performs mechanical artifact validation.
+7. When required, the controller dispatches an independent scientific reviewer.
+8. The science lead accepts, rejects, or requests revision of the interpretation.
+9. On acceptance, the science lead updates Layer 2 state and records the decision
    rationale and next question.
-9. The controller rebuilds and publishes the presentation layer from the accepted
+10. The controller rebuilds and publishes the presentation layer from the accepted
    artifact graph.
 
 ### 5.4 Batch completion

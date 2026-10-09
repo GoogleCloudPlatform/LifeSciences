@@ -90,7 +90,10 @@ WORK_ORDER_TRANSITIONS: dict[str | None, set[str]] = {
 RUN_TRANSITIONS: dict[str | None, set[str]] = {
     None: {"queued"},
     "queued": {"starting"},
-    "starting": {"running"},
+    # Startup can fail before the specialist proves that its harness can
+    # execute a tool.  Keep those attempts terminal and auditable instead of
+    # first mislabelling them as running.
+    "starting": {"running", "failed", "blocked", "cancelled"},
     "running": {"succeeded", "failed", "blocked", "cancelled"},
     # Terminal states.
     "succeeded": set(),
