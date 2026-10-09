@@ -48,7 +48,10 @@ class OF3SubmitPredictionTool(OF3Tool):
                 'use_templates': Use PDB template structures (default: true).
                     Requires pdb_seqres and pdb_mmcif on NFS. Adds ~10-20 min
                     to the MSA step but improves prediction quality for proteins
-                    with known structural homologs.
+                    with known structural homologs.,
+                'use_cueq_triangle_kernels': Enable NVIDIA cuEquivariance
+                    triangle kernels on A100 for accelerated inference (default: true).
+                    Automatically falls back to PyTorch for sequences <= 100 tokens.
             }
 
         Returns:
@@ -86,6 +89,10 @@ class OF3SubmitPredictionTool(OF3Tool):
         gpu_type = arguments.get("gpu_type", "auto")
         enable_flex_start = arguments.get("enable_flex_start", True)
         use_templates = arguments.get("use_templates", True)
+        use_cueq_triangle_kernels = arguments.get(
+            "use_cueq_triangle_kernels", self.config.use_cueq_triangle_kernels
+        )
+        enable_caching = arguments.get("enable_caching", True)
 
         import random
 
@@ -210,6 +217,7 @@ class OF3SubmitPredictionTool(OF3Tool):
             "gpu_type": accel_to_label.get(resolved_gpu, gpu_type.lower().replace("_", "-")),
             "msa_method": "jackhmmer",
             "submitted_by": "foldrun-agent",
+            "use_cueq": str(use_cueq_triangle_kernels).lower(),
         }
 
         # Submit pipeline job
@@ -228,8 +236,9 @@ class OF3SubmitPredictionTool(OF3Tool):
                 "num_diffusion_samples": num_diffusion_samples,
                 "use_templates": use_templates,
                 "base_seed": base_seed,
+                "use_cueq_triangle_kernels": use_cueq_triangle_kernels,
             },
-            "enable_caching": True,
+            "enable_caching": enable_caching,
             "labels": labels,
         }
 
@@ -274,4 +283,6 @@ class OF3SubmitPredictionTool(OF3Tool):
             "submitted_at": datetime.now().isoformat(),
             "pipeline_root": pipeline_root,
             "gcs_console_url": self.gcs_console_url(pipeline_root),
+            "use_cueq_triangle_kernels": use_cueq_triangle_kernels,
+            "enable_caching": enable_caching,
         }

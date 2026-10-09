@@ -46,11 +46,13 @@ class TestOF3GPURecommendation:
         from foldrun_app.models.of3.base import OF3Tool
 
         assert OF3Tool._recommend_gpu(2000) == "A100"
+        assert OF3Tool._recommend_gpu(2128) == "A100"
+        assert OF3Tool._recommend_gpu(2200) == "A100"
 
     def test_large_input_gets_a100_80gb(self):
         from foldrun_app.models.of3.base import OF3Tool
 
-        assert OF3Tool._recommend_gpu(2001) == "A100_80GB"
+        assert OF3Tool._recommend_gpu(2201) == "A100_80GB"
 
     def test_very_large_input_gets_a100_80gb(self):
         from foldrun_app.models.of3.base import OF3Tool

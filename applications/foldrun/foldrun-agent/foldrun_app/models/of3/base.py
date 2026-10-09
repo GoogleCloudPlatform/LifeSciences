@@ -64,10 +64,11 @@ class OF3Tool(BaseTool):
         OpenFold3 uses diffusion-based prediction — minimum A100 (40GB).
 
         Auto-selection tiers:
-            <=2000 tokens  → A100     (40 GB VRAM)
-            >2000 tokens   → A100_80GB (80 GB VRAM)
+            <=2200 tokens  → A100     (40 GB VRAM)
+            >2200 tokens   → A100_80GB (80 GB VRAM)
 
         No L4 tier — OF3 requires at least 40GB VRAM.
+        With cuEquivariance enabled, complexes up to 2200 tokens fit on A100 40GB.
 
         Args:
             num_tokens: Total number of tokens (residues + nucleotides + ligand atoms)
@@ -75,7 +76,7 @@ class OF3Tool(BaseTool):
         Returns:
             Recommended GPU type: 'A100' or 'A100_80GB'
         """
-        if num_tokens > 2000:
+        if num_tokens > 2200:
             return "A100_80GB"
         return "A100"
 

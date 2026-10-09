@@ -106,6 +106,12 @@ class TestOF3PipelineSource:
         assert "nfs_mmcif_dir" in source
         assert "PDB_MMCIF_PATH" in source
 
+    def test_pipeline_passes_use_cueq_triangle_kernels(self):
+        """Pipeline passes use_cueq_triangle_kernels to predict step."""
+        source = self._read_pipeline_source()
+        assert "use_cueq_triangle_kernels: bool = True" in source
+        assert "use_cueq_triangle_kernels=use_cueq_triangle_kernels" in source
+
 
 class TestOF3MSAPipelineSource:
     """Inspect MSA pipeline source for correctness."""
@@ -246,6 +252,19 @@ class TestOF3PredictTemplateArgs:
         assert "save_openfold_outputs" in source
         assert "save_colabfold_outputs" in source
         assert "save_mappings" in source
+
+    def test_predict_has_use_cueq_triangle_kernels_parameter(self):
+        """Predict component has use_cueq_triangle_kernels parameter defaulting to True."""
+        source = self._read_predict_source()
+        assert "use_cueq_triangle_kernels: bool = True" in source
+
+    def test_predict_configures_cueq_triangle_kernels_in_runner_yaml(self):
+        """Predict writes model_update with cuEquivariance triangle kernels when enabled."""
+        source = self._read_predict_source()
+        assert "if use_cueq_triangle_kernels:" in source
+        assert "model_update" in source
+        assert "use_cueq_triangle_kernels" in source
+        assert "use_deepspeed_evo_attention" in source
 
     def test_predict_rejects_legacy_checkpoints(self, tmp_path, monkeypatch):
         """predict_of3 raises ValueError when given a deprecated pre-OpenBind checkpoint."""
@@ -544,3 +563,77 @@ class TestOF3MSAPipelineCacheBehavior:
             f"Template alignment file was destroyed during cache promotion: "
             f"{tpl_chain['template_alignment_file_path']}"
         )
+
+
+class TestOF3SubmitPredictionToolCuEq:
+    """Verify OF3SubmitPredictionTool handling of cuEquivariance triangle kernels."""
+
+    @staticmethod
+    def _run_tool_with_mock_job(args: dict, env_overrides: dict | None = None):
+        import json
+        from unittest.mock import MagicMock, patch
+
+        from foldrun_app.models.of3.tools.submit_prediction import OF3SubmitPredictionTool
+
+        mock_job = MagicMock()
+        tool = OF3SubmitPredictionTool(tool_config={"name": "of3_submit_prediction"})
+
+        query_content = json.dumps(
+            {
+                "queries": {
+                    "test_q": {
+                        "chains": [
+                            {
+                                "molecule_type": "protein",
+                                "chain_ids": ["A"],
+                                "sequence": "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG",
+                            }
+                        ]
+                    }
+                }
+            }
+        )
+        base_args = {"input": query_content, "job_name": "test_cueq"}
+        base_args.update(args)
+
+        env = env_overrides or {}
+        with (
+            patch.dict(os.environ, env),
+            patch.object(tool, "_upload_to_gcs"),
+            patch.object(tool, "_get_filestore_info", return_value=("10.0.0.1", "test-net")),
+            patch.object(tool.storage_client, "bucket") as mock_bucket,
+            patch(
+                "foldrun_app.models.of3.tools.submit_prediction.vertex_ai.PipelineJob",
+                return_value=mock_job,
+            ) as mock_pipeline_job_cls,
+        ):
+            mock_blob = MagicMock()
+            mock_blob.exists.return_value = True
+            mock_bucket.return_value.blob.return_value = mock_blob
+
+            result = tool.run(base_args)
+            call_kwargs = mock_pipeline_job_cls.call_args[1]
+            return result, call_kwargs
+
+    def test_default_enables_cueq(self):
+        """When use_cueq_triangle_kernels is omitted, it defaults to True."""
+        result, call_kwargs = self._run_tool_with_mock_job({})
+        assert result["status"] == "submitted"
+        assert call_kwargs["parameter_values"]["use_cueq_triangle_kernels"] is True
+        assert call_kwargs["labels"]["use_cueq"] == "true"
+
+    def test_explicit_false_disables_cueq(self):
+        """When use_cueq_triangle_kernels=False is passed, it is respected."""
+        result, call_kwargs = self._run_tool_with_mock_job({"use_cueq_triangle_kernels": False})
+        assert result["status"] == "submitted"
+        assert call_kwargs["parameter_values"]["use_cueq_triangle_kernels"] is False
+        assert call_kwargs["labels"]["use_cueq"] == "false"
+
+    def test_env_var_override_disables_cueq(self):
+        """When OF3_USE_CUEQ_TRIANGLE_KERNELS=false, default becomes False."""
+        result, call_kwargs = self._run_tool_with_mock_job(
+            {}, env_overrides={"OF3_USE_CUEQ_TRIANGLE_KERNELS": "false"}
+        )
+        assert result["status"] == "submitted"
+        assert call_kwargs["parameter_values"]["use_cueq_triangle_kernels"] is False
+        assert call_kwargs["labels"]["use_cueq"] == "false"

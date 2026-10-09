@@ -24,7 +24,7 @@
         },
         "gpu_type": {
           "type": "string",
-          "description": "GPU type: 'auto' (default, A100 for <=2000 tokens, A100_80GB for >2000), 'A100', or 'A100_80GB'. No L4 support — OF3 requires minimum 40GB VRAM.",
+          "description": "GPU type: 'auto' (default, A100 for <=2200 tokens, A100_80GB for >2200), 'A100', or 'A100_80GB'. No L4 support — OF3 requires minimum 40GB VRAM.",
           "enum": [
             "auto",
             "A100",
@@ -34,6 +34,10 @@
         "enable_flex_start": {
           "type": "boolean",
           "description": "Enable DWS FLEX_START scheduling to queue job when GPUs unavailable (default: true)"
+        },
+        "use_cueq_triangle_kernels": {
+          "type": "boolean",
+          "description": "Enable NVIDIA cuEquivariance triangle kernels on A100 for accelerated inference (default: true). Automatically falls back to PyTorch for sequences <= 100 tokens."
         }
       },
       "required": [

@@ -76,6 +76,11 @@ class OF3Config(CoreConfig):
         """Cloud Run viewer service URL."""
         return os.getenv("FOLDRUN_VIEWER_URL", "")
 
+    @property
+    def use_cueq_triangle_kernels(self) -> bool:
+        """Whether to enable cuEquivariance triangle kernels by default."""
+        return os.getenv("OF3_USE_CUEQ_TRIANGLE_KERNELS", "true").lower() in ("true", "1", "yes")
+
     def to_dict(self) -> dict:
         """Convert configuration to dictionary."""
         d = super().to_dict()
@@ -84,6 +89,7 @@ class OF3Config(CoreConfig):
                 "base_image": self.base_image,
                 "params_path": self.params_path,
                 "ccd_path": self.ccd_path,
+                "use_cueq_triangle_kernels": self.use_cueq_triangle_kernels,
             }
         )
         return d

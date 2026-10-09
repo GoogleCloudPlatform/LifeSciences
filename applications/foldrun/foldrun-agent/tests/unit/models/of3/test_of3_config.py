@@ -107,9 +107,27 @@ class TestOF3Config:
             "params_path",
             "ccd_path",
             "supported_gpus",
+            "use_cueq_triangle_kernels",
         }
         assert set(d.keys()) == expected_keys
         assert d["base_image"] == "test-of3-image:stable"
+        assert d["use_cueq_triangle_kernels"] is True
+
+    def test_config_cueq_triangle_kernels_default(self):
+        from foldrun_app.models.of3.config import OF3Config
+
+        config = OF3Config()
+        assert config.use_cueq_triangle_kernels is True
+
+    @pytest.mark.parametrize(
+        "val,expected", [("false", False), ("0", False), ("no", False), ("true", True), ("1", True)]
+    )
+    def test_config_cueq_triangle_kernels_env_override(self, monkeypatch, val, expected):
+        monkeypatch.setenv("OF3_USE_CUEQ_TRIANGLE_KERNELS", val)
+        from foldrun_app.models.of3.config import OF3Config
+
+        config = OF3Config()
+        assert config.use_cueq_triangle_kernels is expected
 
     def test_dockerfile_sets_nvidia_runtime_and_ld_library_path(self):
         """Ensure 0.5-pixi Dockerfile defines NVIDIA container runtime env vars and LD_LIBRARY_PATH."""

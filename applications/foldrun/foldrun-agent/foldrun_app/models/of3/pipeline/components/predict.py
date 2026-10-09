@@ -51,6 +51,7 @@ def predict_of3(
     confidence_json: Output[Artifact],
     use_templates: bool = True,
     nfs_mmcif_dir: str = "",
+    use_cueq_triangle_kernels: bool = True,
 ):
     """Runs OF3 structure prediction for a single seed.
 
@@ -129,6 +130,21 @@ def predict_of3(
             "use_templates=True but nfs_mmcif_dir not provided; "
             "OF3 will attempt to download template structures from RCSB"
         )
+    if use_cueq_triangle_kernels:
+        runner_config["model_update"] = {
+            "presets": ["predict"],
+            "custom": {
+                "settings": {
+                    "memory": {
+                        "eval": {
+                            "use_cueq_triangle_kernels": True,
+                            "use_deepspeed_evo_attention": False,
+                        }
+                    }
+                }
+            },
+        }
+        logging.info("cuEquivariance triangle kernels ENABLED in runner YAML")
 
     runner_yaml_path = os.path.join(output_dir, "runner.yaml")
     with open(runner_yaml_path, "w") as f:
@@ -214,6 +230,7 @@ def predict_of3(
     predicted_structure.metadata["num_diffusion_samples"] = num_diffusion_samples
     predicted_structure.metadata["use_templates"] = use_templates
     predicted_structure.metadata["checkpoint"] = ckpt_basename
+    predicted_structure.metadata["use_cueq_triangle_kernels"] = use_cueq_triangle_kernels
 
     if best_conf and os.path.exists(confidence_json.path):
         with open(confidence_json.path) as f:
@@ -222,6 +239,7 @@ def predict_of3(
         confidence_json.metadata["is_monomer"] = _is_monomer
         confidence_json.metadata["use_templates"] = use_templates
         confidence_json.metadata["checkpoint"] = ckpt_basename
+        confidence_json.metadata["use_cueq_triangle_kernels"] = use_cueq_triangle_kernels
         # Store both scores so downstream tools can display the right one
         if "sample_ranking_score" in conf_data:
             confidence_json.metadata["sample_ranking_score"] = conf_data["sample_ranking_score"]

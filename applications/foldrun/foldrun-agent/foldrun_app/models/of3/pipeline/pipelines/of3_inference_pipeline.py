@@ -61,6 +61,7 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
         num_diffusion_samples: int = 5,
         use_templates: bool = True,
         base_seed: int = 42,
+        use_cueq_triangle_kernels: bool = True,
     ):
         """OpenFold3 Inference Pipeline.
 
@@ -167,6 +168,7 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
                 nfs_params_path=nfs_params_path,
                 use_templates=use_templates,
                 nfs_mmcif_dir=nfs_mmcif_dir,
+                use_cueq_triangle_kernels=use_cueq_triangle_kernels,
             ).set_retry(
                 num_retries=2,
                 backoff_duration="60s",
