@@ -33,7 +33,15 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from oase.commands.workorder import _find_critical_liabilities, _perform_commit
+import yaml
+from click.testing import CliRunner
+
+from oase.common import AppState
+from oase.commands.workorder import (
+    _find_critical_liabilities,
+    _perform_commit,
+    workorder,
+)
 from oase.core import controlstore
 from oase.core.errors import Refusal
 
@@ -300,6 +308,141 @@ class TestCommitLiabilityCheckpoint(unittest.TestCase):
         _make_proposed_wo(self.root)
         record, _snapshot_path, _record_path = _perform_commit(self.root, "WO-001")
         self.assertEqual(record["state"], "committed")
+
+
+class TestLiabilityJustificationYamlIngestion(unittest.TestCase):
+    """Exercise liability justification through the public YAML CLI path."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmpdir.name) / "project"
+        (self.root / ".oase").mkdir(parents=True)
+        controlstore.ensure_control_dirs(self.root)
+        tracker = self.root / "program-state" / "liability-tracker.md"
+        tracker.parent.mkdir(parents=True)
+        tracker.write_text(
+            "# Liability Tracker\n\n"
+            "## L-2\n\n"
+            "**Severity**: Critical\n"
+            "**Status**: open\n\n"
+            "A critical problem.\n",
+            encoding="utf-8",
+        )
+        self.runner = CliRunner()
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def _spec(self, **overrides: Any) -> dict[str, Any]:
+        spec: dict[str, Any] = {
+            "decision_question": "Does X hold?",
+            "requested_role": "analyst",
+            "stage": "discovery",
+            "cycle": "C1",
+            "context": {"content": "background", "artifact_links": []},
+            "dependencies": [],
+            "capabilities": [],
+            "deliverables": {"layer_0_classes": ["test"]},
+            "acceptance_criteria": ["Answer the question"],
+            "alert_policy": {"on_fail": "notify"},
+            "priority": "normal",
+            "resource_class": "standard",
+            "report_to": "lead",
+        }
+        spec.update(overrides)
+        return spec
+
+    def _write_spec(self, name: str, **overrides: Any) -> Path:
+        path = self.root / name
+        path.write_text(
+            yaml.safe_dump(self._spec(**overrides), sort_keys=False),
+            encoding="utf-8",
+        )
+        return path
+
+    def _invoke(self, *args: str):
+        return self.runner.invoke(
+            workorder,
+            list(args),
+            obj=AppState(project_override=str(self.root)),
+        )
+
+    def test_create_commit_preserves_yaml_justification_and_critical_severity(self):
+        spec = self._write_spec(
+            "work-order.yaml",
+            liability_justification={"L-2": "This work directly investigates L-2."},
+        )
+
+        result = self._invoke("create", "--from", str(spec), "--commit")
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        record = controlstore.read_record(
+            self.root, "work-order", "WO-001-r1"
+        )
+        self.assertEqual(record["state"], "committed")
+        self.assertEqual(
+            record["liability_justification"],
+            {"L-2": "This work directly investigates L-2."},
+        )
+        tracker = self.root / "program-state" / "liability-tracker.md"
+        self.assertIn("**Severity**: Critical", tracker.read_text(encoding="utf-8"))
+
+    def test_invalid_yaml_justification_type_is_rejected(self):
+        spec = self._write_spec(
+            "invalid-work-order.yaml",
+            liability_justification="bypass",
+        )
+
+        result = self._invoke("create", "--from", str(spec))
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("must be a mapping", result.output)
+
+    def test_update_preserves_yaml_justification(self):
+        initial = self._write_spec("initial.yaml")
+        updated = self._write_spec(
+            "updated.yaml",
+            liability_justification={"L-2": "Updated justification."},
+        )
+        self.assertEqual(
+            self._invoke("create", "--from", str(initial)).exit_code,
+            0,
+        )
+
+        result = self._invoke("update", "WO-001", "--from", str(updated))
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        record = controlstore.read_record(
+            self.root, "work-order", "WO-001-r1"
+        )
+        self.assertEqual(
+            record["liability_justification"],
+            {"L-2": "Updated justification."},
+        )
+
+    def test_revise_preserves_justification(self):
+        _make_proposed_wo(
+            self.root,
+            liability_justification={"L-2": "Preserve this justification."},
+        )
+        record = controlstore.read_record(
+            self.root, "work-order", "WO-001-r1"
+        )
+        record["state"] = "committed"
+        controlstore.write_record(
+            self.root, "work-order", "WO-001-r1", record
+        )
+
+        result = self._invoke("revise", "WO-001")
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        revised = controlstore.read_record(
+            self.root, "work-order", "WO-001-r2"
+        )
+        self.assertEqual(
+            revised["liability_justification"],
+            {"L-2": "Preserve this justification."},
+        )
 
 
 if __name__ == "__main__":
