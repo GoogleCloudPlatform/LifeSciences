@@ -13,6 +13,9 @@
 # limitations under the License.
 
 import os
+from unittest.mock import patch
+
+import pytest
 
 
 def pytest_configure(config):
@@ -31,3 +34,16 @@ def pytest_configure(config):
     # Boltz-2 required variables
     os.environ["BOLTZ2_COMPONENTS_IMAGE"] = "test-boltz2-image"
     os.environ["BOLTZ2_CACHE_PATH"] = "boltz2/cache"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_gcp_clients():
+    """Ensure unit tests never leak singleton clients or require ambient GCP credentials."""
+    import foldrun_app.core.base_tool as base_tool
+
+    base_tool._vertex_initialized = False
+    base_tool._shared_storage_client = None
+    with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
+        yield
+    base_tool._vertex_initialized = False
+    base_tool._shared_storage_client = None

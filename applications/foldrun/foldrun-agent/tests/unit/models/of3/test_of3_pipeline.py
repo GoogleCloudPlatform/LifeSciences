@@ -576,7 +576,8 @@ class TestOF3SubmitPredictionToolCuEq:
         from foldrun_app.models.of3.tools.submit_prediction import OF3SubmitPredictionTool
 
         mock_job = MagicMock()
-        tool = OF3SubmitPredictionTool(tool_config={"name": "of3_submit_prediction"})
+        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
+            tool = OF3SubmitPredictionTool(tool_config={"name": "of3_submit_prediction"})
 
         query_content = json.dumps(
             {

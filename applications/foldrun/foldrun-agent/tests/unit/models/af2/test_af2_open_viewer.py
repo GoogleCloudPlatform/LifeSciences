@@ -33,7 +33,8 @@ def _make_tool(viewer_url: str | None = "https://viewer.example.com") -> AF2Open
         filestore_network="default",
     )
     tool_config = {"name": "af2_open_viewer", "description": "Open viewer"}
-    return AF2OpenViewerTool(tool_config=tool_config, config=config)
+    with patch("foldrun_app.core.base_tool._ensure_clients"):
+        return AF2OpenViewerTool(tool_config=tool_config, config=config)
 
 
 class TestAF2OpenViewerSecurity:

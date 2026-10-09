@@ -38,7 +38,8 @@ class TestAF2GetResultsPathTraversal:
         config = MagicMock()
         config.project_id = "test-project"
         config.region = "us-central1"
-        return AF2GetResultsTool(tool_config=tool_config, config=config)
+        with patch("foldrun_app.core.base_tool._ensure_clients"):
+            return AF2GetResultsTool(tool_config=tool_config, config=config)
 
     @patch("foldrun_app.models.af2.tools.get_results.get_task_details")
     @patch("foldrun_app.models.af2.tools.get_results.get_pipeline_job")
