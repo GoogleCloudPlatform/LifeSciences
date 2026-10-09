@@ -1,3 +1,8 @@
+---
+name: site-generation
+description: Build, post-process, and verify the navigable HTML program website.
+---
+
 # Site Generation
 
 How the project curator builds, post-processes, and verifies the navigable HTML website from the drug discovery program's artifact hierarchy. This skill covers when to trigger a build, how to invoke the CLI, what the build produces, how to apply post-build fixes for known rendering gaps, and how to verify the output. It complements `artifact-conventions` (which governs the source artifacts) and `program-state-management` (which governs the Layer 2 documents that feed the site).

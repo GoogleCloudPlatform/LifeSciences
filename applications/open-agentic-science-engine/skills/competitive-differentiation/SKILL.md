@@ -1,3 +1,8 @@
+---
+name: competitive-differentiation
+description: Interpret competitive landscape and patent search results for a concept.
+---
+
 # Competitive Differentiation Assessment
 
 ## Purpose
