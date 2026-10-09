@@ -41,10 +41,8 @@ from foldrun_app.skills.job_management.tools import (
     check_gpu_quota,
     check_job_status,
     delete_job,
-    deploy_af3_endpoint,
     get_job_details,
     list_jobs,
-    undeploy_af3_endpoint,
 )
 from foldrun_app.skills.job_submission.instruction import JOB_SUBMISSION_INSTRUCTION
 from foldrun_app.skills.job_submission.tools import (
@@ -203,9 +201,7 @@ class SkillRegistry:
             delete_job,
         ]
         if has_af3:
-            management_tools.extend(
-                [check_af3_endpoint, deploy_af3_endpoint, undeploy_af3_endpoint]
-            )
+            management_tools.append(check_af3_endpoint)
 
         self.register(
             Skill(

@@ -8,22 +8,51 @@ metadata:
     - cancel_job
     - delete_job
     - check_af3_endpoint
-    - deploy_af3_endpoint
-    - undeploy_af3_endpoint
 ---
 
 # Job Management
 
-- **AlphaFold 3 Endpoint Lifecycle & Backlog Scaling (Cost Optimization)**:
-  - Unlike Vertex AI Pipelines (AF2/OF3/Boltz-2) which are ephemeral KFP DAGs, an active Vertex AI Endpoint with a deployed model incurs continuous GPU billing (~$11.06/hr per `a3-highgpu-1g` H100 80GB replica with 3 TB local NVMe SSD for the 630 GB MSA bundle, or ~$1.01/hr on `g2-standard-16` L4 for inference-only).
-  - An endpoint with 0 deployed models costs **$0.00/hr**.
-  - **Check Status, Replicas & Cost**: Use `check_af3_endpoint` to see whether the endpoint is dormant ($0/hr) or active, how many replicas (`min_replica_count` / `max_replica_count`) are running, and the current hourly burn rate.
-  - **Spin Up GPU**: Use `deploy_af3_endpoint` to deploy the AF3 model onto `a3-highgpu-1g` (1x H100 80GB, `min_replica_count=1`) when starting an AF3 prediction session.
-  - **Backlog-Driven Replica Scaling (Maximize 1 Replica First, Scale on Same Endpoint)**:
-    1. **Tier 1 — Maximize 1 Warm Replica First (Backlog <= 25–30 min)**: A single warm H100 replica folds `--msa-free` structures in ~58s and Full-MSA structures in ~4.6 min, whereas cold-starting a new replica takes ~25–35 min to unpack the 630 GB MSA bundle onto local NVMe SSD. For up to **~25 `--msa-free` jobs** or **~5 Full-MSA jobs**, keep `min_replica_count=1` and queue sequentially.
-    2. **Tier 2 — Scale Replicas In-Place on the Same Endpoint (Backlog > 30 min)**: For larger batches (e.g., 30+ `--msa-free` screens or 6+ Full-MSA complexes), suggest scaling replicas on the **existing** endpoint by calling `deploy_af3_endpoint(min_replica_count=N, max_replica_count=N)` (e.g., `N=2..4`). Never create a second Endpoint ID; Vertex AI load-balances concurrent predictions across all replicas behind the single endpoint.
-    3. **Tier 3 — Scale Down or Tear Down to $0/hr**: When a batch finishes, either scale back to `1` replica (`deploy_af3_endpoint(min_replica_count=1, max_replica_count=1)`) or call `undeploy_af3_endpoint` to release all GPUs and revert idle cost to **$0.00/hr**.
-  - **PROACTIVE GUIDANCE**: When an AF3 prediction or batch completes, ask the user if they have further AF3 jobs to run or if they would like to scale down / undeploy the endpoint to avoid ongoing charges.
+- **AlphaFold 3 Endpoint Lifecycle & Cost**:
+  - Unlike AF2/OF3/Boltz-2 (ephemeral KFP pipelines), AlphaFold 3 runs on a persistent dedicated endpoint (`a3-highgpu-1g`, 1x H100 80GB + 3 TB local NVMe SSD for the 630 GB MSA bundle, ~$11.06/hr per active replica).
+  - The endpoint and model deployment are **managed by Terraform** (`--steps infra --enable-af3`). The agent does not deploy, scale, or undeploy the endpoint.
+  - The endpoint uses **scale-to-zero** (`min_replica_count=0`, `initial_replica_count=1`): it scales down to 0 replicas ($0.00/hr) after 20 minutes idle and scales back up on the next prediction (the first request after idle waits for the replica to start; the pipeline retries automatically).
+  - **Check Status, Replicas & Cost**: Use `check_af3_endpoint` to see whether a model is deployed, its replica settings, scale-to-zero configuration, and queue depth.
+  - **No deployed model**: If `check_af3_endpoint` reports no deployed model, tell the user to re-run the FoldRun infrastructure step (`./deploy-all.sh <PROJECT_ID> <REGION> --steps infra --enable-af3`). Do not attempt to deploy from the agent.
+  - **Large backlogs**: A single warm H100 replica folds `--msa-free` structures in ~58s and Full-MSA structures in ~4.5 min. For backlogs estimated above ~30 minutes, advise the user to increase `af3_max_replica_count` in Terraform and re-run the infrastructure step.
+
+### Rule: H100 Quota Guidance
+When a user is setting up the AlphaFold 3 endpoint (`google/alphafold3@v3_0_4`):
+1. **Quota**: H100 serving quota is often restricted. Advise the user to confirm `Custom model serving Nvidia H100 80GB GPUs per region` quota (and the preemptible variant, `aiplatform.googleapis.com/custom_model_serving_preemptible_nvidia_h100_80gb_gpus`, if using spot/DWS) in the endpoint region.
+2. **Region Matching**: The quota request must target the region configured for the FoldRun deployment (`AF3_ENDPOINT_LOCATION` / `GOOGLE_CLOUD_REGION`, e.g., `us-central1`).
+
+### Rule: Idle Endpoint Scale-to-Zero Awareness
+When the last job in an active AF3 queue finishes:
+- Check `check_af3_endpoint`. If `active_slots_in_use: 0` and `queued_jobs_waiting: 0`, inform the user:
+  "All jobs in this batch are complete. The endpoint will automatically scale down to 0 replicas ($0.00/hr) after 20 minutes of inactivity."
+
+### Rule: Automatic Batch Duration & Scaling Prompt
+Upon submitting a batch of N jobs:
+- If Full MSA mode: estimate queue time as `N × 4.5 minutes / active_replicas`.
+- If estimated queue time > 30 minutes and `active_replicas == 1`, include:
+  "Estimated queue drain time is ~`<M>` min on 1 replica. To parallelize, increase `af3_max_replica_count` in Terraform and re-run the infrastructure step."
+
+### Communicating Deployment Stages to Users
+When inspecting an endpoint deployment via `check_af3_endpoint`, interpret the stages clearly:
+
+- **`PENDING_NODE_ALLOCATION`**:
+  The request is waiting for GPU capacity. If this persists for >10 minutes, advise the user that the requested pool is congested and suggest checking H100 quota.
+
+- **`ADDING_NODES_TO_CLUSTER`**:
+  **Capacity has been secured!** Google Cloud's cluster scheduler has successfully granted the physical `a3-highgpu-1g` node. The host is currently booting, pulling the container, and mounting the 3 TB local NVMe SSD (takes ~8–12 minutes total). Do NOT cancel or resubmit.
+
+- **`ACTIVE` / `READY`**:
+  Container health check has passed (`/v1/models/alphafold3:predict`), and replica slots are open to process queued predictions.
+
+### Rule: Endpoint Readiness
+- If an AF3 deployment is in progress (e.g., right after the Terraform infrastructure step), the KFP coordinator (`provision_and_queue_af3_endpoint_task`) waits for it to finish (up to ~210 minutes) and fails immediately if the deployment operation errors.
+- When the endpoint has scaled to zero, the first prediction triggers scale-up; the pipeline retries until a replica is ready.
+- **Best Practice Recommendation**: After a fresh infrastructure deploy, advise the user to wait until `check_af3_endpoint` shows `READY` before submitting a large 25-seed pipeline job.
+
 - **Check GPU quota**: Use check_gpu_quota to view available GPU capacity BEFORE submitting jobs
   - **Auto-Detection**: The server automatically checks quotas at startup and prints a "Project GPU Inventory".
   - **Smart Filtering**: GPUs with 0 quota are automatically removed from the supported list.

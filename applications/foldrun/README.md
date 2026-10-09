@@ -7,7 +7,7 @@
 
 - **Conversational AI**: Natural language interface powered by Gemini for submitting, monitoring, and analyzing predictions
 - **Multi-Model Support**: Plugin architecture for **AlphaFold 2**, **AlphaFold 3**, **OpenFold 3**, and **Boltz-2** — shared databases, unified KFP orchestration, and dedicated H100 endpoint management
-- **4-Stage AF3 KFP Pipeline + Auto-Drain**: Orchestrates AlphaFold 3 predictions across 4 observable KFP stages (*Provision & Queue Endpoint $\rightarrow$ Run H100 Inference $\rightarrow$ Report Endpoint Available $\rightarrow$ Process Results & Expert Analysis*) with FIFO GCS replica slot locking and a 20-minute idle auto-undeploy watchdog (`$0.00/hr` when idle)
+- **4-Stage AF3 KFP Pipeline + Scale-to-Zero**: Orchestrates AlphaFold 3 predictions across 4 observable KFP stages (*Provision & Queue Endpoint $\rightarrow$ Run H100 Inference $\rightarrow$ Report Endpoint Available $\rightarrow$ Process Results & Expert Analysis*) with FIFO GCS replica slot locking; the endpoint scales to zero after 20 minutes idle (`$0.00/hr` when idle)
 - **Automated Execution & Reservation-Aware Hardware**: Provisions infrastructure, detects GCE GPU reservations, and automatically falls back across GPU tiers (`H100_80GB` $\rightarrow$ `A100_80GB` $\rightarrow$ `A100` $\rightarrow$ `L4`)
 - **Multimodal Gemini 3.1 Pro Expert Analysis**: Generates structural metrics (`pLDDT`, `PAE`, `pTM`, `ipTM`, `ranking_score`) and multimodal AI biological interpretation from 3D coordinates and plots
 - **Interactive Visualization & Signed Artifact Bundles**: Web-based 3D structure viewer (3Dmol.js) with confidence coloring, PAE/ipTM heatmaps, and 1-click V4 signed ZIP archive downloads (`artifacts_bundle.zip`)
@@ -68,6 +68,25 @@ If you are using a Shared VPC (network belongs to a host project), the following
 - **Boltz-2 minimum**: **1x NVIDIA A100 40GB** (no L4 support — diffusion model requires ≥40 GB VRAM)
 - Check your quota: [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu)
 - If you need to request quota increases, do it first — approvals can take hours
+
+**AlphaFold 3 Model Garden Access & Endpoint APIs (if using AlphaFold 3):**
+AlphaFold 3 on Gemini platform Model Garden requires project-level allowlisting before the model container and weights can be deployed to an endpoint:
+1. **Enable Gemini platform & Endpoint APIs** (if visiting Model Garden before running `./deploy-all.sh`):
+   ```bash
+   gcloud services enable aiplatform.googleapis.com compute.googleapis.com --project=YOUR_PROJECT_ID
+   ```
+   *(Or click **Enable Recommended APIs** if prompted in the Cloud Console under **Gemini platform > Model Garden** or **Online Prediction > Endpoints**.)*
+2. **Request AlphaFold 3 Model Garden Access:**
+   - Open the [AlphaFold 3 Model Garden Request Page](https://console.cloud.google.com/agent-platform/publishers/google/model-garden/alphafold3-request) for your project (`https://console.cloud.google.com/agent-platform/publishers/google/model-garden/alphafold3-request?project=YOUR_PROJECT_ID`).
+   - Complete the [AlphaFold 3 Access Request Form](https://docs.google.com/forms/d/e/1FAIpQLSe31oNAW1HgEptWxwFhu7oOw9WvC32688stgHqsqYxkxeX8nw/viewform) with your **GCP Project ID** and **Project Number** (`gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)'`).
+   - For commercial use, work with your Google Cloud account team to enable a commercial subscription and allowlist your project; for non-commercial academic research, see the [AlphaFold 3 Weights Terms of Use](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md).
+3. **Request Custom Model Serving H100 80GB Quota (Required for Dedicated Endpoint):**
+   - In [IAM & Admin → Quotas](https://console.cloud.google.com/iam-admin/quotas), filter by `aiplatform.googleapis.com` and `H100` in your target region (`us-central1` or `us-west1`) and ensure at least **1–2 GPUs** are approved for:
+     - **`Custom model serving preemptible Nvidia H100 80GB GPUs per region`** (`aiplatform.googleapis.com/custom_model_serving_preemptible_nvidia_h100_80gb_gpus`) — **required for DWS FlexStart / Spot** (preferred for `a3-highgpu-1g` sub-shapes; defaults to `0` on new projects).
+     - **`Custom model serving Nvidia H100 80GB GPUs per region`** (`aiplatform.googleapis.com/custom_model_serving_nvidia_h100_80gb_gpus`) — used for standard `ANY_RESERVATION` fallback.
+4. **Provision the Endpoint with Terraform (Once Allowlisted):**
+   - See the official [AlphaFold 3 on Gemini platform Model Garden Deployment Guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/open-models/alphafold-3#deploy-alphafold-3) for manual/SDK deployment details. To deploy with FoldRun, pass `--enable-af3` to `./deploy-all.sh` (infra step); Terraform provisions the endpoint (`a3-highgpu-1g`, 3,600s inference timeout, scale-to-zero after 20 minutes idle).
+
 
 
 
@@ -196,6 +215,7 @@ Now run the deployment script regularly to build containers and deploy the appli
 
 ### Other deploy options
 ```bash
+./deploy-all.sh YOUR_PROJECT_ID us-central1 --enable-af3  # Full deploy + AlphaFold 3 Model Garden Dedicated Endpoint
 ./deploy-all.sh YOUR_PROJECT_ID --steps infra    # Only Terraform
 ./deploy-all.sh YOUR_PROJECT_ID --steps build    # Only Cloud Build (all containers)
 ./deploy-all.sh YOUR_PROJECT_ID --steps data     # Only database downloads
@@ -494,7 +514,7 @@ uv run adk web foldrun_app
 | Artifact Registry (~16GB) | ~$2/mo |
 | Agent Runtime (idle) | ~$0 (pay per query) |
 | Cloud Run (viewer, idle) | ~$0 (scale to zero) |
-| **AlphaFold 3 endpoint (idle / undeployed)** | **$0.00/hr** (auto-undeploys after 20 min of inactivity) |
+| **AlphaFold 3 endpoint (idle / undeployed)** | **$0.00/hr** (scales to zero after 20 min of inactivity) |
 | **AlphaFold 3 prediction (`--msa-free`, H100)** | **~$0.18 per job** (~58s on warm `a3-highgpu-1g` at ~$11.06/hr) |
 | **AlphaFold 3 prediction (Full 630 GB MSA, H100)** | **~$0.55–$1.15 per standard job** (~3–6 min for 30–350 aa/nt; ~$2.85–$3.55 for >1,100-aa proteins) |
 | AF2 prediction (per job, A100) | ~$8 per job (MSA + 5 seeds predict + relax) |
@@ -530,7 +550,7 @@ foldrun/
 │   │   │   │   ├── config.py   # AF3Config (endpoint ID, H100/A100/L4 auto-fallback, reservations)
 │   │   │   │   ├── base.py     # AF3Tool base class
 │   │   │   │   ├── pipeline.py # 4-stage KFP DAG (Queue → Inference → Release → Expert Analysis) + Idle Watchdog
-│   │   │   │   ├── tools/      # 7 tools: submit, submit_batch, check/deploy/undeploy_endpoint, get_results, open_viewer
+│   │   │   │   ├── tools/      # 5 tools: submit, submit_batch, check_endpoint, get_results, open_viewer
 │   │   │   │   └── utils/      # Input converter (FASTA/JSON), metrics, multimodal viewer_artifacts
 │   │   │   ├── of3/            # OpenFold3 plugin
 │   │   │   │   ├── config.py   # OF3Config (image, params path, viewer URL)

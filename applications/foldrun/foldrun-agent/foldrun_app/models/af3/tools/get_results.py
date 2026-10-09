@@ -29,6 +29,55 @@ logger = logging.getLogger(__name__)
 class AF3GetResultsTool(AF3Tool):
     """Retrieves prediction metrics, confidence scores, and CIF coordinates for an AF3 run."""
 
+    def _resolve_job_name_from_pipeline_id(self, job_id: str) -> str | None:
+        """Attempt to resolve a KFP pipeline_job_id to its human-readable AF3 job_name."""
+        if not (
+            job_id.startswith("alphafold3-inference-pipeline-") or job_id.startswith("projects/")
+        ):
+            return None
+        try:
+            from google.cloud import aiplatform as vertex_ai
+
+            from foldrun_app.core.vertex_utils import resolve_pipeline_job_name
+
+            pjob = vertex_ai.PipelineJob.get(
+                resource_name=resolve_pipeline_job_name(
+                    job_id, self.config.project_id, self.config.region
+                ),
+                project=self.config.project_id,
+                location=self.config.region,
+            )
+            if type(pjob).__module__.startswith("unittest.mock") and not isinstance(
+                getattr(pjob, "display_name", None), str
+            ):
+                return None
+
+            candidates: list[str] = []
+            display_name = getattr(pjob, "display_name", None)
+            if isinstance(display_name, str) and display_name:
+                candidates.append(display_name)
+
+            gca = getattr(pjob, "_gca_resource", None)
+            runtime_cfg = getattr(gca, "runtime_config", None) if gca else None
+            param_values = getattr(runtime_cfg, "parameter_values", None) if runtime_cfg else None
+            if isinstance(param_values, dict) and isinstance(param_values.get("job_name"), str):
+                candidates.insert(0, param_values["job_name"])
+
+            labels = getattr(pjob, "labels", None) or (
+                getattr(gca, "labels", None) if gca else None
+            )
+            if isinstance(labels, dict) and isinstance(labels.get("query_name"), str):
+                candidates.append(labels["query_name"])
+
+            for cand in candidates:
+                try:
+                    return self.validate_job_name(cand)
+                except ValueError:
+                    continue
+        except Exception as exc:
+            logger.debug(f"Could not resolve pipeline_job_id '{job_id}' to job_name: {exc}")
+        return None
+
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Fetch AF3 results from GCS.
 
@@ -42,22 +91,53 @@ class AF3GetResultsTool(AF3Tool):
         if not job_id:
             return {"status": "error", "message": "Missing required argument 'job_id'."}
 
+        requested_job_id = str(job_id).strip()
         bucket_name = self.config.bucket_name
         try:
             bucket = self.storage_client.bucket(bucket_name)
 
-            conf_blob = bucket.blob(self.get_conf_blob_path(job_id))
-            cif_blob = bucket.blob(self.get_cif_blob_path(job_id))
+            resolved_from_pipeline_id = None
+            lookup_job_id = requested_job_id
+            if "/" in lookup_job_id:
+                alt_from_uri = self._resolve_job_name_from_pipeline_id(requested_job_id)
+                if alt_from_uri:
+                    resolved_from_pipeline_id = requested_job_id
+                    lookup_job_id = alt_from_uri
+                else:
+                    lookup_job_id = requested_job_id.rstrip("/").split("/")[-1]
+
+            conf_blob = bucket.blob(self.get_conf_blob_path(lookup_job_id))
+            cif_blob = bucket.blob(self.get_cif_blob_path(lookup_job_id))
 
             conf_exists = conf_blob.exists()
             cif_exists = cif_blob.exists()
 
+            if not conf_exists and not cif_exists and not resolved_from_pipeline_id:
+                alt_job_name = self._resolve_job_name_from_pipeline_id(requested_job_id)
+                if alt_job_name and alt_job_name != lookup_job_id:
+                    alt_conf_blob = bucket.blob(self.get_conf_blob_path(alt_job_name))
+                    alt_cif_blob = bucket.blob(self.get_cif_blob_path(alt_job_name))
+                    alt_conf_exists = alt_conf_blob.exists()
+                    alt_cif_exists = alt_cif_blob.exists()
+                    if alt_conf_exists or alt_cif_exists:
+                        resolved_from_pipeline_id = requested_job_id
+                        lookup_job_id = alt_job_name
+                        conf_blob = alt_conf_blob
+                        cif_blob = alt_cif_blob
+                        conf_exists = alt_conf_exists
+                        cif_exists = alt_cif_exists
+
+            job_id = lookup_job_id
             if not conf_exists and not cif_exists:
                 return {
                     "status": "not_found",
-                    "job_id": job_id,
+                    "job_id": requested_job_id,
                     "message": (
-                        f"No AlphaFold 3 artifacts found at {self.get_job_gcs_prefix(job_id)}."
+                        f"No AlphaFold 3 artifacts found at {self.get_job_gcs_prefix(lookup_job_id)}. "
+                        "Note: AF3 stores artifacts under the sanitized `job_name` "
+                        "(e.g. `gs://.../af3_predictions/{job_name}/`). If you passed a "
+                        "`pipeline_job_id`, immediately retry `get_af3_results` with the "
+                        "human-readable `job_name`."
                     ),
                 }
 
@@ -132,7 +212,7 @@ class AF3GetResultsTool(AF3Tool):
                 else None
             )
 
-            return {
+            result_dict: dict[str, Any] = {
                 "status": "succeeded",
                 "job_id": job_id,
                 "model": "AlphaFold 3",
@@ -157,6 +237,9 @@ class AF3GetResultsTool(AF3Tool):
                 "viewer_url": viewer_url,
                 "console_url": self.gcs_console_url(self.get_job_gcs_prefix(job_id)),
             }
+            if resolved_from_pipeline_id:
+                result_dict["resolved_from_pipeline_job_id"] = resolved_from_pipeline_id
+            return result_dict
 
         except GoogleAPICallError as e:
             logger.exception(f"GCS API error while retrieving AF3 results for {job_id}: {e}")

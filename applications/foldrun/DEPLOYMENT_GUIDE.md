@@ -21,13 +21,37 @@ and production access for FoldRun. For a quick-start overview, see [README.md](R
 
 | Model | Minimum GPU | Recommended | Notes |
 |-------|-------------|-------------|-------|
-| **AlphaFold 3** | 1x NVIDIA L4 (`--msa-free`) | **1x NVIDIA H100 80GB (`a3-highgpu-1g`)** | Auto-detects GCE reservations; auto-falls back across `H100_80GB -> A100_80GB -> A100 -> L4`; auto-undeploys to `$0.00/hr` after 20m idle |
+| **AlphaFold 3** | 1x NVIDIA L4 (`--msa-free`) | **1x NVIDIA H100 80GB (`a3-highgpu-1g`)** | Auto-detects GCE reservations; auto-falls back across `H100_80GB -> A100_80GB -> A100 -> L4`; scales to zero (`$0.00/hr`) after 20m idle |
 | **AlphaFold 2** | 1x NVIDIA L4 | 1x NVIDIA A100 40GB | A100_80GB for >1,500 residues |
 | **OpenFold 3** | 1x NVIDIA A100 40GB | 1x NVIDIA A100 80GB | Minimum 40 GB VRAM |
 | **Boltz-2** | 1x NVIDIA A100 40GB | 1x NVIDIA A100 80GB | Minimum 40 GB VRAM |
 
 Check your quota on the [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu).
 Request increases early — approvals can take hours.
+
+**AlphaFold 3 Model Garden Access & Endpoint APIs:**
+AlphaFold 3 on Gemini platform Model Garden is gated behind a project-level allowlist (`google/alphafold3`). Before deploying or running AlphaFold 3 endpoints in a new project:
+1. **Enable Gemini platform & Endpoint APIs** (if visiting Model Garden in the Console prior to running `./deploy-all.sh`):
+   ```bash
+   gcloud services enable aiplatform.googleapis.com compute.googleapis.com --project=YOUR_PROJECT_ID
+   ```
+   *(If opening **Gemini platform > Model Garden** or **Endpoints** in the Cloud Console on a fresh project, click **Enable Recommended APIs** when prompted.)*
+2. **Submit the AlphaFold 3 Access Request:**
+   - Navigate to the [AlphaFold 3 Model Garden Request Page](https://console.cloud.google.com/agent-platform/publishers/google/model-garden/alphafold3-request) for your project:
+     `https://console.cloud.google.com/agent-platform/publishers/google/model-garden/alphafold3-request?project=YOUR_PROJECT_ID`
+   - Complete the [AlphaFold 3 Access Request Form](https://docs.google.com/forms/d/e/1FAIpQLSe31oNAW1HgEptWxwFhu7oOw9WvC32688stgHqsqYxkxeX8nw/viewform) with your **GCP Project ID** and **Project Number** (`gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)'`).
+   - For commercial use, coordinate with your Google Cloud account team to obtain a commercial subscription and allowlist your project.
+3. **Request Custom Model Serving H100 80GB Quota (Required for Dedicated Endpoint):**
+   - In [IAM & Admin → Quotas](https://console.cloud.google.com/iam-admin/quotas), filter by `aiplatform.googleapis.com` and `H100` in your target region (`us-central1` or `us-west1`) and request **1–2 GPUs** for:
+     - **`Custom model serving preemptible Nvidia H100 80GB GPUs per region`** (`aiplatform.googleapis.com/custom_model_serving_preemptible_nvidia_h100_80gb_gpus`) — **required for DWS FlexStart / Spot** (preferred for `a3-highgpu-1g` sub-shapes; defaults to `0` on new projects).
+     - **`Custom model serving Nvidia H100 80GB GPUs per region`** (`aiplatform.googleapis.com/custom_model_serving_nvidia_h100_80gb_gpus`) — used for standard `ANY_RESERVATION` fallback.
+4. **Provisioning the AlphaFold 3 Model Garden Endpoint (Terraform):**
+   - **During full/infra deployment** (`--enable-af3` or `ENABLE_AF3=true`, which sets `-var="enable_af3=true"` in Terraform):
+     ```bash
+     ./deploy-all.sh YOUR_PROJECT_ID us-central1 --enable-af3
+     ```
+   - See also the official [AlphaFold 3 on Gemini platform Model Garden Deployment Guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/open-models/alphafold-3#deploy-alphafold-3). The endpoint is managed by Terraform; if it is ever removed, re-run the infra step to redeploy it.
+
 
 ### Service Accounts and IAM
 
@@ -37,7 +61,7 @@ You do **not** need to configure these manually — `deploy-all.sh` handles ever
 | Service Account | ID | Purpose | Key Roles |
 |---|---|---|---|
 | **Agent SA** | `foldrun-agent-sa` | Agent Runtime identity | `aiplatform.user`, `batch.jobsEditor`, `run.developer`, `storage.bucketViewer`, `compute.viewer` |
-| **Pipelines SA** | `pipelines-sa` | Agent Platform Pipeline jobs | `aiplatform.user`, `artifactregistry.reader`, `iam.serviceAccountUser` (self-`actAs` for Stage 3 watchdog submission) |
+| **Pipelines SA** | `pipelines-sa` | Agent Platform Pipeline jobs | `aiplatform.user`, `logging.viewer`, `artifactregistry.reader`, `storage.objectUser` (data bucket), `run.jobsExecutorWithOverrides` (analysis job) |
 | **Batch Compute SA** | `batch-compute-sa` | Cloud Batch download/convert jobs | `batch.agentReporter`, `logging.logWriter`, `storage.bucketViewer` |
 | **Build SA** | `foldrun-build-sa` | Cloud Build CI/CD | `aiplatform.user`, `artifactregistry.writer`, `run.developer`, `compute.viewer` |
 | **Viewer SA** | `foldrun-viewer-sa` | Cloud Run viewer service | `storage.objectViewer` (bucket-scoped) |
@@ -100,13 +124,15 @@ gcloud billing projects link YOUR_PROJECT_ID --billing-account="${BILLING#billin
 ```bash
 cd applications/foldrun
 ./deploy-all.sh YOUR_PROJECT_ID
+# Or include AlphaFold 3 Model Garden Dedicated Endpoint provisioning in Terraform:
+./deploy-all.sh YOUR_PROJECT_ID us-central1 --enable-af3
 ```
 
 This runs three stages sequentially:
 
 | Stage | What it does | Time |
 |-------|-------------|------|
-| **infra** | Enables 14 GCP APIs, creates Terraform state bucket, provisions VPC, Cloud NAT, Filestore, GCS buckets, Artifact Registry, service accounts, Cloud Run services | ~15 min |
+| **infra** | Enables the required GCP APIs, creates Terraform state bucket, provisions VPC, Cloud NAT, Filestore, GCS buckets, Artifact Registry, service accounts, Cloud Run services, and (when `--enable-af3` is set) deploys the AlphaFold 3 Model Garden Dedicated Endpoint with 3,600s timeout | ~15 min |
 | **build** | Cloud Build: builds 4 container images (AF2 components, OF3 components, viewer, analysis jobs), deploys to Cloud Run, deploys agent to Agent Runtime | ~15 min |
 | **data** | Interactive prompt for database setup (see below) | 15 min – 4 hrs |
 
@@ -435,7 +461,8 @@ This triggers the `register-agent` step in the Cloud Build pipeline, which runs 
 | Terraform backend error | State bucket mismatch | Script runs `terraform init -reconfigure` automatically |
 | Predictions fail after deploy | Databases still downloading | Check `gcloud batch jobs list`; wait for downloads to complete |
 | OF3 error: `deprecated pre-OpenBind checkpoint` or missing `of3-ob-2025-06-30-174k.pt` | Upgrading from OF3 0.4 (`of3-p2-155k.pt`) to 0.5+ OpenBind | Download OpenBind v0 weights: `./deploy-all.sh YOUR_PROJECT_ID --steps data --db of3_params --force` and unset any custom `OF3_PARAMS_PATH` |
-| AF3 `DeployModel` error: `400 Model doesn't have an image uri that's allowed for creating a new endpoint.` | Model in Vertex AI Model Registry was registered with a `:latest` tag on `serving_container_image_uri` | Register the model using the exact tagless URI `us-docker.pkg.dev/vertex-ai-restricted/alphafold3/alphafold3-inference` (no `:latest` suffix) |
+| AF3 Model Garden card or endpoint deployment fails with `403 Permission Denied` / API not enabled | Project has not enabled Gemini platform Endpoint APIs or is not yet allowlisted for AlphaFold 3 | Enable APIs (`gcloud services enable aiplatform.googleapis.com compute.googleapis.com --project=YOUR_PROJECT_ID`) and submit the [AlphaFold 3 Access Request Form](https://docs.google.com/forms/d/e/1FAIpQLSe31oNAW1HgEptWxwFhu7oOw9WvC32688stgHqsqYxkxeX8nw/viewform) via the [Model Garden Request Page](https://console.cloud.google.com/agent-platform/publishers/google/model-garden/alphafold3-request) |
+| AF3 `DeployModel` error: `400 Model doesn't have an image uri that's allowed for creating a new endpoint.` | Model in Gemini platform Model Registry was registered with a `:latest` tag on `serving_container_image_uri` | Register the model using the exact tagless URI `us-docker.pkg.dev/vertex-ai-restricted/alphafold3/alphafold3-inference` (no `:latest` suffix) |
 | Viewer shows 403 | IAP not configured for your domain | Set `iap_access_domain` in Terraform and re-apply |
 | A2A endpoint returns 403 | Caller lacks `aiplatform.user` role or invalid token | Ensure caller has `roles/aiplatform.user` on the project, and is passing a GCP Access Token (`gcloud auth print-access-token`), NOT an Identity Token |
 | A2A endpoint returns 404 | Agent Runtime URL or app name is incorrect | Verify that the path suffix matches your configured app name (default: `/api/a2a/foldrun_app`) and the reasoning engine ID is correct |

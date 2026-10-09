@@ -24,11 +24,9 @@ from google.api_core.exceptions import DeadlineExceeded
 import foldrun_app.core.base_tool as base_tool_mod
 from foldrun_app.models.af3.config import AF3Config
 from foldrun_app.models.af3.tools.check_endpoint import AF3CheckEndpointTool
-from foldrun_app.models.af3.tools.deploy_endpoint import AF3DeployEndpointTool
 from foldrun_app.models.af3.tools.get_results import AF3GetResultsTool
 from foldrun_app.models.af3.tools.open_viewer import AF3OpenViewerTool
 from foldrun_app.models.af3.tools.submit_prediction import AF3SubmitPredictionTool
-from foldrun_app.models.af3.tools.undeploy_endpoint import AF3UndeployEndpointTool
 
 
 @pytest.fixture
@@ -329,121 +327,6 @@ class TestAF3Tools:
         assert result["status"] == "error"
         assert "Missing required argument 'job_id'" in result["message"]
 
-    def test_deploy_endpoint_async(self, mock_af3_env):
-        config = AF3Config()
-        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
-
-        mock_endpoint = MagicMock()
-        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
-        mock_endpoint.deployed_models = []
-
-        mock_model = MagicMock()
-        mock_model.resource_name = "projects/test-project/locations/us-central1/models/af3-model"
-
-        with (
-            patch.object(tool, "get_endpoint", return_value=mock_endpoint),
-            patch.object(tool, "get_model", return_value=mock_model),
-        ):
-            result = tool.run({"sync": False})
-
-        assert result["status"] == "deploying"
-        assert "5-8 minutes" in result["estimated_wait_minutes"]
-        mock_endpoint.deploy.assert_called_once()
-        assert mock_endpoint.deploy.call_args.kwargs.get("sync") is False
-
-    def test_deploy_endpoint_already_deployed(self, mock_af3_env):
-        config = AF3Config()
-        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
-
-        dedicated = MagicMock()
-        dedicated.min_replica_count = 1
-        dedicated.max_replica_count = 1
-        mock_endpoint = MagicMock()
-        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
-        mock_endpoint.deployed_models = [MagicMock(id="dep-1", dedicated_resources=dedicated)]
-
-        with patch.object(tool, "get_endpoint", return_value=mock_endpoint):
-            result = tool.run()
-
-        assert result["status"] == "already_deployed"
-        assert result["min_replica_count"] == 1
-        assert result["max_replica_count"] == 1
-        assert mock_endpoint.deploy.called is False
-
-    def test_deploy_endpoint_scale_replicas_in_place(self, mock_af3_env):
-        config = AF3Config()
-        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
-
-        dedicated = MagicMock()
-        dedicated.min_replica_count = 1
-        dedicated.max_replica_count = 1
-        mock_endpoint = MagicMock()
-        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
-        mock_endpoint.deployed_models = [MagicMock(id="dep-1", dedicated_resources=dedicated)]
-
-        mock_client = MagicMock()
-        with (
-            patch.object(tool, "get_endpoint", return_value=mock_endpoint),
-            patch(
-                "google.cloud.aiplatform_v1.EndpointServiceClient",
-                return_value=mock_client,
-            ),
-        ):
-            result = tool.run({"min_replica_count": 3, "max_replica_count": 4, "sync": True})
-
-        assert result["status"] == "scaled"
-        assert result["previous_min_replica_count"] == 1
-        assert result["min_replica_count"] == 3
-        assert result["max_replica_count"] == 4
-        assert "$33.18/hr" in result["idle_cost"]
-        mock_client.mutate_deployed_model.assert_called_once()
-        assert mock_endpoint.deploy.called is False
-
-    def test_undeploy_endpoint_all(self, mock_af3_env):
-        config = AF3Config()
-        tool = AF3UndeployEndpointTool(tool_config={"name": "af3_undeploy_endpoint"}, config=config)
-
-        mock_endpoint = MagicMock()
-        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
-        mock_endpoint.deployed_models = [MagicMock(id="dep-1")]
-
-        with patch.object(tool, "get_endpoint", return_value=mock_endpoint):
-            result = tool.run({"sync": True})
-
-        assert result["status"] == "succeeded"
-        assert result["idle_cost"] == "$0.00/hr"
-        mock_endpoint.undeploy_all.assert_called_once_with(sync=True)
-
-    def test_undeploy_endpoint_specific_model(self, mock_af3_env):
-        config = AF3Config()
-        tool = AF3UndeployEndpointTool(tool_config={"name": "af3_undeploy_endpoint"}, config=config)
-
-        mock_endpoint = MagicMock()
-        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
-        mock_endpoint.deployed_models = [MagicMock(id="dep-1")]
-
-        with patch.object(tool, "get_endpoint", return_value=mock_endpoint):
-            result = tool.run({"deployed_model_id": "dep-1", "sync": True})
-
-        assert result["status"] == "succeeded"
-        mock_endpoint.undeploy.assert_called_once_with(deployed_model_id="dep-1", sync=True)
-
-    def test_undeploy_endpoint_already_undeployed(self, mock_af3_env):
-        config = AF3Config()
-        tool = AF3UndeployEndpointTool(tool_config={"name": "af3_undeploy_endpoint"}, config=config)
-
-        mock_endpoint = MagicMock()
-        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
-        mock_endpoint.deployed_models = []
-
-        with patch.object(tool, "get_endpoint", return_value=mock_endpoint):
-            result = tool.run()
-
-        assert result["status"] == "already_undeployed"
-        assert result["idle_cost"] == "$0.00/hr"
-        assert mock_endpoint.undeploy.called is False
-        assert mock_endpoint.undeploy_all.called is False
-
     def test_submit_prediction_path_traversal_denied(self, mock_af3_env):
         config = AF3Config()
         tool = AF3SubmitPredictionTool(
@@ -538,13 +421,6 @@ class TestAF3Tools:
         assert result["status"] == "error"
         assert "Invalid job_name" in result["message"]
 
-    def test_deploy_endpoint_replica_cap_enforced(self, mock_af3_env):
-        config = AF3Config()
-        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
-        result = tool.run({"min_replica_count": 10, "max_replica_count": 20})
-        assert result["status"] == "error"
-        assert "Invalid replica count" in result["message"]
-
     def test_multimer_ranking_score_zero_iptm(self):
         from foldrun_app.models.af3.utils.metrics import compute_ranking_score
 
@@ -595,32 +471,6 @@ class TestAF3Tools:
         assert result["status"] == "ready"
         assert result["deployed_models_count"] == 1
         assert "/locations/us-central1/endpoints/mg-endpoint-12345" in result["console_url"]
-
-    def test_deploy_endpoint_skips_when_active_operation_in_progress(self, mock_af3_env):
-        config = AF3Config()
-        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
-        mock_endpoint = MagicMock()
-        mock_endpoint.resource_name = (
-            "projects/test-project/locations/us-central1/endpoints/mg-endpoint-12345"
-        )
-        mock_endpoint.deployed_models = []
-
-        active_ops = [
-            {
-                "operation_name": "projects/test-project/locations/us-central1/endpoints/mg-endpoint-12345/operations/999",
-                "deployment_stage": "GETTING_CONTAINER_IMAGE",
-                "create_time": "2026-10-06T04:52:00Z",
-            }
-        ]
-        with (
-            patch.object(tool, "get_endpoint", return_value=mock_endpoint),
-            patch.object(tool, "get_active_deploy_operations", return_value=active_ops),
-        ):
-            result = tool.run({"sync": False})
-
-        assert result["status"] == "deploying"
-        assert "Skipping duplicate deployment" in result["message"]
-        mock_endpoint.deploy.assert_not_called()
 
     def test_submit_prediction_kfp_async(self, mock_af3_env):
         config = AF3Config()
@@ -754,47 +604,7 @@ class TestAF3Tools:
         )
         assert plan["candidates"][1]["machine_type"] == "a2-ultragpu-1g"
 
-    def test_deploy_endpoint_auto_fallback_on_h100_stockout_or_reservation_error(
-        self, mock_af3_env
-    ):
-        config = AF3Config()
-        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
-
-        mock_endpoint = MagicMock()
-        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
-        mock_endpoint.deployed_models = []
-
-        mock_model = MagicMock()
-        mock_model.resource_name = "projects/test-project/locations/us-central1/models/af3-model"
-
-        # First call (H100) raises a zone capacity / reservation error; second call (A100 80GB) succeeds
-        mock_endpoint.deploy.side_effect = [
-            RuntimeError(
-                "429 RESOURCE_EXHAUSTED: ZONE_RESOURCE_POOL_EXHAUSTED for a3-highgpu-1g "
-                "or specific reservation required"
-            ),
-            None,
-        ]
-
-        with (
-            patch.object(tool, "get_endpoint", return_value=mock_endpoint),
-            patch.object(tool, "get_model", return_value=mock_model),
-            patch.object(tool, "get_active_deploy_operations", return_value=[]),
-            patch(
-                "foldrun_app.core.hardware.check_gpu_reservations",
-                return_value=[],
-            ),
-        ):
-            result = tool.run({"sync": False})
-
-        assert result["status"] == "deploying"
-        assert result["machine_type"] == "a2-ultragpu-1g"
-        assert result["accelerator_type"] == "NVIDIA_A100_80GB"
-        assert result["fallback_used"] is True
-        assert "a3-highgpu-1g" in result["fallback_reason"]
-        assert mock_endpoint.deploy.call_count == 2
-
-    def test_submit_prediction_kfp_cold_start_auto_deploys_endpoint(self, mock_af3_env):
+    def test_submit_prediction_kfp_no_deployed_model_returns_rerun_infra_error(self, mock_af3_env):
         config = AF3Config()
         tool = AF3SubmitPredictionTool(
             tool_config={"name": "af3_submit_prediction"},
@@ -804,33 +614,13 @@ class TestAF3Tools:
         mock_endpoint.resource_name = (
             "projects/test-project/locations/us-central1/endpoints/mg-endpoint-12345"
         )
-        # Dormant endpoint (0 deployed models)
         mock_endpoint.deployed_models = []
         mock_endpoint.list_models.return_value = []
-
-        mock_pjob = MagicMock()
-        mock_pjob.resource_name = (
-            "projects/test-project/locations/us-central1/pipelineJobs/"
-            "alphafold3-inference-pipeline-20261006080000"
-        )
-        mock_pjob.state.name = "PIPELINE_STATE_PENDING"
-
-        fake_deploy_res = {
-            "status": "deploying",
-            "machine_type": "a3-highgpu-1g",
-            "accelerator_type": "NVIDIA_H100_80GB",
-            "reservation_status": "matched open reservation",
-            "fallback_used": False,
-        }
 
         with (
             patch.object(tool, "get_endpoint", return_value=mock_endpoint),
             patch.object(tool, "get_active_deploy_operations", return_value=[]),
-            patch(
-                "foldrun_app.models.af3.tools.deploy_endpoint.AF3DeployEndpointTool.run",
-                return_value=fake_deploy_res,
-            ) as mock_deploy_run,
-            patch("google.cloud.aiplatform.PipelineJob", return_value=mock_pjob),
+            patch("google.cloud.aiplatform.PipelineJob") as mock_pjob_cls,
         ):
             result = tool.run(
                 {
@@ -841,12 +631,9 @@ class TestAF3Tools:
                 }
             )
 
-        assert result["status"] == "submitted"
-        assert result["auto_deploy_triggered"] is True
-        assert any("Auto-initiated AF3 endpoint deployment" in w for w in result["warnings"])
-        mock_deploy_run.assert_called_once_with(
-            {"endpoint_id": mock_endpoint.resource_name, "sync": False}
-        )
+        assert result["status"] == "error"
+        assert "--steps infra --enable-af3" in result["message"]
+        mock_pjob_cls.assert_not_called()
 
     def test_af3_4_stage_kfp_pipeline_compilation(self, tmp_path):
         from kfp import compiler
@@ -914,7 +701,7 @@ class TestAF3Tools:
         assert result["scale_up_recommendation"] is not None
         assert result["scale_up_recommendation"]["recommended"] is True
         assert result["scale_up_recommendation"]["recommended_replicas"] == 2
-        assert "deploy_af3_endpoint(min_replica_count=2, max_replica_count=2)" in result["message"]
+        assert "af3_max_replica_count = 2" in result["message"]
 
     def test_af3_auto_defaults_model_seeds_monomer_vs_multimer(self, mock_af3_env):
         config = AF3Config()
@@ -976,22 +763,88 @@ class TestAF3Tools:
             assert res_msafree["model_seeds"] == [1]
             assert res_msafree["diffusion_samples_expected"] == 5
 
-            # 4. Multimer where LLM filled in default model_seeds=[1] -> still upgrades to [1, 2, 3, 4, 5] (25 samples)
-            res_multimer_llm_default = tool.run(
+            # 4. Multimer where caller explicitly passes model_seeds=[1] -> NEVER silently overwritten; preserves [1] + emits Ensemble Advisory
+            res_multimer_explicit_one = tool.run(
                 {
                     "input": ">ChainA\nMKTIIALSYIFCLVFA\n>ChainB\nGIVEQCCTSICSLYQLENYCN",
-                    "job_name": "multimer_llm_default_test",
+                    "job_name": "multimer_explicit_one_test",
                     "model_seeds": [1],
                     "msa_free": False,
                     "sync": False,
                 }
             )
-            assert res_multimer_llm_default["model_seeds"] == [1, 2, 3, 4, 5]
-            assert res_multimer_llm_default["diffusion_samples_expected"] == 25
+            assert res_multimer_explicit_one["model_seeds"] == [1]
+            assert res_multimer_explicit_one["diffusion_samples_expected"] == 5
+            assert any("Ensemble Advisory" in w for w in res_multimer_explicit_one["warnings"])
+
+            # 5. Multimer AF3 JSON with 1 seed ("modelSeeds": [42]) -> NEVER silently overwritten; preserves [42] + emits Ensemble Advisory
+            res_multimer_json_one = tool.run(
+                {
+                    "input": json.dumps(
+                        {
+                            "name": "json_one_seed",
+                            "modelSeeds": [42],
+                            "sequences": [
+                                {"protein": {"id": "A", "sequence": "MKTIIALSYIFCLVFA"}},
+                                {"ligand": {"id": "B", "ccdCodes": ["ATP"]}},
+                            ],
+                            "dialect": "alphafold3",
+                            "version": 1,
+                        }
+                    ),
+                    "job_name": "multimer_json_one_test",
+                    "msa_free": False,
+                    "sync": False,
+                }
+            )
+            assert res_multimer_json_one["model_seeds"] == [42]
+            assert res_multimer_json_one["diffusion_samples_expected"] == 5
+            assert any("Ensemble Advisory" in w for w in res_multimer_json_one["warnings"])
+
+    def test_get_results_resolves_pipeline_job_id_to_job_name(self, mock_af3_env):
+        config = AF3Config()
+        tool = AF3GetResultsTool(tool_config={"name": "af3_get_results"}, config=config)
+
+        mock_storage = MagicMock()
+        mock_bucket = MagicMock()
+        mock_missing_blob = MagicMock()
+        mock_missing_blob.exists.return_value = False
+
+        mock_conf_blob = MagicMock()
+        mock_conf_blob.exists.return_value = True
+        mock_conf_blob.download_as_text.return_value = json.dumps(
+            {"ranking_score": 0.91, "ptm": 0.90, "iptm": 0.92, "mean_plddt": 93.4}
+        )
+        mock_cif_blob = MagicMock()
+        mock_cif_blob.exists.return_value = True
+
+        def get_blob(path):
+            if "af3_ubiquitin_run/" in path:
+                return (
+                    mock_conf_blob if path.endswith("summary_confidences.json") else mock_cif_blob
+                )
+            return mock_missing_blob
+
+        mock_bucket.blob.side_effect = get_blob
+        mock_storage.bucket.return_value = mock_bucket
+        tool.storage_client = mock_storage
+
+        fake_pjob = MagicMock()
+        fake_pjob.display_name = "af3_ubiquitin_run"
+
+        with patch("google.cloud.aiplatform.PipelineJob.get", return_value=fake_pjob):
+            res = tool.run({"job_id": "alphafold3-inference-pipeline-20261010120000"})
+
+        assert res["status"] == "succeeded"
+        assert res["job_id"] == "af3_ubiquitin_run"
+        assert (
+            res["resolved_from_pipeline_job_id"] == "alphafold3-inference-pipeline-20261010120000"
+        )
+        assert res["metrics"]["ranking_score"] == 0.91
 
     def test_get_model_prefers_tagless_serving_container_image_uri(self, mock_af3_env):
         config = AF3Config()
-        tool = AF3DeployEndpointTool(tool_config={"name": "af3_deploy_endpoint"}, config=config)
+        tool = AF3CheckEndpointTool(tool_config={"name": "af3_check_endpoint"}, config=config)
 
         tagged_model = MagicMock()
         tagged_model.display_name = "alphafold3"
@@ -1012,3 +865,436 @@ class TestAF3Tools:
         ):
             selected = tool.get_model("auto")
             assert selected is tagless_model
+
+    def test_setup_af3_endpoint_script_deploy_and_idempotent_reuse(self):
+        import sys
+        from pathlib import Path
+
+        scripts_dir = Path(__file__).resolve().parents[4] / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        import setup_af3_endpoint as setup_mod
+
+        mock_ep = MagicMock()
+        mock_ep.display_name = "af3-dedicated-ep"
+        mock_ep.resource_name = "projects/269454588150/locations/us-central1/endpoints/777"
+        mock_ep.name = "777"
+
+        mock_open_model = MagicMock()
+        mock_open_model._publisher_model_name = "publishers/google/models/alphafold3@v3_0_4"
+        mock_lro = MagicMock()
+        mock_lro.operation.name = "projects/269454588150/locations/us-central1/operations/999"
+        mock_lro.result.return_value = MagicMock(
+            endpoint="projects/269454588150/locations/us-central1/endpoints/777"
+        )
+        mock_open_model._model_garden_client.deploy.return_value = mock_lro
+        mock_open_model.deploy.return_value = mock_ep
+
+        mock_session = MagicMock()
+        mock_resp = MagicMock()
+        mock_session.post.return_value = mock_resp
+
+        # 1. Fresh project (default DWS=True): deploys via DWS FlexStart + sets 3,600s timeout
+        with (
+            patch("vertexai.init"),
+            patch("google.cloud.aiplatform.init"),
+            patch("google.cloud.aiplatform.Endpoint.list", return_value=[]),
+            patch("google.cloud.aiplatform.Endpoint", return_value=mock_ep),
+            patch("vertexai.model_garden.OpenModel", return_value=mock_open_model),
+            patch("google.auth.default", return_value=(MagicMock(), "269454588150")),
+            patch.object(setup_mod, "AuthorizedSession", return_value=mock_session),
+        ):
+            res1 = setup_mod.setup_af3_endpoint(
+                project_id="269454588150",
+                location="us-central1",
+            )
+
+        assert res1["created_new"] is True
+        assert res1["endpoint_id"] == "777"
+        assert res1["provisioning_mode"] == "DWS_FLEX_START"
+        mock_open_model._model_garden_client.deploy.assert_called_once()
+        sent_req = mock_open_model._model_garden_client.deploy.call_args.args[0]
+        assert (
+            int(
+                sent_req.deploy_config.dedicated_resources.flex_start.max_runtime_duration.total_seconds()
+            )
+            == 561600
+        )
+
+        mock_session.post.assert_called_once_with(
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/269454588150/locations/us-central1/endpoints/777:update",
+            json={
+                "endpoint": {
+                    "name": "projects/269454588150/locations/us-central1/endpoints/777",
+                    "clientConnectionConfig": {"inferenceTimeout": {"seconds": 3600}},
+                }
+            },
+            timeout=60,
+        )
+
+        # 2. Re-run: existing endpoint found -> skips OpenModel.deploy, updates 3,600s timeout
+        mock_open_model._model_garden_client.deploy.reset_mock()
+        mock_open_model.deploy.reset_mock()
+        mock_session.post.reset_mock()
+        with (
+            patch("vertexai.init"),
+            patch("google.cloud.aiplatform.init"),
+            patch("google.cloud.aiplatform.Endpoint.list", return_value=[mock_ep]),
+            patch("vertexai.model_garden.OpenModel", return_value=mock_open_model),
+            patch("google.auth.default", return_value=(MagicMock(), "269454588150")),
+            patch.object(setup_mod, "AuthorizedSession", return_value=mock_session),
+        ):
+            res2 = setup_mod.setup_af3_endpoint(
+                project_id="269454588150",
+                location="us-central1",
+            )
+
+        assert res2["created_new"] is False
+        assert res2["endpoint_id"] == "777"
+        mock_open_model._model_garden_client.deploy.assert_not_called()
+        mock_open_model.deploy.assert_not_called()
+        mock_session.post.assert_called_once()
+
+    def test_check_endpoint_stage_explanations_and_3tier_strategy(self, mock_af3_env):
+        """check_af3_endpoint explains PENDING_NODE_ALLOCATION, ADDING_NODES_TO_CLUSTER, and ACTIVE stages."""
+        tool = AF3CheckEndpointTool({"name": "check_af3_endpoint"}, AF3Config())
+        mock_ep = MagicMock()
+        mock_ep.deployed_models = []
+        mock_ep.resource_name = "projects/test-proj/locations/us-central1/endpoints/12345"
+        mock_ep.display_name = "af3-ep"
+        mock_ep.gca_resource.deployed_models = []
+
+        # 1. PENDING_NODE_ALLOCATION
+        with (
+            patch.object(tool, "get_endpoint", return_value=mock_ep),
+            patch.object(
+                tool,
+                "get_active_deploy_operations",
+                return_value=[
+                    {
+                        "operation_name": "ops/1",
+                        "deployment_stage": "PENDING_NODE_ALLOCATION",
+                        "create_time": "2026-10-10T18:00:00Z",
+                    }
+                ],
+            ),
+        ):
+            res_pending = tool.run()
+        assert res_pending["status"] == "deploying"
+        assert res_pending["deployment_stage"] == "PENDING_NODE_ALLOCATION"
+        assert "DWS queueing" in res_pending["deployment_stage_explanation"]
+        assert (
+            "Custom model serving preemptible Nvidia H100 80GB GPUs per region"
+            in res_pending["deployment_stage_explanation"]
+        )
+        assert len(res_pending["hardware_readiness"]["hardware_allocation_strategy"]) == 3
+
+        # 2. ADDING_NODES_TO_CLUSTER
+        with (
+            patch.object(tool, "get_endpoint", return_value=mock_ep),
+            patch.object(
+                tool,
+                "get_active_deploy_operations",
+                return_value=[
+                    {
+                        "operation_name": "ops/1",
+                        "deployment_stage": "ADDING_NODES_TO_CLUSTER",
+                        "create_time": "2026-10-10T18:05:00Z",
+                    }
+                ],
+            ),
+        ):
+            res_adding = tool.run()
+        assert res_adding["status"] == "deploying"
+        assert res_adding["deployment_stage"] == "ADDING_NODES_TO_CLUSTER"
+        assert "Capacity has been secured!" in res_adding["deployment_stage_explanation"]
+        assert "Do NOT cancel or resubmit" in res_adding["deployment_stage_explanation"]
+
+    def test_submit_af3_endpoint_prediction_forwards_num_model_seeds_and_samples(
+        self, mock_af3_env
+    ):
+        """submit_af3_endpoint_prediction wrapper forwards num_model_seeds and num_diffusion_samples."""
+        from foldrun_app.skills.job_submission.tools import submit_af3_endpoint_prediction
+
+        fake_tool = MagicMock()
+        fake_tool.run.return_value = {"status": "submitted", "diffusion_samples_expected": 25}
+        with patch(
+            "foldrun_app.skills.job_submission.tools.get_tool",
+            return_value=fake_tool,
+        ):
+            res = submit_af3_endpoint_prediction(
+                input=">ChainA\nMKTIIALSYIFCLVFA",
+                job_name="monomer_25_samples",
+                num_model_seeds=5,
+                num_diffusion_samples=5,
+            )
+        assert res["diffusion_samples_expected"] == 25
+        called_args = fake_tool.run.call_args.args[0]
+        assert called_args["num_model_seeds"] == 5
+        assert called_args["num_diffusion_samples"] == 5
+
+    def test_process_af3_results_task_queues_cloud_run_job_and_finishes_immediately(
+        self, mock_af3_env
+    ):
+        """KFP Stage 4 writes task_config.json, queues foldrun-analysis-job (25 tasks), and exits immediately."""
+        from foldrun_app.models.af3.pipeline import process_af3_results_task
+
+        mock_bucket = MagicMock()
+        uploaded_blobs = {}
+
+        def make_blob(path):
+            b = MagicMock()
+            b.name = path
+            if path.endswith("query.json"):
+                b.download_as_text.return_value = json.dumps(
+                    {
+                        "name": "test_25",
+                        "modelSeeds": [1, 2, 3, 4, 5],
+                        "sequences": [{"protein": {"id": "A", "sequence": "MKTIIALSYIFCLVFA"}}],
+                    }
+                )
+
+            def save_str(content, content_type=None):
+                uploaded_blobs[path] = content
+
+            b.upload_from_string.side_effect = save_str
+            return b
+
+        mock_bucket.blob.side_effect = make_blob
+
+        raw_blobs = []
+        for s in range(1, 6):
+            for sample_idx in range(5):
+                prefix = f"af3_predictions/test_25/af3_raw/seed-{s}_sample-{sample_idx}"
+                cif_b = MagicMock()
+                cif_b.name = f"{prefix}/model.cif"
+                cif_b.download_as_text.return_value = (
+                    "ATOM 1 N N . MET A 1 1 ? 1.0 2.0 3.0 1.00 91.5 1 MET A 1\n"
+                )
+                sum_b = MagicMock()
+                sum_b.name = f"{prefix}/summary_confidences.json"
+                sum_b.download_as_text.return_value = json.dumps(
+                    {"ranking_score": 0.91, "ptm": 0.89, "mean_plddt": 91.5}
+                )
+                conf_b = MagicMock()
+                conf_b.name = f"{prefix}/confidences.json"
+                raw_blobs.extend([cif_b, sum_b, conf_b])
+
+        def list_blobs_side_effect(prefix=""):
+            if "af3_raw" in prefix:
+                return raw_blobs
+            return []
+
+        mock_bucket.list_blobs.side_effect = list_blobs_side_effect
+        mock_storage_client = MagicMock()
+        mock_storage_client.bucket.return_value = mock_bucket
+
+        mock_session = MagicMock()
+        mock_cr_resp = MagicMock()
+        mock_cr_resp.status_code = 200
+        mock_session.post.return_value = mock_cr_resp
+
+        with (
+            patch("google.cloud.storage.Client", return_value=mock_storage_client),
+            patch("google.auth.default", return_value=(MagicMock(), "test-project")),
+            patch("google.auth.transport.requests.AuthorizedSession", return_value=mock_session),
+            patch("time.sleep"),
+        ):
+            out = process_af3_results_task.python_func(
+                project_id="test-project",
+                region="us-central1",
+                endpoint_location="us-central1",
+                endpoint_id="projects/test-project/locations/us-central1/endpoints/123",
+                bucket_name="test-bucket",
+                job_name="test_25",
+                pipeline_job_id="alphafold3-inference-pipeline-20261010190031",
+                query_json_path="gs://test-bucket/af3_predictions/test_25/query.json",
+                pipeline_root="gs://test-bucket/pipeline_runs/20261010_190031",
+                job_prefix="af3_predictions/test_25",
+                raw_output_gcs_uri="gs://test-bucket/af3_predictions/test_25/af3_raw",
+                start_iso="2026-10-10T19:00:00Z",
+                end_iso="2026-10-10T19:05:00Z",
+                queue_wait_seconds=1.5,
+                inference_seconds=300.0,
+                endpoint_status="ACTIVE",
+                msa_free=False,
+            )
+
+        assert out.ranking_score == pytest.approx(0.91)
+        assert out.mean_plddt == pytest.approx(91.5)
+        mock_session.post.assert_called_once()
+        cr_call = mock_session.post.call_args
+        assert "jobs/foldrun-analysis-job:run" in cr_call.args[0]
+        assert cr_call.kwargs["json"]["overrides"]["taskCount"] == 25
+        assert "af3_predictions/test_25/analysis/task_config.json" in uploaded_blobs
+        assert "af3_predictions/test_25/analysis/analysis_metadata.json" in uploaded_blobs
+        assert "pipeline_runs/20261010_190031/analysis/analysis_metadata.json" in uploaded_blobs
+
+    def test_run_af3_inference_task_retries_404_unimplemented_on_wakeup(self, mock_af3_env):
+        """KFP Stage 2 retries transient HTTP 404 UNIMPLEMENTED during Dedicated Endpoint GFE route propagation."""
+        from foldrun_app.models.af3.pipeline import run_af3_inference_task
+
+        mock_bucket = MagicMock()
+        mock_bucket.list_blobs.return_value = []
+
+        def make_blob(path):
+            b = MagicMock()
+            b.name = path
+            b.exists.return_value = False
+            if path.endswith("input.json"):
+                b.download_as_text.return_value = json.dumps(
+                    {
+                        "name": "test_404_retry",
+                        "modelSeeds": [1],
+                        "sequences": [{"protein": {"id": "A", "sequence": "MKTIIALSYIFCLVFA"}}],
+                    }
+                )
+            return b
+
+        mock_bucket.blob.side_effect = make_blob
+        mock_storage_client = MagicMock()
+        mock_storage_client.bucket.return_value = mock_bucket
+
+        mock_pred_resp = MagicMock()
+        mock_pred_resp.predictions = [
+            {
+                "structure_cif": "ATOM 1 N N . MET A 1 1 ? 1.0 2.0 3.0 1.00 91.5 1 MET A 1\n",
+                "summary_confidences": {"ranking_score": 0.88, "ptm": 0.88},
+                "plddt": [91.5],
+                "pae": [[0.5]],
+            }
+        ]
+
+        mock_ep = MagicMock()
+        mock_ep.resource_name = "projects/test-project/locations/us-central1/endpoints/123"
+        mock_ep.predict.side_effect = [
+            ValueError(
+                'Failed to make prediction request. Status code:404, response: {"error":{"code":404,"message":"The server could not process your request because the specified resource was not found.","status":"UNIMPLEMENTED"}}'
+            ),
+            ValueError("Failed to make prediction request. Status code:503, response: unavailable"),
+            mock_pred_resp,
+        ]
+
+        with (
+            patch("google.cloud.storage.Client", return_value=mock_storage_client),
+            patch("google.cloud.aiplatform.init"),
+            patch("google.cloud.aiplatform.Endpoint", return_value=mock_ep),
+            patch("time.sleep"),
+        ):
+            out = run_af3_inference_task.python_func(
+                project_id="test-project",
+                region="us-central1",
+                endpoint_location="us-central1",
+                endpoint_id="projects/test-project/locations/us-central1/endpoints/123",
+                bucket_name="test-bucket",
+                job_name="test_404_retry",
+                pipeline_job_id="alphafold3-inference-pipeline-20261010230519",
+                query_json_path="gs://test-bucket/af3_predictions/test_404_retry/input.json",
+                job_prefix="af3_predictions/test_404_retry",
+                slot_blob_path="af3_predictions/.locks/123_slot_0.json",
+                slot_index=0,
+                active_replicas=1,
+                queue_wait_seconds=10.0,
+                msa_free=True,
+                num_diffusion_samples=5,
+                timeout_seconds=1800,
+            )
+
+        assert out.slot_released is True
+        assert mock_ep.predict.call_count == 3
+
+    def test_scale_to_zero_defaults_and_check_endpoint(self, mock_af3_env):
+        """AF3Config defaults to scale-to-zero and check_af3_endpoint reports it."""
+        config = AF3Config()
+        assert config.min_replica_count == 0
+        assert config.max_replica_count == 1
+        assert config.initial_replica_count == 1
+        assert config.min_scaleup_period_seconds == 300
+        assert config.idle_scaledown_period_seconds == 1200
+
+        check_tool = AF3CheckEndpointTool(tool_config={"name": "af3_check_endpoint"}, config=config)
+        dedicated = MagicMock()
+        mock_endpoint = MagicMock()
+        mock_endpoint.resource_name = "projects/test-project/locations/us-central1/endpoints/12345"
+        mock_endpoint.display_name = "af3-stz-ep"
+        mock_endpoint.deployed_models = [MagicMock(id="dep-stz", dedicated_resources=dedicated)]
+
+        dedicated.min_replica_count = 0
+        dedicated.max_replica_count = 1
+        dedicated.initial_replica_count = 1
+        with patch.object(check_tool, "get_endpoint", return_value=mock_endpoint):
+            check_res = check_tool.run()
+
+        assert check_res["status"] == "ready"
+        assert check_res["deployed_models"][0]["min_replica_count"] == 0
+        assert check_res["deployed_models"][0]["scale_to_zero_enabled"] is True
+        assert "$0.00/hr when scaled to 0" in check_res["idle_cost"]
+
+    def test_setup_af3_endpoint_reconcile_and_bucket_iam(self, mock_af3_env):
+        """setup_af3_endpoint mutates replicas on existing endpoint and grants tenant SA bucket IAM."""
+        import importlib.util
+        from pathlib import Path
+
+        script_path = Path(__file__).resolve().parents[4] / "scripts" / "setup_af3_endpoint.py"
+        spec = importlib.util.spec_from_file_location("setup_af3_endpoint", script_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        # 1. Verify ensure_endpoint_bucket_iam extracts tenant SA from 403 error and grants objectUser
+        mock_ep = MagicMock()
+        mock_ep.__class__.__module__ = "google.cloud.aiplatform.matching_engine"
+        mock_ep.predict.side_effect = RuntimeError(
+            "403 custom-online-prediction@w5b8aada84bff4c76p-tp.iam.gserviceaccount.com "
+            "does not have storage.objects.create access"
+        )
+        mock_bucket = MagicMock()
+        mock_policy = MagicMock()
+        mock_policy.bindings = []
+        mock_bucket.get_iam_policy.return_value = mock_policy
+        mock_storage_client = MagicMock()
+        mock_storage_client.bucket.return_value = mock_bucket
+
+        with (
+            patch.object(mod.aiplatform, "Endpoint", return_value=mock_ep),
+            patch.object(mod, "_get_credentials", return_value=MagicMock()),
+            patch("google.cloud.storage.Client", return_value=mock_storage_client),
+        ):
+            sa = mod.ensure_endpoint_bucket_iam(
+                project_id="test-project",
+                location="us-central1",
+                endpoint_resource_name="projects/test-project/locations/us-central1/endpoints/123",
+                bucket_name="test-project-foldrun-data",
+            )
+
+        assert sa == "custom-online-prediction@w5b8aada84bff4c76p-tp.iam.gserviceaccount.com"
+        _, predict_kwargs = mock_ep.predict.call_args
+        assert (
+            predict_kwargs["parameters"]["output_dir"]
+            == "gs://test-project-foldrun-data/af3_predictions/.iam_probe"
+        )
+        mock_bucket.set_iam_policy.assert_called_once_with(mock_policy)
+        assert any(
+            b.get("role") == "roles/storage.objectUser"
+            and "serviceAccount:custom-online-prediction@w5b8aada84bff4c76p-tp.iam.gserviceaccount.com"
+            in b.get("members", set())
+            for b in mock_policy.bindings
+        )
+
+    def test_all_instructions_pass_adk_inject_session_state(self):
+        import asyncio
+        from pathlib import Path
+
+        from google.adk.utils.instructions_utils import inject_session_state
+
+        app_dir = Path(__file__).resolve().parents[4] / "foldrun_app"
+        ctx = MagicMock()
+        ctx.state = {}
+
+        async def _check():
+            for p in sorted(app_dir.rglob("*")):
+                if p.suffix in (".py", ".md") and ("instruction" in p.name or "SKILL" in p.name):
+                    text = p.read_text()
+                    rendered = await inject_session_state(text, ctx)
+                    assert len(rendered) > 0
+
+        asyncio.run(_check())

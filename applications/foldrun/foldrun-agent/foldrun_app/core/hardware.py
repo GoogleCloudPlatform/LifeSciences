@@ -207,7 +207,7 @@ def resolve_af3_hardware_plan(
         r
         for r in reservations
         if r.get("machine_type") == requested_machine_type
-        and int(r.get("available_count", 0)) >= min_replicas
+        and int(r.get("available_count", 0)) >= max(1, min_replicas)
     ]
 
     resolved_affinity_type = (reservation_affinity_type or "").strip().upper() or None

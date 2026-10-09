@@ -87,7 +87,7 @@ foldrun-agent/
 │   │   │   ├── base.py             # AF3Tool base class
 │   │   │   ├── startup.py          # Singleton config + tool configs
 │   │   │   ├── pipeline.py         # 4-stage KFP DAG (Queue → Inference → Release → Expert Analysis) + Idle Watchdog
-│   │   │   ├── tools/              # 7 tools: submit, submit_batch, check/deploy/undeploy_endpoint, get_results, open_viewer
+│   │   │   ├── tools/              # 5 tools: submit, submit_batch, check_endpoint, get_results, open_viewer
 │   │   │   └── utils/              # Input converter (FASTA/AF3 JSON), metrics, multimodal viewer_artifacts
 │   │   ├── of3/                    # OpenFold3 plugin
 │   │   │   ├── config.py           # OF3Config (A100/A100_80GB only, no relax)
@@ -154,8 +154,6 @@ Tool count depends on which models are configured:
 | `submit_af3_endpoint_prediction` | Submit single AF3 complex via 4-stage KFP PipelineJob (`msa_free=False` Full 630 GB MSA default, or `msa_free=True` zero-MSA) |
 | `submit_af3_batch_predictions` | Submit multiple AF3 targets in batch as async 4-stage KFP PipelineJobs with FIFO H100 replica slot queueing |
 | `check_af3_endpoint` | Inspect health, active deployed models, replica count, and hourly cost state of the AF3 Endpoint |
-| `deploy_af3_endpoint` | Deploy or scale AF3 model on the Endpoint (`a3-highgpu-1g` H100 80GB default, auto-fallback to A100/L4, GCE reservation auto-detection) |
-| `undeploy_af3_endpoint` | Undeploy AF3 models from the Endpoint, immediately reverting GPU cost to `$0.00/hr` |
 | `get_af3_results` | Retrieve completed AF3 prediction metrics (`ranking_score`, `ptm`, `iptm`, `mean_plddt`, `mean_pae`, mmCIF URI) |
 | `open_af3_structure_viewer` | Open the FoldRun 3D viewer for an AF3 job (renders all-atom mmCIF + Gemini 3.1 Pro Expert Analysis) |
 

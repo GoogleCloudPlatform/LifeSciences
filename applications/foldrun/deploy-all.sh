@@ -29,11 +29,13 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --steps STEPS          Comma-separated list of steps to run:"
-    echo "                           infra      - Enable APIs + Terraform"
+    echo "                           infra      - Enable APIs + Terraform (plus AF3 if --enable-af3)"
     echo "                           build      - Cloud Build (containers + Agent Runtime)"
     echo "                           data       - Download genomic databases to NFS + GCS backup"
     echo "                           convert    - MMseqs2 GPU index conversion (optional, requires data)"
     echo "                           all        - Run infra + build + data (no convert)"
+    echo "  --enable-af3           Provision the AlphaFold 3 Model Garden Dedicated Endpoint"
+    echo "                         (google/alphafold3@v3_0_4) and set 3,600s inference timeout."
     echo "  --build-target TARGET  With --steps build: which components to rebuild (default: all)."
     echo "                           all            - rebuild everything (default)"
     echo "                           of3            - openfold3-components + agent"
@@ -55,6 +57,8 @@ usage() {
     echo ""
     echo "Environment variables:"
     echo "  DOWNLOAD_MODE      Database download mode: reduced (default) or full"
+    echo "  ENABLE_AF3         Provision AlphaFold 3 Model Garden Endpoint in Terraform: true or false (default)"
+    echo "  AF3_ENDPOINT_LOCATION  Region for AF3 Dedicated Endpoint (default: REGION, e.g. us-central1)"
     echo "  AF2_VERSION        AlphaFold2 git commit to build (default: pinned commit)"
     echo "  FOLDRUN_VIEWER_URL Custom Viewer URL (defaults to Terraform output if available)"
     echo "  ENABLE_VIEWER_IAP  Enable IAP for the viewer: true (default) or false"
@@ -74,7 +78,7 @@ usage() {
     echo ""
     echo "Examples:"
     echo "  $0                                      # Full deploy (infra + build + data)"
-    echo "  $0 my-project us-central1               # Full deploy to specific project"
+    echo "  $0 my-project us-central1 --enable-af3  # Full deploy including AF3 Model Garden Endpoint"
     echo "  $0 --steps infra                        # Only run Terraform"
     echo "  $0 --steps build                        # Only run Cloud Build"
     echo "  $0 --steps data                         # Download all genomic databases"
@@ -106,6 +110,10 @@ while [[ $# -gt 0 ]]; do
         --steps)
             STEPS="$2"
             shift 2
+            ;;
+        --enable-af3)
+            export ENABLE_AF3="true"
+            shift
             ;;
         --build-target)
             BUILD_TARGET="$2"
@@ -175,6 +183,12 @@ if [[ "$PROJECT_ID" == "{self.config.project_id}" ]]; then
 fi
 
 REGION=${POSITIONAL_ARGS[1]:-"us-central1"}
+ZONE=${ZONE:-"${REGION}-a"}
+ENABLE_AF3=${ENABLE_AF3:-"false"}
+AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION:-""}
+if [[ "${AF3_ENDPOINT_LOCATION,,}" == "global" ]]; then
+    AF3_ENDPOINT_LOCATION=""
+fi
 DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
 AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
 OF3_VERSION=${OF3_VERSION:-"0.5-pixi@sha256:8764f7320ff12c52e9b9ec6bb0047f71df0ab197d401d04a78a51f48e9913335"}
@@ -213,7 +227,8 @@ echo "==========================================================================
 echo "FoldRun Ecosystem Deployment"
 echo "================================================================================"
 echo "Project:       $PROJECT_ID"
-echo "Region:        $REGION"
+echo "Region:        $REGION (Zone: $ZONE)"
+echo "AF3 Endpoint:  $ENABLE_AF3 (Location: ${AF3_ENDPOINT_LOCATION:-$REGION})"
 echo "Viewer IAP:    $ENABLE_VIEWER_IAP"
 echo "IAP Domain:    $IAP_ACCESS_DOMAIN"
 echo "Download Mode: $DOWNLOAD_MODE"
@@ -250,6 +265,7 @@ extract_terraform_outputs() {
     export NETWORK_ID="${NETWORK_ID:-}"
     export NETWORK_PROJECT_NUMBER="${NETWORK_PROJECT_NUMBER:-}"
     export MODEL_ENDPOINT_LOCATION="${MODEL_ENDPOINT_LOCATION:-global}"
+    export AF3_ENDPOINT_LOCATION="${AF3_ENDPOINT_LOCATION:-}"
     export TF_VIEWER_URL="${TF_VIEWER_URL:-}"
     export GEMINI_ENTERPRISE_APP_ID="${GEMINI_ENTERPRISE_APP_ID:-}"
 
@@ -288,6 +304,7 @@ EOF
             v=$(_tf network_id);             if [[ -n "$v" ]]; then echo "NETWORK_ID=$v"; fi
             v=$(_tf network_project_number); if [[ -n "$v" ]]; then echo "NETWORK_PROJECT_NUMBER=$v"; fi
             v=$(_tf model_endpoint_location); if [[ -n "$v" ]]; then echo "MODEL_ENDPOINT_LOCATION=$v"; fi
+            v=$(_tf af3_endpoint_location);  if [[ -n "$v" ]]; then echo "AF3_ENDPOINT_LOCATION=$v"; fi
             v=$(_tf foldrun_viewer_url);     if [[ -n "$v" ]]; then echo "TF_VIEWER_URL=$v"; fi
             v=$(_tf agent_runtime_id);       if [[ -n "$v" ]]; then echo "AGENT_RUNTIME_ID=$v"; fi
         ) > "$_tf_env" 2>/dev/null || true
@@ -295,6 +312,10 @@ EOF
             [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="${!key:-$val}"
         done < "$_tf_env"
         rm -f "$_tf_env"
+    fi
+
+    if [[ "${AF3_ENDPOINT_LOCATION,,}" == "global" ]] || [[ -z "${AF3_ENDPOINT_LOCATION:-}" ]]; then
+        export AF3_ENDPOINT_LOCATION="$REGION"
     fi
 
     export FOLDRUN_VIEWER_URL="${FOLDRUN_VIEWER_URL:-$TF_VIEWER_URL}"
@@ -320,6 +341,7 @@ EOF
     echo "  NETWORK_ID=$NETWORK_ID"
     echo "  NETWORK_PROJECT_NUMBER=$NETWORK_PROJECT_NUMBER"
     echo "  MODEL_ENDPOINT_LOCATION=$MODEL_ENDPOINT_LOCATION"
+    echo "  AF3_ENDPOINT_LOCATION=$AF3_ENDPOINT_LOCATION"
     echo "  FOLDRUN_VIEWER_URL=$FOLDRUN_VIEWER_URL"
     echo "  AGENT_RUNTIME_ID=$AGENT_RUNTIME_ID"
     echo "  GEMINI_ENTERPRISE_APP_ID=$GEMINI_ENTERPRISE_APP_ID"
@@ -360,14 +382,18 @@ EOF
 
     echo "Step 3: Provisioning Infrastructure with Terraform"
     cd "$TERRAFORM_DIR"
+    export GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
     terraform init -reconfigure
     echo "Running terraform apply..."
     terraform apply -auto-approve \
         -var="project_id=${PROJECT_ID}" \
         -var="region=${REGION}" \
+        -var="zone=${ZONE}" \
         -var="bucket_name=${BUCKET_NAME}" \
         -var="iap_access_domain=${IAP_ACCESS_DOMAIN}" \
-        -var="enable_viewer_iap=${ENABLE_VIEWER_IAP}"
+        -var="enable_viewer_iap=${ENABLE_VIEWER_IAP}" \
+        -var="enable_af3=${ENABLE_AF3}" \
+        -var="af3_endpoint_location=${AF3_ENDPOINT_LOCATION}"
     cd ..
 fi
 
@@ -388,13 +414,14 @@ if $run_build; then
     echo "  _DATABASES_BUCKET=${DATABASES_BUCKET}"
     echo "  _DOWNLOAD_MODE=${DOWNLOAD_MODE}"
     echo "  _MODEL_ENDPOINT_LOCATION=${MODEL_ENDPOINT_LOCATION}"
+    echo "  _AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION}"
     echo "  _AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID}"
     echo "  _GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID}"
 
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions=_REGION="$REGION",_BUCKET_NAME="$GCS_BUCKET",_FILESTORE_ID="$FILESTORE_ID",_AR_REPO="$AR_REPO",_AGENT_SA_EMAIL="$AGENT_SA_EMAIL",_PIPELINES_SA_EMAIL="$PIPELINES_SA_EMAIL",_DATABASES_BUCKET="$DATABASES_BUCKET",_NETWORK_ID="$NETWORK_ID",_NETWORK_PROJECT_NUMBER="$NETWORK_PROJECT_NUMBER",_AF2_VERSION="$AF2_VERSION",_OF3_VERSION="$OF3_VERSION",_BOLTZ_VERSION="$BOLTZ_VERSION",_BUILD_TARGET="$BUILD_TARGET",_MODEL_ENDPOINT_LOCATION="$MODEL_ENDPOINT_LOCATION",_FOLDRUN_VIEWER_URL="$FOLDRUN_VIEWER_URL",_AGENT_RUNTIME_ID="$AGENT_RUNTIME_ID",_GEMINI_ENTERPRISE_APP_ID="$GEMINI_ENTERPRISE_APP_ID",_AF3_ENDPOINT="${AF3_ENDPOINT:-auto}",_AF3_MODEL_ID="${AF3_MODEL_ID:-auto}" \
+        --substitutions="^;^_REGION=${REGION};_BUCKET_NAME=${GCS_BUCKET};_FILESTORE_ID=${FILESTORE_ID};_AR_REPO=${AR_REPO};_AGENT_SA_EMAIL=${AGENT_SA_EMAIL};_PIPELINES_SA_EMAIL=${PIPELINES_SA_EMAIL};_DATABASES_BUCKET=${DATABASES_BUCKET};_NETWORK_ID=${NETWORK_ID};_NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER};_AF2_VERSION=${AF2_VERSION};_OF3_VERSION=${OF3_VERSION};_BOLTZ_VERSION=${BOLTZ_VERSION};_BUILD_TARGET=${BUILD_TARGET};_MODEL_ENDPOINT_LOCATION=${MODEL_ENDPOINT_LOCATION};_AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION};_FOLDRUN_VIEWER_URL=${FOLDRUN_VIEWER_URL};_AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID};_GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID};_AF3_ENDPOINT=${AF3_ENDPOINT:-auto};_AF3_MODEL_ID=${AF3_MODEL_ID:-auto}" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi

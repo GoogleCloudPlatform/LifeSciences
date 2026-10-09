@@ -180,48 +180,27 @@ class AF3SubmitPredictionTool(AF3Tool):
         total_tokens: int,
         num_chains: int,
         collected_warnings: list[str],
-        idle_shutdown_minutes: int = 20,
     ) -> dict[str, Any]:
         """Submit an asynchronous KFP PipelineJob that wraps the synchronous AF3 endpoint call."""
         deployed_models = self.get_deployed_models(endpoint)
         active_ops = self.get_active_deploy_operations(endpoint)
-        auto_deploy_triggered = False
         if not deployed_models and not active_ops:
-            from .deploy_endpoint import AF3DeployEndpointTool
-
-            deploy_tool = AF3DeployEndpointTool(
-                tool_config={"name": "af3_auto_deploy_on_submit"},
-                config=self.config,
-            )
-            deploy_res = deploy_tool.run(
-                {"endpoint_id": getattr(endpoint, "resource_name", None), "sync": False}
-            )
-            if deploy_res.get("status") in ("deploying", "ready", "already_deployed"):
-                auto_deploy_triggered = True
-                collected_warnings.append(
-                    f"Auto-initiated AF3 endpoint deployment ({deploy_res.get('machine_type', 'GPU')} / "
-                    f"{deploy_res.get('accelerator_type', 'GPU')}; reservation: "
-                    f"{deploy_res.get('reservation_status', 'on-demand')}). "
-                    "The KFP worker will wait for the endpoint to reach READY before executing inference."
-                )
-            else:
-                return {
-                    "status": "error",
-                    "job_id": job_name,
-                    "message": (
-                        "AlphaFold 3 Endpoint currently has 0 deployed models (paused at $0.00/hr) and "
-                        f"automatic deployment failed: {deploy_res.get('message', 'unknown error')}. "
-                        "Please call `deploy_af3_endpoint` first."
-                    ),
-                }
+            return {
+                "status": "error",
+                "job_id": job_name,
+                "message": (
+                    f"AlphaFold 3 endpoint '{getattr(endpoint, 'resource_name', endpoint)}' has no deployed "
+                    "model. Model deployment is managed by Terraform: re-run the FoldRun infrastructure "
+                    "step (`./deploy-all.sh <PROJECT_ID> <REGION> --steps infra --enable-af3`) to redeploy "
+                    "AlphaFold 3, then resubmit."
+                ),
+            }
 
         active_replicas = 0
         for dm in deployed_models:
-            dr = getattr(dm, "dedicated_resources", None)
-            min_rep = int(getattr(dr, "min_replica_count", 0) or 0) if dr else 1
-            active_replicas += max(1, min_rep)
+            rep_info = self.extract_replica_counts(dm)
+            active_replicas += rep_info["serving_capacity_replicas"]
         active_replicas = max(1, active_replicas)
-        _ = auto_deploy_triggered
 
         bucket = self.storage_client.bucket(bucket_name)
         input_blob_path = f"{job_prefix}/input.json"
@@ -234,7 +213,7 @@ class AF3SubmitPredictionTool(AF3Tool):
         pipeline_job_id = f"alphafold3-inference-pipeline-{ts_id}"
         pipeline_root = f"gs://{bucket_name}/pipeline_runs/{ts_dir}"
 
-        # Stamp activity in GCS so any running idle-drain watchdog immediately resets its timer
+        # Record submission activity in GCS for queue/status reporting
         endpoint_short_id = (
             str(getattr(endpoint, "resource_name", endpoint)).rstrip("/").split("/")[-1]
         )
@@ -250,7 +229,6 @@ class AF3SubmitPredictionTool(AF3Tool):
                         .replace("+00:00", "Z"),
                         "last_event": f"submitted:{job_name}",
                         "last_pipeline_job_id": pipeline_job_id,
-                        "idle_shutdown_minutes": int(idle_shutdown_minutes),
                     },
                     indent=2,
                 ),
@@ -262,7 +240,7 @@ class AF3SubmitPredictionTool(AF3Tool):
         with _COMPILE_LOCK:
             from kfp import compiler
 
-            from ..pipeline import create_af3_idle_drain_pipeline, create_af3_inference_pipeline
+            from ..pipeline import create_af3_inference_pipeline
 
             pipeline_func = create_af3_inference_pipeline()
             fd, pipeline_path = tempfile.mkstemp(suffix=".json", prefix=f"af3_pipeline_{job_name}_")
@@ -271,27 +249,6 @@ class AF3SubmitPredictionTool(AF3Tool):
                 pipeline_func=pipeline_func,
                 package_path=pipeline_path,
             )
-
-            # Also ensure the idle-drain pipeline template is uploaded to GCS for post-job auto-drain
-            try:
-                drain_func = create_af3_idle_drain_pipeline()
-                fd_d, drain_path = tempfile.mkstemp(suffix=".json", prefix="af3_idle_drain_")
-                os.close(fd_d)
-                try:
-                    compiler.Compiler().compile(
-                        pipeline_func=drain_func,
-                        package_path=drain_path,
-                    )
-                    with open(drain_path, encoding="utf-8") as df:
-                        drain_spec_json = df.read()
-                    bucket.blob(
-                        "af3_predictions/.locks/af3_idle_drain_pipeline.json"
-                    ).upload_from_string(drain_spec_json, content_type="application/json")
-                finally:
-                    if os.path.exists(drain_path):
-                        os.remove(drain_path)
-            except Exception as drain_compile_exc:
-                logger.warning(f"Could not compile/upload AF3 idle drain spec: {drain_compile_exc}")
 
         labels = {
             "model_type": "alphafold3",
@@ -325,7 +282,6 @@ class AF3SubmitPredictionTool(AF3Tool):
                     "msa_free": msa_free,
                     "num_diffusion_samples": num_diffusion_samples,
                     "timeout_seconds": self.config.timeout_seconds,
-                    "idle_shutdown_minutes": int(idle_shutdown_minutes),
                 },
                 enable_caching=False,
                 labels=labels,
@@ -357,15 +313,15 @@ class AF3SubmitPredictionTool(AF3Tool):
         msg = (
             f"Submitted AlphaFold 3 KFP pipeline job '{job_name}' (run ID: '{run_id}', "
             f"mode={'Zero-MSA' if msa_free else 'Full 630 GB MSA + Templates'}). "
-            f"The 4-stage KFP pipeline coordinates FIFO replica slots ({active_replicas} active H100 replica(s)), "
-            f"executes endpoint inference, immediately releases the replica slot, arms the {idle_shutdown_minutes}-minute "
-            f"idle auto-undeploy watchdog, and runs CPU Expert Analysis + 3D Viewer generation. "
+            f"The 4-stage KFP pipeline coordinates FIFO replica slots ({active_replicas} H100 replica(s)), "
+            "executes endpoint inference, immediately releases the replica slot, and runs CPU Expert Analysis "
+            "+ 3D Viewer generation. "
             f"Monitor progress via `check_job_status(job_id='{run_id}')`."
         )
         if scale_rec:
             msg += (
                 f" [Queue Advisory: {scale_rec['reason']} "
-                f"Call `{scale_rec['suggested_tool_call']}` to scale up.]"
+                f"To scale up: {scale_rec['suggested_action']}.]"
             )
 
         return {
@@ -377,14 +333,12 @@ class AF3SubmitPredictionTool(AF3Tool):
             "model": "AlphaFold 3",
             "mode": "msa-free" if msa_free else "standard",
             "execution_mode": "kfp_pipeline",
-            "idle_shutdown_minutes": int(idle_shutdown_minutes),
             "total_tokens": total_tokens,
             "num_chains": num_chains,
             "model_seeds": model_seeds,
             "diffusion_samples_expected": len(model_seeds) * num_diffusion_samples,
             "endpoint": endpoint.resource_name,
             "active_replicas": active_replicas,
-            "auto_deploy_triggered": auto_deploy_triggered,
             "gcs_output_dir": f"gs://{bucket_name}/{job_prefix}",
             "pipeline_root": pipeline_root,
             "console_url": console_url,
@@ -442,7 +396,6 @@ class AF3SubmitPredictionTool(AF3Tool):
         model_seeds = list(explicit_seeds) if explicit_seeds else [1]
         num_diffusion_samples = int(arguments.get("num_diffusion_samples", 5))
         sync = bool(arguments.get("sync", True))
-        idle_shutdown_minutes = int(arguments.get("idle_shutdown_minutes", 20))
 
         endpoint_id = arguments.get("endpoint_id")
         collected_warnings: list[str] = []
@@ -450,22 +403,7 @@ class AF3SubmitPredictionTool(AF3Tool):
         # 1. Resolve content from GCS, local file, or direct string
         try:
             if isinstance(input_data, str) and input_data.startswith("gs://"):
-                parsed_gcs = urlparse(input_data)
-                if (
-                    parsed_gcs.scheme != "gs"
-                    or not parsed_gcs.netloc
-                    or not parsed_gcs.path.lstrip("/")
-                ):
-                    raise ValueError(
-                        f"Invalid GCS URI: '{input_data}'. Expected format 'gs://<bucket>/<object>'."
-                    )
-                bucket_name = parsed_gcs.netloc
-                blob_path = parsed_gcs.path.lstrip("/")
-                if ".." in blob_path.split("/"):
-                    raise ValueError(
-                        f"Invalid GCS path in '{input_data}': path traversal segments ('..') are not allowed."
-                    )
-                self._validate_gcs_bucket(bucket_name)
+                bucket_name, blob_path = self._validate_gcs_uri(input_data)
                 bucket = self.storage_client.bucket(bucket_name)
                 content = bucket.blob(blob_path).download_as_text()
             elif isinstance(input_data, str) and (
@@ -532,18 +470,32 @@ class AF3SubmitPredictionTool(AF3Tool):
 
             total_tokens = count_af3_tokens(af3_query)
             num_chains = _count_af3_chains(af3_query)
-            if not explicit_seeds or (
-                explicit_seeds == [1]
-                and arguments.get("num_model_seeds") != 1
-                and not sync
-                and num_chains > 1
-                and not msa_free
-            ):
-                if json_seeds and len(json_seeds) > 1:
-                    model_seeds = json_seeds
-                elif not sync and num_chains > 1 and not msa_free:
-                    model_seeds = [1, 2, 3, 4, 5]
+            # Rule: Never silently overwrite user-supplied modelSeeds (either via explicit
+            # tool arguments or in the input AF3 JSON). Only auto-select defaults when
+            # neither explicit_seeds nor json_seeds was provided.
+            if explicit_seeds:
+                model_seeds = list(explicit_seeds)
+            elif json_seeds:
+                model_seeds = list(json_seeds)
+            elif not sync and num_chains > 1 and not msa_free:
+                model_seeds = [1, 2, 3, 4, 5]
+            else:
+                model_seeds = [1]
             af3_query["modelSeeds"] = model_seeds
+
+            total_samples = len(model_seeds) * num_diffusion_samples
+            if num_chains > 1 and not msa_free and total_samples < 25:
+                collected_warnings.append(
+                    f"Ensemble Advisory: Input specifies {len(model_seeds)} seed(s) "
+                    f"({total_samples} total diffusion sample(s)). DeepMind AF3 standard for "
+                    "multimers/complexes is 5 seeds (25 samples) to sample interface diversity."
+                )
+            elif num_chains <= 1 and total_samples < 5:
+                collected_warnings.append(
+                    f"Ensemble Advisory: Input specifies {len(model_seeds)} seed(s) "
+                    f"({total_samples} total diffusion sample(s)). DeepMind AF3 standard for "
+                    "monomers is 5 samples."
+                )
 
             # Resolve destination GCS bucket and prefix
             output_gcs_uri = arguments.get("output_gcs_uri")
@@ -567,7 +519,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                 out_bucket_name = self.config.bucket_name
                 job_prefix = self.get_job_blob_prefix(job_name)
 
-            # 3. Resolve Endpoint and prepare payload
+            # 3. Resolve the Terraform-managed AF3 endpoint and prepare payload
             endpoint = self.get_endpoint(endpoint_id)
             instance_payload = _prepare_af3_instance_for_endpoint(
                 af3_query=af3_query,
@@ -593,7 +545,6 @@ class AF3SubmitPredictionTool(AF3Tool):
                     total_tokens=total_tokens,
                     num_chains=num_chains,
                     collected_warnings=collected_warnings,
-                    idle_shutdown_minutes=idle_shutdown_minutes,
                 )
 
             logger.info(
@@ -613,11 +564,17 @@ class AF3SubmitPredictionTool(AF3Tool):
                         timeout=self.config.timeout_seconds,
                     )
                 except Exception as first_err:
-                    if "NameResolutionError" in repr(first_err) or "ConnectionError" in repr(
-                        first_err
+                    err_repr = repr(first_err) + " " + str(first_err)
+                    if (
+                        "NameResolutionError" in err_repr
+                        or "ConnectionError" in err_repr
+                        or "Status code:404" in err_repr
+                        or "UNIMPLEMENTED" in err_repr
+                        or "Status code:502" in err_repr
+                        or "Status code:503" in err_repr
                     ):
                         logger.warning(
-                            f"Transient DNS/ConnectionError on AF3 endpoint ({first_err}); "
+                            f"Transient routing/DNS/ConnectionError on AF3 endpoint ({first_err}); "
                             "refreshing endpoint metadata and retrying after 5s..."
                         )
                         if not type(endpoint).__module__.startswith("unittest.mock"):

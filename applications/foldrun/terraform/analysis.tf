@@ -110,3 +110,12 @@ resource "google_cloud_run_v2_job_iam_member" "foldrun_viewer_run_analysis" {
   role     = "roles/run.jobsExecutorWithOverrides"
   member   = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
+
+# Allow KFP Stage 4 (running as pipelines-sa) to queue foldrun-analysis-job with task_count overrides
+resource "google_cloud_run_v2_job_iam_member" "pipelines_sa_run_analysis" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_job.foldrun_analysis_job.name
+  role     = "roles/run.jobsExecutorWithOverrides"
+  member   = "serviceAccount:${google_service_account.pipelines.email}"
+}

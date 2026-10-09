@@ -250,20 +250,21 @@ def submit_af3_endpoint_prediction(
     job_name: str | None = None,
     msa_free: bool = False,
     model_seeds: list[int] | None = None,
+    num_model_seeds: int | None = None,
+    num_diffusion_samples: int = 5,
     endpoint_id: str | None = None,
     sync: bool = False,
-    idle_shutdown_minutes: int = 20,
 ) -> dict:
-    """Submit AlphaFold 3 all-atom structure prediction via a Vertex AI PipelineJob calling the AF3 Endpoint.
+    """Submit AlphaFold 3 all-atom structure prediction via a Gemini platform PipelineJob calling the AF3 Endpoint.
 
     Supports proteins, RNA, DNA, ligands, and ions with full 630 GB MSA + PDB templates on H100 NVMe SSD
     (default: msa_free=False) or fast --msa-free zero-MSA mode (msa_free=True).
 
-    By default (`sync=False`), submits an asynchronous Vertex AI PipelineJob (`alphafold3-inference-pipeline-...`)
+    By default (`sync=False`), submits an asynchronous Gemini platform PipelineJob (`alphafold3-inference-pipeline-...`)
     that returns immediately so the agent never blocks or times out, while a lightweight CPU worker
     coordinates H100 replica access via GCS slot locks, calls the AF3 Endpoint, harvests Cloud Logging
-    container logs, generates all 3D viewer analysis artifacts, and automatically undeploys the H100
-    endpoint after `idle_shutdown_minutes` (default: 20 minutes) of inactivity once the queue drains.
+    container logs, and generates all 3D viewer analysis artifacts. The endpoint scales to zero on its
+    own when idle (configured in Terraform).
 
     Args:
         input: Input sequence in FASTA format, AF3 JSON format, or path to input file / GCS URI.
@@ -272,28 +273,29 @@ def submit_af3_endpoint_prediction(
         msa_free: Whether to skip MSA/template search and run in zero-MSA mode (default: False).
             Leave False for natural proteins, multimers, and protein-ligand complexes so the
             630 GB MSA + template pipeline runs on the H100 NVMe SSD.
-        model_seeds: Random seed(s) for diffusion generation. Leave None to auto-select:
-            defaults to [1] (1 seed x 5 diffusion samples = 5 structures) for monomers or msa_free=True,
-            and [1, 2, 3, 4, 5] (5 seeds x 5 diffusion samples = 25 structures) for Full-MSA
-            multimers/complexes (>1 chain), matching AF2 Multimer, OF3, and Boltz-2.
+        model_seeds: Explicit random seed list for diffusion generation (e.g. [1] for 1 seed = 5 samples,
+            or [1, 2, 3, 4, 5] for 5 seeds = 25 samples). Leave None to auto-select or use num_model_seeds.
+        num_model_seeds: Number of random model seeds (e.g. 1 for 5 samples, 5 for 25 samples).
+            Each seed generates `num_diffusion_samples` (default: 5) structures.
+        num_diffusion_samples: Diffusion samples generated per seed (default: 5).
+            Total structures = len(model_seeds) * num_diffusion_samples (e.g., 5 seeds * 5 samples = 25).
         endpoint_id: Optional Agent Platform Endpoint ID override.
-        sync: If False (default), submits an async Vertex AI PipelineJob and returns immediately.
+        sync: If False (default), submits an async Gemini platform PipelineJob and returns immediately.
             Only set True for unit tests or short in-process debugging.
-        idle_shutdown_minutes: Minutes of endpoint inactivity after the last AF3 job finishes
-            before automatically undeploying the H100 endpoint (default: 20; 0 = immediate undeploy;
-            -1 = disable auto-undeploy).
     """
     validated_input = _validate_input_source(input, "input")
     args = {
         "input": validated_input,
         "msa_free": msa_free,
+        "num_diffusion_samples": num_diffusion_samples,
         "sync": sync,
-        "idle_shutdown_minutes": idle_shutdown_minutes,
     }
     if job_name is not None:
         args["job_name"] = job_name
     if model_seeds is not None:
         args["model_seeds"] = model_seeds
+    if num_model_seeds is not None:
+        args["num_model_seeds"] = num_model_seeds
     if endpoint_id is not None:
         args["endpoint_id"] = endpoint_id
     return get_tool("af3_submit_prediction").run(args)
@@ -301,16 +303,14 @@ def submit_af3_endpoint_prediction(
 
 def submit_af3_batch_predictions(
     batch_config: list[dict],
-    idle_shutdown_minutes: int = 20,
 ) -> dict:
-    """Submit multiple AlphaFold 3 prediction jobs in batch as asynchronous Vertex AI PipelineJobs.
+    """Submit multiple AlphaFold 3 prediction jobs in batch as asynchronous Gemini platform PipelineJobs.
 
     Each item in `batch_config` is submitted as its own non-blocking KFP PipelineJob
     (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`) that coordinates H100 replica access
     via GCS slot locks (`R` concurrent jobs per `R` deployed H100 replicas), harvests
-    container logs into Cloud Logging / KFP, populates the 3D viewer upon completion,
-    and automatically undeploys the H100 endpoint after `idle_shutdown_minutes` (default: 20)
-    of inactivity once the last job in the batch finishes.
+    container logs into Cloud Logging / KFP, and populates the 3D viewer upon completion.
+    The endpoint scales to zero on its own when idle (configured in Terraform).
 
     Args:
         batch_config: List of job configuration dicts, each containing:
@@ -320,8 +320,6 @@ def submit_af3_batch_predictions(
             - `model_seeds`: Optional list of integer random seeds (auto-defaults to [1] / 5 samples
               for monomers or msa_free=True, and [1, 2, 3, 4, 5] / 25 samples for Full-MSA multimers/complexes)
             - `endpoint_id`: Optional endpoint ID override
-        idle_shutdown_minutes: Minutes of endpoint inactivity after the last job in the batch
-            completes before automatically undeploying the H100 endpoint (default: 20).
     """
     sanitized_batch = []
     for item in batch_config:
@@ -333,11 +331,10 @@ def submit_af3_batch_predictions(
         if "job_name" in entry and entry["job_name"] is None:
             del entry["job_name"]
         entry["sync"] = False
-        entry.setdefault("idle_shutdown_minutes", idle_shutdown_minutes)
+        entry.pop("idle_shutdown_minutes", None)
         sanitized_batch.append(entry)
     return get_tool("af3_submit_batch").run(
         {
             "batch_config": sanitized_batch,
-            "idle_shutdown_minutes": idle_shutdown_minutes,
         }
     )

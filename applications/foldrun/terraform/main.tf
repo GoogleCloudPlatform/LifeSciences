@@ -32,13 +32,13 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.region
-  zone    = var.zone
+  zone    = local.zone
 }
 
 provider "google-beta" {
   project = var.project_id
   region  = var.region
-  zone    = var.zone
+  zone    = local.zone
 }
 
 data "google_project" "project" {}
@@ -108,6 +108,7 @@ resource "time_sleep" "service_agent_creation_sleep" {
 # VPC Network & Subnet
 # ==============================================================================
 locals {
+  zone           = var.zone != "" ? var.zone : "${var.region}-a"
   create_network = var.network_name == ""
 
   network_project_id     = var.network_project_id != "" ? var.network_project_id : var.project_id
@@ -221,7 +222,7 @@ resource "google_filestore_instance" "foldrun_nfs" {
   name     = var.filestore_id
   project  = var.project_id
   tier     = var.filestore_tier
-  location = var.zone
+  location = local.zone
 
   file_shares {
     capacity_gb = var.filestore_capacity_gb

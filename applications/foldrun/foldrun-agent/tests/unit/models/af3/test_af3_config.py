@@ -98,3 +98,20 @@ class TestAF3Config:
         assert "default_msa_free" in d
         assert "timeout_seconds" in d
         assert d["endpoint_id"] == "projects/test-project/locations/us-central1/endpoints/123456789"
+
+    def test_region_and_endpoint_location_alignment_ignores_global(self, monkeypatch):
+        from foldrun_app.models.af3.config import AF3Config
+
+        monkeypatch.setenv("GCP_REGION", "us-west1")
+        monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "global")
+        monkeypatch.delenv("GCP_ZONE", raising=False)
+        monkeypatch.delenv("AF3_ENDPOINT_LOCATION", raising=False)
+
+        config = AF3Config()
+        assert config.region == "us-west1"
+        assert config.zone == "us-west1-a"
+        assert config.endpoint_location == "us-west1"
+
+        # Even if AF3_ENDPOINT_LOCATION is accidentally set to 'global', it falls back to regional GCP_REGION
+        monkeypatch.setenv("AF3_ENDPOINT_LOCATION", "global")
+        assert config.endpoint_location == "us-west1"

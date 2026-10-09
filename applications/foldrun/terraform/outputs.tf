@@ -82,7 +82,23 @@ output "model_endpoint_location" {
   value       = var.model_endpoint_location
 }
 
+output "zone" {
+  description = "The resolved GCP zone aligned with var.region"
+  value       = local.zone
+}
+
+output "af3_enabled" {
+  description = "Whether the AlphaFold 3 Model Garden Dedicated Endpoint was provisioned via Terraform"
+  value       = var.enable_af3
+}
+
+output "af3_endpoint_location" {
+  description = "The resolved regional GCP location for the AlphaFold 3 Dedicated Endpoint"
+  value       = local.af3_endpoint_location
+}
+
 output "agent_runtime_id" {
   description = "The Agent Runtime ID"
   value       = google_vertex_ai_reasoning_engine.agent_runtime.id
 }
+

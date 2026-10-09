@@ -21,19 +21,14 @@ from google.cloud import aiplatform_v1 as vertex_ai
 _JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
-def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.PipelineJob:
-    """Get a Agent Platform pipeline job by ID.
+def resolve_pipeline_job_name(job_id: str, project_id: str, region: str) -> str:
+    """Validate a pipeline job ID and return its full resource name.
 
-    Accepts either a full resource name (projects/.../pipelineJobs/...)
-    or a short job name/ID and constructs the full name automatically.
+    Accepts either a full resource name (projects/.../pipelineJobs/...) or a short job
+    name/ID. Full resource names must match the configured project and region.
 
-    Args:
-        job_id: Full resource name or short job name/ID.
-        project_id: GCP project ID.
-        region: GCP region (e.g. 'us-central1').
-
-    Returns:
-        PipelineJob proto object.
+    Raises:
+        ValueError: If the ID is malformed or targets another project/region.
     """
     if not isinstance(job_id, str) or not job_id.strip() or "\x00" in job_id:
         raise ValueError("Invalid job_id: must be a non-empty string without null bytes")
@@ -49,10 +44,27 @@ def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.Pip
             raise ValueError(
                 f"Malformed pipeline job resource name: invalid short job ID '{short_id}'"
             )
-    else:
-        if not _JOB_ID_PATTERN.match(job_id):
-            raise ValueError(f"Malformed pipeline job ID: '{job_id}'")
-        job_id = f"{expected_prefix}{job_id}"
+        return job_id
+    if not _JOB_ID_PATTERN.match(job_id):
+        raise ValueError(f"Malformed pipeline job ID: '{job_id}'")
+    return f"{expected_prefix}{job_id}"
+
+
+def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.PipelineJob:
+    """Get a Agent Platform pipeline job by ID.
+
+    Accepts either a full resource name (projects/.../pipelineJobs/...)
+    or a short job name/ID and constructs the full name automatically.
+
+    Args:
+        job_id: Full resource name or short job name/ID.
+        project_id: GCP project ID.
+        region: GCP region (e.g. 'us-central1').
+
+    Returns:
+        PipelineJob proto object.
+    """
+    job_id = resolve_pipeline_job_name(job_id, project_id, region)
 
     client = vertex_ai.PipelineServiceClient(
         client_options={"api_endpoint": f"{region}-aiplatform.googleapis.com"}

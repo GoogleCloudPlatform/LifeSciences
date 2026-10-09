@@ -19,6 +19,17 @@ metadata:
 - **Download results**: Use get_prediction_results to retrieve PDB files
 - **Analyze quality**: Use analyze_prediction_quality for pLDDT and PAE metrics
 - **AF3 results**: Use get_af3_results to retrieve completed AlphaFold 3 prediction results from GCS (ranking_score, pTM, ipTM, mean pLDDT, and mmCIF path)
+
+### Rule: AF3 Results Lookup Resolution
+When calling `get_af3_results`:
+- AF3 stores artifacts under the sanitized `job_name` (e.g. `gs://.../af3_predictions/<job_name>/`).
+- If `get_af3_results(pipeline_job_id)` returns `not_found`, immediately retry with the human-readable `job_name` before reporting an artifact error to the user.
+
+### Rule: Idle Endpoint Scale-to-Zero Awareness
+When the last job in an active AF3 queue finishes:
+- Check `check_af3_endpoint`. If `active_slots_in_use: 0` and `queued_jobs_waiting: 0`:
+  - Inform the user:
+    "All jobs in this batch are complete. The endpoint will automatically scale down to 0 replicas ($0.00/hr) after 20 minutes of inactivity."
 - **Parallel analysis**: Use analyze_job_parallel for fast batch analysis (25 predictions in ~60s)
   - **IMPORTANT**: After starting analysis, DO NOT automatically check for results
   - Tell the user: "Analysis started. This will take 1-2 minutes. Ask me to check results in a few minutes."

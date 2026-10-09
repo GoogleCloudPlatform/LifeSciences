@@ -65,7 +65,6 @@ class AF3BatchSubmitTool(AF3Tool):
         )
         submit_tool.storage_client = self.storage_client
 
-        default_idle_shutdown = int(arguments.get("idle_shutdown_minutes", 20))
         submitted_jobs = []
         failed_jobs = []
 
@@ -76,7 +75,6 @@ class AF3BatchSubmitTool(AF3Tool):
                 item["input"] = item.pop("sequence")
             # Always submit batch items asynchronously as KFP PipelineJobs
             item["sync"] = False
-            item.setdefault("idle_shutdown_minutes", default_idle_shutdown)
 
             job_label = item.get("job_name") or f"af3_batch_{idx + 1}"
             try:
@@ -134,13 +132,13 @@ class AF3BatchSubmitTool(AF3Tool):
 
         msg = (
             f"Submitted {len(submitted_jobs)}/{len(batch_config)} AlphaFold 3 KFP pipeline job(s). "
-            f"Each job is tracked in Vertex AI Pipelines, coordinates H100 replica slots automatically, "
-            f"and auto-undeploys the H100 endpoint after {default_idle_shutdown} minutes of inactivity once the batch drains."
+            "Each job is tracked in Gemini platform Pipelines and coordinates H100 replica slots automatically; "
+            "the endpoint scales to zero on its own when idle."
         )
         if scale_rec:
             msg += (
                 f" [Queue Advisory: {scale_rec['reason']} "
-                f"Call `{scale_rec['suggested_tool_call']}` to scale up.]"
+                f"To scale up: {scale_rec['suggested_action']}.]"
             )
 
         return {
@@ -148,7 +146,6 @@ class AF3BatchSubmitTool(AF3Tool):
             "total": len(batch_config),
             "succeeded": len(submitted_jobs),
             "failed": len(failed_jobs),
-            "idle_shutdown_minutes": default_idle_shutdown,
             "submitted_jobs": submitted_jobs,
             "failed_jobs": failed_jobs if failed_jobs else None,
             "queue_status": queue_status,

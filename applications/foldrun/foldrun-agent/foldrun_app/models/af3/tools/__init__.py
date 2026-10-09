@@ -12,22 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AlphaFold 3 Vertex AI Endpoint tools."""
+"""AlphaFold 3 Gemini platform Endpoint tools."""
 
 from .check_endpoint import AF3CheckEndpointTool
-from .deploy_endpoint import AF3DeployEndpointTool
 from .get_results import AF3GetResultsTool
 from .open_viewer import AF3OpenViewerTool
 from .submit_batch import AF3BatchSubmitTool
 from .submit_prediction import AF3SubmitPredictionTool
-from .undeploy_endpoint import AF3UndeployEndpointTool
 
 __all__ = [
     "AF3BatchSubmitTool",
     "AF3CheckEndpointTool",
-    "AF3DeployEndpointTool",
     "AF3GetResultsTool",
     "AF3OpenViewerTool",
     "AF3SubmitPredictionTool",
-    "AF3UndeployEndpointTool",
 ]

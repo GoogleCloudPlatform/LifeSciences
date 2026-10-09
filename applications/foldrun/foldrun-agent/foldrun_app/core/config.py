@@ -68,11 +68,16 @@ class CoreConfig:
 
     @property
     def region(self) -> str:
-        return os.getenv("GCP_REGION") or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+        reg = (
+            os.getenv("GCP_REGION") or os.getenv("GOOGLE_CLOUD_LOCATION") or "us-central1"
+        ).strip()
+        if reg.lower() == "global":
+            return (os.getenv("GCP_REGION") or "us-central1").strip()
+        return reg
 
     @property
     def zone(self) -> str:
-        return os.getenv("GCP_ZONE", "us-central1-a")
+        return os.getenv("GCP_ZONE") or f"{self.region}-a"
 
     @property
     def bucket_name(self) -> str:

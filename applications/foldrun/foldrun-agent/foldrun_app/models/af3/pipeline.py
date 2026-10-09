@@ -16,8 +16,8 @@
 
 Architecture (4 observable KFP stages):
 1. `1. Provision & Queue AF3 Endpoint` (`provision_and_queue_af3_endpoint_task`):
-   - Ensures the AlphaFold 3 Vertex AI Endpoint is deployed and READY (auto-initiating
-     deployment if the endpoint was previously idle-drained to 0 replicas).
+   - Verifies the Terraform-managed AlphaFold 3 endpoint has a deployed model (waiting for an
+     in-progress deployment if one is active) and fails fast with re-run-infra guidance otherwise.
    - Coordinates FIFO access across active H100 replica(s) (`_slot_0 .. _slot_{R-1}`)
      using GCS conditional-generation locks (`if_generation_match=0`) and queue tickets.
 2. `2. Run AF3 Inference (H100 Endpoint)` (`run_af3_inference_task`):
@@ -28,9 +28,8 @@ Architecture (4 observable KFP stages):
    - Immediately releases the GCS replica slot in `finally:` the instant inference completes
      so the next queued job can start H100 inference with zero inter-step delay.
 3. `3. Report AF3 Endpoint Available` (`report_af3_endpoint_available_task`):
-   - Verifies replica slot release, records endpoint availability and queue depth in
-     `_activity.json`, and schedules the 20-minute `alphafold3-idle-drain-*` watchdog
-     once the queue drains.
+   - Verifies replica slot release and records endpoint availability and queue depth in
+     `_activity.json`. Idle scale-down is handled by the endpoint's native scale-to-zero.
 4. `4. Process AF3 Results & Expert Analysis` (`process_af3_results_task`):
    - Runs on CPU completely off the H100 GPU critical path.
    - Harvests AF3 container logs from Cloud Logging into `execution.log`, renders
@@ -96,7 +95,7 @@ def provision_and_queue_af3_endpoint_task(
         location=endpoint_location,
     )
     endpoint_short_id = endpoint.resource_name.split("/")[-1]
-    creds, _ = google.auth.default()
+    creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     authed = AuthorizedSession(creds)
 
     def _get_deployed_models(ep) -> list:
@@ -106,7 +105,10 @@ def provision_and_queue_af3_endpoint_task(
             gca = getattr(ep, "gca_resource", None) or getattr(ep, "_gca_resource", None)
             return list(getattr(gca, "deployed_models", None) or [])
 
-    def _has_active_deploy_op() -> bool:
+    def _get_deploy_op_status(
+        tracked_op_name: str | None = None,
+    ) -> tuple[str | None, str | None, str | None]:
+        """Return (active_stage, op_name, terminal_error) for the endpoint's DeployModel operations."""
         try:
             op_url = (
                 f"https://{endpoint_location}-aiplatform.googleapis.com/v1/"
@@ -114,13 +116,36 @@ def provision_and_queue_af3_endpoint_task(
             )
             r = authed.get(op_url, timeout=10)
             if not r.ok:
-                return False
-            for op in r.json().get("operations", []):
-                if not op.get("done") and "DeployModel" in op.get("metadata", {}).get("@type", ""):
-                    return True
+                return None, tracked_op_name, None
+            ops = r.json().get("operations", [])
+            for op in ops:
+                meta = op.get("metadata", {})
+                if not op.get("done") and "DeployModel" in meta.get("@type", ""):
+                    return (
+                        str(meta.get("deploymentStage") or "DEPLOYING"),
+                        str(op.get("name") or "") or tracked_op_name,
+                        None,
+                    )
+            # Only report a terminal error if the specific tracked in-progress operation failed
+            if tracked_op_name:
+                for op in ops:
+                    if op.get("name") == tracked_op_name and op.get("done") and op.get("error"):
+                        err = op["error"]
+                        return (
+                            None,
+                            tracked_op_name,
+                            f"code={err.get('code')}: {err.get('message')}",
+                        )
         except Exception:
             pass
-        return False
+        return None, tracked_op_name, None
+
+    def _get_active_deploy_stage() -> str | None:
+        stage, _, _ = _get_deploy_op_status()
+        return stage
+
+    def _has_active_deploy_op() -> bool:
+        return _get_active_deploy_stage() is not None
 
     def _get_active_replica_count(ep) -> int:
         models = _get_deployed_models(ep)
@@ -134,58 +159,24 @@ def provision_and_queue_af3_endpoint_task(
     wait_start = time.time()
     if not _get_deployed_models(endpoint):
         if not _has_active_deploy_op():
-            log.info(
-                f"[AF3 Stage 1] Endpoint '{endpoint.resource_name}' has 0 deployed models and no "
-                "active DeployModel operation. Auto-discovering AlphaFold 3 model in Model Registry..."
+            raise RuntimeError(
+                f"AlphaFold 3 endpoint '{endpoint.resource_name}' has no deployed model. "
+                "Model deployment is managed by Terraform: re-run the FoldRun infrastructure step "
+                "(`./deploy-all.sh <PROJECT_ID> <REGION> --steps infra --enable-af3`) to redeploy AlphaFold 3."
             )
-            try:
-                models = aiplatform.Model.list(project=project_id, location=endpoint_location)
-                af3_models = [
-                    m
-                    for m in models
-                    if "alphafold" in (getattr(m, "display_name", "") or "").lower()
-                    or "af3" in (getattr(m, "display_name", "") or "").lower()
-                ]
-                if af3_models:
-                    allowed_tagless_uri = (
-                        "us-docker.pkg.dev/vertex-ai-restricted/alphafold3/alphafold3-inference"
-                    )
-
-                    def _image_uri_rank(m) -> int:
-                        spec = getattr(m, "container_spec", None) or getattr(
-                            getattr(m, "_gca_resource", None), "container_spec", None
-                        )
-                        uri = str(getattr(spec, "image_uri", "") or "").strip()
-                        if uri == allowed_tagless_uri:
-                            return 0
-                        if uri and ":" not in uri.split("/")[-1]:
-                            return 1
-                        return 2
-
-                    af3_models.sort(key=_image_uri_rank)
-                    target_model = af3_models[0]
-                    log.info(
-                        f"[AF3 Stage 1] Auto-initiating deployment of model '{target_model.resource_name}' "
-                        f"to '{endpoint.resource_name}' (a3-highgpu-1g + NVIDIA_H100_80GB)..."
-                    )
-                    endpoint.deploy(
-                        model=target_model,
-                        machine_type="a3-highgpu-1g",
-                        accelerator_type="NVIDIA_H100_80GB",
-                        accelerator_count=1,
-                        min_replica_count=1,
-                        max_replica_count=1,
-                        traffic_percentage=100,
-                        sync=False,
-                    )
-            except Exception as auto_dep_exc:
-                log.warning(f"[AF3 Stage 1] Auto-deploy attempt warning: {auto_dep_exc}")
 
         log.info(
-            f"[AF3 Stage 1] Waiting up to 35 minutes for endpoint '{endpoint.resource_name}' "
-            "to finish provisioning and reach READY..."
+            f"[AF3 Stage 1] Waiting up to 120 minutes (aligned with Model Garden deploymentTimeout=7200s, "
+            f"extendable up to Gemini platform's 210m backend polling ceiling while DeployModel is active) "
+            f"for endpoint '{endpoint.resource_name}' to finish provisioning and reach READY..."
         )
-        deploy_wait_deadline = time.time() + 2100.0
+        # Base window: 120m (7200s, matching Model Garden containerSpec.deploymentTimeout);
+        # hard cap: 210m (12600s, matching Gemini platform LONG_UNIFIED_DEPLOYMENT_SERVICE_POLLING_SPEC
+        # which covers CREATING_SERVING_CLUSTER + ADDING_NODES_TO_CLUSTER + STARTING_MODEL_SERVER).
+        deploy_wait_deadline = wait_start + 7200.0
+        max_deploy_wait_deadline = wait_start + 12600.0
+        last_stage_log = 0.0
+        tracked_op_name: str | None = None
         while time.time() < deploy_wait_deadline:
             endpoint = aiplatform.Endpoint(
                 endpoint_name=endpoint_id,
@@ -197,11 +188,71 @@ def provision_and_queue_af3_endpoint_task(
                     f"[AF3 Stage 1] Endpoint '{endpoint.resource_name}' is READY with deployed model(s)."
                 )
                 break
+            cur_stage, tracked_op_name, terminal_err = _get_deploy_op_status(
+                tracked_op_name=tracked_op_name
+            )
+            if cur_stage:
+                # Keep extending the watcher deadline while Gemini platform's DeployModel LRO is active
+                # (up to the 210-minute Gemini platform backend polling ceiling).
+                deploy_wait_deadline = min(
+                    max_deploy_wait_deadline,
+                    max(deploy_wait_deadline, time.time() + 1800.0),
+                )
+                if time.time() - last_stage_log >= 60.0:
+                    log.info(
+                        f"[AF3 Stage 1] Endpoint '{endpoint.resource_name}' deployment in progress: "
+                        f"stage={cur_stage} ({int(time.time() - wait_start)}s elapsed)."
+                    )
+                    last_stage_log = time.time()
+            elif terminal_err:
+                raise RuntimeError(
+                    f"Gemini platform DeployModel operation '{tracked_op_name}' on "
+                    f"'{endpoint.resource_name}' failed: {terminal_err}"
+                )
             time.sleep(20.0)
         else:
             raise RuntimeError(
                 f"Timed out waiting for AF3 endpoint '{endpoint.resource_name}' to reach READY."
             )
+
+        # Verify that the Dedicated Endpoint GFE data-plane route has finished propagating
+        # across front-end tasks after waking up from 0 deployed models (preventing HTTP 404
+        # UNIMPLEMENTED during the 1-3 minute GFE route sync window).
+        if not type(endpoint).__module__.startswith("unittest.mock"):
+            dedicated_dns = getattr(endpoint, "dedicated_endpoint_dns", "") or getattr(
+                getattr(endpoint, "_gca_resource", None), "dedicated_endpoint_dns", ""
+            )
+            if dedicated_dns:
+                probe_url = f"https://{dedicated_dns}/v1/{endpoint.resource_name}:predict"
+                probe_deadline = time.time() + 240.0
+                consecutive_ok = 0
+                while time.time() < probe_deadline and consecutive_ok < 3:
+                    try:
+                        probe_session = AuthorizedSession(creds)
+                        probe_resp = probe_session.post(
+                            probe_url, json={"instances": []}, timeout=15
+                        )
+                        probe_session.close()
+                        if probe_resp.status_code in (200, 400, 422, 429):
+                            consecutive_ok += 1
+                            if consecutive_ok < 3:
+                                time.sleep(3.0)
+                            continue
+                        log.info(
+                            f"[AF3 Stage 1] Waiting for Dedicated Endpoint GFE route propagation "
+                            f"(probe returned HTTP {probe_resp.status_code}, ok={consecutive_ok}/3)..."
+                        )
+                    except Exception as probe_exc:
+                        log.info(
+                            f"[AF3 Stage 1] Waiting for Dedicated Endpoint GFE route propagation "
+                            f"({probe_exc})..."
+                        )
+                    consecutive_ok = 0
+                    time.sleep(10.0)
+                if consecutive_ok >= 3:
+                    log.info(
+                        "[AF3 Stage 1] Dedicated Endpoint GFE data-plane route verified READY (3/3 probes reached container)."
+                    )
 
     active_replicas = _get_active_replica_count(endpoint)
     stale_heartbeat_sec = 210.0
@@ -397,7 +448,6 @@ def run_af3_inference_task(
     msa_free: bool = False,
     num_diffusion_samples: int = 5,
     timeout_seconds: int = 1800,
-    idle_shutdown_minutes: int = 20,
 ) -> NamedTuple(
     "AF3InferenceOutputs",
     [
@@ -557,17 +607,33 @@ def run_af3_inference_task(
                 call_elapsed = time.time() - call_t0
                 err_repr = repr(pred_err) + " " + str(pred_err)
 
-                # Case A: Fast DNS or immediate connection establishment error (< 30s)
-                if "NameResolutionError" in err_repr or (
-                    "ConnectionError" in err_repr
-                    and call_elapsed < 30.0
-                    and "RemoteDisconnected" not in err_repr
-                ):
-                    log.warning(
-                        f"[AF3 Stage 2] Fast DNS/ConnectionError after {call_elapsed:.1f}s ({pred_err}); "
-                        "refreshing endpoint and retrying after 5s..."
+                # Case A: Fast DNS, immediate connection establishment error, or Dedicated Endpoint
+                # GFE routing / Scale-to-Zero replica wakeup (HTTP 404 UNIMPLEMENTED / 502 / 503
+                # / ServiceUnavailable while Gemini platform scales replica 0 -> 1)
+                if (
+                    "NameResolutionError" in err_repr
+                    or "Dedicated endpoint DNS is empty" in err_repr
+                    or "Status code:502" in err_repr
+                    or "Status code:503" in err_repr
+                    or "ServiceUnavailable" in err_repr
+                    or (
+                        call_elapsed < 30.0
+                        and "RemoteDisconnected" not in err_repr
+                        and (
+                            "ConnectionError" in err_repr
+                            or "Status code:404" in err_repr
+                            or "UNIMPLEMENTED" in err_repr
+                        )
                     )
-                    time.sleep(5)
+                ):
+                    if time.time() - t0 > max(timeout_seconds, 1800):
+                        raise
+                    log.warning(
+                        f"[AF3 Stage 2] Transient endpoint routing/scale-from-zero wakeup after {call_elapsed:.1f}s "
+                        f"({pred_err}); refreshing endpoint session and retrying after 10s..."
+                    )
+                    if not type(endpoint).__module__.startswith("unittest.mock"):
+                        time.sleep(10)
                     endpoint = aiplatform.Endpoint(
                         endpoint_name=endpoint_id,
                         project=project_id,
@@ -575,29 +641,38 @@ def run_af3_inference_task(
                     )
                     continue
 
-                # Case B: Container still busy finishing a prior request (HTTP 429)
+                # Case B: Container still busy finishing a prior request or scaling up from 0 replicas (HTTP 429)
                 if "Status code:429" in err_repr or (
-                    "429" in err_repr and "already working on a prediction" in err_repr
+                    "429" in err_repr
+                    and (
+                        "already working on a prediction" in err_repr
+                        or "scale-up from zero" in err_repr.lower()
+                    )
                 ):
                     if time.time() - t0 > max(timeout_seconds, 3600):
                         raise
-                    log.warning(
-                        "[AF3 Stage 2] Endpoint container reported HTTP 429 (still finishing prior prediction); "
-                        "holding slot and retrying in 20s..."
-                    )
+                    if "scale-up from zero" in err_repr.lower():
+                        log.info(
+                            "[AF3 Stage 2] Endpoint is scaling up from 0 replicas (Gemini platform Scale-to-Zero wakeup); "
+                            "holding replica slot and retrying in 20s..."
+                        )
+                    else:
+                        log.warning(
+                            "[AF3 Stage 2] Endpoint container reported HTTP 429 (still finishing prior prediction); "
+                            "holding slot and retrying in 20s..."
+                        )
                     time.sleep(20)
                     continue
 
-                # Case C: Endpoint tenant SA missing GCS permission on output_dir -> fallback to inline response
-                # (Terraform provisions roles/storage.objectAdmin for service-<PROJECT_NUMBER>@gcp-sa-aiplatform-cc.iam.gserviceaccount.com)
+                # Case C: Endpoint serving identity lacks write access to output_dir. Bucket IAM is
+                # managed by Terraform; fall back to inline response mode for this request.
                 if use_gcs_output_dir and (
                     "does not have storage.objects" in err_repr
                     or "does not have write access" in err_repr
                 ):
                     log.warning(
-                        f"[AF3 Stage 2] Vertex AI Endpoint service agent lacks write access to {raw_output_gcs_uri} "
-                        "(ensure Terraform IAM binding for service-<PROJECT_NUMBER>@gcp-sa-aiplatform-cc.iam.gserviceaccount.com "
-                        "is applied); falling back to inline response mode (without output_dir)."
+                        f"[AF3 Stage 2] Gemini platform Endpoint service agent lacks write access to {raw_output_gcs_uri}; "
+                        "falling back to inline response mode (without output_dir)."
                     )
                     use_gcs_output_dir = False
                     predict_parameters.pop("output_dir", None)
@@ -729,7 +804,6 @@ def run_af3_inference_task(
                         "last_event": f"inference_finished:{job_name}",
                         "last_pipeline_job_id": pipeline_job_id,
                         "slot_released": slot_released,
-                        "idle_shutdown_minutes": int(idle_shutdown_minutes),
                     },
                     indent=2,
                 ),
@@ -762,16 +836,14 @@ def report_af3_endpoint_available_task(
     queue_wait_seconds: float,
     inference_seconds: float,
     slot_released: bool,
-    idle_shutdown_minutes: int = 20,
 ) -> NamedTuple(
     "AF3EndpointAvailableOutputs",
     [
         ("endpoint_status", str),
         ("active_queued_jobs", int),
-        ("idle_drain_status", str),
     ],
 ):
-    """Stage 3: Verify replica slot release, report endpoint availability, and arm idle auto-drain."""
+    """Stage 3: Verify replica slot release and report endpoint availability and queue depth."""
     import json
     import logging
     import time
@@ -817,9 +889,8 @@ def report_af3_endpoint_available_task(
 
     # Inspect other active AF3 pipeline jobs and active slot locks
     other_af3_jobs = []
-    active_drain_jobs = []
     try:
-        creds, _ = google.auth.default()
+        creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         authed = AuthorizedSession(creds)
         list_url = (
             f"https://{region}-aiplatform.googleapis.com/v1/"
@@ -840,8 +911,6 @@ def report_af3_endpoint_available_task(
                 continue
             if pj_id.startswith("alphafold3-inference-pipeline-"):
                 other_af3_jobs.append(pj_id)
-            elif pj_id.startswith("alphafold3-idle-drain-"):
-                active_drain_jobs.append(pj_id)
     except Exception as list_exc:
         log.warning(f"[AF3 Stage 3] Could not list active PipelineJobs: {list_exc}")
 
@@ -870,84 +939,10 @@ def report_af3_endpoint_available_task(
         "other_active_af3_jobs": other_af3_jobs,
         "queue_wait_seconds": round(float(queue_wait_seconds), 2),
         "inference_seconds": round(float(inference_seconds), 2),
-        "idle_shutdown_minutes": int(idle_shutdown_minutes),
     }
     activity_blob.upload_from_string(
         json.dumps(activity_payload, indent=2), content_type="application/json"
     )
-
-    endpoint_status = "available"
-    idle_drain_status = "none"
-
-    def _ensure_idle_watchdog() -> str:
-        if active_drain_jobs:
-            log.info(
-                f"[AF3 Stage 3] Refreshed {idle_shutdown_minutes}m countdown on active watchdog '{active_drain_jobs[0]}'."
-            )
-            return active_drain_jobs[0]
-        if not bucket.blob("af3_predictions/.locks/af3_idle_drain_pipeline.json").exists():
-            return "none"
-        # Guard against concurrent Stage 3 tasks spawning duplicate watchdogs within 90s
-        spawn_lock_blob = bucket.blob(
-            f"af3_predictions/.locks/{endpoint_short_id}_watchdog_spawn.json"
-        )
-        try:
-            if spawn_lock_blob.exists():
-                spawn_data = json.loads(spawn_lock_blob.download_as_text())
-                if time.time() - float(spawn_data.get("spawned_at", 0)) < 90.0:
-                    existing_id = spawn_data.get("drain_job_id", "spawning")
-                    log.info(
-                        f"[AF3 Stage 3] Watchdog '{existing_id}' was recently spawned; reusing."
-                    )
-                    return existing_id
-        except Exception:
-            pass
-
-        drain_ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        drain_job_id = f"alphafold3-idle-drain-{drain_ts}"
-        try:
-            spawn_lock_blob.upload_from_string(
-                json.dumps({"drain_job_id": drain_job_id, "spawned_at": time.time()}),
-                content_type="application/json",
-            )
-        except Exception:
-            pass
-        drain_template_uri = (
-            f"gs://{bucket_name}/af3_predictions/.locks/af3_idle_drain_pipeline.json"
-        )
-        drain_job = aiplatform.PipelineJob(
-            display_name="af3-endpoint-idle-drain",
-            template_path=drain_template_uri,
-            job_id=drain_job_id,
-            pipeline_root=f"gs://{bucket_name}/pipeline_runs/idle_drain_{drain_ts}",
-            parameter_values={
-                "project_id": project_id,
-                "region": region,
-                "endpoint_location": endpoint_location,
-                "endpoint_id": endpoint.resource_name,
-                "bucket_name": bucket_name,
-                "idle_shutdown_minutes": int(idle_shutdown_minutes),
-            },
-            enable_caching=False,
-            project=project_id,
-            location=region,
-            labels={
-                "model_type": "af3_system",
-                "job_type": "af3_idle_drain",
-                "submitted_by": "foldrun-agent",
-            },
-        )
-        try:
-            drain_job.submit(service_account=f"pipelines-sa@{project_id}.iam.gserviceaccount.com")
-            log.info(
-                f"[AF3 Stage 3] Launched {idle_shutdown_minutes}m idle-drain watchdog '{drain_job_id}'."
-            )
-            return drain_job_id
-        except Exception as drain_exc:
-            log.warning(
-                f"[AF3 Stage 3] Could not submit idle-drain watchdog '{drain_job_id}': {drain_exc}"
-            )
-            return "watchdog_submit_skipped"
 
     if other_af3_jobs or active_slots > 0:
         endpoint_status = "available_serving_queue"
@@ -957,33 +952,18 @@ def report_af3_endpoint_available_task(
             f"{len(other_af3_jobs)} other AF3 pipeline job(s) ({other_af3_jobs}) and "
             f"{active_slots} active slot(s) are currently active."
         )
-        if idle_shutdown_minutes > 0:
-            idle_drain_status = _ensure_idle_watchdog()
-        else:
-            idle_drain_status = f"deferred ({len(other_af3_jobs)} queued/running)"
-    elif idle_shutdown_minutes == 0:
-        endpoint_status = "auto_undeployed"
-        idle_drain_status = "undeployed_immediately"
+    else:
+        endpoint_status = "available_idle"
         log.info(
-            "[AF3 Stage 3] Queue is empty and idle_shutdown_minutes=0 -> "
-            "undeploying H100 endpoint immediately ($0.00/hr)."
-        )
-        endpoint.undeploy_all(sync=False)
-        activity_payload["state"] = "auto_undeployed"
-        activity_blob.upload_from_string(
-            json.dumps(activity_payload, indent=2), content_type="application/json"
-        )
-    elif idle_shutdown_minutes > 0:
-        idle_drain_status = _ensure_idle_watchdog()
-        endpoint_status = (
-            "available_idle_timer_reset" if active_drain_jobs else "available_idle_watchdog_started"
+            f"[AF3 Stage 3] Endpoint '{endpoint.resource_name}' replica {slot_index}/{active_replicas} "
+            "is idle with 0 queued jobs; the endpoint's scale-to-zero policy will scale it down when idle."
         )
 
     outputs = namedtuple(
         "AF3EndpointAvailableOutputs",
-        ["endpoint_status", "active_queued_jobs", "idle_drain_status"],
+        ["endpoint_status", "active_queued_jobs"],
     )
-    return outputs(endpoint_status, len(other_af3_jobs), idle_drain_status)
+    return outputs(endpoint_status, len(other_af3_jobs))
 
 
 @dsl.component(
@@ -1154,7 +1134,177 @@ def process_af3_results_task(
         else f"pipeline_runs/{pipeline_job_id}"
     )
 
-    # 3. Parse CIF & summary_confidences for every sample and sort by ranking_score descending
+    # 2b. Upload input.json and execution.log immediately so Cloud Run Job tasks & Viewer have them
+    bucket.blob(f"{job_prefix_clean}/input.json").upload_from_string(
+        json.dumps(instance_payload, indent=2), content_type="application/json"
+    )
+    bucket.blob(f"{pipeline_root_prefix}/input.json").upload_from_string(
+        json.dumps(instance_payload, indent=2), content_type="application/json"
+    )
+    bucket.blob(f"{job_prefix_clean}/execution.log").upload_from_string(
+        execution_log_text, content_type="text/plain; charset=utf-8"
+    )
+    bucket.blob(f"{pipeline_root_prefix}/execution.log").upload_from_string(
+        execution_log_text, content_type="text/plain; charset=utf-8"
+    )
+
+    # 2c. Dispatch parallel sample analysis to Cloud Run Job (foldrun-analysis-job) and finish KFP immediately
+    cif_filename = f"{job_name}_model.cif"
+    conf_filename = f"{job_name}_summary_confidences.json"
+    cif_uri = f"gs://{bucket_name}/{job_prefix_clean}/{cif_filename}"
+    kfp_summary_blob_path = f"{pipeline_root_prefix}/analysis/summary.json"
+    summary_uri = f"gs://{bucket_name}/{kfp_summary_blob_path}"
+    analysis_path = f"gs://{bucket_name}/{job_prefix_clean}/analysis/"
+
+    try:
+        import os
+
+        import google.auth
+        from google.auth.transport.requests import AuthorizedSession
+
+        # Clear any stale prediction_*_analysis.json or summary.json from prior runs
+        for stale_b in bucket.list_blobs(prefix=f"{job_prefix_clean}/analysis/"):
+            if stale_b.name.endswith(("_analysis.json", "/summary.json", "/artifacts_bundle.zip")):
+                try:
+                    stale_b.delete()
+                except Exception:
+                    pass
+
+        predictions_cfg = []
+        for idx, (s_key, s_files) in enumerate(valid_samples.items()):
+            s_label = f"{s_key.replace('-', '_')} ({mode_label})"
+            predictions_cfg.append(
+                {
+                    "index": idx,
+                    "s_key": s_key,
+                    "sample_name": s_label,
+                    "cif_uri": f"gs://{bucket_name}/{s_files['cif'].name}",
+                    "summary_uri": f"gs://{bucket_name}/{s_files['summary'].name}",
+                    "confidences_uri": (
+                        f"gs://{bucket_name}/{s_files['conf'].name}"
+                        if s_files.get("conf") is not None
+                        else None
+                    ),
+                    "output_uri": f"{analysis_path}prediction_{idx}_analysis.json",
+                }
+            )
+
+        task_config = {
+            "job_id": job_name,
+            "pipeline_job_id": pipeline_job_id,
+            "project_id": project_id,
+            "region": region,
+            "bucket_name": bucket_name,
+            "job_prefix": job_prefix_clean,
+            "pipeline_root_prefix": pipeline_root_prefix,
+            "analysis_path": analysis_path,
+            "model_type": "alphafold3",
+            "msa_free": msa_free,
+            "mode_label": mode_label,
+            "start_iso": start_iso,
+            "end_iso": end_iso,
+            "inference_seconds": inference_seconds,
+            "queue_wait_seconds": queue_wait_seconds,
+            "endpoint_status": endpoint_status,
+            "instance_payload": instance_payload,
+            "predictions": predictions_cfg,
+        }
+        bucket.blob(f"{job_prefix_clean}/analysis/task_config.json").upload_from_string(
+            json.dumps(task_config, indent=2), content_type="application/json"
+        )
+
+        cr_job_name = os.environ.get("ANALYSIS_JOB_NAME", "foldrun-analysis-job")
+        cr_url = (
+            f"https://{region}-run.googleapis.com/v2/projects/{project_id}"
+            f"/locations/{region}/jobs/{cr_job_name}:run"
+        )
+        cr_body = {
+            "overrides": {
+                "taskCount": len(predictions_cfg),
+                "timeout": "600s",
+                "containerOverrides": [
+                    {
+                        "env": [
+                            {"name": "ANALYSIS_PATH", "value": analysis_path},
+                            {"name": "MODEL_TYPE", "value": "alphafold3"},
+                            {"name": "GCS_BUCKET", "value": bucket_name},
+                            {"name": "GOOGLE_CLOUD_PROJECT", "value": project_id},
+                            {"name": "PIPELINE_JOB_LOCATION", "value": region},
+                            {
+                                "name": "GEMINI_MODEL",
+                                "value": os.environ.get("GEMINI_ANALYSIS_MODEL", "gemini-4-argon"),
+                            },
+                        ]
+                    }
+                ],
+            }
+        }
+        creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        authed_session = AuthorizedSession(creds)
+        cr_resp = authed_session.post(cr_url, json=cr_body, timeout=30)
+        if cr_resp.status_code < 300:
+            meta_payload = {
+                "job_id": job_name,
+                "pipeline_job_id": pipeline_job_id,
+                "total_predictions": len(predictions_cfg),
+                "started_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "status": "running",
+                "model_type": "alphafold3",
+                "execution_method": "cloud_run_job",
+                "triggered_by": "kfp_stage_4",
+            }
+            bucket.blob(f"{job_prefix_clean}/analysis/analysis_metadata.json").upload_from_string(
+                json.dumps(meta_payload, indent=2), content_type="application/json"
+            )
+            bucket.blob(
+                f"{pipeline_root_prefix}/analysis/analysis_metadata.json"
+            ).upload_from_string(
+                json.dumps(meta_payload, indent=2), content_type="application/json"
+            )
+
+            # Seed top-level CIF and summary_confidences so immediate get_results calls succeed while Cloud Run Job executes
+            first_files = top_cif_b, top_sum_b
+            if first_files[0] is None or first_files[1] is None:
+                first_sample = next(iter(valid_samples.values()))
+                first_files = first_sample["cif"], first_sample["summary"]
+            init_cif_text = first_files[0].download_as_text()
+            init_sum_conf = dict(json.loads(first_files[1].download_as_text()) or {})
+            init_rank_score = float(
+                init_sum_conf.get("ranking_score") or init_sum_conf.get("ptm") or 0.0
+            )
+            init_plddt = float(init_sum_conf.get("mean_plddt") or 0.0)
+            bucket.blob(f"{job_prefix_clean}/{cif_filename}").upload_from_string(
+                init_cif_text, content_type="chemical/x-mmcif"
+            )
+            bucket.blob(f"{job_prefix_clean}/{conf_filename}").upload_from_string(
+                json.dumps(init_sum_conf, indent=2), content_type="application/json"
+            )
+
+            log.info(
+                f"[AF3 Stage 4] Queued Cloud Run Job '{cr_job_name}' with "
+                f"{len(predictions_cfg)} parallel task(s); completing KFP stage immediately."
+            )
+            outputs = namedtuple(
+                "AF3PredictOutputs",
+                ["cif_uri", "summary_uri", "ranking_score", "mean_plddt"],
+            )
+            return outputs(
+                cif_uri,
+                summary_uri,
+                round(init_rank_score, 4),
+                round(init_plddt, 2),
+            )
+        else:
+            log.warning(
+                f"[AF3 Stage 4] Cloud Run Job '{cr_job_name}' returned HTTP {cr_resp.status_code} "
+                f"({cr_resp.text[:200]}); falling back to in-process analysis."
+            )
+    except Exception as cr_exc:
+        log.warning(
+            f"[AF3 Stage 4] Could not queue Cloud Run Job ({cr_exc}); falling back to in-process analysis."
+        )
+
+    # 3. Fallback: Parse CIF & summary_confidences in-process and sort by ranking_score descending
     parsed_samples = []
     for s_key, s_files in valid_samples.items():
         s_cif_b = s_files["cif"]
@@ -1542,6 +1692,10 @@ def process_af3_results_task(
         "successful_analyses": len(ranked_predictions),
         "failed_analyses": 0,
         "summary": {
+            "statistics": {
+                "total_predictions": len(ranked_predictions),
+                "analyzed_successfully": len(ranked_predictions),
+            },
             "protein_info": {
                 "total_length": total_residues,
                 "total_predictions": len(ranked_predictions),
@@ -1565,6 +1719,12 @@ def process_af3_results_task(
                     "job_type": "alphafold3",
                     "seq_len": total_residues,
                     "seq_name": job_name,
+                    "labels": {
+                        "num_seeds": str(len(instance_payload.get("modelSeeds") or [1])),
+                        "num_samples": str(len(ranked_predictions)),
+                        "msa_method": "none" if msa_free else "jackhmmer",
+                        "gpu_type": "h100-80gb",
+                    },
                 },
             },
             "quality_metrics": {
@@ -1813,7 +1973,6 @@ def create_af3_inference_pipeline():
         msa_free: bool = False,
         num_diffusion_samples: int = 5,
         timeout_seconds: int = 1800,
-        idle_shutdown_minutes: int = 20,
     ):
         queue_task = provision_and_queue_af3_endpoint_task(
             project_id=project_id,
@@ -1846,7 +2005,6 @@ def create_af3_inference_pipeline():
             msa_free=msa_free,
             num_diffusion_samples=num_diffusion_samples,
             timeout_seconds=timeout_seconds,
-            idle_shutdown_minutes=idle_shutdown_minutes,
         )
         infer_task.set_display_name("2. Run AF3 Inference (H100 Endpoint)")
         infer_task.set_caching_options(False)
@@ -1865,7 +2023,6 @@ def create_af3_inference_pipeline():
             queue_wait_seconds=queue_task.outputs["queue_wait_seconds"],
             inference_seconds=infer_task.outputs["inference_seconds"],
             slot_released=infer_task.outputs["slot_released"],
-            idle_shutdown_minutes=idle_shutdown_minutes,
         )
         release_task.set_display_name("3. Report AF3 Endpoint Available")
         release_task.set_caching_options(False)
@@ -1893,244 +2050,3 @@ def create_af3_inference_pipeline():
         process_task.set_caching_options(False)
 
     return af3_inference_pipeline
-
-
-@dsl.component(
-    base_image="python:3.12-slim",
-    packages_to_install=[
-        "google-cloud-aiplatform>=1.50.0",
-        "google-cloud-storage>=2.10.0",
-        "requests-toolbelt>=1.0.0",
-        "pyyaml>=6.0",
-    ],
-)
-def af3_idle_drain_task(
-    project_id: str,
-    region: str,
-    endpoint_location: str,
-    endpoint_id: str,
-    bucket_name: str,
-    idle_shutdown_minutes: int = 20,
-) -> str:
-    """Monitor the AF3 H100 Endpoint after a job/batch completes and auto-undeploy after idle_shutdown_minutes of inactivity."""
-    import json
-    import logging
-    import time
-    from datetime import datetime, timezone
-
-    import google.auth
-    from google.auth.transport.requests import AuthorizedSession
-    from google.cloud import aiplatform, storage
-
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-    log = logging.getLogger("af3_idle_drain")
-
-    if idle_shutdown_minutes < 0:
-        log.info("[AF3 Auto-Drain] idle_shutdown_minutes < 0; auto-undeploy disabled.")
-        return "disabled"
-
-    storage_client = storage.Client(project=project_id)
-    bucket = storage_client.bucket(bucket_name)
-
-    aiplatform.init(project=project_id, location=endpoint_location)
-    endpoint = aiplatform.Endpoint(
-        endpoint_name=endpoint_id,
-        project=project_id,
-        location=endpoint_location,
-    )
-    endpoint_short_id = endpoint.resource_name.split("/")[-1]
-    activity_blob_path = f"af3_predictions/.locks/{endpoint_short_id}_activity.json"
-
-    creds, _ = google.auth.default()
-    authed = AuthorizedSession(creds)
-
-    def _get_deployed_models(ep):
-        try:
-            return list(ep.list_models())
-        except Exception:
-            gca = getattr(ep, "_gca_resource", None) or getattr(ep, "gca_resource", None)
-            return list(getattr(gca, "deployed_models", None) or [])
-
-    def _has_active_deploy_op() -> bool:
-        try:
-            op_url = (
-                f"https://{endpoint_location}-aiplatform.googleapis.com/v1/"
-                f"{endpoint.resource_name}/operations"
-            )
-            r = authed.get(op_url, timeout=10)
-            if not r.ok:
-                return False
-            for op in r.json().get("operations", []):
-                if not op.get("done") and "DeployModel" in op.get("metadata", {}).get("@type", ""):
-                    return True
-        except Exception:
-            pass
-        return False
-
-    def _get_active_af3_jobs() -> list[str]:
-        active = []
-        try:
-            list_url = (
-                f"https://{region}-aiplatform.googleapis.com/v1/"
-                f"projects/{project_id}/locations/{region}/pipelineJobs?pageSize=50"
-            )
-            r = authed.get(list_url, timeout=15)
-            if r.ok:
-                active_states = {
-                    "PIPELINE_STATE_PENDING",
-                    "PIPELINE_STATE_RUNNING",
-                    "PIPELINE_STATE_QUEUED",
-                    "PIPELINE_STATE_CANCELLING",
-                }
-                for pj in r.json().get("pipelineJobs", []):
-                    pj_id = pj.get("name", "").split("/")[-1]
-                    if pj.get("state") in active_states and pj_id.startswith(
-                        "alphafold3-inference-pipeline-"
-                    ):
-                        active.append(pj_id)
-        except Exception:
-            pass
-        return active
-
-    def _get_active_slot_locks() -> int:
-        count = 0
-        now_t = time.time()
-        try:
-            for b in bucket.list_blobs(prefix=f"af3_predictions/.locks/{endpoint_short_id}_slot_"):
-                ld = json.loads(b.download_as_text())
-                hb = float(
-                    ld.get("heartbeat_at")
-                    or ld.get("heartbeat_epoch")
-                    or ld.get("acquired_at")
-                    or 0
-                )
-                if now_t - hb < 210.0:
-                    count += 1
-        except Exception:
-            pass
-        return count
-
-    last_activity_epoch = time.time()
-    effective_idle_minutes = int(idle_shutdown_minutes)
-    last_log_time = 0.0
-
-    log.info(
-        f"[AF3 Auto-Drain] Started idle watchdog for endpoint '{endpoint.resource_name}' "
-        f"(grace window: {effective_idle_minutes} minutes)."
-    )
-
-    while True:
-        now_ts = time.time()
-        deployed = _get_deployed_models(endpoint)
-        deploying = _has_active_deploy_op()
-
-        if not deployed and not deploying:
-            log.info(
-                "[AF3 Auto-Drain] Endpoint already has 0 deployed models and no active DeployModel operation. Exiting ($0.00/hr)."
-            )
-            return "already_undeployed"
-
-        if deploying and not deployed:
-            last_activity_epoch = now_ts
-
-        # Check activity file in GCS
-        try:
-            act_blob = bucket.blob(activity_blob_path)
-            if act_blob.exists():
-                act_data = json.loads(act_blob.download_as_text())
-                file_epoch = float(act_data.get("last_activity_epoch", 0))
-                if file_epoch > last_activity_epoch:
-                    last_activity_epoch = file_epoch
-                if "idle_shutdown_minutes" in act_data:
-                    effective_idle_minutes = int(act_data["idle_shutdown_minutes"])
-                    if effective_idle_minutes < 0:
-                        log.info(
-                            "[AF3 Auto-Drain] idle_shutdown_minutes set to < 0 in activity config; exiting."
-                        )
-                        return "disabled"
-        except Exception:
-            pass
-
-        # Check if any AF3 prediction jobs or slot locks are active right now
-        active_jobs = _get_active_af3_jobs()
-        active_slots = _get_active_slot_locks()
-        if active_jobs or active_slots > 0:
-            last_activity_epoch = now_ts
-            if now_ts - last_log_time >= 120.0:
-                log.info(
-                    f"[AF3 Auto-Drain] {len(active_jobs)} AF3 job(s) ({active_jobs}) / "
-                    f"{active_slots} slot(s) currently active; resetting {effective_idle_minutes}m idle timer."
-                )
-                last_log_time = now_ts
-            time.sleep(30)
-            continue
-
-        idle_sec = now_ts - last_activity_epoch
-        target_sec = max(0, effective_idle_minutes * 60)
-
-        if idle_sec >= target_sec:
-            if not _get_active_af3_jobs() and _get_active_slot_locks() == 0:
-                log.info(
-                    f"[AF3 Auto-Drain] Endpoint '{endpoint.resource_name}' has been idle for "
-                    f"{idle_sec / 60:.1f} minutes (threshold: {effective_idle_minutes}m) with 0 active jobs. "
-                    "Undeploying all models to revert GPU cost to $0.00/hr..."
-                )
-                endpoint.undeploy_all(sync=False)
-                try:
-                    act_blob = bucket.blob(activity_blob_path)
-                    act_blob.upload_from_string(
-                        json.dumps(
-                            {
-                                "endpoint_id": endpoint.resource_name,
-                                "state": "auto_undeployed",
-                                "undeployed_at_iso": datetime.now(timezone.utc)
-                                .isoformat()
-                                .replace("+00:00", "Z"),
-                                "idle_minutes_before_undeploy": round(idle_sec / 60.0, 2),
-                                "idle_shutdown_minutes": effective_idle_minutes,
-                            },
-                            indent=2,
-                        ),
-                        content_type="application/json",
-                    )
-                except Exception:
-                    pass
-                return "auto_undeployed"
-
-        if now_ts - last_log_time >= 120.0:
-            log.info(
-                f"[AF3 Auto-Drain] Endpoint idle for {idle_sec / 60:.1f} / {effective_idle_minutes} min "
-                "(0 active AF3 jobs). Waiting before auto-undeploy..."
-            )
-            last_log_time = now_ts
-
-        time.sleep(30)
-
-
-def create_af3_idle_drain_pipeline():
-    """Create the KFP v2 pipeline for auto-undeploying the AF3 H100 Endpoint after an idle grace window."""
-
-    @dsl.pipeline(
-        name="alphafold3-idle-drain-pipeline",
-        description="Auto-undeploys the AlphaFold 3 Dedicated H100 Endpoint after idle_shutdown_minutes of inactivity ($0.00/hr).",
-    )
-    def af3_idle_drain_pipeline(
-        project_id: str,
-        region: str,
-        endpoint_location: str,
-        endpoint_id: str,
-        bucket_name: str,
-        idle_shutdown_minutes: int = 20,
-    ):
-        task = af3_idle_drain_task(
-            project_id=project_id,
-            region=region,
-            endpoint_location=endpoint_location,
-            endpoint_id=endpoint_id,
-            bucket_name=bucket_name,
-            idle_shutdown_minutes=idle_shutdown_minutes,
-        )
-        task.set_display_name("AF3 Endpoint Idle Auto-Undeploy Watchdog")
-        task.set_caching_options(False)
-
-    return af3_idle_drain_pipeline

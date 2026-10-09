@@ -68,7 +68,10 @@ class AF3Config(CoreConfig):
     @property
     def endpoint_location(self) -> str:
         """GCP location where the Agent Platform Endpoint is hosted."""
-        return os.getenv("AF3_ENDPOINT_LOCATION") or self.region or "us-central1"
+        loc = (os.getenv("AF3_ENDPOINT_LOCATION") or self.region or "us-central1").strip()
+        if loc.lower() == "global":
+            return self.region if self.region.lower() != "global" else "us-central1"
+        return loc
 
     @property
     def default_msa_free(self) -> bool:
@@ -99,6 +102,31 @@ class AF3Config(CoreConfig):
     def accelerator_count(self) -> int:
         """Default accelerator count for AF3 endpoint deployment."""
         return int(os.getenv("AF3_ACCELERATOR_COUNT", "1"))
+
+    @property
+    def min_replica_count(self) -> int:
+        """Minimum replica count for AF3 endpoint deployment (0 = Gemini platform Scale-to-Zero)."""
+        return int(os.getenv("AF3_MIN_REPLICA_COUNT", "0"))
+
+    @property
+    def max_replica_count(self) -> int:
+        """Maximum replica count for AF3 endpoint deployment."""
+        return int(os.getenv("AF3_MAX_REPLICA_COUNT", "1"))
+
+    @property
+    def initial_replica_count(self) -> int:
+        """Initial replica count when min_replica_count == 0 (Scale-to-Zero)."""
+        return int(os.getenv("AF3_INITIAL_REPLICA_COUNT", "1"))
+
+    @property
+    def min_scaleup_period_seconds(self) -> int:
+        """Scale-to-zero minimum scale-up duration in seconds (default 300s = 5m)."""
+        return int(os.getenv("AF3_MIN_SCALEUP_PERIOD_SECONDS", "300"))
+
+    @property
+    def idle_scaledown_period_seconds(self) -> int:
+        """Scale-to-zero idle scale-down duration in seconds before scaling to 0 (default 1200s = 20m)."""
+        return int(os.getenv("AF3_IDLE_SCALEDOWN_PERIOD_SECONDS", "1200"))
 
     @property
     def reservation_affinity_type(self) -> str:
@@ -136,6 +164,11 @@ class AF3Config(CoreConfig):
                 "machine_type": self.machine_type,
                 "accelerator_type": self.accelerator_type,
                 "accelerator_count": self.accelerator_count,
+                "min_replica_count": self.min_replica_count,
+                "max_replica_count": self.max_replica_count,
+                "initial_replica_count": self.initial_replica_count,
+                "min_scaleup_period_seconds": self.min_scaleup_period_seconds,
+                "idle_scaledown_period_seconds": self.idle_scaledown_period_seconds,
                 "reservation_affinity_type": self.reservation_affinity_type,
                 "reservation_names": self.reservation_names,
                 "auto_fallback_gpu": self.auto_fallback_gpu,

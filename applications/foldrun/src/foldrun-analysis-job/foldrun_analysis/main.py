@@ -18,7 +18,7 @@ import logging
 import os
 import sys
 
-from . import af2_analyzer, boltz2_analyzer, of3_analyzer
+from . import af2_analyzer, af3_analyzer, boltz2_analyzer, of3_analyzer
 from .shared_utils import download_json_from_gcs
 
 # Configure logging
@@ -74,6 +74,12 @@ def main():
             if "uri" in first_pred and first_pred["uri"].endswith(".pkl"):
                 model_type = "alphafold2"
             elif (
+                "summary_uri" in first_pred
+                or "/af3_predictions/" in analysis_path
+                or "instance_payload" in task_config
+            ):
+                model_type = "alphafold3"
+            elif (
                 "affinity_uri" in task_config
                 or "query_yaml_uri" in task_config
                 or "pde_uri" in first_pred
@@ -91,6 +97,10 @@ def main():
     try:
         if model_type in ["alphafold2", "af2"]:
             af2_analyzer.run_task(
+                task_index, task_count, task_config, bucket_name, analysis_path
+            )
+        elif model_type in ["alphafold3", "af3"]:
+            af3_analyzer.run_task(
                 task_index, task_count, task_config, bucket_name, analysis_path
             )
         elif model_type in ["boltz2", "boltz"]:

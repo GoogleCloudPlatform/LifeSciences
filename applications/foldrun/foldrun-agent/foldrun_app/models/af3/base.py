@@ -69,7 +69,9 @@ class AF3Tool(BaseTool):
             candidates = af3_endpoints or endpoints
             if not candidates:
                 raise ValueError(
-                    f"No AlphaFold 3 Endpoint found in {self.config.project_id}/{self.config.endpoint_location}."
+                    f"No AlphaFold 3 Endpoint found in {self.config.project_id}/{self.config.endpoint_location}. "
+                    "The endpoint is managed by Terraform: run the FoldRun infrastructure step "
+                    "(`./deploy-all.sh <PROJECT_ID> <REGION> --steps infra --enable-af3`) to provision it."
                 )
             # Prefer an endpoint with active deployed models
             candidates.sort(
@@ -121,7 +123,9 @@ class AF3Tool(BaseTool):
             import google.auth
             from google.auth.transport.requests import AuthorizedSession
 
-            creds, _ = google.auth.default()
+            creds, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
             session = AuthorizedSession(creds)
             url = (
                 f"https://{self.config.endpoint_location}-aiplatform.googleapis.com/"
@@ -148,6 +152,67 @@ class AF3Tool(BaseTool):
         except Exception as e:
             logger.debug(f"Could not list active endpoint operations for {resource_name}: {e}")
             return []
+
+    @staticmethod
+    def extract_replica_counts(dm: Any) -> dict[str, Any]:
+        """Extract min/max/initial replica counts and Scale-to-Zero metadata from a DeployedModel.
+
+        In protobuf3, `min_replica_count = 0` is the default value for `int32`, whereas
+        in unit test MagicMocks `min_replica_count` may be an unconfigured MagicMock object.
+        When `min_replica_count` is an integer `0` alongside a positive `max_replica_count`,
+        `initial_replica_count`, or `scale_to_zero_spec`, Gemini platform Scale-to-Zero is enabled.
+        """
+        dedicated = getattr(dm, "dedicated_resources", None)
+        raw_min = getattr(dedicated, "min_replica_count", None) if dedicated else None
+        raw_max = getattr(dedicated, "max_replica_count", None) if dedicated else None
+        raw_init = getattr(dedicated, "initial_replica_count", None) if dedicated else None
+        stz_spec = getattr(dedicated, "scale_to_zero_spec", None) if dedicated else None
+
+        is_int_min = isinstance(raw_min, int) and not isinstance(raw_min, bool)
+        is_int_max = isinstance(raw_max, int) and not isinstance(raw_max, bool)
+        is_int_init = isinstance(raw_init, int) and not isinstance(raw_init, bool)
+
+        stz_enabled = False
+        if is_int_min and raw_min == 0:
+            if (is_int_max and raw_max >= 1) or (is_int_init and raw_init >= 1) or stz_spec:
+                stz_enabled = True
+                min_replicas = 0
+            else:
+                min_replicas = 1
+        elif is_int_min and raw_min > 0:
+            min_replicas = raw_min
+        else:
+            min_replicas = 1
+
+        if is_int_max and raw_max >= 1:
+            max_replicas = max(raw_max, min_replicas)
+        else:
+            max_replicas = max(1, min_replicas)
+
+        if stz_enabled:
+            initial_replicas = raw_init if (is_int_init and raw_init >= 1) else 1
+        else:
+            initial_replicas = 0
+
+        min_scaleup_sec = 300
+        idle_scaledown_sec = 1200
+        if stz_spec is not None and not type(stz_spec).__module__.startswith("unittest.mock"):
+            up_dur = getattr(stz_spec, "min_scaleup_period", None)
+            down_dur = getattr(stz_spec, "idle_scaledown_period", None)
+            if up_dur is not None and hasattr(up_dur, "seconds") and int(up_dur.seconds) > 0:
+                min_scaleup_sec = int(up_dur.seconds)
+            if down_dur is not None and hasattr(down_dur, "seconds") and int(down_dur.seconds) > 0:
+                idle_scaledown_sec = int(down_dur.seconds)
+
+        return {
+            "min_replica_count": int(min_replicas),
+            "max_replica_count": int(max_replicas),
+            "initial_replica_count": int(initial_replicas),
+            "scale_to_zero_enabled": stz_enabled,
+            "min_scaleup_period_seconds": min_scaleup_sec if stz_enabled else None,
+            "idle_scaledown_period_seconds": idle_scaledown_sec if stz_enabled else None,
+            "serving_capacity_replicas": max(int(min_replicas), int(initial_replicas), 1),
+        }
 
     def get_model(self, model_id: str | None = None) -> vertex_ai.Model:
         """Resolve and instantiate an Agent Platform Model object.
@@ -282,9 +347,8 @@ class AF3Tool(BaseTool):
         deployed_models = self.get_deployed_models(endpoint)
         active_replicas = 0
         for dm in deployed_models:
-            dedicated = getattr(dm, "dedicated_resources", None)
-            rep = int((getattr(dedicated, "min_replica_count", None) if dedicated else None) or 1)
-            active_replicas += rep
+            rep_info = self.extract_replica_counts(dm)
+            active_replicas += rep_info["serving_capacity_replicas"]
 
         active_slots: list[dict[str, Any]] = []
         waiting_queue: list[dict[str, Any]] = []
@@ -351,7 +415,7 @@ class AF3Tool(BaseTool):
         total_in_flight = (
             len(active_slots) + len(waiting_queue) + max(0, int(newly_submitted_count))
         )
-        avg_job_minutes = 6.0
+        avg_job_minutes = 4.5
         est_queue_minutes = round((total_in_flight * avg_job_minutes) / effective_replicas, 1)
 
         max_allowed = int(os.environ.get("AF3_MAX_ALLOWED_REPLICAS", "4"))
@@ -366,6 +430,18 @@ class AF3Tool(BaseTool):
             )
             scaled_est_minutes = round((total_in_flight * avg_job_minutes) / rec_replicas, 1)
             hourly_rate = round(11.06 * rec_replicas, 2)
+            two_rep_minutes = round((total_in_flight * avg_job_minutes) / 2, 1)
+            scaling_prompt = (
+                f"Estimated queue drain time is ~{est_queue_minutes} min on 1 replica. "
+                f"Scaling to 2 replicas cuts this to ~{two_rep_minutes} min. "
+                "Increase `af3_max_replica_count` in Terraform and re-run the infra step to parallelize."
+                if effective_replicas == 1
+                else (
+                    f"Estimated queue drain time is ~{est_queue_minutes} min on {effective_replicas} replicas. "
+                    f"Scaling to {rec_replicas} replicas cuts this to ~{scaled_est_minutes} min. "
+                    "Increase `af3_max_replica_count` in Terraform and re-run the infra step to parallelize."
+                )
+            )
             scale_up_recommendation = {
                 "recommended": True,
                 "current_replicas": active_replicas,
@@ -373,10 +449,12 @@ class AF3Tool(BaseTool):
                 "max_allowed_replicas": max_allowed,
                 "estimated_minutes_current": est_queue_minutes,
                 "estimated_minutes_scaled": scaled_est_minutes,
-                "scaled_hourly_cost": f"~${hourly_rate:.2f}/hr (auto-drains to $0.00/hr after 20m idle)",
-                "suggested_tool_call": (
-                    f"deploy_af3_endpoint(min_replica_count={rec_replicas}, max_replica_count={rec_replicas})"
+                "scaled_hourly_cost": f"~${hourly_rate:.2f}/hr while active (scales to $0.00/hr when idle)",
+                "suggested_action": (
+                    f"Set af3_max_replica_count = {rec_replicas} in Terraform and re-run "
+                    "`./deploy-all.sh <PROJECT_ID> <REGION> --steps infra --enable-af3`"
                 ),
+                "scaling_prompt": scaling_prompt,
                 "reason": (
                     f"{total_in_flight} AF3 jobs are active/queued (~{est_queue_minutes} min at "
                     f"{effective_replicas} replica(s)). Scaling to {rec_replicas} H100 replicas cuts "

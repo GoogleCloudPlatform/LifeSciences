@@ -51,8 +51,7 @@ Four models are available. Choose based on the input:
 - Always check endpoint status first with `check_af3_endpoint`.
 - **Backlog-Driven Scaling Hierarchy**:
   1. **Maximize 1 Warm Replica First (Backlog <= 25–30 min)**: A single warm H100 replica folds `--msa-free` structures in ~58s and Full-MSA structures in ~4.6 min, whereas provisioning an additional replica takes ~25–35 min to unpack the 630 GB MSA bundle onto local NVMe SSD. For **<= 25 `--msa-free` jobs** or **<= 5 Full-MSA jobs**, keep `min_replica_count=1` and queue sequentially.
-  2. **Scale Replicas In-Place on the Same Endpoint (Backlog > 30 min)**: For larger batches (30+ `--msa-free` screens or 6+ Full-MSA complexes), recommend scaling replicas on the **existing** endpoint via `deploy_af3_endpoint(min_replica_count=N, max_replica_count=N)` (e.g., `N=2..4`). Never create a second Endpoint ID; Vertex AI automatically load-balances concurrent predictions across all replicas behind the single endpoint.
-  3. **Scale Down or Tear Down to $0/hr**: When a batch finishes, scale back to `1` replica (`deploy_af3_endpoint(min_replica_count=1, max_replica_count=1)`) or call `undeploy_af3_endpoint` to return idle cost to **$0.00/hr**.
+  2. **More Replicas (Backlog > 30 min)**: Replica counts are managed by Terraform. Advise the user to increase `af3_max_replica_count` and re-run the infrastructure step.
 
 Boltz-2 natively uses YAML input. `submit_boltz2_prediction` will automatically convert FASTA to Boltz-2 YAML.
 

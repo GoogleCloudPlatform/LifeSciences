@@ -74,11 +74,9 @@ def _initialize_af3_tools():
         from foldrun_app.models.af3.tools import (
             AF3BatchSubmitTool,
             AF3CheckEndpointTool,
-            AF3DeployEndpointTool,
             AF3GetResultsTool,
             AF3OpenViewerTool,
             AF3SubmitPredictionTool,
-            AF3UndeployEndpointTool,
         )
 
         config = get_config()
@@ -88,8 +86,6 @@ def _initialize_af3_tools():
             "AF3SubmitPredictionTool": AF3SubmitPredictionTool,
             "AF3BatchSubmitTool": AF3BatchSubmitTool,
             "AF3CheckEndpointTool": AF3CheckEndpointTool,
-            "AF3DeployEndpointTool": AF3DeployEndpointTool,
-            "AF3UndeployEndpointTool": AF3UndeployEndpointTool,
             "AF3GetResultsTool": AF3GetResultsTool,
             "AF3OpenViewerTool": AF3OpenViewerTool,
         }

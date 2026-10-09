@@ -89,6 +89,39 @@ except Exception:
     else
         echo "❌ [Agent Platform] FoldRun Agent Runtime is missing"
     fi
+
+    # 4b. Check AlphaFold 3 Gemini platform Dedicated Endpoint
+    AF3_LOC=$(cd $TERRAFORM_DIR && terraform output -raw af3_endpoint_location 2>/dev/null || echo "")
+    if [ -z "$AF3_LOC" ] || [[ "$AF3_LOC" == *"No outputs"* ]] || [ "$AF3_LOC" = "global" ]; then
+        AF3_LOC="$REGION"
+    fi
+    AF3_EP_RESULT=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+        "https://$AF3_LOC-aiplatform.googleapis.com/v1/projects/$PROJECT_ID/locations/$AF3_LOC/endpoints" 2>/dev/null)
+    AF3_EP_STATUS=$(echo "$AF3_EP_RESULT" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for ep in data.get('endpoints', []):
+        dname = ep.get('displayName', '')
+        if 'af3' in dname.lower() or 'alphafold' in dname.lower():
+            deployed = len(ep.get('deployedModels', []))
+            timeout_s = ep.get('clientConnectionConfig', {}).get('inferenceTimeout', {}).get('seconds', 'default')
+            print(f\"{dname}|{ep.get('name', '')}|{deployed}|{timeout_s}\")
+            break
+except Exception:
+    pass
+" 2>/dev/null)
+    if [ -n "$AF3_EP_STATUS" ]; then
+        IFS='|' read -r _ep_dname _ep_name _ep_models _ep_timeout <<< "$AF3_EP_STATUS"
+        if [ "$_ep_models" -gt 0 ] 2>/dev/null; then
+            echo "✅ [AlphaFold 3] Dedicated Endpoint '$_ep_dname' is READY in $AF3_LOC ($_ep_models deployed model(s), timeout=${_ep_timeout}s)"
+        else
+            echo "💤 [AlphaFold 3] Dedicated Endpoint '$_ep_dname' is provisioned in $AF3_LOC (dormant at \$0.00/hr, timeout=${_ep_timeout}s)"
+        fi
+        echo "   🔗 Endpoint: $_ep_name"
+    else
+        echo "ℹ️  [AlphaFold 3] No AF3 Dedicated Endpoint provisioned in $AF3_LOC (optional: run ./deploy-all.sh $PROJECT_ID $AF3_LOC --steps infra --enable-af3)"
+    fi
 else
     echo "⚠️  [Agent Platform] Could not retrieve access token to check Agent Runtime"
 fi

@@ -634,12 +634,18 @@ def list_jobs():
                             entry["create_time"] = iso_ts
                     if b.name.endswith("/analysis/summary.json"):
                         entry["has_analysis"] = True
+                        entry["analysis_running"] = False
                         if "msa_free" in jid:
                             entry["display_name"] = f"{jid} (Zero-MSA / --msa-free)"
                         elif "full_msa" in jid:
                             entry["display_name"] = (
                                 f"{jid} (Full 630 GB MSA + Templates)"
                             )
+                    elif (
+                        b.name.endswith("/analysis/analysis_metadata.json")
+                        and not entry["has_analysis"]
+                    ):
+                        entry["analysis_running"] = True
                 succeeded_kfp_names = set()
                 for j in jobs:
                     if (
@@ -650,10 +656,16 @@ def list_jobs():
                         succeeded_kfp_names.add(j["job_id"])
                         if dn:
                             succeeded_kfp_names.add(dn)
-                        if dn in af3_by_job and af3_by_job[dn].get("has_analysis"):
-                            j["has_analysis"] = True
+                        if dn in af3_by_job:
+                            if af3_by_job[dn].get("has_analysis"):
+                                j["has_analysis"] = True
+                                j["analysis_running"] = False
+                            elif af3_by_job[dn].get("analysis_running"):
+                                j["analysis_running"] = True
                 for jid, af3_job in af3_by_job.items():
-                    if jid not in succeeded_kfp_names and af3_job["has_analysis"]:
+                    if jid not in succeeded_kfp_names and (
+                        af3_job["has_analysis"] or af3_job["analysis_running"]
+                    ):
                         jobs.append(af3_job)
                 jobs.sort(key=lambda x: str(x.get("create_time", "")), reverse=True)
             except Exception as af3_exc:
@@ -704,6 +716,60 @@ def job_quality(job_id):
         return jsonify({"quality_assessment": ""}), 404
 
 
+def _discover_af3_predictions(job_prefix: str) -> list:
+    """Scan GCS for AF3 seed-*_sample-* outputs under af3_predictions/<job_name>/."""
+    bucket = storage_client.bucket(BUCKET_NAME)
+    base_prefix = f"{job_prefix.strip('/')}/"
+    sample_blobs: dict[str, dict] = {}
+    top_cif = None
+    top_sum = None
+    top_conf = None
+    for b in bucket.list_blobs(prefix=base_prefix):
+        bname = b.name
+        if "/analysis/" in bname:
+            continue
+        m_seed = re.search(r"/(seed-\d+_sample-\d+)/", bname)
+        if m_seed:
+            s_key = m_seed.group(1)
+            s_entry = sample_blobs.setdefault(s_key, {})
+            if bname.endswith(("_model.cif", "/model.cif")):
+                s_entry["cif_uri"] = f"gs://{BUCKET_NAME}/{bname}"
+            elif bname.endswith(
+                ("_summary_confidences.json", "/summary_confidences.json")
+            ):
+                s_entry["summary_uri"] = f"gs://{BUCKET_NAME}/{bname}"
+            elif bname.endswith(("_confidences.json", "/confidences.json")):
+                s_entry["confidences_uri"] = f"gs://{BUCKET_NAME}/{bname}"
+            continue
+        if bname.endswith("_model.cif"):
+            top_cif = f"gs://{BUCKET_NAME}/{bname}"
+        elif bname.endswith("_summary_confidences.json"):
+            top_sum = f"gs://{BUCKET_NAME}/{bname}"
+        elif bname.endswith("_confidences.json"):
+            top_conf = f"gs://{BUCKET_NAME}/{bname}"
+
+    predictions = [
+        {
+            "sample_name": k.replace("-", "_"),
+            "cif_uri": v["cif_uri"],
+            "summary_uri": v["summary_uri"],
+            "confidences_uri": v.get("confidences_uri"),
+        }
+        for k, v in sorted(sample_blobs.items())
+        if v.get("cif_uri") and v.get("summary_uri")
+    ]
+    if not predictions and top_cif and top_sum:
+        predictions = [
+            {
+                "sample_name": "seed_1_sample_0",
+                "cif_uri": top_cif,
+                "summary_uri": top_sum,
+                "confidences_uri": top_conf,
+            }
+        ]
+    return predictions
+
+
 @app.route("/api/analyze", methods=["POST"])
 def trigger_analysis():
     """Trigger analysis for a succeeded prediction job that has no analysis yet.
@@ -721,7 +787,7 @@ def trigger_analysis():
     if not JOB_ID_PATTERN.fullmatch(str(job_id)):
         return jsonify({"error": "Invalid job_id format"}), 400
 
-    allowed_model_types = {"alphafold2", "openfold3", "boltz2"}
+    allowed_model_types = {"alphafold2", "alphafold3", "openfold3", "boltz2"}
     if model_type not in allowed_model_types:
         return jsonify(
             {
@@ -743,21 +809,50 @@ def trigger_analysis():
             f"/projects/{PROJECT_ID}/locations/{REGION}/pipelineJobs/{safe_job_id}"
         )
         pj_resp = authed.get(pj_url, timeout=15)
-        pj_resp.raise_for_status()
-        pj = pj_resp.json()
-
-        gcs_output_dir = (
-            pj.get("runtimeConfig", {}).get("gcsOutputDirectory", "").rstrip("/") + "/"
-        )
-        if not gcs_output_dir or gcs_output_dir == "/":
-            return jsonify(
-                {"error": "Could not determine gcs_output_directory for job"}
-            ), 400
+        if pj_resp.status_code == 404 and model_type == "alphafold3":
+            pj = {"displayName": str(job_id)}
+            gcs_output_dir = f"gs://{BUCKET_NAME}/af3_predictions/{job_id}/"
+        else:
+            pj_resp.raise_for_status()
+            pj = pj_resp.json()
+            gcs_output_dir = (
+                pj.get("runtimeConfig", {}).get("gcsOutputDirectory", "").rstrip("/")
+                + "/"
+            )
+            if not gcs_output_dir or gcs_output_dir == "/":
+                return jsonify(
+                    {"error": "Could not determine gcs_output_directory for job"}
+                ), 400
 
         analysis_path = f"{gcs_output_dir}analysis/"
+        af3_extra_cfg: dict = {}
 
         # Discover predictions based on model type
-        if model_type == "openfold3":
+        if model_type == "alphafold3":
+            param_vals = pj.get("runtimeConfig", {}).get("parameterValues", {}) or {}
+            labels = pj.get("labels", {}) or {}
+            af3_job_name = (
+                param_vals.get("job_name")
+                or labels.get("query_name")
+                or pj.get("displayName")
+                or str(job_id)
+            )
+            af3_prefix = f"af3_predictions/{af3_job_name}"
+            analysis_path = f"gs://{BUCKET_NAME}/{af3_prefix}/analysis/"
+            raw_predictions = _discover_af3_predictions(af3_prefix)
+            af3_extra_cfg = {
+                "job_id": af3_job_name,
+                "pipeline_job_id": str(job_id),
+                "project_id": PROJECT_ID,
+                "region": REGION,
+                "bucket_name": BUCKET_NAME,
+                "job_prefix": af3_prefix,
+                "pipeline_root_prefix": gcs_output_dir.replace(
+                    f"gs://{BUCKET_NAME}/", ""
+                ).strip("/"),
+                "model_type": "alphafold3",
+            }
+        elif model_type == "openfold3":
             raw_predictions = _discover_of3_predictions(gcs_output_dir)
         elif model_type == "boltz2":
             raw_predictions = _discover_boltz2_predictions(gcs_output_dir)
@@ -777,6 +872,18 @@ def trigger_analysis():
                     "uri": p["uri"],
                     "model_name": p["model_name"],
                     "ranking_confidence": p["ranking_confidence"],
+                    "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
+                }
+                for i, p in enumerate(raw_predictions)
+            ]
+        elif model_type == "alphafold3":
+            predictions_cfg = [
+                {
+                    "index": i,
+                    "sample_name": p["sample_name"],
+                    "cif_uri": p["cif_uri"],
+                    "summary_uri": p["summary_uri"],
+                    "confidences_uri": p.get("confidences_uri"),
                     "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
                 }
                 for i, p in enumerate(raw_predictions)
@@ -812,6 +919,7 @@ def trigger_analysis():
             "analysis_path": analysis_path,
             "task_config_uri": f"{analysis_path}task_config.json",
             "predictions": predictions_cfg,
+            **af3_extra_cfg,
         }
 
         # Write task_config.json to GCS before triggering the job (tasks read it on startup)

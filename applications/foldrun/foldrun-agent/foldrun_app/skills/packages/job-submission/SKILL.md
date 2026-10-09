@@ -324,17 +324,28 @@ OF3 writes outputs to a nested directory structure:
 
 ## AlphaFold 3 (AF3) — 4-Stage KFP Pipeline + Managed H100 Endpoint (`Full 630 GB MSA` & `--msa-free` Modes)
 
-AlphaFold 3 predicts all-atom 3D structures across proteins, multimers, nucleic acids (DNA/RNA), small-molecule ligands (CCD codes or SMILES), and metal ions (`MG`, `ZN`, `CA`, `FE`). Every AF3 prediction (`submit_af3_endpoint_prediction` for single targets, `submit_af3_batch_predictions` for 2+ targets) runs as an **asynchronous 4-stage Vertex AI `PipelineJob`** (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`):
+AlphaFold 3 predicts all-atom 3D structures across proteins, multimers, nucleic acids (DNA/RNA), small-molecule ligands (CCD codes or SMILES), and metal ions (`MG`, `ZN`, `CA`, `FE`). Every AF3 prediction (`submit_af3_endpoint_prediction` for single targets, `submit_af3_batch_predictions` for 2+ targets) runs as an **asynchronous 4-stage Gemini platform `PipelineJob`** (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`):
 
-1. **`1. Provision & Queue AF3 Endpoint`**: Verifies the AF3 Endpoint has an active GPU deployment (auto-initiating deployment if idle-drained to 0 replicas) and waits in a FIFO GCS slot queue (`_slot_0 .. _slot_{R-1}`) until a warm H100 replica is available.
-2. **`2. Run AF3 Inference (H100 Endpoint)`**: Calls `endpoint.predict()` on the warm `a3-highgpu-1g` (NVIDIA H100 80GB + 3 TB local NVMe SSD) replica while heartbeating the slot lease, handles long-running HTTP proxy disconnects (>8 min on >1,000-aa proteins) by polling `output_dir` in GCS, and **immediately releases the replica slot in `finally:`** the instant inference finishes so the next queued job starts with zero delay.
-3. **`3. Report AF3 Endpoint Available`**: Verifies replica slot release, records live queue depth in `_activity.json`, and arms the 20-minute `alphafold3-idle-drain-*` watchdog once the queue drains (reverting endpoint cost to `$0.00/hr` after 20 minutes of inactivity).
-4. **`4. Process AF3 Results & Expert Analysis`**: Runs on CPU off the GPU critical path — harvests Cloud Logging container execution logs (`execution.log`), enumerates and ranks all generated `seed-*_sample-*` structures (`5` for monomers, `25` for 5-seed complexes), renders per-rank `plddt_plot_{i}.png` and `pae_plot_{i}.png`, runs `gemini-4-argon` multimodal Expert Analysis (`status: "success"`), and writes `analysis/summary.json`.
+1. **`1. Provision & Queue AF3 Endpoint`**: Verifies the Terraform-managed AF3 endpoint has a deployed model (waiting for an in-progress deployment if one is active; otherwise failing fast with guidance to re-run the infrastructure step) and waits in a FIFO GCS slot queue (`_slot_0 .. _slot_<R-1>`) until an H100 replica is available.
+2. **`2. Run AF3 Inference (H100 Endpoint)`**: Calls `endpoint.predict()` on the `a3-highgpu-1g` (NVIDIA H100 80GB + 3 TB local NVMe SSD) replica with `output_dir` so all 5/25 `seed-*_sample-*` structures are written directly to GCS, retries while the endpoint scales up from zero, handles long-running HTTP proxy disconnects (>8 min on >1,000-aa proteins) by polling `output_dir` in GCS, and **immediately releases the replica slot in `finally:`** so the next queued job starts with zero delay.
+3. **`3. Report AF3 Endpoint Available`**: Verifies replica slot release and records live queue depth in `_activity.json`. The endpoint's scale-to-zero policy scales replicas down to `0` (`$0.00/hr`) after 20 minutes of inactivity.
+4. **`4. Process AF3 Results & Expert Analysis`**: Harvests Cloud Logging container execution logs (`execution.log`), discovers all generated `seed-*_sample-*` structures (`5` for monomers, `25` for 5-seed complexes), writes `task_config.json`, **dispatches the parallel `foldrun-analysis-job` Cloud Run Job (`taskCount = 5` or `25`) to compute per-sample pLDDT/PAE/ipTM plots in parallel and consolidate `analysis/summary.json` with `gemini-4-argon` Expert Analysis, and completes the KFP pipeline immediately without waiting**.
 
 ### AF3 Seeds vs Diffusion Samples (5 for Monomers, 25 for Multimers/Complexes)
-Like OpenFold 3 and Boltz-2, AlphaFold 3 generates `num_diffusion_samples` (default `5`) denoising trajectories per seed in `modelSeeds`, and bulk-uploads all `seed-{S}_sample-{0..4}` subdirectories to GCS:
+Like OpenFold 3 and Boltz-2, AlphaFold 3 generates `num_diffusion_samples` (default `5`) denoising trajectories per seed in `modelSeeds`, and bulk-uploads all `seed-<S>_sample-<0..4>` subdirectories to GCS:
 - **Monomers (`1 chain`) & `--msa-free` Fast Screening**: Default `modelSeeds: [1]` × `num_diffusion_samples: 5` = **5 structures** (`seed_1_sample_0` … `seed_1_sample_4`).
-- **Multimers & Multi-Entity Complexes (`2+ chains`, protein-ligand, protein-RNA, protein-DNA in Full-MSA mode)**: Default `modelSeeds: [1, 2, 3, 4, 5]` × `num_diffusion_samples: 5` = **25 structures** (`seed_1_sample_0` … `seed_5_sample_4`), matching AlphaFold 2 Multimer (25 structures) and the AlphaFold 3 Nature paper benchmark protocol. Because all 5 seeds are passed in a single `input.json`, the H100 container runs the Jackhmmer/nhmmer MSA search **only once** and reuses the compiled JAX trunk across all 5 seeds.
+- **Multimers & Multi-Entity Complexes (`2+ chains`, protein-ligand, protein-RNA, protein-DNA in Full-MSA mode)**: Default (when `modelSeeds` is omitted) `modelSeeds: [1, 2, 3, 4, 5]` × `num_diffusion_samples: 5` = **25 structures** (`seed_1_sample_0` … `seed_5_sample_4`), matching AlphaFold 2 Multimer (25 structures) and the AlphaFold 3 Nature paper benchmark protocol. Because all 5 seeds are passed in a single `input.json`, the H100 container runs the Jackhmmer/nhmmer MSA search **only once** and reuses the compiled JAX trunk across all 5 seeds.
+
+### Rule: Diffusion Ensemble Verification
+When preparing an AlphaFold 3 submission:
+- If a monomer input specifies < 5 seeds/samples, or a multimer/complex specifies < 25 seeds/samples:
+  - DO NOT silently overwrite the configuration.
+  - ALWAYS highlight this in the pre-submission plan and ask:
+    > "⚠️ **Ensemble Advisory**: Your input specifies `<N>` seed(s) (`<N>` structure). The standard best practice (DeepMind AF3 paper) is 5 seeds for monomers and 25 for multimers to properly sample conformational diversity and alternative interface poses.
+    >
+    > Would you like to:
+    > (A) Keep `<N>` seed(s) for a rapid, lower-cost screen, or
+    > (B) Upgrade to `<5 or 25>` seeds for the gold-standard ensemble?"
 
 ### AF3 Input Formats (`dialect: "alphafold3"`)
 `submit_af3_endpoint_prediction` and `submit_af3_batch_predictions` accept raw FASTA (auto-converted for monomers, multimers, RNA, and DNA) or native AlphaFold 3 JSON (`dialect: "alphafold3"`, `version: 1`) for complexes with ligands, SMILES inhibitors, metal ions, or dsDNA:
@@ -370,15 +381,22 @@ Before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions
 
 | KFP Pipeline Stage | Resource | Provisioning / Machine | Estimated Runtime |
 |:---|:---|:---|:---|
-| **1. Provision & Queue AF3 Endpoint** | Vertex AI PipelineJob (`e2-standard-4`) | Checks endpoint health (auto-deploys if dormant) + FIFO GCS replica slot queue | Instant if warm & free; queues automatically in batch |
-| **2. Run AF3 Inference (H100)** | Managed Vertex AI Endpoint (`a3-highgpu-1g`) | Dedicated NVIDIA H100 80GB + 3 TB NVMe SSD (630 GB MSA bundle, ~$11.06/hr) | ~58s (`--msa-free`), ~3–6m (<350 aa Full MSA), ~15–20m (>1,000 aa) |
-| **3. Report Endpoint Available** | Vertex AI PipelineJob (`e2-standard-4`) | Releases replica slot immediately for next queued job + arms 20m idle auto-undeploy | <5 sec |
-| **4. Process Results & Expert Analysis** | Vertex AI PipelineJob (`e2-standard-4`) + Gemini 3.1 Pro | Off-GPU log harvest, pLDDT/PAE plots, multimodal Gemini 3.1 Pro Expert Analysis | ~35–50 sec (runs while H100 is already serving next job) |
+| **1. Provision & Queue AF3 Endpoint** | KFP PipelineJob (`e2-standard-4`) | Checks the endpoint has a deployed model + FIFO GCS replica slot queue | Instant if warm & free; queues automatically in batch |
+| **2. Run AF3 Inference (H100)** | Dedicated endpoint (`a3-highgpu-1g`) | NVIDIA H100 80GB + 3 TB NVMe SSD (630 GB MSA bundle); scales up from zero on demand | ~58s (`--msa-free`), ~3–6m (<350 aa Full MSA), ~15–20m (>1,000 aa), plus scale-up time if idle |
+| **3. Report Endpoint Available** | KFP PipelineJob (`e2-standard-4`) | Releases replica slot immediately for next queued job; endpoint scales to zero after 20m idle | <5 sec |
+| **4. Process Results & Expert Analysis** | KFP PipelineJob (`e2-standard-4`) → `foldrun-analysis-job` Cloud Run Job | Harvests logs, dispatches parallel `foldrun-analysis-job` (`taskCount=5` or `25`) + Gemini Expert Analysis, and completes KFP immediately | <10s in KFP; ~30–45s parallel Cloud Run Job |
 
 > **Hardware Constraints, Backlog Scaling & Operational Rules:**
-> - Runs against the managed Vertex AI Online Prediction Endpoint (`AF3_ENDPOINT`). Check status first with `check_af3_endpoint`.
-> - **Maximize 1 Replica First, Scale Replicas on the Same Endpoint for Backlogs >30 min**:
->   - Because a warm H100 replica takes ~58s (`--msa-free`) or ~3–6m (standard Full-MSA) per structure whereas cold-starting an additional H100 replica with the 630 GB MSA bundle takes ~10–12 minutes, **keep `min_replica_count=1` for backlogs of <=25 `--msa-free` jobs or <=5 Full-MSA jobs**.
->   - If the user wants to run a larger batch (>30 min estimated queue), recommend scaling replicas in-place on the **same** endpoint via `deploy_af3_endpoint(min_replica_count=N, max_replica_count=N)` (e.g., `2–4` replicas) rather than creating a second endpoint. The 20-minute idle auto-drain watchdog automatically undeploys the endpoint back to `$0.00/hr` after the batch finishes.
+> - Runs against the Terraform-managed AF3 endpoint (`AF3_ENDPOINT`). Check status first with `check_af3_endpoint`. If no model is deployed, tell the user to re-run `./deploy-all.sh <PROJECT_ID> <REGION> --steps infra --enable-af3`.
+> - A warm H100 replica takes ~58s (`--msa-free`) or ~4.5m (Full-MSA) per structure. For backlogs estimated above ~30 minutes, advise increasing `af3_max_replica_count` in Terraform and re-running the infrastructure step.
+
+### Rule: Automatic Batch Duration & Scaling Prompt
+Upon submitting a batch of N jobs:
+- If Full MSA mode: estimate queue time as `N × 4.5 minutes / active_replicas`.
+- If estimated queue time > 30 minutes and `active_replicas == 1`:
+  - Include: "Estimated queue drain time is ~`<M>` min on 1 replica. To parallelize, increase `af3_max_replica_count` in Terraform and re-run the infrastructure step."
+
+### Rule: Endpoint Readiness
+- **Best Practice Recommendation**: After a fresh infrastructure deploy, advise the user to wait until `check_af3_endpoint` shows `READY` before submitting a large 25-seed pipeline job.
 
 Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`.
