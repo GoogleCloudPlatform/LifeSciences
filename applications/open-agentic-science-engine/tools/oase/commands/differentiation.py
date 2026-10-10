@@ -69,6 +69,7 @@ from ..common import (
 from ..core import provenance
 from ..core.errors import ArtifactError, SchemaError
 from ..core.output import warn
+from .patent import capped_counts, coverage_relays
 
 TOOL = "oase.differentiation"
 ARTIFACT_CLASS = "ip"
@@ -89,6 +90,13 @@ COVERAGE_DISCLAIMER_TEMPLATE = (
     "Search scope: {scope}. "
     "Coverage limits: {limits}. "
     "This search should not be treated as exhaustive."
+)
+
+DEFAULT_COVERAGE_LIMITS = (
+    "Non-English filings may be underrepresented; "
+    "unpublished applications (within 18-month window) are not visible; "
+    "patent databases other than Google Patents were not queried; "
+    "this search is not exhaustive"
 )
 
 # ---------------------------------------------------------------------------
@@ -438,12 +446,7 @@ def assess_competitive_differentiation(
 
     scope = search_scope or (f"Google Patents public search for {query_term!r}")
 
-    limits = coverage_limits or (
-        "Non-English filings may be underrepresented; "
-        "unpublished applications (within 18-month window) are not visible; "
-        "patent databases other than Google Patents were not queried; "
-        "this search is not exhaustive"
-    )
+    limits = coverage_limits or DEFAULT_COVERAGE_LIMITS
 
     competitor = _assess_competitor_activity(
         patents,
@@ -816,6 +819,20 @@ def assess_cmd(
 
     patents = artifact.get("patents", [])
 
+    # Every dimension below is computed over what the search retained, so a
+    # capped or faulted set qualifies all three. The cap is also the largest
+    # coverage limit when it applies, so it leads the stated limits.
+    summary = artifact.get("summary") or {}
+    retained_relays = coverage_relays(summary)
+    coverage_limits = None
+    capped = capped_counts(summary)
+    if capped:
+        n_retained, total = capped
+        coverage_limits = (
+            f"only the first {n_retained} of {total} results, in relevance "
+            f"order, were retained and assessed; {DEFAULT_COVERAGE_LIMITS}"
+        )
+
     # ------------------------------------------------------------------
     # Source-transparency: detect unconsumed trial artifacts (#98)
     # ------------------------------------------------------------------
@@ -842,6 +859,7 @@ def assess_cmd(
         indication=indication,
         entity=entity,
         charter_constraints=list(charter_constraints),
+        coverage_limits=coverage_limits,
     )
 
     # Inject source-transparency metadata into the result.
@@ -849,7 +867,7 @@ def assess_cmd(
     result["sources_available_but_unused"] = unconsumed_trial_tags
 
     # Build relays.
-    relays: list[dict[str, str]] = []
+    relays: list[dict[str, str]] = list(retained_relays)
     fto = result["dimensions"]["freedom_to_operate"]
     if fto["risk_level"] in ("moderate_risk", "high_risk"):
         relays.append(

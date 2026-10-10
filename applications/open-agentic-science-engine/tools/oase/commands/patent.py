@@ -70,6 +70,12 @@ ARTIFACT_CLASS = "ip"
 _MAX_PAGES = 3
 # Maximum patents to retain across all pages.
 _MAX_PATENTS = 300
+# Results per page.  Without ``num`` the endpoint returns 10 per page, so
+# three pages held at most 30 results and the _MAX_PATENTS cap could never
+# be reached.  ``num=100`` returns 100 per page with consecutive pages
+# disjoint (measured 2026-10-10), which makes _MAX_PAGES * _PAGE_SIZE the
+# cap it was meant to be.
+_PAGE_SIZE = 100
 
 
 def _fetch_google_patents(query: str) -> tuple[bytes, dict[str, Any]]:
@@ -80,22 +86,26 @@ def _fetch_google_patents(query: str) -> tuple[bytes, dict[str, Any]]:
     unavailable without notice.  Rate limiting is aggressive (~5 requests
     before HTTP 503).
 
-    Handles pagination up to ``_MAX_PAGES`` pages, capped at
-    ``_MAX_PATENTS`` total patents.
+    Handles pagination up to ``_MAX_PAGES`` pages of ``_PAGE_SIZE``
+    results, capped at ``_MAX_PATENTS`` total patents.  A 503 on a later
+    page keeps the pages already fetched and is recorded in
+    ``summary.fetch_faults``: a set cut short by a refused page has not
+    reached the end of the results, and must not read as if it had.
 
     Returns (verbatim response bytes, structured artifact dict).
     """
     all_patents: list[dict[str, Any]] = []
     raw_pages: list[bytes] = []
     total_results: int = 0
+    fetch_faults: list[dict[str, Any]] = []
 
     for page in range(_MAX_PAGES):
-        # Build the URL — page parameter is embedded in the url= value.
+        # Build the URL — num and page are embedded in the url= value.
         encoded_query = quote(query, safe="")
-        if page == 0:
-            url = f"{GOOGLE_PATENTS_API}?url=q%3D{encoded_query}&exp="
-        else:
-            url = f"{GOOGLE_PATENTS_API}?url=q%3D{encoded_query}%26page%3D{page}&exp="
+        url = f"{GOOGLE_PATENTS_API}?url=q%3D{encoded_query}%26num%3D{_PAGE_SIZE}"
+        if page > 0:
+            url += f"%26page%3D{page}"
+        url += "&exp="
 
         response = http.request(
             "GET",
@@ -116,7 +126,10 @@ def _fetch_google_patents(query: str) -> tuple[bytes, dict[str, Any]]:
                         "rate-limited (~5 requests before 503)"
                     ),
                 )
-            # Got some results before hitting the limit — use what we have.
+            # Got some results before hitting the limit — keep them, and
+            # record the refused page so the shortfall is not read as the
+            # end of the result set.
+            fetch_faults.append({"page": page, "status": 503})
             break
 
         raw_pages.append(response.content)
@@ -205,11 +218,68 @@ def _fetch_google_patents(query: str) -> tuple[bytes, dict[str, Any]]:
             "by_assignee": top_assignees,
             "by_year": dict(sorted(year_counts.items())),
             "date_range": date_range,
+            "fetch_faults": fetch_faults,
         },
         "patents": all_patents,
     }
 
     return raw, artifact
+
+
+def capped_counts(summary: dict[str, Any]) -> tuple[int, int] | None:
+    """``(retained, total)`` when fewer results were kept than matched, else None."""
+    n_patents = int(summary.get("n_patents") or 0)
+    try:
+        total = int(summary.get("total_results") or 0)
+    except (TypeError, ValueError):
+        return None
+    return (n_patents, total) if total > n_patents else None
+
+
+def coverage_relays(summary: dict[str, Any]) -> list[dict[str, str]]:
+    """Relays for a retained set that is not the whole of what the query matched.
+
+    Derived from the artifact's own summary rather than the sidecar, so
+    ``search``, ``analyze`` and ``differentiation assess`` reach the same
+    answer, offline, and so an artifact written before these codes existed
+    still gets the cap relay (it carries no ``fetch_faults``, so it cannot
+    get the fault relay).
+
+    Both are defect-triggered qualifiers: they fire on a fault in what was
+    retained and are silent on a set that reached the end of the results.
+    """
+    relays: list[dict[str, str]] = []
+
+    n_patents = int(summary.get("n_patents") or 0)
+    capped = capped_counts(summary)
+    if capped:
+        _, total = capped
+        relays.append(
+            provenance.relay(
+                "patent.result_set_capped",
+                f"Retained {n_patents} of {total} results, in the source's "
+                "relevance order. Counts derived from this set (recent "
+                "filings, density, top assignees) describe the first "
+                f"{n_patents} results, not the query: report them as at "
+                f"least N among the top {n_patents}, and do not read a quiet "
+                "or empty retained set as an absence of filings.",
+            )
+        )
+
+    faults = summary.get("fetch_faults") or []
+    if faults:
+        pages = ", ".join(str(f.get("page")) for f in faults)
+        relays.append(
+            provenance.relay(
+                "patent.fetch_fault",
+                f"Search page(s) {pages} failed after earlier pages "
+                f"succeeded; the {n_patents} retained results end where the "
+                "failure happened, not where the results did. State that the "
+                "set is incomplete because a request failed.",
+            )
+        )
+
+    return relays
 
 
 def _extract_patent(patent_data: dict[str, Any]) -> dict[str, Any]:
@@ -287,12 +357,10 @@ def search_cmd(
     sidecar.note("n_patents", artifact["summary"]["n_patents"])
     sidecar.note("total_results", artifact["summary"]["total_results"])
 
-    if artifact["summary"]["n_patents"] >= _MAX_PATENTS:
-        sidecar.warn(
-            f"Results capped at {_MAX_PATENTS} patents; the total result set "
-            f"contains {artifact['summary']['total_results']} patents. "
-            "Refine the query for a more focused search."
-        )
+    sidecar.note("fetch_faults", artifact["summary"]["fetch_faults"])
+
+    for record in coverage_relays(artifact["summary"]):
+        sidecar.warn(record["message"], code=record["code"])
 
     sidecar.warn(
         "Google Patents XHR is an undocumented endpoint. Results should "
@@ -361,7 +429,9 @@ def analyze_cmd(
 
     patents = artifact.get("patents", [])
 
-    relays: list[dict[str, str]] = []
+    # Carried forward from what the search retained: every count below is
+    # taken over that set, so a capped or faulted set qualifies all of them.
+    relays: list[dict[str, str]] = coverage_relays(artifact.get("summary") or {})
 
     def add_relay(code: str, message: str) -> None:
         if not any(r["code"] == code for r in relays):
