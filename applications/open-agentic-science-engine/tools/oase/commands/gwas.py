@@ -75,7 +75,8 @@ ARTIFACT_CLASS = "genomics"  # co-locate with gnomAD data in raw/genomics/
 
 OPENTARGETS_API = "https://api.platform.opentargets.org/api/v4/graphql"
 
-GWAS_CATALOG_API = "https://www.ebi.ac.uk/gwas/rest/api"
+GWAS_CATALOG_API = "https://www.ebi.ac.uk/gwas/rest/api/v2"
+GWAS_CATALOG_PAGE_SIZE = 500
 
 # NCBI E-utilities for ClinVar.  When NCBI_API_KEY is set,
 # api_key_suffix() appends it and qps_for_host returns 10 req/s;
@@ -387,92 +388,106 @@ def _fetch_gwas_catalog(symbol: str) -> tuple[bytes, dict[str, Any]]:
 
     Returns (verbatim response bytes, structured artifact dict).
 
-    NOTE (2026-09-07, issue #47): The ``associations/search/findByGene``
-    endpoint was removed from the GWAS Catalog REST API. The API base URL
-    still responds, and ``singleNucleotidePolymorphisms/search/findByGene``
-    still works, but there is no direct association-by-gene endpoint.
-    Reconstructing association data from per-SNP lookups would require
-    paginating all SNPs for a gene and issuing a separate request per SNP,
-    which is infeasible at scale. This function now detects the 404 and
-    raises a clear ``Refusal`` so callers know the source is unavailable.
+    V2 filters the associations resource directly. ``extended_geneset=true``
+    intentionally preserves the broader gene annotations used by API v1.
+    All pages are followed; multi-page responses are stored in the same
+    raw-page envelope used by other paginated DDE fetchers.
     """
-    url = (
-        f"{GWAS_CATALOG_API}/associations/search/findByGene"
-        f"?geneName={quote(symbol.upper(), safe='')}"
+    page_url: str | None = (
+        f"{GWAS_CATALOG_API}/associations"
+        f"?mapped_gene={quote(symbol.upper(), safe='')}"
+        f"&extended_geneset=true&page=0&size={GWAS_CATALOG_PAGE_SIZE}"
     )
-    response = http.request(
-        "GET",
-        url,
-        qps=qps_for_host("www.ebi.ac.uk"),
-        timeout=60.0,
-        headers={"Accept": "application/json"},
-        tolerate_status=(404,),
-    )
+    raw_pages: list[bytes] = []
+    raw_assocs: list[dict[str, Any]] = []
+    visited_urls: set[str] = set()
 
-    if response.status_code == 404:
-        raise Refusal(
-            f"GWAS Catalog association-by-gene endpoint returned HTTP 404 "
-            f"for {symbol.upper()!r}",
-            detail=(
-                f"the endpoint {GWAS_CATALOG_API}/associations/search/"
-                f"findByGene has been removed from the EBI GWAS Catalog "
-                f"REST API (confirmed 2026-09-07)"
-            ),
-            remedy=(
-                "use --source opentargets or --source clinvar instead; "
-                "the GWAS Catalog gwas-catalog source is currently "
-                "unavailable until the API is updated or a replacement "
-                "endpoint is integrated"
-            ),
+    while page_url:
+        if page_url in visited_urls:
+            raise SchemaError(
+                "GWAS Catalog pagination returned a repeated next link",
+                detail=page_url,
+            )
+        visited_urls.add(page_url)
+
+        response = http.request(
+            "GET",
+            page_url,
+            qps=qps_for_host("www.ebi.ac.uk"),
+            timeout=60.0,
+            headers={"Accept": "application/json"},
         )
+        raw_pages.append(response.content)
+        try:
+            payload = json.loads(response.content.decode("utf-8"))
+        except Exception as exc:
+            raise SchemaError(
+                "GWAS Catalog did not return JSON", detail=str(exc)
+            ) from exc
 
-    raw = response.content
-    try:
-        payload = json.loads(raw.decode("utf-8"))
-    except Exception as exc:
-        raise SchemaError("GWAS Catalog did not return JSON", detail=str(exc)) from exc
+        embedded = payload.get("_embedded") or {}
+        page_assocs = embedded.get("associations") or []
+        if not isinstance(page_assocs, list):
+            raise SchemaError(
+                "GWAS Catalog associations response is not a list",
+                detail=f"got {type(page_assocs).__name__}",
+            )
+        raw_assocs.extend(page_assocs)
 
-    # Navigate the HAL-style _embedded response.
-    embedded = payload.get("_embedded", {})
-    raw_assocs = embedded.get("associations", [])
+        next_link = ((payload.get("_links") or {}).get("next") or {}).get("href")
+        page_url = next_link if isinstance(next_link, str) and next_link else None
+
+    if len(raw_pages) == 1:
+        raw = raw_pages[0]
+    else:
+        raw = json.dumps(
+            {
+                "pages": [json.loads(page.decode("utf-8")) for page in raw_pages],
+                "total_pages": len(raw_pages),
+            },
+            indent=2,
+        ).encode("utf-8")
 
     associations = []
     for assoc in raw_assocs:
         # Extract trait names from the nested structure.
         traits = []
-        for ea_trait in assoc.get("efoTraits", []):
-            trait_name = ea_trait.get("trait")
+        trait_ids = []
+        for ea_trait in assoc.get("efo_traits", []):
+            trait_name = ea_trait.get("efo_trait")
             if trait_name:
                 traits.append(trait_name)
+            trait_id = ea_trait.get("efo_id")
+            if trait_id:
+                trait_ids.append(trait_id)
         disease_name = "; ".join(traits) if traits else "Unknown trait"
 
         # Extract p-value.
-        p_mantissa = assoc.get("pvalueMantissa")
-        p_exponent = assoc.get("pvalueExponent")
-        p_value = None
-        if p_mantissa is not None and p_exponent is not None:
-            p_value = p_mantissa * (10**p_exponent)
+        p_value = assoc.get("p_value")
+        if p_value is None:
+            p_mantissa = assoc.get("pvalue_mantissa")
+            p_exponent = assoc.get("pvalue_exponent")
+            if p_mantissa is not None and p_exponent is not None:
+                p_value = p_mantissa * (10**p_exponent)
 
         # Extract OR/beta.
-        or_value = assoc.get("orPerCopyNum")
-        beta = assoc.get("betaNum")
+        or_value = assoc.get("or_per_copy_num")
+        beta = assoc.get("beta_num")
+        beta_text = assoc.get("beta")
 
         # Extract rsIDs from SNPs.
         rs_ids = []
-        for snp in assoc.get("snps", []):
-            rs_id = snp.get("rsId")
+        for snp in assoc.get("snp_allele", []):
+            rs_id = snp.get("rs_id")
             if rs_id:
                 rs_ids.append(rs_id)
 
-        # Study accession from _links if available.
-        study_link = (assoc.get("_links") or {}).get("study", {})
-        study_href = study_link.get("href", "")
-        study_accession = study_href.rstrip("/").split("/")[-1] if study_href else None
+        study_accession = assoc.get("accession_id")
 
         associations.append(
             {
                 "source_db": "gwas-catalog",
-                "disease_id": "",
+                "disease_id": "; ".join(trait_ids),
                 "disease_name": disease_name,
                 # NB: score is p-value here (lower = more significant), unlike
                 # Open Targets where score is 0-1 (higher = stronger association).
@@ -482,6 +497,7 @@ def _fetch_gwas_catalog(symbol: str) -> tuple[bytes, dict[str, Any]]:
                 "p_value": p_value,
                 "or_per_copy": or_value,
                 "beta": beta,
+                "beta_text": beta_text,
                 "study_accession": study_accession,
             }
         )
