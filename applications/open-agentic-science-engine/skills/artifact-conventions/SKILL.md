@@ -1,6 +1,6 @@
 ---
 name: artifact-conventions
-description: Standard report format, headings, and linking conventions for all dde project artifacts.
+description: Standard report format, headings, and linking conventions for all OASE project artifacts.
 ---
 
 # Artifact Conventions
