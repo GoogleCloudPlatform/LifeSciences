@@ -180,7 +180,7 @@ When that happens, edit `.env` — you should never need to touch a script.
 
 | Variable | Default | Used for |
 | --- | --- | --- |
-| `VIDEO_CLIPPER_MODEL` | `gemini-3.1-pro-preview` | Watching raw footage, deciding what to keep |
+| `VIDEO_CLIPPER_MODEL` | `gemini-4-argon` | Watching raw footage, deciding what to keep |
 | `VIDEO_VISION_MODEL` | `gemini-3.8-flash` | Timing narration to on-screen action |
 | `VIDEO_TTS_MODEL` | `gemini-3.1-flash-tts-preview` | Speech (24 kHz mono PCM) |
 | `VIDEO_SEARCH_MODEL` | `gemini-3.5-flash-lite` | Cheap video Q&A |

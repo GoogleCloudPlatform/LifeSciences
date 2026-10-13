@@ -192,7 +192,7 @@ class TestArtifactDownloadEndpoints(unittest.TestCase):
             ],
             "expert_analysis": {
                 "status": "success",
-                "model": "gemini-3.1-pro-preview",
+                "model": "gemini-4-argon",
                 "analysis": "High confidence prediction.",
             },
         }

@@ -11,7 +11,7 @@ FoldRun Agent is a modular, stateful conversational agent for biomolecular struc
 - Submit structure predictions across **AlphaFold 2** (monomers/multimers), **AlphaFold 3** (all-atom proteins, multimers, dsDNA, RNA, CCD ligands, SMILES inhibitors, and metal ions via a 4-stage KFP pipeline + managed H100 endpoint), **OpenFold 3**, and **Boltz-2**
 - Coordinate replica-aware FIFO queueing and automatic 20-minute idle shutdown (`$0.00/hr` when idle) on the AlphaFold 3 H100 endpoint
 - Monitor job progress across all 4 stages in Vertex AI Pipelines
-- Run parallel structural analysis and multimodal **Gemini 3.1 Pro** (`gemini-3.1-pro-preview`) Expert Analysis
+- Run parallel structural analysis and multimodal **Gemini 4 Argon** (`gemini-4-argon`) Expert Analysis
 - Visualize results in the interactive 3D viewer and generate 60-minute V4 Signed URLs for complete job artifact bundles (`artifacts_bundle.zip`)
 - Query the AlphaFold Database for existing structures
 - Estimate and track compute costs
@@ -31,9 +31,9 @@ Built with **Google ADK** using **native Skills** — all skills run directly wi
 ## Features
 
 - **4-Model Plugin Architecture**: AF2 (`L4`/`A100`), AF3 (`H100_80GB` with auto-fallback to `A100_80GB`/`A100`/`L4` and GCE reservation auto-detection), OF3 (`A100`), and Boltz-2 (`A100`)
-- **4-Stage AF3 KFP Pipeline**: Every AF3 prediction runs as an observable 4-stage KFP `PipelineJob` (*1. Provision & Queue AF3 Endpoint $\rightarrow$ 2. Run AF3 Inference (H100) $\rightarrow$ 3. Report AF3 Endpoint Available $\rightarrow$ 4. Process AF3 Results & Expert Analysis*) so the H100 replica is freed immediately after inference while log harvesting, plotting, and Gemini 3.1 Pro analysis run on CPU
+- **4-Stage AF3 KFP Pipeline**: Every AF3 prediction runs as an observable 4-stage KFP `PipelineJob` (*1. Provision & Queue AF3 Endpoint $\rightarrow$ 2. Run AF3 Inference (H100) $\rightarrow$ 3. Report AF3 Endpoint Available $\rightarrow$ 4. Process AF3 Results & Expert Analysis*) so the H100 replica is freed immediately after inference while log harvesting, plotting, and Gemini 4 Argon analysis run on CPU
 - **Up to 36 Native Tools across 10 Skill Packages**: Dynamically loaded based on configured models
-- **Multimodal Expert Analysis**: `gemini-3.1-pro-preview` inspects per-residue pLDDT and PAE plots alongside chain-pair ipTM/PAE matrices to generate an 8-section structural biology report
+- **Multimodal Expert Analysis**: `gemini-4-argon` inspects per-residue pLDDT and PAE plots alongside chain-pair ipTM/PAE matrices to generate an 8-section structural biology report
 - **Interactive Viewer & Signed Downloads**: Combined 3D viewer with pLDDT confidence coloring, PAE/PDE/ipTM matrices, and V4 signed URLs (`download_job_artifacts`)
 
 ## Prerequisites
@@ -217,7 +217,7 @@ Tool count depends on which models are configured:
 |----------|-------------|
 | `ANALYSIS_JOB_NAME` | Cloud Run Job name (default: `foldrun-analysis-job`) |
 | `FOLDRUN_VIEWER_URL` | FoldRun viewer Cloud Run URL (shared by all 4 models) |
-| `GEMINI_ANALYSIS_MODEL` | Gemini model for expert analysis (default: `gemini-3.1-pro-preview`) |
+| `GEMINI_ANALYSIS_MODEL` | Gemini model for expert analysis (default: `gemini-4-argon`) |
 | `PIPELINES_SA_EMAIL` | Service account email for Agent Platform Pipeline submissions |
 
 ## GPU Requirements by Model

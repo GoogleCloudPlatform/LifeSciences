@@ -52,7 +52,7 @@ root_agent (LlmAgent, Gemini 3 Pro, conversational)
 1. A Google Cloud project with billing enabled
 2. A [Gemini Enterprise](https://cloud.google.com/products/gemini/enterprise) subscription (only needed for GE registration; local testing works without)
 3. [Agent Platform API](https://console.cloud.google.com/apis/library/aiplatform.googleapis.com) enabled
-4. Access to `gemini-3.1-pro-preview`, `gemini-3.8-flash`, and `gemini-3-pro-image` (all served from the `global` endpoint)
+4. Access to `gemini-4-argon`, `gemini-3.8-flash`, and `gemini-3-pro-image` (all served from the `global` endpoint)
 5. [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed
 6. Python 3.11+
 
@@ -77,7 +77,7 @@ GOOGLE_GENAI_USE_ENTERPRISE=1
 GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID
 GOOGLE_CLOUD_LOCATION=us-central1
 MODEL_LOCATION=global
-COORDINATOR_MODEL_NAME=gemini-3.1-pro-preview
+COORDINATOR_MODEL_NAME=gemini-4-argon
 WORKER_MODEL_NAME=gemini-3.8-flash
 IMAGE_MODEL_NAME=gemini-3-pro-image
 IMAGE_SIZE=2K            # 1K, 2K, or 4K
@@ -261,7 +261,7 @@ biocompass-on-gemini-enterprise/
 ## Troubleshooting
 
 - **`google.adk.skills` import error** — the SkillToolset feature requires ADK Python ≥ 1.25.0. Upgrade with `uv pip install --upgrade google-adk`.
-- **`gemini-3.1-pro-preview` 404 from a regional endpoint** — Gemini 3.x is only served from the `global` endpoint. The agent sets `GOOGLE_CLOUD_LOCATION=global` in process; if you override it in `.env` to a regional value, you'll get this error. Leave `MODEL_LOCATION=global` and use `GOOGLE_CLOUD_LOCATION=us-central1` only for Agent Engine deployment.
+- **`gemini-4-argon` 404 from a regional endpoint** — Gemini 4 / 3.x is only served from the `global` endpoint. The agent sets `GOOGLE_CLOUD_LOCATION=global` in process; if you override it in `.env` to a regional value, you'll get this error. Leave `MODEL_LOCATION=global` and use `GOOGLE_CLOUD_LOCATION=us-central1` only for Agent Engine deployment.
 - **Empty PubMed results on a known-good query** — NCBI rate-limits unauthenticated callers to 3 req/sec. Set `PUBMED_API_KEY` in `.env`.
 - **ClinicalTrials.gov returns no studies for a sponsor query** — the API is case-sensitive on sponsor names and requires the registered legal entity (e.g. "Pfizer" not "Pfizer Inc."). Try a free-text `query` first to find the canonical sponsor string.
 - **The deep-research pipeline finishes but the chat shows nothing** — usually a Gemini Enterprise rendering issue; check that the pipeline's `Finalize` agent is the LAST sub-agent in the SequentialAgent (anything emitting events after it will be the one GE displays).

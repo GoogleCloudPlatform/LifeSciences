@@ -287,7 +287,7 @@ IMPORTANT: Begin your response directly with the report. Do NOT include any prea
             except Exception as e:
                 logger.warning(f"Could not include PAE plot: {e}")
 
-        gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
+        gemini_model = os.getenv("GEMINI_MODEL", "gemini-4-argon")
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         location = os.getenv("GOOGLE_CLOUD_LOCATION")
 

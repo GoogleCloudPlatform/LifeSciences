@@ -55,7 +55,7 @@ class TestCreateAgent:
             assert agent.model == "gemini-3.8-flash"
 
     def test_create_agent_custom_model(self, mock_env_vars):
-        """Accepts gemini-3.1-pro-preview as a model."""
+        """Accepts gemini-4-argon as a model."""
         with (
             _mock_startup(),
             patch("google.cloud.aiplatform.init"),
@@ -63,8 +63,8 @@ class TestCreateAgent:
         ):
             from foldrun_app.agent import create_alphafold_agent
 
-            agent = create_alphafold_agent(model="gemini-3.1-pro-preview")
-            assert agent.model == "gemini-3.1-pro-preview"
+            agent = create_alphafold_agent(model="gemini-4-argon")
+            assert agent.model == "gemini-4-argon"
 
     def test_create_agent_invalid_model(self, mock_env_vars):
         """Invalid model raises ValueError."""

@@ -227,9 +227,7 @@ class AF2JobAnalysisTool(AF2Tool):
                                 run_v2.EnvVar(name="MODEL_TYPE", value="alphafold2"),
                                 run_v2.EnvVar(
                                     name="GEMINI_MODEL",
-                                    value=os.getenv(
-                                        "GEMINI_ANALYSIS_MODEL", "gemini-3.1-pro-preview"
-                                    ),
+                                    value=os.getenv("GEMINI_ANALYSIS_MODEL", "gemini-4-argon"),
                                 ),
                             ]
                         )

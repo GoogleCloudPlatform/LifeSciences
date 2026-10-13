@@ -21,7 +21,7 @@ requires-python = ">=3.10"
 dependencies = [
     # This is `google-genai`, NOT the retired `google-generativeai`. Support for
     # the latter has ended; if you see `import google.generativeai`, it's old.
-    "google-genai>=1.0.0",
+    "google-genai>=2.0.0",
     "python-dotenv>=1.0.0",
 ]
 

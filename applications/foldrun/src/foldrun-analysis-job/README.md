@@ -35,4 +35,4 @@ Deployed automatically via Cloud Build from the repository root. For standalone 
 | `REGION` | Location of Cloud Run Job | Yes | `us-central1` |
 | `ANALYSIS_PATH` | GCS location of analysis files | Yes | — |
 | `MODEL_TYPE` | Target model: `af2`, `boltz2`, `of3` | No | (Auto-detected) |
-| `GEMINI_MODEL` | Model tier used for expert insights | No | `gemini-3.1-pro-preview` |
+| `GEMINI_MODEL` | Model tier used for expert insights | No | `gemini-4-argon` |

@@ -156,7 +156,7 @@ class TestBuildAndUploadRunArchive:
                 "plddt_mean": 94.2,
             },
             "expert_analysis": {
-                "model": "gemini-3.1-pro-preview",
+                "model": "gemini-4-argon",
                 "analysis": "### Fold Quality\nHigh confidence alpha-helical bundle.",
             },
         }
@@ -230,7 +230,7 @@ class TestBuildAndUploadRunArchive:
             ],
             "expert_analysis": {
                 "status": "success",
-                "model": "gemini-3.1-pro-preview",
+                "model": "gemini-4-argon",
                 "analysis": "Well-folded monomer.",
             },
         }

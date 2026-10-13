@@ -84,11 +84,11 @@ from .sub_agents import (
 )
 from .tools.visualize_concept import visualize_concept
 
-# Gemini 3.x is only served from the `global` endpoint; Agent Engine itself
+# Gemini 4 / 3.x is only served from the `global` endpoint; Agent Engine itself
 # still deploys regionally (GOOGLE_CLOUD_LOCATION env var).
 os.environ["GOOGLE_CLOUD_LOCATION"] = os.getenv("MODEL_LOCATION", "global")
 
-_COORDINATOR_MODEL = os.getenv("COORDINATOR_MODEL_NAME", "gemini-3.1-pro-preview")
+_COORDINATOR_MODEL = os.getenv("COORDINATOR_MODEL_NAME", "gemini-4-argon")
 
 # ---------------------------------------------------------------------------
 # Skills — load all SKILL.md directories from skills/ and expose them as a

@@ -458,7 +458,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default=os.getenv("VIDEO_CLIPPER_MODEL", "gemini-3.1-pro-preview"),
+        default=os.getenv("VIDEO_CLIPPER_MODEL", "gemini-4-argon"),
         help="Gemini model to use",
     )
     parser.add_argument(

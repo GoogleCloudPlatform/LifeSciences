@@ -221,7 +221,7 @@ IMPORTANT: Begin your response directly with the analysis. Do NOT include any pr
             except Exception as e:
                 logger.warning(f"Could not include ipTM matrix plot: {e}")
 
-        gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
+        gemini_model = os.getenv("GEMINI_MODEL", "gemini-4-argon")
 
         with genai.Client() as client:
             response = client.models.generate_content(

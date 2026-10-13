@@ -212,7 +212,12 @@ def create_alphafold_agent(model: str | None = None) -> Agent:
     gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
     # Validate model choice
-    allowed_models = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-pro-preview"]
+    allowed_models = [
+        "gemini-3.8-flash",
+        "gemini-3.5-flash",
+        "gemini-4-argon",
+        "gemini-3.1-pro-preview",
+    ]
     if gemini_model not in allowed_models:
         raise ValueError(
             f"Model '{gemini_model}' not supported. Use one of: {', '.join(allowed_models)}"
@@ -244,7 +249,12 @@ def create_foldrun_agent(model: str | None = None) -> Agent:
     gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
     # Validate model choice
-    allowed_models = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-pro-preview"]
+    allowed_models = [
+        "gemini-3.8-flash",
+        "gemini-3.5-flash",
+        "gemini-4-argon",
+        "gemini-3.1-pro-preview",
+    ]
     if gemini_model not in allowed_models:
         raise ValueError(
             f"Model '{gemini_model}' not supported. Use one of: {', '.join(allowed_models)}"

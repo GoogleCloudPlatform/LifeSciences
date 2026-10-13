@@ -58,12 +58,12 @@ GOOGLE_GENAI_USE_ENTERPRISE=1
 GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_CLOUD_LOCATION=us-central1
 
-# Gemini 3.x is served ONLY from the global endpoint.
+# Gemini 4 / 3.x is served ONLY from the global endpoint.
 # The agent forces this in-process for model calls; the line above is the
 # region the agent is DEPLOYED to. They are different things.
 MODEL_LOCATION=global
 
-COORDINATOR_MODEL_NAME=gemini-3.1-pro-preview
+COORDINATOR_MODEL_NAME=gemini-4-argon
 WORKER_MODEL_NAME=gemini-3.8-flash
 IMAGE_MODEL_NAME=gemini-3-pro-image
 IMAGE_SIZE=2K

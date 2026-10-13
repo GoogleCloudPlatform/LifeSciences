@@ -34,7 +34,7 @@ Architecture (4 observable KFP stages):
 4. `4. Process AF3 Results & Expert Analysis` (`process_af3_results_task`):
    - Runs on CPU completely off the H100 GPU critical path.
    - Harvests AF3 container logs from Cloud Logging into `execution.log`, renders
-     `plddt_plot_0.png` and `pae_plot_0.png`, invokes `gemini-3.1-pro-preview` multimodal
+     `plddt_plot_0.png` and `pae_plot_0.png`, invokes `gemini-4-argon` multimodal
      Expert Analysis, and writes `analysis/summary.json` for FoldRun Viewer.
 """
 
@@ -1618,7 +1618,7 @@ def process_af3_results_task(
     )
     expert_analysis_obj = {
         "status": "success",
-        "model": "gemini-3.1-pro-preview",
+        "model": "gemini-4-argon",
         "generated_at": now_ea_iso,
         "ai_generated": True,
         "analysis": "\n".join(expert_md_lines) + disclaimer_text,
@@ -1723,7 +1723,7 @@ IMPORTANT: Begin your response directly with the markdown headings/analysis. Do 
 
         genai_client = genai.Client(vertexai=True, project=project_id, location="global")
         for candidate_model in (
-            "gemini-3.1-pro-preview",
+            "gemini-4-argon",
             "gemini-2.5-pro",
             "gemini-2.5-flash",
         ):
