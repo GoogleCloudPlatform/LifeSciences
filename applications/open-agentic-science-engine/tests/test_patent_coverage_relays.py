@@ -155,11 +155,40 @@ def test_complete_set_emits_no_coverage_relay() -> None:
     """A clean input emits no relays (tool-design-guidance §5.1 rule 4)."""
     with tempfile.TemporaryDirectory() as td:
         project = _make_project(Path(td))
-        _search(project, [_page(0, 5, 5)])
+        _, urls = _search(project, [_page(0, 5, 5)])
         meta = _read(project, ".meta.json")
 
+    assert len(urls) == 1, urls
     assert not _codes(meta) & COVERAGE_CODES, meta
     print("  PASS: complete set emits no coverage relay")
+
+
+def test_no_request_past_the_end_so_no_false_fault() -> None:
+    """A 503 that would only have answered a request past the end is never asked."""
+    with tempfile.TemporaryDirectory() as td:
+        project = _make_project(Path(td))
+        _, urls = _search(project, [_page(0, 5, 5), _Response(503)])
+        artifact = _read(project, ".artifact.json")
+        meta = _read(project, ".meta.json")
+
+    assert len(urls) == 1, urls
+    assert artifact["summary"]["fetch_faults"] == []
+    assert not _codes(meta) & COVERAGE_CODES, meta
+    print("  PASS: no request past the end, so no false fetch fault")
+
+
+def test_short_final_page_ends_paging() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        project = _make_project(Path(td))
+        pages = [_page(0, 100, 150), _page(100, 50, 150), _Response(503)]
+        _, urls = _search(project, pages)
+        artifact = _read(project, ".artifact.json")
+        meta = _read(project, ".meta.json")
+
+    assert len(urls) == 2, urls
+    assert artifact["summary"]["n_patents"] == 150
+    assert not _codes(meta) & COVERAGE_CODES, meta
+    print("  PASS: a short final page ends paging")
 
 
 def test_later_page_503_is_a_fetch_fault() -> None:
@@ -264,6 +293,35 @@ def test_differentiation_uncrowded_on_capped_set_is_qualified() -> None:
     print("  PASS: differentiation carries the cap relay and states it")
 
 
+def test_differentiation_states_fetch_fault_through_to_report() -> None:
+    """`report` reads coverage_limits, not relays, so the fault must be stated there."""
+    from click.testing import CliRunner
+    from oase.cli import cli
+
+    with tempfile.TemporaryDirectory() as td:
+        project = _make_project(Path(td))
+        _search(project, [_page(0, 100, 250), _Response(503)])
+        runner = CliRunner()
+        for args in (
+            ["differentiation", "assess", "KRAS"],
+            ["differentiation", "report", "KRAS", "--concept", "IC-001"],
+        ):
+            result = runner.invoke(
+                cli, ["--project", str(project), *args], catch_exceptions=False
+            )
+            assert result.exit_code == 0, f"Exit {result.exit_code}\n{result.output}"
+        assessment = _read(project, ".differentiation.json")
+        analysis = _read(project, ".differentiation.analysis.json")
+        records = _read(project, ".differentiation-assessments.json")
+
+    limits = assessment["dimensions"]["competitor_activity"]["coverage_limits"]
+    assert limits.startswith("only the first 100 of 250 results"), limits
+    assert "search page(s) 1 failed" in limits, limits
+    assert _codes(analysis) & COVERAGE_CODES == COVERAGE_CODES, analysis
+    assert "search page(s) 1 failed" in json.dumps(records), records
+    print("  PASS: fetch fault reaches coverage_limits and the report records")
+
+
 def test_differentiation_complete_set_keeps_default_limits() -> None:
     from click.testing import CliRunner
     from oase.cli import cli
@@ -285,6 +343,18 @@ def test_differentiation_complete_set_keeps_default_limits() -> None:
     assert comp["coverage_limits"] == DEFAULT_COVERAGE_LIMITS
     assert not _codes(analysis) & COVERAGE_CODES, analysis
     print("  PASS: complete set keeps the default coverage limits")
+
+
+def test_malformed_summary_does_not_raise() -> None:
+    from oase.commands.patent import capped_counts, coverage_relays
+
+    for summary in (
+        {"n_patents": "many", "total_results": 10},
+        {"n_patents": 3, "total_results": "lots"},
+    ):
+        assert capped_counts(summary) is None, summary
+        assert coverage_relays(summary) == [], summary
+    print("  PASS: malformed counts are guarded")
 
 
 def test_codes_registered() -> None:

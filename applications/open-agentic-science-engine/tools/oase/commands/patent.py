@@ -147,11 +147,16 @@ def _fetch_google_patents(query: str) -> tuple[bytes, dict[str, Any]]:
 
         # Capture total result count from the first page.
         if page == 0:
-            total_results = results.get("total_num_results", 0)
+            try:
+                total_results = int(results.get("total_num_results") or 0)
+            except (TypeError, ValueError):
+                total_results = 0
 
         page_patents: list[dict[str, Any]] = []
+        n_page_results = 0
         for cluster in clusters:
             for result in cluster.get("result", []):
+                n_page_results += 1
                 patent_data = result.get("patent")
                 if not patent_data:
                     continue
@@ -165,7 +170,16 @@ def _fetch_google_patents(query: str) -> tuple[bytes, dict[str, Any]]:
                 break
             all_patents.append(p)
 
-        if len(all_patents) >= _MAX_PATENTS:
+        # Stop once the results are exhausted, not only at the cap. Another
+        # request past the end spends the endpoint's small rate budget, and a
+        # 503 on it would be recorded as a fault in a set that was complete.
+        # The short-page test counts every result the page returned, so a
+        # result without a patent payload does not end paging early.
+        if (
+            len(all_patents) >= _MAX_PATENTS
+            or n_page_results < _PAGE_SIZE
+            or (total_results > 0 and len(all_patents) >= total_results)
+        ):
             break
 
     # Build verbatim bytes — combine pages if paginated.
@@ -228,12 +242,43 @@ def _fetch_google_patents(query: str) -> tuple[bytes, dict[str, Any]]:
 
 def capped_counts(summary: dict[str, Any]) -> tuple[int, int] | None:
     """``(retained, total)`` when fewer results were kept than matched, else None."""
-    n_patents = int(summary.get("n_patents") or 0)
     try:
+        n_patents = int(summary.get("n_patents") or 0)
         total = int(summary.get("total_results") or 0)
     except (TypeError, ValueError):
         return None
     return (n_patents, total) if total > n_patents else None
+
+
+def _fault_pages(summary: dict[str, Any]) -> str | None:
+    """Comma-separated failed page numbers, or None when no page failed."""
+    faults = summary.get("fetch_faults") or []
+    return ", ".join(str(f.get("page")) for f in faults) if faults else None
+
+
+def coverage_limit_clauses(summary: dict[str, Any]) -> list[str]:
+    """Coverage-limit sentences for what the search did not retain.
+
+    The prose counterpart of :func:`coverage_relays`, for consumers that
+    read a coverage statement rather than relays (``differentiation
+    report`` reads ``coverage_limits`` from ``.differentiation.json``).
+    Empty for a set that reached the end of the results.
+    """
+    clauses: list[str] = []
+    capped = capped_counts(summary)
+    if capped:
+        n_retained, total = capped
+        clauses.append(
+            f"only the first {n_retained} of {total} results, in relevance "
+            "order, were retained and assessed"
+        )
+    pages = _fault_pages(summary)
+    if pages:
+        clauses.append(
+            f"search page(s) {pages} failed after earlier pages succeeded, so "
+            "the retained set ends at the failure, not at the end of the results"
+        )
+    return clauses
 
 
 def coverage_relays(summary: dict[str, Any]) -> list[dict[str, str]]:
@@ -250,10 +295,9 @@ def coverage_relays(summary: dict[str, Any]) -> list[dict[str, str]]:
     """
     relays: list[dict[str, str]] = []
 
-    n_patents = int(summary.get("n_patents") or 0)
     capped = capped_counts(summary)
     if capped:
-        _, total = capped
+        n_patents, total = capped
         relays.append(
             provenance.relay(
                 "patent.result_set_capped",
@@ -266,16 +310,15 @@ def coverage_relays(summary: dict[str, Any]) -> list[dict[str, str]]:
             )
         )
 
-    faults = summary.get("fetch_faults") or []
-    if faults:
-        pages = ", ".join(str(f.get("page")) for f in faults)
+    pages = _fault_pages(summary)
+    if pages:
         relays.append(
             provenance.relay(
                 "patent.fetch_fault",
                 f"Search page(s) {pages} failed after earlier pages "
-                f"succeeded; the {n_patents} retained results end where the "
-                "failure happened, not where the results did. State that the "
-                "set is incomplete because a request failed.",
+                f"succeeded; the {summary.get('n_patents')} retained results "
+                "end where the failure happened, not where the results did. "
+                "State that the set is incomplete because a request failed.",
             )
         )
 

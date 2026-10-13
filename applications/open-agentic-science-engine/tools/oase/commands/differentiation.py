@@ -69,7 +69,7 @@ from ..common import (
 from ..core import provenance
 from ..core.errors import ArtifactError, SchemaError
 from ..core.output import warn
-from .patent import capped_counts, coverage_relays
+from .patent import coverage_limit_clauses, coverage_relays
 
 TOOL = "oase.differentiation"
 ARTIFACT_CLASS = "ip"
@@ -820,18 +820,15 @@ def assess_cmd(
     patents = artifact.get("patents", [])
 
     # Every dimension below is computed over what the search retained, so a
-    # capped or faulted set qualifies all three. The cap is also the largest
-    # coverage limit when it applies, so it leads the stated limits.
+    # capped or faulted set qualifies all three. Those are also the largest
+    # coverage limits when they apply, so they lead the stated limits, which
+    # is what `report` carries into the evidence-assessment records.
     summary = artifact.get("summary") or {}
     retained_relays = coverage_relays(summary)
-    coverage_limits = None
-    capped = capped_counts(summary)
-    if capped:
-        n_retained, total = capped
-        coverage_limits = (
-            f"only the first {n_retained} of {total} results, in relevance "
-            f"order, were retained and assessed; {DEFAULT_COVERAGE_LIMITS}"
-        )
+    clauses = coverage_limit_clauses(summary)
+    coverage_limits = (
+        "; ".join([*clauses, DEFAULT_COVERAGE_LIMITS]) if clauses else None
+    )
 
     # ------------------------------------------------------------------
     # Source-transparency: detect unconsumed trial artifacts (#98)
