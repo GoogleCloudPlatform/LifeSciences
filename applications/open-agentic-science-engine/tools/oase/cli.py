@@ -198,20 +198,27 @@ def _collect_sources(
 def _module_helpers(mod: Any) -> dict[str, str]:
     """Return ``{name: source}`` for top-level helper functions in *mod*.
 
-    A "helper" is any regular function defined in *mod* (same
-    ``__module__``) that is **not** a Click command callback.  Click
-    decorators rebind the decorated name to a ``Command`` object, so
-    ``inspect.isfunction`` already excludes them.
+    A "helper" is any regular function defined in *mod*, or imported into
+    it from a sibling module in the same package, that is **not** a Click
+    command callback.  Click decorators rebind the decorated name to a
+    ``Command`` object, so ``inspect.isfunction`` already excludes them.
 
-    Functions imported from other modules are filtered by comparing
-    ``__module__`` to the module's own ``__name__``.
+    Sibling helpers are included so that a command emitting a code through
+    a helper shared across command modules (``differentiation assess``
+    calling ``patent.coverage_relays``) is attributed like one calling a
+    helper of its own.  Functions imported from anywhere else (the standard
+    library, third-party packages, ``oase.core``) are filtered by comparing
+    ``__module__`` with the module's own ``__name__`` and package.
     """
     import inspect
 
     mod_name = mod.__name__
+    package = mod_name.rpartition(".")[0]
     helpers: dict[str, str] = {}
     for fname, obj in inspect.getmembers(mod, inspect.isfunction):
-        if getattr(obj, "__module__", None) != mod_name:
+        owner = getattr(obj, "__module__", None) or ""
+        is_sibling = bool(package) and owner.rpartition(".")[0] == package
+        if owner != mod_name and not is_sibling:
             continue
         try:
             helpers[fname] = inspect.getsource(obj)
