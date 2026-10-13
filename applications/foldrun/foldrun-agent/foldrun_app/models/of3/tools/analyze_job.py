@@ -47,19 +47,18 @@ class OF3JobAnalysisTool(OF3Tool):
         if not pipeline_root:
             raise ValueError("Job does not have gcs_output_directory in runtime_config")
 
+        self._validate_gcs_uri(pipeline_root)
+
         if not pipeline_root.endswith("/"):
             pipeline_root += "/"
 
-        return f"{pipeline_root}analysis/"
+        analysis_path = f"{pipeline_root}analysis/"
+        self._validate_gcs_uri(analysis_path)
+        return analysis_path
 
     def _write_to_gcs(self, gcs_uri: str, data: dict[str, Any]) -> None:
         """Write JSON data to GCS."""
-        if not gcs_uri.startswith("gs://"):
-            raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-        parts = gcs_uri[5:].split("/", 1)
-        bucket_name = parts[0]
-        blob_name = parts[1] if len(parts) > 1 else ""
+        bucket_name, blob_name = self._validate_gcs_uri(gcs_uri)
 
         storage_client = storage.Client(project=self.config.project_id)
         bucket = storage_client.bucket(bucket_name)
@@ -69,11 +68,10 @@ class OF3JobAnalysisTool(OF3Tool):
 
     def _check_existing_analysis(self, analysis_path: str) -> tuple[bool, dict | None]:
         """Check if analysis already exists."""
+        bucket_name, prefix = self._validate_gcs_uri(analysis_path)
         try:
             storage_client = storage.Client(project=self.config.project_id)
-            parts = analysis_path[5:].split("/", 1)
-            bucket = storage_client.bucket(parts[0])
-            prefix = parts[1] if len(parts) > 1 else ""
+            bucket = storage_client.bucket(bucket_name)
 
             summary_blob = bucket.blob(f"{prefix}summary.json")
             if summary_blob.exists():
@@ -92,12 +90,9 @@ class OF3JobAnalysisTool(OF3Tool):
             List of sample dicts with cif_uri, confidences_uri, aggregated_uri, sample_name
         """
         pipeline_root = job.runtime_config.gcs_output_directory
-        if not pipeline_root.endswith("/"):
-            pipeline_root += "/"
-
-        parts = pipeline_root[5:].split("/", 1)
-        bucket_name = parts[0]
-        prefix = parts[1] if len(parts) > 1 else ""
+        bucket_name, prefix = self._validate_gcs_uri(pipeline_root)
+        if not prefix.endswith("/"):
+            prefix += "/"
 
         storage_client = storage.Client(project=self.config.project_id)
         bucket = storage_client.bucket(bucket_name)

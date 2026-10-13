@@ -45,19 +45,18 @@ class BOLTZ2GetAnalysisResultsTool(BOLTZ2Tool):
         if not pipeline_root:
             raise ValueError("Job does not have gcs_output_directory in runtime_config")
 
+        self._validate_gcs_uri(pipeline_root)
+
         if not pipeline_root.endswith("/"):
             pipeline_root += "/"
 
-        return f"{pipeline_root}analysis/"
+        analysis_path = f"{pipeline_root}analysis/"
+        self._validate_gcs_uri(analysis_path)
+        return analysis_path
 
     def _read_from_gcs(self, gcs_uri: str) -> dict[str, Any]:
         """Read JSON data from GCS."""
-        if not gcs_uri.startswith("gs://"):
-            raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-        parts = gcs_uri[5:].split("/", 1)
-        bucket_name = parts[0]
-        blob_name = parts[1] if len(parts) > 1 else ""
+        bucket_name, blob_name = self._validate_gcs_uri(gcs_uri)
 
         storage_client = storage.Client(project=self.config.project_id)
         bucket = storage_client.bucket(bucket_name)
@@ -98,12 +97,7 @@ class BOLTZ2GetAnalysisResultsTool(BOLTZ2Tool):
 
     def _list_completed_analyses(self, analysis_path: str) -> list[str]:
         """List all completed analysis files in GCS."""
-        if not analysis_path.startswith("gs://"):
-            raise ValueError(f"Invalid GCS URI: {analysis_path}")
-
-        parts = analysis_path[5:].split("/", 1)
-        bucket_name = parts[0]
-        prefix = parts[1] if len(parts) > 1 else ""
+        bucket_name, prefix = self._validate_gcs_uri(analysis_path)
 
         storage_client = storage.Client(project=self.config.project_id)
         bucket = storage_client.bucket(bucket_name)

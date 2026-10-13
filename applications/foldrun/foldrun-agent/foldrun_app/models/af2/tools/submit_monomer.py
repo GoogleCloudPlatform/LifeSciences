@@ -96,8 +96,7 @@ class AF2SubmitMonomerTool(AF2Tool):
         is_fasta_file = False
 
         if is_gcs:
-            bucket_name = sequence[5:].split("/", 1)[0]
-            blob_path = sequence[5:].split("/", 1)[1]
+            bucket_name, blob_path = self._validate_gcs_uri(sequence)
             bucket = self.storage_client.bucket(bucket_name)
             sequence = bucket.blob(blob_path).download_as_text()
         elif isinstance(sequence, str) and (

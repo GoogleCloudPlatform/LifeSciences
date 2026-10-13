@@ -107,8 +107,7 @@ class OF3SubmitPredictionTool(OF3Tool):
         )
 
         if is_gcs:
-            bucket_name = input_data[5:].split("/", 1)[0]
-            blob_path = input_data[5:].split("/", 1)[1]
+            bucket_name, blob_path = self._validate_gcs_uri(input_data)
             bucket = self.storage_client.bucket(bucket_name)
             content = bucket.blob(blob_path).download_as_text()
         elif is_file:

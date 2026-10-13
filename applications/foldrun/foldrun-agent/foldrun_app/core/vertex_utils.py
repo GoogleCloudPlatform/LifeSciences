@@ -14,7 +14,11 @@
 
 """Shared Agent Platform utilities used across all model plugins (AF2, OF3, Boltz-2)."""
 
+import re
+
 from google.cloud import aiplatform_v1 as vertex_ai
+
+_JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
 def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.PipelineJob:
@@ -31,12 +35,27 @@ def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.Pip
     Returns:
         PipelineJob proto object.
     """
+    if not isinstance(job_id, str) or not job_id.strip() or "\x00" in job_id:
+        raise ValueError("Invalid job_id: must be a non-empty string without null bytes")
+
+    expected_prefix = f"projects/{project_id}/locations/{region}/pipelineJobs/"
+    if job_id.startswith("projects/"):
+        if not job_id.startswith(expected_prefix):
+            raise ValueError(
+                f"Cross-project or cross-region pipeline job access denied: '{job_id}' does not match expected prefix '{expected_prefix}'"
+            )
+        short_id = job_id[len(expected_prefix) :]
+        if not _JOB_ID_PATTERN.match(short_id):
+            raise ValueError(
+                f"Malformed pipeline job resource name: invalid short job ID '{short_id}'"
+            )
+    else:
+        if not _JOB_ID_PATTERN.match(job_id):
+            raise ValueError(f"Malformed pipeline job ID: '{job_id}'")
+        job_id = f"{expected_prefix}{job_id}"
+
     client = vertex_ai.PipelineServiceClient(
         client_options={"api_endpoint": f"{region}-aiplatform.googleapis.com"}
     )
-
-    if not job_id.startswith("projects/"):
-        job_id = f"projects/{project_id}/locations/{region}/pipelineJobs/{job_id}"
-
     request = vertex_ai.GetPipelineJobRequest(name=job_id)
     return client.get_pipeline_job(request=request)

@@ -59,20 +59,19 @@ class AF2JobAnalysisTool(AF2Tool):
         if not pipeline_root:
             raise ValueError("Job does not have gcs_output_directory in runtime_config")
 
+        self._validate_gcs_uri(pipeline_root)
+
         # Ensure trailing slash
         if not pipeline_root.endswith("/"):
             pipeline_root += "/"
 
-        return f"{pipeline_root}analysis/"
+        analysis_path = f"{pipeline_root}analysis/"
+        self._validate_gcs_uri(analysis_path)
+        return analysis_path
 
     def _write_to_gcs(self, gcs_uri: str, data: dict[str, Any]) -> None:
         """Write JSON data to GCS."""
-        if not gcs_uri.startswith("gs://"):
-            raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-        parts = gcs_uri[5:].split("/", 1)
-        bucket_name = parts[0]
-        blob_name = parts[1] if len(parts) > 1 else ""
+        bucket_name, blob_name = self._validate_gcs_uri(gcs_uri)
 
         storage_client = storage.Client(project=self.config.project_id)
         bucket = storage_client.bucket(bucket_name)
@@ -88,11 +87,10 @@ class AF2JobAnalysisTool(AF2Tool):
         Returns:
             Tuple of (exists: bool, summary_data: dict | None)
         """
+        bucket_name, prefix = self._validate_gcs_uri(analysis_path)
         try:
             storage_client = storage.Client(project=self.config.project_id)
-            parts = analysis_path[5:].split("/", 1)
-            bucket = storage_client.bucket(parts[0])
-            prefix = parts[1] if len(parts) > 1 else ""
+            bucket = storage_client.bucket(bucket_name)
 
             # Check for existing summary.json (contains expert analysis)
             summary_blob = bucket.blob(f"{prefix}summary.json")

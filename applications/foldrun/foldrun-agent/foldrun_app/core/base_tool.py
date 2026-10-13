@@ -15,6 +15,7 @@
 """Model-agnostic base tool class."""
 
 import logging
+import os
 import re
 from typing import Any
 
@@ -94,6 +95,67 @@ class BaseTool:
         """
         raise NotImplementedError("Subclasses must implement run()")
 
+    def _validate_gcs_uri(self, gcs_uri: str) -> tuple[str, str]:
+        """Validate that a GCS URI targets an authorized project bucket and has no path traversal.
+
+        Args:
+            gcs_uri: GCS URI in the format 'gs://bucket_name/blob_path'.
+
+        Returns:
+            Tuple of (bucket_name, blob_path).
+
+        Raises:
+            ValueError: If the URI is invalid, contains traversal segments, or specifies an unauthorized bucket.
+        """
+        if (
+            not isinstance(gcs_uri, str)
+            or not gcs_uri.strip()
+            or "\x00" in gcs_uri
+            or not gcs_uri.startswith("gs://")
+        ):
+            raise ValueError(f"Invalid GCS URI: {gcs_uri}")
+
+        parts = gcs_uri[5:].split("/", 1)
+        bucket_name = parts[0]
+        blob_path = parts[1] if len(parts) > 1 else ""
+
+        if not bucket_name or not blob_path.strip("/"):
+            raise ValueError(f"Invalid GCS URI (missing bucket or object path): {gcs_uri}")
+
+        if any(seg in (".", "..") for seg in blob_path.split("/")):
+            raise ValueError(f"Path traversal detected in GCS URI: {gcs_uri}")
+
+        bucket_attr = getattr(self.config, "bucket_name", None)
+        db_bucket_attr = getattr(self.config, "databases_bucket_name", None)
+        allowed_buckets = {
+            b.strip() for b in (bucket_attr, db_bucket_attr) if isinstance(b, str) and b.strip()
+        }
+        if not allowed_buckets and (
+            self.config is None
+            or (bucket_attr is not None and not isinstance(bucket_attr, str))
+            or (db_bucket_attr is not None and not isinstance(db_bucket_attr, str))
+        ):
+            allowed_buckets = {
+                b.strip()
+                for b in (
+                    os.getenv("GCS_BUCKET_NAME"),
+                    os.getenv("GCS_DATABASES_BUCKET"),
+                )
+                if isinstance(b, str) and b.strip()
+            }
+        extra = os.environ.get("AF3_ALLOWED_BUCKETS", "")
+        if extra:
+            allowed_buckets.update(b.strip() for b in extra.split(",") if b.strip())
+
+        if not allowed_buckets:
+            raise ValueError("No authorized GCS buckets configured")
+        if bucket_name not in allowed_buckets:
+            raise ValueError(
+                f"Unauthorized GCS bucket '{bucket_name}'. Expected one of: {sorted(allowed_buckets)}"
+            )
+
+        return bucket_name, blob_path
+
     def _upload_to_gcs(self, local_path: str, gcs_path: str) -> str:
         """
         Upload file to GCS.
@@ -105,8 +167,7 @@ class BaseTool:
         Returns:
             GCS path
         """
-        bucket_name = gcs_path.replace("gs://", "").split("/")[0]
-        blob_path = "/".join(gcs_path.replace("gs://", "").split("/")[1:])
+        bucket_name, blob_path = self._validate_gcs_uri(gcs_path)
 
         bucket = self.storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
@@ -126,8 +187,7 @@ class BaseTool:
         Returns:
             Local path
         """
-        bucket_name = gcs_path.replace("gs://", "").split("/")[0]
-        blob_path = "/".join(gcs_path.replace("gs://", "").split("/")[1:])
+        bucket_name, blob_path = self._validate_gcs_uri(gcs_path)
 
         bucket = self.storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
