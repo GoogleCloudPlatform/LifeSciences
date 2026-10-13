@@ -348,3 +348,130 @@ class TestThresholdsYamlSymlink:
         link.symlink_to(target)
 
         assert not is_safe_to_open(link)
+
+
+# ---------------------------------------------------------------------------
+# Fix 8: provenance.py — write_analysis() symlink guard & confinement
+# ---------------------------------------------------------------------------
+
+
+class TestProvenanceWriteAnalysisSymlink:
+    """Verify write_analysis() refuses symlinks and unconfined paths."""
+
+    def test_symlink_destination_raises_refusal(self, tmp_path: Path) -> None:
+        """A symlink at the analysis path must trigger Refusal without reading or writing target."""
+        from oase.core import provenance
+        from oase.core.errors import Refusal
+
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        target = outside / "sensitive.json"
+        target.write_text('{"secret": "do_not_overwrite"}', encoding="utf-8")
+
+        link = tmp_path / "test.analysis.json"
+        link.symlink_to(target)
+
+        try:
+            provenance.write_analysis(
+                link,
+                source="test-source",
+                threshold_set="test",
+                thresholds_applied={},
+                metrics={},
+                assessment={"verdict": "ok"},
+            )
+            assert False, "write_analysis should have raised Refusal"
+        except Refusal as exc:
+            assert "symlink" in str(exc)
+
+        # Target must remain untouched
+        assert target.read_text(encoding="utf-8") == '{"secret": "do_not_overwrite"}'
+
+    def test_symlink_parent_directory_raises_refusal(self, tmp_path: Path) -> None:
+        """An analysis path whose parent directory is a symlink must trigger Refusal."""
+        from oase.core import provenance
+        from oase.core.errors import Refusal
+
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        symlink_dir = tmp_path / "symdir"
+        symlink_dir.symlink_to(outside)
+
+        analysis_path = symlink_dir / "test.analysis.json"
+
+        try:
+            provenance.write_analysis(
+                analysis_path,
+                source="test-source",
+                threshold_set="test",
+                thresholds_applied={},
+                metrics={},
+                assessment={"verdict": "ok"},
+            )
+            assert False, "write_analysis should have raised Refusal"
+        except Refusal as exc:
+            assert "symlink" in str(exc)
+
+    def test_escapes_project_root_raises_refusal(self, tmp_path: Path) -> None:
+        """An analysis path outside project_root must trigger Refusal when project_root is active."""
+        from unittest import mock
+
+        from oase.core import provenance
+        from oase.core.errors import Refusal
+
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        outside_path = tmp_path / "outside" / "test.analysis.json"
+        outside_path.parent.mkdir()
+
+        with mock.patch(
+            "oase.core.provenance._get_project_root", return_value=project_dir
+        ):
+            try:
+                provenance.write_analysis(
+                    outside_path,
+                    source="test-source",
+                    threshold_set="test",
+                    thresholds_applied={},
+                    metrics={},
+                    assessment={"verdict": "ok"},
+                )
+                assert False, (
+                    "write_analysis should have raised Refusal for escaping project root"
+                )
+            except Refusal as exc:
+                assert "project root" in str(exc)
+
+    def test_regular_analysis_path_succeeds(self, tmp_path: Path) -> None:
+        """A regular non-symlink path within project root succeeds."""
+        import json
+
+        from oase.core import provenance
+
+        analysis_path = tmp_path / "test.analysis.json"
+        result = provenance.write_analysis(
+            analysis_path,
+            source="test-source",
+            threshold_set="test",
+            thresholds_applied={},
+            metrics={},
+            assessment={"verdict": "ok"},
+        )
+        assert result.exists()
+        written = json.loads(result.read_text(encoding="utf-8"))
+        assert written["record_type"] == "analysis"
+        assert written["assessment"] == {"verdict": "ok"}
+
+    def test_source_digest_skips_symlink(self, tmp_path: Path) -> None:
+        """_source_digest returns None when source is a symlink."""
+        from oase.core.provenance import _source_digest
+
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        target = outside / "source.json"
+        target.write_text("content", encoding="utf-8")
+
+        link = tmp_path / "source_link.json"
+        link.symlink_to(target)
+
+        assert _source_digest(str(link)) is None

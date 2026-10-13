@@ -48,7 +48,7 @@ from typing import Any
 
 from . import env, output
 from .errors import ArtifactError, Refusal
-from .paths import is_safe_to_open
+from .paths import confine_path, is_safe_to_open
 from .toolchain import check_integrity
 
 
@@ -1231,6 +1231,21 @@ def write_analysis(
     that is precisely the case where somebody's citation is about to stop
     matching the file it cites.
     """
+    path = Path(path)
+    if not is_safe_to_open(path) or not is_safe_to_open(path.parent):
+        raise Refusal(
+            f"refusing to write analysis through symlink: {path}",
+            detail="symlink exploitation guard",
+        )
+
+    project_root = _get_project_root()
+    if project_root is not None:
+        if confine_path(project_root, path) is None:
+            raise Refusal(
+                f"refusing to write analysis outside project root: {path}",
+                detail="path confinement guard",
+            )
+
     # Compute digest from the original source value (which may be an
     # absolute path or Path object) before normalising to a relative
     # string, so the digest resolves against the filesystem as the
@@ -1280,8 +1295,6 @@ def write_analysis(
     if capability_state:
         record["capability_state"] = capability_state
 
-    path = Path(path)
-
     # Cross-WO protection: refuse overwrite across work orders unless
     # --overwrite-cross-wo is explicitly passed.  When allowed, fire a
     # relay so the evidence chain records the break.
@@ -1304,7 +1317,7 @@ def _source_digest(source: str) -> str | None:
     """
     try:
         candidate = Path(source)
-        if candidate.is_file():
+        if candidate.is_file() and is_safe_to_open(candidate):
             return sha256_file(candidate)
     except (OSError, ValueError):
         pass
