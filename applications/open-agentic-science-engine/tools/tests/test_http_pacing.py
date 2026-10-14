@@ -26,20 +26,16 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-# Patch optional dependencies before importing the module under test so
-# that the import succeeds even when ``requests`` or ``click`` are not
-# installed in the test environment.
-with patch.dict("sys.modules", {"requests": MagicMock(), "click": MagicMock()}):
-    from oase.core import http
-    from oase.core.errors import Refusal
-    from oase.core.http import (
-        _pace,
-        _pace_disk,
-        _pace_memory,
-        _resolve_pace_dir,
-    )
+from oase.core import http
+from oase.core.errors import Refusal
+from oase.core.http import (
+    _pace,
+    _pace_disk,
+    _pace_memory,
+    _resolve_pace_dir,
+)
 
 
 class TestPaceDisk(unittest.TestCase):

@@ -31,21 +31,10 @@ from __future__ import annotations
 
 import json
 import tempfile
+import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-# Patch optional dependencies before importing the module under test.
-_mock_requests = MagicMock()
-_mock_yaml = MagicMock()
-_module_patches = patch.dict(
-    "sys.modules",
-    {"requests": _mock_requests, "yaml": _mock_yaml},
-)
-_module_patches.start()
-
-import unittest  # noqa: E402
-
-from oase.core.provenance import RELAY_CODES  # noqa: E402
+from oase.core.provenance import RELAY_CODES
 
 
 def _make_gnomad_payload(

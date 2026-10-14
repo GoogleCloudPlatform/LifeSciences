@@ -29,35 +29,16 @@ from __future__ import annotations
 
 import unittest
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-# Patch optional dependencies before importing the modules under test
-# so that the import succeeds even when ``requests``, ``click``,
-# ``yaml``, or ``rdkit`` are not installed in the test environment.
-_mock_requests = MagicMock()
-_mock_yaml = MagicMock()
-_mock_click = MagicMock()
-_mock_rdkit = MagicMock()
-_module_patches = patch.dict(
-    "sys.modules",
-    {
-        "requests": _mock_requests,
-        "yaml": _mock_yaml,
-        "click": _mock_click,
-        "rdkit": _mock_rdkit,
-        "rdkit.Chem": MagicMock(),
-    },
-)
-_module_patches.start()
-
-from oase.commands.similar import (  # noqa: E402
+from oase.commands.similar import (
     _build_artifact,
     _classify_results,
     _poll_pubchem_listkey,
     _pubchem_similarity,
 )
-from oase.core import http  # noqa: E402
-from oase.core.errors import ArtifactError  # noqa: E402
+from oase.core import http
+from oase.core.errors import ArtifactError
 
 # ---------------------------------------------------------------------------
 # Fixtures

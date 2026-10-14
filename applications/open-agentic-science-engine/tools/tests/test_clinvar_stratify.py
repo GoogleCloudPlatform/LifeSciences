@@ -27,19 +27,9 @@ Asserts:
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock, patch
 
-# Patch optional dependencies before importing the module under test.
-_mock_requests = MagicMock()
-_mock_yaml = MagicMock()
-_module_patches = patch.dict(
-    "sys.modules",
-    {"requests": _mock_requests, "yaml": _mock_yaml},
-)
-_module_patches.start()
-
-from oase.commands.gwas import _analyze_clinvar, _classify_variant_type  # noqa: E402
-from oase.core.provenance import RELAY_CODES  # noqa: E402
+from oase.commands.gwas import _analyze_clinvar, _classify_variant_type
+from oase.core.provenance import RELAY_CODES
 
 
 def _make_variant(

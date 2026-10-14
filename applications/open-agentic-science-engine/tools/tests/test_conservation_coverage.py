@@ -31,22 +31,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Patch optional dependencies before importing the module under test.
-_mock_requests = MagicMock()
-_mock_yaml = MagicMock()
-_module_patches = patch.dict(
-    "sys.modules",
-    {"requests": _mock_requests, "yaml": _mock_yaml},
-)
-_module_patches.start()
-
-from oase.commands.conservation import (  # noqa: E402
+from oase.commands.conservation import (
     COVERAGE_THRESHOLD,
     _find_aligner,
     _run_alignment,
 )
-from oase.core.errors import ArtifactError, DependencyError  # noqa: E402
-from oase.core.provenance import RELAY_CODES  # noqa: E402
+from oase.core.errors import ArtifactError, DependencyError
+from oase.core.provenance import RELAY_CODES
 
 # ---------------------------------------------------------------------------
 # Coverage computation tests
