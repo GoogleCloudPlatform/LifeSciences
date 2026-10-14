@@ -836,7 +836,17 @@ def make_pocket_runner(
 
     from ..cli import cli
 
-    runner = CliRunner(mix_stderr=False)
+    # ``_diagnostic`` reads ``result.stderr``, which on Click 8.1 (still
+    # allowed by ``click>=8.1``) raises unless ``mix_stderr=False``. Click
+    # >= 8.2 always separates the streams and removed the keyword.
+    try:
+        runner = CliRunner(mix_stderr=False)
+    except TypeError:
+        runner = CliRunner()
+
+    def _diagnostic(result: Any) -> str:
+        """Best available error text from an invocation, stderr first."""
+        return (result.stderr or result.stdout or "").strip()[:500]
 
     def _run(candidate: StructureCandidate) -> PocketResult:
         # --- Phase 1: oase pocket run ---
@@ -849,14 +859,14 @@ def make_pocket_runner(
         if result.exit_code != 0:
             raise RuntimeError(
                 f"oase pocket run failed (exit {result.exit_code}): "
-                f"{(result.output or '').strip()[:500]}"
+                f"{_diagnostic(result)}"
             )
 
         # Locate the pockets record. The pocket run command writes
         # <stem>.pockets.json into the structures artifact directory.
         # Parse the JSON output to find the path.
         pockets_path: str | None = None
-        for line in result.output.strip().splitlines():
+        for line in result.stdout.strip().splitlines():
             line = line.strip()
             if line.endswith(".pockets.json"):
                 pockets_path = line
@@ -892,7 +902,7 @@ def make_pocket_runner(
         if result.exit_code != 0:
             raise RuntimeError(
                 f"oase pocket analyze failed (exit {result.exit_code}): "
-                f"{(result.output or '').strip()[:500]}"
+                f"{_diagnostic(result)}"
             )
 
         # Find the analysis output file
