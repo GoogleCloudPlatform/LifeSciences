@@ -464,12 +464,12 @@ class TestFetchSlugOverride(unittest.TestCase):
         self.assertEqual(exit_code, 0, f"exit {exit_code}:\n{output}")
 
         self.assertIn(
-            "aspirin.pubchem-compound.artifact.json",
+            "aspirin-2244.pubchem-compound.artifact.json",
             files,
             "custom-slug artifact not written",
         )
         self.assertIn(
-            "aspirin.pubchem-compound.meta.json",
+            "aspirin-2244.pubchem-compound.meta.json",
             files,
             "custom-slug sidecar not written",
         )

@@ -25,7 +25,6 @@ Covers:
 
 from __future__ import annotations
 
-import os
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -255,6 +254,10 @@ class TestDoctorToolchainUnknown(_ResetCacheMixin, unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+# A real subcommand path that runs the group callback without side effects.
+_SUBCOMMAND_ARGS = ["tools", "--help"]
+
+
 class TestCLIDirtyWarning(_ResetCacheMixin, unittest.TestCase):
     """CLI emits stderr warning on dirty source."""
 
@@ -270,9 +273,14 @@ class TestCLIDirtyWarning(_ResetCacheMixin, unittest.TestCase):
 
         from oase.cli import cli
 
-        runner = CliRunner(mix_stderr=False)
-        env = {k: v for k, v in os.environ.items() if k != "OASE_NO_DIRTY_WARNING"}
-        result = runner.invoke(cli, ["--version"], env=env)
+        runner = CliRunner()
+        # CliRunner treats None as "unset for this invocation".
+        env = {"OASE_NO_DIRTY_WARNING": None}
+        # Invoke a real subcommand: --version is eager and exits before the
+        # group callback that prints the warning.
+        result = runner.invoke(cli, _SUBCOMMAND_ARGS, env=env)
+        self.assertEqual(result.exit_code, 0, result.output)
+        _mock.assert_called_once()
         self.assertIn("uncommitted modifications", result.stderr)
         self.assertIn("3 files", result.stderr)
 
@@ -286,10 +294,13 @@ class TestCLIDirtyWarning(_ResetCacheMixin, unittest.TestCase):
 
         from oase.cli import cli
 
-        runner = CliRunner(mix_stderr=False)
-        env = dict(os.environ)
-        env["OASE_NO_DIRTY_WARNING"] = "1"
-        result = runner.invoke(cli, ["--version"], env=env)
+        runner = CliRunner()
+        env = {"OASE_NO_DIRTY_WARNING": "1"}
+        result = runner.invoke(cli, _SUBCOMMAND_ARGS, env=env)
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("Usage:", result.stdout)
+        # Suppression short-circuits before the integrity check runs.
+        _mock.assert_not_called()
         self.assertNotIn("uncommitted modifications", result.stderr)
 
     @mock.patch(
@@ -302,8 +313,12 @@ class TestCLIDirtyWarning(_ResetCacheMixin, unittest.TestCase):
 
         from oase.cli import cli
 
-        runner = CliRunner(mix_stderr=False)
-        result = runner.invoke(cli, ["--version"])
+        runner = CliRunner()
+        # CliRunner treats None as "unset for this invocation".
+        env = {"OASE_NO_DIRTY_WARNING": None}
+        result = runner.invoke(cli, _SUBCOMMAND_ARGS, env=env)
+        self.assertEqual(result.exit_code, 0, result.output)
+        _mock.assert_called_once()
         self.assertNotIn("uncommitted modifications", result.stderr)
 
 
