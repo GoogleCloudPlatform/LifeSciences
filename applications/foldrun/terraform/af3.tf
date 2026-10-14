@@ -46,6 +46,7 @@ resource "terraform_data" "af3_model_garden_endpoint" {
     var.af3_machine_type,
     var.af3_accelerator_type,
     tostring(var.af3_accelerator_count),
+    var.af3_capacity_pool,
     tostring(var.af3_use_dws),
     tostring(var.af3_dws_max_runtime_seconds),
     var.af3_reservation_affinity_type,
@@ -69,6 +70,7 @@ resource "terraform_data" "af3_model_garden_endpoint" {
         --machine-type "${var.af3_machine_type}" \
         --accelerator-type "${var.af3_accelerator_type}" \
         --accelerator-count "${var.af3_accelerator_count}" \
+        --capacity-pool "${var.af3_capacity_pool}" \
         ${var.af3_use_dws ? "--dws" : "--no-dws"} \
         --dws-max-runtime-seconds "${var.af3_dws_max_runtime_seconds}" \
         --reservation-affinity-type "${var.af3_reservation_affinity_type}" \

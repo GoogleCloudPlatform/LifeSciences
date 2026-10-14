@@ -194,15 +194,63 @@ class AF3Tool(BaseTool):
         else:
             initial_replicas = 0
 
+        def _dur_seconds(dur: Any) -> int | None:
+            if dur is None:
+                return None
+            if not type(dur).__module__.startswith("unittest.mock"):
+                total_fn = getattr(dur, "total_seconds", None)
+                if callable(total_fn):
+                    val = total_fn()
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        return int(val)
+            sec = getattr(dur, "seconds", None)
+            if isinstance(sec, int) and not isinstance(sec, bool):
+                return int(sec)
+            return None
+
         min_scaleup_sec = 300
         idle_scaledown_sec = 1200
         if stz_spec is not None and not type(stz_spec).__module__.startswith("unittest.mock"):
-            up_dur = getattr(stz_spec, "min_scaleup_period", None)
-            down_dur = getattr(stz_spec, "idle_scaledown_period", None)
-            if up_dur is not None and hasattr(up_dur, "seconds") and int(up_dur.seconds) > 0:
-                min_scaleup_sec = int(up_dur.seconds)
-            if down_dur is not None and hasattr(down_dur, "seconds") and int(down_dur.seconds) > 0:
-                idle_scaledown_sec = int(down_dur.seconds)
+            up_sec = _dur_seconds(getattr(stz_spec, "min_scaleup_period", None))
+            down_sec = _dur_seconds(getattr(stz_spec, "idle_scaledown_period", None))
+            if up_sec is not None and up_sec > 0:
+                min_scaleup_sec = up_sec
+            if down_sec is not None and down_sec > 0:
+                idle_scaledown_sec = down_sec
+
+        # Extract capacity pool / provisioning mode and live replica status
+        provisioning_mode = "ANY_RESERVATION"
+        if dedicated is not None:
+            flex_start = getattr(dedicated, "flex_start", None)
+            flex_sec = _dur_seconds(getattr(flex_start, "max_runtime_duration", None))
+            spot_val = getattr(dedicated, "spot", False)
+            if isinstance(flex_sec, int) and flex_sec > 0:
+                provisioning_mode = "DWS_FLEX_START"
+            elif isinstance(spot_val, bool) and spot_val:
+                provisioning_mode = "SPOT"
+            else:
+                ms = getattr(dedicated, "machine_spec", None)
+                ra = getattr(ms, "reservation_affinity", None) if ms else None
+                ra_type = getattr(ra, "reservation_affinity_type", None) if ra else None
+                ra_name = (
+                    ra_type.name
+                    if hasattr(ra_type, "name") and isinstance(ra_type.name, str)
+                    else (str(ra_type) if isinstance(ra_type, str) else "")
+                )
+                if ra_name and ra_name != "TYPE_UNSPECIFIED":
+                    provisioning_mode = ra_name
+
+        status_obj = getattr(dm, "status", None)
+        avail_raw = getattr(status_obj, "available_replica_count", None) if status_obj else None
+        available_replicas = (
+            int(avail_raw)
+            if isinstance(avail_raw, int) and not isinstance(avail_raw, bool)
+            else None
+        )
+        msg_raw = getattr(status_obj, "message", None) if status_obj else None
+        status_message = (
+            str(msg_raw).strip() if isinstance(msg_raw, str) and msg_raw.strip() else None
+        )
 
         return {
             "min_replica_count": int(min_replicas),
@@ -212,6 +260,9 @@ class AF3Tool(BaseTool):
             "min_scaleup_period_seconds": min_scaleup_sec if stz_enabled else None,
             "idle_scaledown_period_seconds": idle_scaledown_sec if stz_enabled else None,
             "serving_capacity_replicas": max(int(min_replicas), int(initial_replicas), 1),
+            "provisioning_mode": provisioning_mode,
+            "available_replica_count": available_replicas,
+            "status_message": status_message,
         }
 
     def get_model(self, model_id: str | None = None) -> vertex_ai.Model:

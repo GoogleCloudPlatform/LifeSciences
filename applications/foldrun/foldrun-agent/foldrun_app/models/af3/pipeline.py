@@ -256,7 +256,7 @@ def provision_and_queue_af3_endpoint_task(
 
     active_replicas = _get_active_replica_count(endpoint)
     stale_heartbeat_sec = 210.0
-    max_lease_sec = float(max(timeout_seconds + 300, 2400))
+    max_lease_sec = float(max(timeout_seconds * 2 + 1800, 7200))
 
     # Register FIFO queue ticket so concurrent jobs acquire replica slots in submission order
     queue_ticket_path = f"af3_predictions/.locks/{endpoint_short_id}_queue_{pipeline_job_id}.json"
@@ -301,8 +301,9 @@ def provision_and_queue_af3_endpoint_task(
                     or 0
                 )
                 acq = float(existing.get("acquired_at") or 0)
+                slot_max_lease = float(existing.get("max_lease_sec") or max_lease_sec)
                 holder = existing.get("job_name", "unknown")
-                if (now_t - hb) > stale_heartbeat_sec or (now_t - acq) > max_lease_sec:
+                if (now_t - hb) > stale_heartbeat_sec or (now_t - acq) > slot_max_lease:
                     log.warning(
                         f"[AF3 Stage 1] Reaping stale lock on {slot_path} held by '{holder}' "
                         f"(last heartbeat {int(now_t - hb)}s ago)."
@@ -579,11 +580,60 @@ def run_af3_inference_task(
         start_dt = datetime.now(timezone.utc)
         start_iso = start_dt.isoformat()
         t0 = time.time()
+        wakeup_t0 = t0
         log.info(
             f"[AF3 Stage 2] Calling endpoint.predict() for '{job_name}' on slot {slot_index}/{active_replicas} "
             f"(run_data_pipeline={not msa_free}, num_diffusion_samples={num_diffusion_samples}, "
             f"output_dir={raw_output_gcs_uri}, timeout={timeout_seconds}s)..."
         )
+
+        def _get_endpoint_wakeup_status() -> str:
+            if type(endpoint).__module__.startswith("unittest.mock"):
+                return "scaling 0 -> 1"
+            try:
+                import google.auth
+                from google.auth.transport.requests import AuthorizedSession
+
+                creds, _ = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                )
+                ep_url = (
+                    f"https://{endpoint_location}-aiplatform.googleapis.com/v1beta1/"
+                    f"{endpoint.resource_name}"
+                )
+                sess = AuthorizedSession(creds)
+                r = sess.get(ep_url, timeout=10)
+                sess.close()
+                if not r.ok:
+                    return "scaling 0 -> 1"
+                dms = r.json().get("deployedModels") or []
+                if not dms:
+                    return "0 deployed models"
+                dm = dms[0]
+                dr = dm.get("dedicatedResources") or {}
+                status_obj = dm.get("status") or {}
+                avail_rep = int(status_obj.get("availableReplicaCount", 0) or 0)
+                status_msg = str(status_obj.get("message", "") or "").strip()
+                if dr.get("flexStart"):
+                    pool_mode = "DWS_FLEX_START"
+                elif dr.get("spot"):
+                    pool_mode = "SPOT"
+                else:
+                    pool_mode = (
+                        str(
+                            dr.get("machineSpec", {})
+                            .get("reservationAffinity", {})
+                            .get("reservationAffinityType", "")
+                            or ""
+                        )
+                        or "STANDARD"
+                    )
+                summary = f"pool={pool_mode}, available_replicas={avail_rep}"
+                if status_msg:
+                    summary += f", status='{status_msg}'"
+                return summary
+            except Exception:
+                return "scaling 0 -> 1"
 
         prediction_response = None
         while True:
@@ -641,22 +691,34 @@ def run_af3_inference_task(
                     )
                     continue
 
-                # Case B: Container still busy finishing a prior request or scaling up from 0 replicas (HTTP 429)
-                if "Status code:429" in err_repr or (
-                    "429" in err_repr
-                    and (
-                        "already working on a prediction" in err_repr
-                        or "scale-up from zero" in err_repr.lower()
-                    )
+                # Case B: Endpoint scaling up from 0 replicas / waiting on DWS or GCE node allocation
+                # (HTTP 400 FailedPrecondition: "not ready for prediction yet" or HTTP 429 "scale-up from zero")
+                # or container still busy finishing a prior request (HTTP 429).
+                err_lower = err_repr.lower()
+                is_wakeup_not_ready = (
+                    "not ready for prediction yet" in err_lower
+                    or "not yet ready for prediction" in err_lower
+                    or "not yet ready" in err_lower
+                    or "scale-up from zero" in err_lower
+                    or "scaling up from zero" in err_lower
+                )
+                if (
+                    is_wakeup_not_ready
+                    or "Status code:429" in err_repr
+                    or ("429" in err_repr and "already working on a prediction" in err_repr)
                 ):
-                    if time.time() - t0 > max(timeout_seconds, 3600):
-                        raise
-                    if "scale-up from zero" in err_repr.lower():
+                    if is_wakeup_not_ready:
+                        if time.time() - wakeup_t0 > max(timeout_seconds * 2, 7200):
+                            raise
+                        t0 = time.time()
+                        wakeup_detail = _get_endpoint_wakeup_status()
                         log.info(
-                            "[AF3 Stage 2] Endpoint is scaling up from 0 replicas (Gemini platform Scale-to-Zero wakeup); "
-                            "holding replica slot and retrying in 20s..."
+                            f"[AF3 Stage 2] Endpoint is waking up from 0 replicas ({wakeup_detail}; "
+                            f"{int(time.time() - wakeup_t0)}s elapsed); holding replica slot and retrying in 20s..."
                         )
                     else:
+                        if time.time() - t0 > max(timeout_seconds, 3600):
+                            raise
                         log.warning(
                             "[AF3 Stage 2] Endpoint container reported HTTP 429 (still finishing prior prediction); "
                             "holding slot and retrying in 20s..."

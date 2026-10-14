@@ -46,6 +46,7 @@ DEFAULT_MODEL_DISPLAY_NAME = "af3-on-mg"
 DEFAULT_MACHINE_TYPE = "a3-highgpu-1g"
 DEFAULT_ACCELERATOR_TYPE = "NVIDIA_H100_80GB"
 DEFAULT_ACCELERATOR_COUNT = 1
+DEFAULT_CAPACITY_POOL = "DWS"
 DEFAULT_RESERVATION_AFFINITY_TYPE = "ANY_RESERVATION"
 DEFAULT_INFERENCE_TIMEOUT_SECONDS = 3600
 DEFAULT_DEPLOYMENT_TIMEOUT_SECONDS = 3600
@@ -65,6 +66,51 @@ def _env_bool(name: str, default: bool) -> bool:
     if raw is None or raw.strip() == "":
         return default
     return raw.strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def _duration_seconds(dur: Any) -> int | None:
+    """Extract total seconds from a proto-plus datetime.timedelta or protobuf Duration."""
+    if dur is None:
+        return None
+    if not type(dur).__module__.startswith("unittest.mock"):
+        total_fn = getattr(dur, "total_seconds", None)
+        if callable(total_fn):
+            val = total_fn()
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
+                return int(val)
+    sec = getattr(dur, "seconds", None)
+    if isinstance(sec, int) and not isinstance(sec, bool):
+        return int(sec)
+    return None
+
+
+def resolve_capacity_pool_config(
+    *,
+    capacity_pool: str | None = None,
+    use_dws: bool = True,
+    use_spot: bool = False,
+    reservation_affinity_type: str = DEFAULT_RESERVATION_AFFINITY_TYPE,
+) -> tuple[bool, bool, str]:
+    """Resolve (use_dws, use_spot, reservation_affinity_type) from capacity_pool or explicit flags.
+
+    Defaults to DWS FlexStart (`use_dws=True`), while allowing explicit selection of
+    `ANY_RESERVATION`, `NO_RESERVATION`, `SPECIFIC_RESERVATION`, or `SPOT`.
+    """
+    pool = (capacity_pool or "").strip().upper().replace("-", "_")
+    res_aff = (reservation_affinity_type or DEFAULT_RESERVATION_AFFINITY_TYPE).strip().upper()
+    if pool in ("DWS", "DWS_FLEX_START", "FLEX_START"):
+        return True, False, res_aff
+    if pool in ("ANY_RESERVATION", "RESERVATION", "SHARED_RESERVATION"):
+        return False, False, "ANY_RESERVATION"
+    if pool in ("NO_RESERVATION", "ON_DEMAND", "STANDARD"):
+        return False, False, "NO_RESERVATION"
+    if pool == "SPECIFIC_RESERVATION":
+        return False, False, "SPECIFIC_RESERVATION"
+    if pool == "SPOT":
+        return False, True, res_aff
+    if use_spot:
+        return False, True, res_aff
+    return bool(use_dws), False, res_aff
 
 
 def _build_dedicated_resources_v1beta1(
@@ -327,11 +373,65 @@ def reconcile_existing_endpoint_deployment(
     if deployed_models:
         dm = deployed_models[0]
         dr = getattr(dm, "dedicated_resources", None)
+
+        # Check if the capacity pool (DWS FlexStart vs Spot vs ReservationAffinity) changed
+        cur_flex = getattr(dr, "flex_start", None) if dr else None
+        cur_flex_sec = _duration_seconds(getattr(cur_flex, "max_runtime_duration", None))
+        cur_has_dws = isinstance(cur_flex_sec, int) and cur_flex_sec > 0
+        cur_spot_raw = getattr(dr, "spot", False) if dr else False
+        cur_has_spot = isinstance(cur_spot_raw, bool) and cur_spot_raw
+        cur_ms = getattr(dr, "machine_spec", None) if dr else None
+        cur_ra = getattr(cur_ms, "reservation_affinity", None) if cur_ms else None
+        cur_ra_type = getattr(cur_ra, "reservation_affinity_type", None) if cur_ra else None
+        cur_ra_name = (
+            cur_ra_type.name
+            if hasattr(cur_ra_type, "name") and isinstance(cur_ra_type.name, str)
+            else ""
+        )
+
+        want_dws = bool(use_dws and not use_spot)
+        want_spot = bool(use_spot)
+        pool_changed = False
+        if isinstance(cur_flex_sec, int):
+            if want_spot != cur_has_spot or want_dws != cur_has_dws:
+                pool_changed = True
+            elif (
+                not want_dws
+                and not want_spot
+                and reservation_affinity_type
+                and cur_ra_name
+                and cur_ra_name != "TYPE_UNSPECIFIED"
+                and cur_ra_name != reservation_affinity_type
+            ):
+                pool_changed = True
+
+        if pool_changed:
+            target_pool = (
+                "DWS_FLEX_START"
+                if want_dws
+                else ("SPOT" if want_spot else reservation_affinity_type)
+            )
+            print(
+                f"Capacity pool changed on {endpoint.resource_name} "
+                f"(deployed_model='{dm.id}' -> {target_pool}); undeploying to redeploy..."
+            )
+            undep_op = ep_client.undeploy_model(
+                request=gapic_v1beta1_types.UndeployModelRequest(
+                    endpoint=endpoint.resource_name,
+                    deployed_model_id=str(dm.id),
+                )
+            )
+            undep_op.result(timeout=600)
+            deployed_models = []
+
+    if deployed_models:
+        dm = deployed_models[0]
+        dr = getattr(dm, "dedicated_resources", None)
         cur_min = int(getattr(dr, "min_replica_count", 0) or 0) if dr else 1
         cur_max = int(getattr(dr, "max_replica_count", 1) or 1) if dr else 1
         stz = getattr(dr, "scale_to_zero_spec", None) if dr else None
-        cur_up = int(getattr(getattr(stz, "min_scaleup_period", None), "seconds", 0) or 0)
-        cur_down = int(getattr(getattr(stz, "idle_scaledown_period", None), "seconds", 0) or 0)
+        cur_up = _duration_seconds(getattr(stz, "min_scaleup_period", None)) or 0
+        cur_down = _duration_seconds(getattr(stz, "idle_scaledown_period", None)) or 0
 
         needs_mutate = cur_min != min_rep or cur_max != max_rep
         if min_rep == 0 and (cur_up != up_sec or cur_down != down_sec):
@@ -554,6 +654,7 @@ def setup_af3_endpoint(
     machine_type: str = DEFAULT_MACHINE_TYPE,
     accelerator_type: str = DEFAULT_ACCELERATOR_TYPE,
     accelerator_count: int = DEFAULT_ACCELERATOR_COUNT,
+    capacity_pool: str | None = None,
     reservation_affinity_type: str = DEFAULT_RESERVATION_AFFINITY_TYPE,
     use_dws: bool = True,
     dws_max_runtime_seconds: int = DEFAULT_DWS_MAX_RUNTIME_SECONDS,
@@ -570,6 +671,12 @@ def setup_af3_endpoint(
     undeploy_after_setup: bool = False,
 ) -> dict[str, Any]:
     """Deploy or verify the AlphaFold 3 Model Garden Dedicated Endpoint and set timeout."""
+    use_dws, use_spot, reservation_affinity_type = resolve_capacity_pool_config(
+        capacity_pool=capacity_pool,
+        use_dws=use_dws,
+        use_spot=use_spot,
+        reservation_affinity_type=reservation_affinity_type,
+    )
     print(f"Initializing Gemini platform for {project_id} in {location}...")
     vertexai.init(project=project_id, location=location, credentials=_get_credentials())
 
@@ -608,7 +715,7 @@ def setup_af3_endpoint(
             if not reconciled:
                 endpoint = None
 
-    used_dws = False
+    used_dws = bool(use_dws and not use_spot) if endpoint is not None else False
     if endpoint is None:
         # 1. Deploy Model Garden OpenModel to Dedicated Endpoint (~10-15 mins)
         af3_model = model_garden.OpenModel(model_id)
@@ -811,6 +918,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"GPU accelerator count (default: {DEFAULT_ACCELERATOR_COUNT})",
     )
     parser.add_argument(
+        "--capacity-pool",
+        default=os.getenv("AF3_CAPACITY_POOL", ""),
+        help=(
+            "Target capacity pool for the AF3 endpoint: 'DWS' (default, Dynamic Workload Scheduler FlexStart), "
+            "'ANY_RESERVATION' (GCE/CAIIS reservation or on-demand pool), 'NO_RESERVATION', "
+            "'SPECIFIC_RESERVATION', or 'SPOT' (env: AF3_CAPACITY_POOL)"
+        ),
+    )
+    parser.add_argument(
         "--dws",
         dest="use_dws",
         action="store_true",
@@ -839,7 +955,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--reservation-affinity-type",
         default=os.getenv("AF3_RESERVATION_AFFINITY_TYPE") or DEFAULT_RESERVATION_AFFINITY_TYPE,
-        help=f"GCE reservation affinity type when --no-dws is used (default: {DEFAULT_RESERVATION_AFFINITY_TYPE})",
+        help=f"GCE reservation affinity type when --no-dws or --capacity-pool ANY_RESERVATION is used (default: {DEFAULT_RESERVATION_AFFINITY_TYPE})",
     )
     parser.add_argument(
         "--min-replica-count",
@@ -929,6 +1045,7 @@ def main(argv: list[str] | None = None) -> int:
         machine_type=args.machine_type,
         accelerator_type=args.accelerator_type,
         accelerator_count=args.accelerator_count,
+        capacity_pool=args.capacity_pool,
         reservation_affinity_type=args.reservation_affinity_type,
         use_dws=args.use_dws,
         dws_max_runtime_seconds=args.dws_max_runtime_seconds,

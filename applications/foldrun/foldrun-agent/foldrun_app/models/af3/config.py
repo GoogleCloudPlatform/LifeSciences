@@ -129,9 +129,40 @@ class AF3Config(CoreConfig):
         return int(os.getenv("AF3_IDLE_SCALEDOWN_PERIOD_SECONDS", "1200"))
 
     @property
+    def capacity_pool(self) -> str:
+        """Target capacity pool for AF3 endpoint ('DWS' by default, or 'ANY_RESERVATION', 'NO_RESERVATION', 'SPOT')."""
+        raw = os.getenv("AF3_CAPACITY_POOL", "").strip().upper().replace("-", "_")
+        if raw in ("ANY_RESERVATION", "RESERVATION", "SHARED_RESERVATION"):
+            return "ANY_RESERVATION"
+        if raw in ("NO_RESERVATION", "ON_DEMAND", "STANDARD"):
+            return "NO_RESERVATION"
+        if raw == "SPECIFIC_RESERVATION":
+            return "SPECIFIC_RESERVATION"
+        if raw == "SPOT":
+            return "SPOT"
+        if raw in ("DWS", "DWS_FLEX_START", "FLEX_START"):
+            return "DWS"
+        if os.getenv("AF3_USE_DWS", "true").strip().lower() in ("false", "0", "no", "off"):
+            return (
+                os.getenv("AF3_RESERVATION_AFFINITY_TYPE", "ANY_RESERVATION").strip().upper()
+                or "ANY_RESERVATION"
+            )
+        return "DWS"
+
+    @property
+    def use_dws(self) -> bool:
+        """Whether the AF3 endpoint defaults to Dynamic Workload Scheduler (DWS FlexStart)."""
+        return self.capacity_pool == "DWS"
+
+    @property
     def reservation_affinity_type(self) -> str:
         """Optional GCE reservation affinity type ('NO_RESERVATION', 'ANY_RESERVATION', 'SPECIFIC_RESERVATION')."""
-        return os.getenv("AF3_RESERVATION_AFFINITY_TYPE", "").strip()
+        explicit = os.getenv("AF3_RESERVATION_AFFINITY_TYPE", "").strip()
+        if explicit:
+            return explicit
+        if self.capacity_pool in ("ANY_RESERVATION", "NO_RESERVATION", "SPECIFIC_RESERVATION"):
+            return self.capacity_pool
+        return ""
 
     @property
     def reservation_names(self) -> list[str]:
@@ -169,6 +200,8 @@ class AF3Config(CoreConfig):
                 "initial_replica_count": self.initial_replica_count,
                 "min_scaleup_period_seconds": self.min_scaleup_period_seconds,
                 "idle_scaledown_period_seconds": self.idle_scaledown_period_seconds,
+                "capacity_pool": self.capacity_pool,
+                "use_dws": self.use_dws,
                 "reservation_affinity_type": self.reservation_affinity_type,
                 "reservation_names": self.reservation_names,
                 "auto_fallback_gpu": self.auto_fallback_gpu,

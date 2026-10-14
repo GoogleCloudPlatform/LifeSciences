@@ -557,35 +557,41 @@ class AF3SubmitPredictionTool(AF3Tool):
 
             t0 = time.time()
             try:
-                try:
-                    prediction_response = endpoint.predict(
-                        instances=[instance_payload],
-                        parameters=predict_parameters,
-                        timeout=self.config.timeout_seconds,
-                    )
-                except Exception as first_err:
-                    err_repr = repr(first_err) + " " + str(first_err)
-                    if (
-                        "NameResolutionError" in err_repr
-                        or "ConnectionError" in err_repr
-                        or "Status code:404" in err_repr
-                        or "UNIMPLEMENTED" in err_repr
-                        or "Status code:502" in err_repr
-                        or "Status code:503" in err_repr
-                    ):
-                        logger.warning(
-                            f"Transient routing/DNS/ConnectionError on AF3 endpoint ({first_err}); "
-                            "refreshing endpoint metadata and retrying after 5s..."
-                        )
-                        if not type(endpoint).__module__.startswith("unittest.mock"):
-                            time.sleep(5)
-                        endpoint = self.get_endpoint(endpoint_id)
+                while True:
+                    try:
                         prediction_response = endpoint.predict(
                             instances=[instance_payload],
                             parameters=predict_parameters,
                             timeout=self.config.timeout_seconds,
                         )
-                    else:
+                        break
+                    except Exception as first_err:
+                        err_repr = repr(first_err) + " " + str(first_err)
+                        err_lower = err_repr.lower()
+                        is_wakeup = (
+                            "not ready for prediction yet" in err_lower
+                            or "not yet ready" in err_lower
+                            or "scale-up from zero" in err_lower
+                            or "scaling up from zero" in err_lower
+                        )
+                        if (
+                            is_wakeup
+                            or "NameResolutionError" in err_repr
+                            or "ConnectionError" in err_repr
+                            or "Status code:404" in err_repr
+                            or "UNIMPLEMENTED" in err_repr
+                            or "Status code:502" in err_repr
+                            or "Status code:503" in err_repr
+                        ) and (time.time() - t0) < max(self.config.timeout_seconds, 1800):
+                            wait_sec = 20 if is_wakeup else 5
+                            logger.warning(
+                                f"Transient wakeup/routing/ConnectionError on AF3 endpoint ({first_err}); "
+                                f"refreshing endpoint metadata and retrying after {wait_sec}s..."
+                            )
+                            if not type(endpoint).__module__.startswith("unittest.mock"):
+                                time.sleep(wait_sec)
+                            endpoint = self.get_endpoint(endpoint_id)
+                            continue
                         raise
             except DeadlineExceeded:
                 return {

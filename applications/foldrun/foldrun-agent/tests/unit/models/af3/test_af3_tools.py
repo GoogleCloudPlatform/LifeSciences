@@ -1203,6 +1203,129 @@ class TestAF3Tools:
         assert out.slot_released is True
         assert mock_ep.predict.call_count == 3
 
+    def test_run_af3_inference_task_retries_400_not_ready_for_prediction_yet(self, mock_af3_env):
+        """KFP Stage 2 retries HTTP 400 FailedPrecondition ('not ready for prediction yet') during DWS/Scale-to-Zero wakeup."""
+        from google.api_core.exceptions import FailedPrecondition
+
+        from foldrun_app.models.af3.pipeline import run_af3_inference_task
+
+        mock_bucket = MagicMock()
+        mock_bucket.list_blobs.return_value = []
+
+        def make_blob(path):
+            b = MagicMock()
+            b.name = path
+            b.exists.return_value = False
+            if path.endswith("input.json"):
+                b.download_as_text.return_value = json.dumps(
+                    {
+                        "name": "test_400_not_ready",
+                        "modelSeeds": [1],
+                        "sequences": [{"protein": {"id": "A", "sequence": "MKTIIALSYIFCLVFA"}}],
+                    }
+                )
+            return b
+
+        mock_bucket.blob.side_effect = make_blob
+        mock_storage_client = MagicMock()
+        mock_storage_client.bucket.return_value = mock_bucket
+
+        mock_pred_resp = MagicMock()
+        mock_pred_resp.predictions = [
+            {
+                "structure_cif": "ATOM 1 N N . MET A 1 1 ? 1.0 2.0 3.0 1.00 91.5 1 MET A 1\n",
+                "summary_confidences": {"ranking_score": 0.90, "ptm": 0.90},
+                "plddt": [91.5],
+                "pae": [[0.5]],
+            }
+        ]
+
+        mock_ep = MagicMock()
+        mock_ep.resource_name = "projects/test-project/locations/us-central1/endpoints/123"
+        mock_ep.predict.side_effect = [
+            FailedPrecondition(
+                'The model "google-alphafold3-v3_0_4-1791651264" is not ready for prediction yet.'
+            ),
+            RuntimeError("429 Endpoint is undergoing scale-up from zero"),
+            mock_pred_resp,
+        ]
+
+        with (
+            patch("google.cloud.storage.Client", return_value=mock_storage_client),
+            patch("google.cloud.aiplatform.init"),
+            patch("google.cloud.aiplatform.Endpoint", return_value=mock_ep),
+            patch("time.sleep"),
+        ):
+            out = run_af3_inference_task.python_func(
+                project_id="test-project",
+                region="us-central1",
+                endpoint_location="us-central1",
+                endpoint_id="projects/test-project/locations/us-central1/endpoints/123",
+                bucket_name="test-bucket",
+                job_name="test_400_not_ready",
+                pipeline_job_id="alphafold3-inference-pipeline-20261014232500",
+                query_json_path="gs://test-bucket/af3_predictions/test_400_not_ready/input.json",
+                job_prefix="af3_predictions/test_400_not_ready",
+                slot_blob_path="af3_predictions/.locks/123_slot_0.json",
+                slot_index=0,
+                active_replicas=1,
+                queue_wait_seconds=5.0,
+                msa_free=True,
+                num_diffusion_samples=5,
+                timeout_seconds=1800,
+            )
+
+        assert out.slot_released is True
+        assert mock_ep.predict.call_count == 3
+
+    def test_capacity_pool_dws_default_and_any_reservation_config(self, mock_af3_env):
+        """AF3Config and setup_af3_endpoint default to DWS and support ANY_RESERVATION config option."""
+        import sys
+        from pathlib import Path
+
+        scripts_dir = Path(__file__).resolve().parents[4] / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        import setup_af3_endpoint as setup_mod
+
+        # Default is DWS
+        cfg_default = AF3Config()
+        assert cfg_default.capacity_pool == "DWS"
+        assert cfg_default.use_dws is True
+        assert setup_mod.resolve_capacity_pool_config() == (True, False, "ANY_RESERVATION")
+
+        # ANY_RESERVATION via capacity_pool argument or env
+        assert setup_mod.resolve_capacity_pool_config(capacity_pool="ANY_RESERVATION") == (
+            False,
+            False,
+            "ANY_RESERVATION",
+        )
+        parsed = setup_mod.parse_args(
+            ["--project-id", "test-proj", "--capacity-pool", "ANY_RESERVATION"]
+        )
+        assert parsed.capacity_pool == "ANY_RESERVATION"
+
+        with patch.dict(os.environ, {"AF3_CAPACITY_POOL": "ANY_RESERVATION"}):
+            cfg_any = AF3Config()
+            assert cfg_any.capacity_pool == "ANY_RESERVATION"
+            assert cfg_any.use_dws is False
+            assert cfg_any.reservation_affinity_type == "ANY_RESERVATION"
+
+        # Verify whole-day timedelta (e.g. 7 days = 604800s where .seconds == 0) is recognized as DWS_FLEX_START
+        from datetime import timedelta
+
+        assert setup_mod._duration_seconds(timedelta(days=7)) == 604800
+        assert setup_mod._duration_seconds(timedelta(days=0)) == 0
+
+        dm_7d = MagicMock()
+        dm_7d.dedicated_resources.min_replica_count = 0
+        dm_7d.dedicated_resources.max_replica_count = 1
+        dm_7d.dedicated_resources.initial_replica_count = 1
+        dm_7d.dedicated_resources.flex_start.max_runtime_duration = timedelta(days=7)
+        dm_7d.dedicated_resources.spot = False
+        rep_7d = AF3CheckEndpointTool.extract_replica_counts(dm_7d)
+        assert rep_7d["provisioning_mode"] == "DWS_FLEX_START"
+
     def test_scale_to_zero_defaults_and_check_endpoint(self, mock_af3_env):
         """AF3Config defaults to scale-to-zero and check_af3_endpoint reports it."""
         config = AF3Config()

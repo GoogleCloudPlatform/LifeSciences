@@ -174,8 +174,14 @@ variable "af3_accelerator_count" {
   default     = 1
 }
 
+variable "af3_capacity_pool" {
+  description = "Optional capacity pool override for the AlphaFold 3 Dedicated Endpoint: 'DWS' (default, Dynamic Workload Scheduler FlexStart), 'ANY_RESERVATION', 'NO_RESERVATION', 'SPECIFIC_RESERVATION', or 'SPOT'. When empty, uses var.af3_use_dws (true by default)."
+  type        = string
+  default     = ""
+}
+
 variable "af3_reservation_affinity_type" {
-  description = "GCE reservation affinity type for AlphaFold 3 Dedicated Endpoint when af3_use_dws=false ('ANY_RESERVATION', 'NO_RESERVATION', or 'SPECIFIC_RESERVATION')"
+  description = "GCE reservation affinity type for AlphaFold 3 Dedicated Endpoint when af3_use_dws=false or af3_capacity_pool='ANY_RESERVATION' ('ANY_RESERVATION', 'NO_RESERVATION', or 'SPECIFIC_RESERVATION')"
   type        = string
   default     = "ANY_RESERVATION"
 }

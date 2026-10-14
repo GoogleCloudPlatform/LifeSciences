@@ -34,8 +34,10 @@ usage() {
     echo "                           data       - Download genomic databases to NFS + GCS backup"
     echo "                           convert    - MMseqs2 GPU index conversion (optional, requires data)"
     echo "                           all        - Run infra + build + data (no convert)"
-    echo "  --enable-af3           Provision the AlphaFold 3 Model Garden Dedicated Endpoint"
-    echo "                         (google/alphafold3@v3_0_4) and set 3,600s inference timeout."
+  echo "  --enable-af3           Provision the AlphaFold 3 Model Garden Dedicated Endpoint"
+  echo "                         (google/alphafold3@v3_0_4) and set 3,600s inference timeout."
+  echo "  --af3-capacity-pool P  Target capacity pool for the AF3 endpoint: DWS (default),"
+  echo "                         ANY_RESERVATION, NO_RESERVATION, or SPOT."
     echo "  --build-target TARGET  With --steps build: which components to rebuild (default: all)."
     echo "                           all            - rebuild everything (default)"
     echo "                           of3            - openfold3-components + agent"
@@ -59,6 +61,9 @@ usage() {
     echo "  DOWNLOAD_MODE      Database download mode: reduced (default) or full"
     echo "  ENABLE_AF3         Provision AlphaFold 3 Model Garden Endpoint in Terraform: true or false (default)"
     echo "  AF3_ENDPOINT_LOCATION  Region for AF3 Dedicated Endpoint (default: REGION, e.g. us-central1)"
+    echo "  AF3_CAPACITY_POOL  Capacity pool for AF3 Endpoint: DWS (default), ANY_RESERVATION, NO_RESERVATION, or SPOT"
+    echo "  AF3_USE_DWS        Use DWS FlexStart for AF3 Endpoint: true (default) or false"
+    echo "  AF3_RESERVATION_AFFINITY_TYPE  GCE reservation affinity when AF3_USE_DWS=false (default: ANY_RESERVATION)"
     echo "  AF2_VERSION        AlphaFold2 git commit to build (default: pinned commit)"
     echo "  FOLDRUN_VIEWER_URL Custom Viewer URL (defaults to Terraform output if available)"
     echo "  ENABLE_VIEWER_IAP  Enable IAP for the viewer: true (default) or false"
@@ -114,6 +119,10 @@ while [[ $# -gt 0 ]]; do
         --enable-af3)
             export ENABLE_AF3="true"
             shift
+            ;;
+        --af3-capacity-pool)
+            export AF3_CAPACITY_POOL="$2"
+            shift 2
             ;;
         --build-target)
             BUILD_TARGET="$2"
@@ -189,6 +198,31 @@ AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION:-""}
 if [[ "${AF3_ENDPOINT_LOCATION,,}" == "global" ]]; then
     AF3_ENDPOINT_LOCATION=""
 fi
+AF3_CAPACITY_POOL=${AF3_CAPACITY_POOL:-""}
+AF3_RESERVATION_AFFINITY_TYPE=${AF3_RESERVATION_AFFINITY_TYPE:-"ANY_RESERVATION"}
+if [[ -n "$AF3_CAPACITY_POOL" ]]; then
+    case "${AF3_CAPACITY_POOL^^}" in
+        DWS|DWS_FLEX_START|FLEX_START)
+            AF3_USE_DWS="true"
+            ;;
+        ANY_RESERVATION|RESERVATION|SHARED_RESERVATION)
+            AF3_USE_DWS="false"
+            AF3_RESERVATION_AFFINITY_TYPE="ANY_RESERVATION"
+            ;;
+        NO_RESERVATION|ON_DEMAND|STANDARD)
+            AF3_USE_DWS="false"
+            AF3_RESERVATION_AFFINITY_TYPE="NO_RESERVATION"
+            ;;
+        SPECIFIC_RESERVATION)
+            AF3_USE_DWS="false"
+            AF3_RESERVATION_AFFINITY_TYPE="SPECIFIC_RESERVATION"
+            ;;
+        SPOT)
+            AF3_USE_DWS="false"
+            ;;
+    esac
+fi
+AF3_USE_DWS=${AF3_USE_DWS:-"true"}
 DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
 AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
 OF3_VERSION=${OF3_VERSION:-"0.5-pixi@sha256:8764f7320ff12c52e9b9ec6bb0047f71df0ab197d401d04a78a51f48e9913335"}
@@ -228,7 +262,7 @@ echo "FoldRun Ecosystem Deployment"
 echo "================================================================================"
 echo "Project:       $PROJECT_ID"
 echo "Region:        $REGION (Zone: $ZONE)"
-echo "AF3 Endpoint:  $ENABLE_AF3 (Location: ${AF3_ENDPOINT_LOCATION:-$REGION})"
+echo "AF3 Endpoint:  $ENABLE_AF3 (Location: ${AF3_ENDPOINT_LOCATION:-$REGION}, Pool: ${AF3_CAPACITY_POOL:-$([[ "$AF3_USE_DWS" == "true" ]] && echo "DWS" || echo "$AF3_RESERVATION_AFFINITY_TYPE")})"
 echo "Viewer IAP:    $ENABLE_VIEWER_IAP"
 echo "IAP Domain:    $IAP_ACCESS_DOMAIN"
 echo "Download Mode: $DOWNLOAD_MODE"
@@ -393,7 +427,10 @@ EOF
         -var="iap_access_domain=${IAP_ACCESS_DOMAIN}" \
         -var="enable_viewer_iap=${ENABLE_VIEWER_IAP}" \
         -var="enable_af3=${ENABLE_AF3}" \
-        -var="af3_endpoint_location=${AF3_ENDPOINT_LOCATION}"
+        -var="af3_endpoint_location=${AF3_ENDPOINT_LOCATION}" \
+        -var="af3_use_dws=${AF3_USE_DWS}" \
+        -var="af3_reservation_affinity_type=${AF3_RESERVATION_AFFINITY_TYPE}" \
+        -var="af3_capacity_pool=${AF3_CAPACITY_POOL}"
     cd ..
 fi
 

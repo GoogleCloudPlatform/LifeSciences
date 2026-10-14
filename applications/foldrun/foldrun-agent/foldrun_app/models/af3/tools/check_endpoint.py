@@ -109,6 +109,9 @@ class AF3CheckEndpointTool(AF3Tool):
                         "scale_to_zero_enabled": rep_info["scale_to_zero_enabled"],
                         "min_scaleup_period_seconds": rep_info["min_scaleup_period_seconds"],
                         "idle_scaledown_period_seconds": rep_info["idle_scaledown_period_seconds"],
+                        "provisioning_mode": rep_info.get("provisioning_mode"),
+                        "available_replica_count": rep_info.get("available_replica_count"),
+                        "status_message": rep_info.get("status_message"),
                     }
                 )
 
@@ -130,6 +133,9 @@ class AF3CheckEndpointTool(AF3Tool):
                 stz_enabled = bool(first_model.get("scale_to_zero_enabled", replicas == 0))
                 idle_sec = int(first_model.get("idle_scaledown_period_seconds") or 1200)
                 idle_min = max(1, idle_sec // 60)
+                prov_mode = first_model.get("provisioning_mode") or "DWS_FLEX_START"
+                avail_rep = first_model.get("available_replica_count")
+                status_msg = first_model.get("status_message")
                 if "g2" in m_type or "L4" in acc_str:
                     unit_rate = 1.01
                     tier_label = "L4"
@@ -165,12 +171,14 @@ class AF3CheckEndpointTool(AF3Tool):
                 msg = (
                     f"AlphaFold 3 endpoint '{endpoint.display_name or endpoint.resource_name}' is active "
                     f"with {len(deployed_models_info)} deployed model(s) ({m_type}, "
-                    f"min_replicas={replicas}, max_replicas={max_rep}"
+                    f"pool={prov_mode}, min_replicas={replicas}, max_replicas={max_rep}"
+                    + (f", available_replicas={avail_rep}" if avail_rep is not None else "")
                     + (f", scale_to_zero=True [{idle_min}m idle]" if stz_enabled else "")
                     + "). "
-                    f"Cost state: {cost_estimate}. "
+                    + (f"Replica status: {status_msg} " if status_msg else "")
+                    + f"Cost state: {cost_estimate}. "
                     f"Console: {console_url} | Logs: {logs_url}. "
-                    "Replica counts are managed by Terraform (`af3_max_replica_count`)."
+                    "Replica counts and capacity pool are managed by Terraform (`af3_max_replica_count`, `af3_capacity_pool`)."
                 )
             elif active_deploy_ops:
                 status_str = "deploying"
