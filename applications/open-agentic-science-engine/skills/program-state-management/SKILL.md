@@ -1,3 +1,8 @@
+---
+name: program-state-management
+description: Maintain the Layer 2 program state for a drug discovery program.
+---
+
 # Program State Management
 
 How the orchestrator maintains Layer 2 program state — the living decision surface for the drug discovery program.
