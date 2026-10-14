@@ -762,6 +762,19 @@ RELAY_CODES: dict[str, str] = {
         "operate. Check assignees, claim scope, and jurisdiction before "
         "proceeding."
     ),
+    "patent.result_set_capped": (
+        "The search retained fewer results than the query matched, in the "
+        "source's relevance order. Recent-filing counts, density, FTO risk "
+        "and top assignees describe the retained results, not the query: "
+        "report them as at least N among the top K, and do not read a quiet "
+        "or empty retained set as an absence of filings."
+    ),
+    "patent.fetch_fault": (
+        "A search page failed after earlier pages succeeded, so the retained "
+        "set ends where the failure happened, not where the results did. "
+        "State that the set is incomplete because a request failed, not "
+        "because the query ran out of results."
+    ),
     "differentiation.crowded_landscape": (
         "Competitive landscape shows significant activity. Existing "
         "competitor activity is informational, not a go/no-go gate — "
