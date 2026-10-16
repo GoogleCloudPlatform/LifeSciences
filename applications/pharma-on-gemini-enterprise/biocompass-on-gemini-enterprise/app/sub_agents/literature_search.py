@@ -16,7 +16,7 @@
 
 import os
 
-from google.adk.agents.llm_agent import Agent
+from google.adk.agents import LlmAgent
 
 from ..app_utils.models import get_gemini_model
 from ..tools.eutils import (
@@ -29,7 +29,7 @@ from ..tools.eutils import (
 
 _MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.8-flash")
 
-literature_search_agent = Agent(
+literature_search_agent = LlmAgent(
     model=get_gemini_model(_MODEL),
     name="literature_search_agent",
     description=(

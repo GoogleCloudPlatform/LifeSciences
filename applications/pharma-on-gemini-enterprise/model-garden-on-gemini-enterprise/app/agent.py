@@ -16,8 +16,8 @@ import os
 import re
 
 from anthropic import types as _anthropic_types
+from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
-from google.adk.agents.llm_agent import Agent
 from google.adk.apps import App
 from google.adk.models import anthropic_llm as _anthropic_llm
 from google.adk.models.llm_request import LlmRequest
@@ -397,7 +397,7 @@ _INSTRUCTION = (
 #     ' session, so do not reload files you already loaded.'
 # )
 
-root_agent = Agent(
+root_agent = LlmAgent(
     model=os.getenv("MODEL_NAME", "claude-opus-4-7"),
     name="root_agent",
     description="A helpful assistant for user questions.",

@@ -66,8 +66,8 @@ import os
 import pathlib
 import re
 
+from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
-from google.adk.agents.llm_agent import Agent
 from google.adk.apps import App
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
@@ -311,7 +311,7 @@ in that lane."
 """
 
 
-root_agent = Agent(
+root_agent = LlmAgent(
     model=get_gemini_model(_COORDINATOR_MODEL),
     name="root_agent",
     description=(

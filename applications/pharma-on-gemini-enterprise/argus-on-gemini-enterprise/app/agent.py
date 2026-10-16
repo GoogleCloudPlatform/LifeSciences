@@ -59,7 +59,7 @@ Design notes:
 
 import os
 
-from google.adk.agents import Agent
+from google.adk.agents import LlmAgent
 from google.adk.apps import App
 from google.adk.models.google_llm import Gemini
 from google.adk.planners import BuiltInPlanner
@@ -172,7 +172,7 @@ synthesizer_skill_toolset = create_agent_skill_toolset(
 
 # --- Web search, isolated then shared as a tool (built-in tool constraint) ---
 
-search_agent = Agent(
+search_agent = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="search_agent",
@@ -216,7 +216,7 @@ def launch_deep_diligence(
 
 # --- Specialist analysts (attached directly to the coordinator as sub-agents) ---
 
-regulatory_scientific_analyst = Agent(
+regulatory_scientific_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="regulatory_scientific_analyst",
@@ -229,7 +229,7 @@ regulatory_scientific_analyst = Agent(
     tools=[regulatory_scientific_skill_toolset, web_search],
 )
 
-clinical_analyst = Agent(
+clinical_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="clinical_analyst",
@@ -242,7 +242,7 @@ clinical_analyst = Agent(
     tools=[clinical_skill_toolset, web_search],
 )
 
-financial_analyst = Agent(
+financial_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="financial_analyst",
@@ -260,7 +260,7 @@ financial_analyst = Agent(
     ],
 )
 
-market_analyst = Agent(
+market_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="market_analyst",
@@ -276,7 +276,7 @@ market_analyst = Agent(
 
 # --- Deep-report workflow DAG: parallel analysts -> JoinNode -> synthesizer -> PDF ---
 
-scientific_pos_analyst = Agent(
+scientific_pos_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="scientific_pos_analyst",
@@ -286,7 +286,7 @@ scientific_pos_analyst = Agent(
     output_key="findings_scientific_pos",
 )
 
-competitive_analyst = Agent(
+competitive_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="competitive_analyst",
@@ -296,7 +296,7 @@ competitive_analyst = Agent(
     output_key="findings_competitive",
 )
 
-clinical_regulatory_analyst = Agent(
+clinical_regulatory_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="clinical_regulatory_analyst",
@@ -306,7 +306,7 @@ clinical_regulatory_analyst = Agent(
     output_key="findings_clinical_regulatory",
 )
 
-commercial_analyst = Agent(
+commercial_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="commercial_analyst",
@@ -316,7 +316,7 @@ commercial_analyst = Agent(
     output_key="findings_commercial",
 )
 
-financial_deal_analyst = Agent(
+financial_deal_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="financial_deal_analyst",
@@ -332,7 +332,7 @@ financial_deal_analyst = Agent(
     output_key="findings_financial_deal",
 )
 
-ip_fto_analyst = Agent(
+ip_fto_analyst = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="ip_fto_analyst",
@@ -347,7 +347,7 @@ join_analyst_findings = JoinNode(
     description="Synchronizes and merges findings from all six parallel diligence analysts.",
 )
 
-report_synthesizer = Agent(
+report_synthesizer = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="report_synthesizer",
@@ -389,7 +389,7 @@ deep_report_pipeline = Workflow(
 
 # --- Coordinator & Root Workflow ---
 
-coordinator_agent = Agent(
+coordinator_agent = LlmAgent(
     model=MODEL,
     planner=THINKING_PLANNER,
     name="coordinator",

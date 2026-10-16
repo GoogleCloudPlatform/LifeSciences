@@ -85,7 +85,7 @@ invalid-assignment = "ignore"
 invalid-return-type = "ignore"
 possibly-missing-attribute = "ignore"
 not-subscriptable = "ignore"
-deprecated = "ignore"
+deprecated = "warn"
 
 [build-system]
 requires = ["hatchling"]

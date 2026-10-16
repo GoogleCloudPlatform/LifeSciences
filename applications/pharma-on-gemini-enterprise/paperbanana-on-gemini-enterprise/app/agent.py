@@ -54,7 +54,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from google.adk.agents import Agent, LlmAgent
+from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.context import Context
 from google.adk.agents.readonly_context import ReadonlyContext
@@ -1062,7 +1062,7 @@ async def _strip_tool_preamble(
     return None
 
 
-coordinator_agent = Agent(
+coordinator_agent = LlmAgent(
     model=_PLANNER_MODEL,
     planner=THINKING_PLANNER,
     name="coordinator_agent",

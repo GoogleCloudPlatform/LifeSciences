@@ -16,7 +16,7 @@
 
 import os
 
-from google.adk.agents.llm_agent import Agent
+from google.adk.agents import LlmAgent
 
 from ..app_utils.models import get_gemini_model
 from ..tools.pubtator import (
@@ -27,7 +27,7 @@ from ..tools.pubtator import (
 
 _MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.8-flash")
 
-entity_analysis_agent = Agent(
+entity_analysis_agent = LlmAgent(
     model=get_gemini_model(_MODEL),
     name="entity_analysis_agent",
     description=(
