@@ -35,8 +35,8 @@ steps:
   # 1. FoldRun Viewer (Cloud Run Service)
   # ============================================================================
   - id: 'build-push-viewer'
-    name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
     env:
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
@@ -50,6 +50,7 @@ steps:
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",viewer,"* ]]; then
           docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" || true
           docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" \
             --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" \
             src/foldrun-viewer/
@@ -60,7 +61,7 @@ steps:
     waitFor: ['-']
 
   - id: 'deploy-viewer'
-    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    name: 'gcr.io/google.com/cloudsdktool/google-cloud-cli:stable'
     entrypoint: bash
     env:
       - 'PROJECT_ID=$PROJECT_ID'
@@ -87,8 +88,8 @@ steps:
   # 2. Unified Analysis Job (Cloud Run Job)
   # ============================================================================
   - id: 'build-push-analysis'
-    name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
     env:
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
@@ -102,6 +103,7 @@ steps:
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",analysis,"* ]]; then
           docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" || true
           docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" \
             --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" \
             src/foldrun-analysis-job/
@@ -112,7 +114,7 @@ steps:
     waitFor: ['-']
 
   - id: 'deploy-analysis'
-    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    name: 'gcr.io/google.com/cloudsdktool/google-cloud-cli:stable'
     entrypoint: bash
     env:
       - 'PROJECT_ID=$PROJECT_ID'
@@ -142,8 +144,8 @@ steps:
   # 3. AlphaFold2 Components (Pipeline Container Image)
   # ============================================================================
   - id: 'build-push-af2-components'
-    name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
     env:
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
@@ -158,6 +160,7 @@ steps:
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",af2,"* ]]; then
           docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest" || true
           docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
             --build-arg "AF2_VERSION=$$AF2_VERSION" \
             -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest" \
             --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest" \
@@ -172,8 +175,8 @@ steps:
   # 3b. OpenFold3 Components (Pipeline Container Image)
   # ============================================================================
   - id: 'build-push-of3-components'
-    name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
     env:
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
@@ -200,8 +203,8 @@ steps:
   # 3c. Boltz-2 Components (Pipeline Container Image)
   # ============================================================================
   - id: 'build-push-boltz2-components'
-    name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
     env:
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
@@ -216,6 +219,7 @@ steps:
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",boltz2,"* ]]; then
           docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest" || true
           docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
             --build-arg "BOLTZ_VERSION=$$BOLTZ_VERSION" \
             --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest" \
             -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest" \

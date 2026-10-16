@@ -13,7 +13,7 @@
 # limitations under the License.
 
 steps:
-- name: 'gcr.io/cloud-builders/docker'
+- name: 'docker:29-cli'
   args: ['build', '-t', '${_IMAGE_PATH}', '.']
 images:
 - '${_IMAGE_PATH}'

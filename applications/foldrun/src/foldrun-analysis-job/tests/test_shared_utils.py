@@ -258,3 +258,22 @@ class TestBuildAndUploadRunArchive:
             assert "plots/rank_01_model_1_pred_0_pae.png" in names
             # Ensure raw matrices (.pkl/.npz) are excluded from the compact bundle
             assert not any(n.endswith((".pkl", ".npz")) for n in names)
+
+    @patch.object(shared_utils.storage, "Client")
+    def test_download_json_from_gcs_uses_download_as_text(self, mock_storage_cls):
+        """Verify download_json_from_gcs calls download_as_text() instead of removed download_as_string()."""
+        mock_blob = MagicMock()
+        mock_blob.download_as_string.side_effect = AttributeError(
+            "'Blob' object has no attribute 'download_as_string'"
+        )
+        mock_blob.download_as_text.return_value = (
+            '{"job_id": "job-123", "status": "ok"}'
+        )
+        mock_storage_cls.return_value.bucket.return_value.blob.return_value = mock_blob
+
+        data = shared_utils.download_json_from_gcs(
+            "gs://test-bucket/analysis/summary.json"
+        )
+        assert data == {"job_id": "job-123", "status": "ok"}
+        mock_blob.download_as_text.assert_called_once_with()
+        mock_blob.download_as_string.assert_not_called()

@@ -17,7 +17,7 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import run_v2, storage
@@ -206,7 +206,7 @@ class OF3JobAnalysisTool(OF3Tool):
         metadata = {
             "job_id": job_id,
             "total_predictions": len(samples),
-            "started_at": datetime.utcnow().isoformat() + "Z",
+            "started_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "status": "running",
             "execution_method": "cloud_run_job",
             "model_type": "openfold3",

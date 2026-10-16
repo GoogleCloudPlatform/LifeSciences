@@ -273,3 +273,51 @@ class TestAF2AnalysisGcsValidation:
 
         with pytest.raises(ValueError, match="Path traversal detected"):
             tool.run({"job_id": "job-123", "overwrite": True})
+
+    @patch("foldrun_app.models.af2.tools.analyze_job.storage.Client")
+    def test_af2_check_existing_analysis_uses_download_as_text(
+        self, mock_storage_client_cls, analyze_job_tool
+    ):
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = True
+        mock_blob.download_as_string.side_effect = AttributeError(
+            "'Blob' object has no attribute 'download_as_string'"
+        )
+        mock_blob.download_as_text.return_value = '{"status": "completed", "num_predictions": 5}'
+        mock_storage_client_cls.return_value.bucket.return_value.blob.return_value = mock_blob
+
+        exists, data = analyze_job_tool._check_existing_analysis(
+            "gs://authorized-pipeline-bucket/run1/analysis/"
+        )
+        assert exists is True
+        assert data == {"status": "completed", "num_predictions": 5}
+        mock_blob.download_as_text.assert_called_once_with()
+        mock_blob.download_as_string.assert_not_called()
+
+    @patch("foldrun_app.models.boltz2.tools.analyze_job.storage.Client")
+    def test_boltz2_check_existing_analysis_uses_download_as_text(
+        self, mock_storage_client_cls, mock_config
+    ):
+        from foldrun_app.models.boltz2.tools.analyze_job import BOLTZ2JobAnalysisTool
+
+        with patch("foldrun_app.core.base_tool._ensure_clients"):
+            tool = BOLTZ2JobAnalysisTool(
+                tool_config={"name": "boltz2_analyze_job", "description": "test"},
+                config=mock_config,
+            )
+
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = True
+        mock_blob.download_as_string.side_effect = AttributeError(
+            "'Blob' object has no attribute 'download_as_string'"
+        )
+        mock_blob.download_as_text.return_value = '{"status": "completed", "num_samples": 4}'
+        mock_storage_client_cls.return_value.bucket.return_value.blob.return_value = mock_blob
+
+        exists, data = tool._check_existing_analysis(
+            "gs://authorized-pipeline-bucket/run1/analysis/"
+        )
+        assert exists is True
+        assert data == {"status": "completed", "num_samples": 4}
+        mock_blob.download_as_text.assert_called_once_with()
+        mock_blob.download_as_string.assert_not_called()

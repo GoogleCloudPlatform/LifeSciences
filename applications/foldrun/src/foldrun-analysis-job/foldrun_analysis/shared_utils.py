@@ -83,7 +83,7 @@ def download_json_from_gcs(gcs_uri: str) -> dict:
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
-    content = blob.download_as_string()
+    content = blob.download_as_text()
     return json.loads(content)
 
 

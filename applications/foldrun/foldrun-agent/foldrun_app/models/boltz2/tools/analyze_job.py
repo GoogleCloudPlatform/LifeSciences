@@ -17,7 +17,7 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import run_v2, storage
@@ -75,7 +75,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
 
             summary_blob = bucket.blob(f"{prefix}summary.json")
             if summary_blob.exists():
-                content = summary_blob.download_as_string()
+                content = summary_blob.download_as_text()
                 return True, json.loads(content)
 
             return False, None
@@ -239,7 +239,7 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
         metadata = {
             "job_id": job_id,
             "total_predictions": len(samples),
-            "started_at": datetime.utcnow().isoformat() + "Z",
+            "started_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "status": "running",
             "execution_method": "cloud_run_job",
             "model_type": "boltz2",

@@ -48,7 +48,11 @@ def test_cloudbuild_inline_bash_steps_enable_strict_error_propagation():
         step_id = step.get("id", "<unnamed>")
         entrypoint = step.get("entrypoint", "")
         args = step.get("args", [])
-        if entrypoint in ("bash", "/bin/bash") and len(args) >= 2 and args[0] == "-c":
+        if (
+            entrypoint in ("bash", "/bin/bash", "sh", "/bin/sh")
+            and len(args) >= 2
+            and args[0] == "-c"
+        ):
             script = args[1]
             first_line = _first_effective_line(script)
             if first_line != "set -euo pipefail":
@@ -58,3 +62,30 @@ def test_cloudbuild_inline_bash_steps_enable_strict_error_propagation():
         "The following Cloud Build inline bash steps do not begin with "
         f"`set -euo pipefail` (CWE-252): {missing_strict_mode}"
     )
+
+
+def test_cloudbuild_files_do_not_use_deprecated_builder_images():
+    """Verify FoldRun cloudbuild.yaml files do not use deprecated builder images."""
+    foldrun_root = CLOUDBUILD_YAML_PATH.parent
+    cloudbuild_paths = [
+        foldrun_root / "cloudbuild.yaml",
+        foldrun_root / "src" / "foldrun-analysis-job" / "cloudbuild.yaml",
+        foldrun_root / "src" / "foldrun-viewer" / "cloudbuild.yaml",
+    ]
+    deprecated_prefixes = (
+        "gcr.io/cloud-builders/docker",
+        "gcr.io/cloud-builders/gcloud",
+        "gcr.io/google.com/cloudsdktool/cloud-sdk",
+    )
+
+    for path in cloudbuild_paths:
+        assert path.exists(), f"Missing {path}"
+        config = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for step in config.get("steps", []):
+            name = step.get("name", "")
+            assert not name.startswith(deprecated_prefixes), (
+                f"{path} uses deprecated builder image '{name}'"
+            )
+            assert name not in ("docker", "docker:latest"), (
+                f"{path} should use a tagged CLI docker image (e.g. 'docker:29-cli'), got '{name}'"
+            )

@@ -35,7 +35,7 @@ import os
 import warnings
 
 # ADK imports
-from google.adk.agents import Agent
+from google.adk.agents import LlmAgent
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -170,7 +170,7 @@ async def create_pretty_agent():
         raise
 
 
-async def run_interactive_session(agent: Agent):
+async def run_interactive_session(agent: LlmAgent):
     """Run an interactive session with the FoldRun agent."""
 
     # Create session and artifact services
@@ -277,7 +277,7 @@ async def run_interactive_session(agent: Agent):
         pass
 
 
-async def run_single_query(agent: Agent, query: str):
+async def run_single_query(agent: LlmAgent, query: str):
     """Run a single query against the agent (useful for testing/scripting)."""
 
     session_service = InMemorySessionService()

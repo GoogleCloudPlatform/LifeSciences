@@ -24,7 +24,7 @@ import re
 import tempfile
 import urllib.parse
 import zipfile
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import google.auth
@@ -962,7 +962,7 @@ def trigger_analysis():
                 {
                     "job_id": job_id,
                     "total_predictions": len(raw_predictions),
-                    "started_at": datetime.utcnow().isoformat() + "Z",
+                    "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                     "status": "running",
                     "model_type": model_type,
                     "execution_method": "cloud_run_job",

@@ -17,7 +17,7 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from google.cloud import run_v2, storage
@@ -97,7 +97,7 @@ class AF2JobAnalysisTool(AF2Tool):
             if summary_blob.exists():
                 logger.info(f"Found existing summary.json at {analysis_path}summary.json")
                 # Download and return the summary data
-                content = summary_blob.download_as_string()
+                content = summary_blob.download_as_text()
                 summary_data = json.loads(content)
                 return True, summary_data
 
@@ -162,7 +162,7 @@ class AF2JobAnalysisTool(AF2Tool):
         metadata = {
             "job_id": job_id,
             "total_predictions": len(predictions),
-            "started_at": datetime.utcnow().isoformat() + "Z",
+            "started_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "status": "running",
             "top_n": top_n,
             "execution_method": "cloud_run_job",

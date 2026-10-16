@@ -22,7 +22,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from google.adk.agents import Agent
+from google.adk.agents import LlmAgent
 from google.adk.apps import App
 from google.adk.flows.llm_flows.base_llm_flow import LlmResponse
 from google.genai import types
@@ -204,7 +204,7 @@ def _initialize_backends():
     ensure_initialized()
 
 
-def create_alphafold_agent(model: str | None = None) -> Agent:
+def create_alphafold_agent(model: str | None = None) -> LlmAgent:
     """Create and configure the baseline v1 FoldRun agent (AF2 + OF3 + Boltz-2) with static tools.
 
     Retained as the rollback/fallback path and for backward compatibility.
@@ -229,7 +229,7 @@ def create_alphafold_agent(model: str | None = None) -> Agent:
     full_instruction = AGENT_INSTRUCTION + "\n\n" + config_context
     tools = skill_registry.compile_tools()
 
-    agent = Agent(
+    agent = LlmAgent(
         model=gemini_model,
         name="foldrun_app",
         description="Expert AI assistant for FoldRun (AlphaFold2 + OpenFold3) protein structure prediction, job management, and results analysis",
@@ -241,7 +241,7 @@ def create_alphafold_agent(model: str | None = None) -> Agent:
     return agent
 
 
-def create_foldrun_agent(model: str | None = None) -> Agent:
+def create_foldrun_agent(model: str | None = None) -> LlmAgent:
     """Create and configure the FoldRun v2 agent using native ADK skills and SkillToolset.
 
     Activated when FOLDRUN_V2=true. Uses progressive disclosure and dynamic additional tools.
@@ -267,7 +267,7 @@ def create_foldrun_agent(model: str | None = None) -> Agent:
 
     skill_toolset = skill_registry.get_skill_toolset()
 
-    agent = Agent(
+    agent = LlmAgent(
         model=gemini_model,
         name="foldrun_app",
         description="Expert AI assistant for FoldRun 2.0 with modular skills architecture",
