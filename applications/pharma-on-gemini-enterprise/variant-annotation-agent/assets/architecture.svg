@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1376 768" width="1376" height="768" style="background:#FFFFFF; font-family:'Roboto', 'Google Sans', Arial, sans-serif;">
+
+  <!-- ==================== COLUMN 1: DATA SOURCES (Google Blue) ==================== -->
+  <g id="col1">
+    <rect x="34" y="40" width="300" height="688" rx="20" fill="#F8FAFD" stroke="#D2E3FC" stroke-width="1.5" />
+    <rect x="34" y="40" width="300" height="6" rx="3" fill="#4285F4" />
+    <text x="184" y="85" text-anchor="middle" font-size="18" font-weight="700" fill="#202124" letter-spacing="0.5">1. DATA SOURCES</text>
+
+    <!-- Card 1: GCS -->
+    <rect x="50" y="125" width="268" height="255" rx="16" fill="#FFFFFF" stroke="#4285F4" stroke-width="2" />
+    <rect x="114" y="145" width="140" height="24" rx="12" fill="#E8F0FE" stroke="#4285F4" stroke-width="1" />
+    <text x="184" y="161" text-anchor="middle" font-size="11" font-weight="700" fill="#1A73E8" letter-spacing="0.4">STORAGE BUCKET</text>
+    <text x="184" y="225" text-anchor="middle" font-size="17" font-weight="700" fill="#174EA6">Google Cloud</text>
+    <text x="184" y="250" text-anchor="middle" font-size="17" font-weight="700" fill="#174EA6">Storage (gs://)</text>
+    <line x1="80" y1="280" x2="288" y2="280" stroke="#E8EAED" stroke-width="1.5" />
+    <text x="184" y="312" text-anchor="middle" font-size="13" font-weight="500" fill="#3C4043">VCF, JSON, TSV Outputs</text>
+    <text x="184" y="335" text-anchor="middle" font-size="12" font-weight="400" fill="#5F6368">Variant Run Directories</text>
+
+    <!-- Card 2: Gemini UI -->
+    <rect x="50" y="415" width="268" height="255" rx="16" fill="#FFFFFF" stroke="#4285F4" stroke-width="2" />
+    <rect x="114" y="435" width="140" height="24" rx="12" fill="#E8F0FE" stroke="#4285F4" stroke-width="1" />
+    <text x="184" y="451" text-anchor="middle" font-size="11" font-weight="700" fill="#1A73E8" letter-spacing="0.4">CLIENT INTERFACES</text>
+    <text x="184" y="515" text-anchor="middle" font-size="17" font-weight="700" fill="#174EA6">Gemini Chat UI &amp;</text>
+    <text x="184" y="540" text-anchor="middle" font-size="17" font-weight="700" fill="#174EA6">ADK Web</text>
+    <line x1="80" y1="570" x2="288" y2="570" stroke="#E8EAED" stroke-width="1.5" />
+    <text x="184" y="602" text-anchor="middle" font-size="13" font-weight="500" fill="#3C4043">Variant IDs &amp; File Uploads</text>
+    <text x="184" y="625" text-anchor="middle" font-size="12" font-weight="400" fill="#5F6368">Interactive Clinical Queries</text>
+  </g>
+
+  <!-- ==================== COLUMN 2: ORCHESTRATION LAYER (Google Red/Blue) ==================== -->
+  <g id="col2">
+    <rect x="370" y="40" width="300" height="688" rx="20" fill="#FDF8F8" stroke="#FAD2CF" stroke-width="1.5" />
+    <rect x="370" y="40" width="300" height="6" rx="3" fill="#EA4335" />
+    <text x="520" y="85" text-anchor="middle" font-size="18" font-weight="700" fill="#202124" letter-spacing="0.5">2. ORCHESTRATION LAYER</text>
+
+    <!-- Card 1: 44 Skills -->
+    <rect x="386" y="125" width="268" height="150" rx="16" fill="#FFFFFF" stroke="#FBBC04" stroke-width="2" />
+    <rect x="435" y="140" width="170" height="22" rx="11" fill="#FEF7E0" stroke="#FBBC04" stroke-width="1" />
+    <text x="520" y="155" text-anchor="middle" font-size="10.5" font-weight="700" fill="#B06000" letter-spacing="0.4">SCIENTIFIC CAPABILITIES</text>
+    <text x="520" y="195" text-anchor="middle" font-size="16" font-weight="700" fill="#B06000">Dynamic &amp; Custom</text>
+    <text x="520" y="218" text-anchor="middle" font-size="16" font-weight="700" fill="#B06000">Science Skills</text>
+    <line x1="420" y1="235" x2="620" y2="235" stroke="#E8EAED" stroke-width="1.5" />
+    <text x="520" y="255" text-anchor="middle" font-size="12.5" font-weight="500" fill="#5F6368">DeepMind &amp; Clinical Skills</text>
+
+    <!-- Card 2: alphagenome_variant_agent (Primary Orchestrator) -->
+    <rect x="386" y="300" width="268" height="150" rx="16" fill="#E8F0FE" stroke="#1A73E8" stroke-width="2.5" />
+    <rect x="440" y="315" width="160" height="22" rx="11" fill="#1A73E8" />
+    <text x="520" y="330" text-anchor="middle" font-size="10.5" font-weight="700" fill="#FFFFFF" letter-spacing="0.5">AGENT RUNTIME</text>
+    <text x="520" y="375" text-anchor="middle" font-size="14.5" font-weight="700" fill="#174EA6">alphagenome_variant_agent</text>
+    <line x1="420" y1="395" x2="620" y2="395" stroke="#D2E3FC" stroke-width="1.5" />
+    <text x="520" y="423" text-anchor="middle" font-size="13.5" font-weight="600" fill="#202124">Root Orchestrator</text>
+
+    <!-- Card 3: GCS Bucket Tools -->
+    <rect x="386" y="475" width="268" height="150" rx="16" fill="#FFFFFF" stroke="#4285F4" stroke-width="2" />
+    <rect x="440" y="490" width="160" height="22" rx="11" fill="#E8F0FE" stroke="#4285F4" stroke-width="1" />
+    <text x="520" y="505" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1A73E8" letter-spacing="0.4">STORAGE INTEGRATION</text>
+    <text x="520" y="545" text-anchor="middle" font-size="16" font-weight="700" fill="#174EA6">GCS Bucket Tools</text>
+    <line x1="420" y1="565" x2="620" y2="565" stroke="#E8EAED" stroke-width="1.5" />
+    <text x="520" y="588" text-anchor="middle" font-size="13" font-weight="500" fill="#3C4043">List &amp; Import gs:// Files</text>
+    <text x="520" y="608" text-anchor="middle" font-size="11.5" font-weight="400" fill="#5F6368">Auto-Persistence to gs://dossiers/</text>
+  </g>
+
+  <!-- ==================== COLUMN 3: VARIANT ANNOTATION PIPELINE (Google Yellow) ==================== -->
+  <g id="col3">
+    <rect x="706" y="40" width="300" height="688" rx="20" fill="#FEFCF5" stroke="#FCE8B2" stroke-width="1.5" />
+    <rect x="706" y="40" width="300" height="6" rx="3" fill="#FBBC04" />
+    <text x="856" y="75" text-anchor="middle" font-size="16" font-weight="700" fill="#202124" letter-spacing="0.3">3. VARIANT ANNOTATION</text>
+    <text x="856" y="95" text-anchor="middle" font-size="16" font-weight="700" fill="#202124" letter-spacing="0.3">PIPELINE</text>
+
+    <!-- Step 1: PrepVariantRequest -->
+    <rect x="722" y="125" width="268" height="85" rx="14" fill="#FFFFFF" stroke="#FBBC04" stroke-width="2" />
+    <text x="856" y="155" text-anchor="middle" font-size="14.5" font-weight="700" fill="#B06000">Step 1: PrepVariantRequest</text>
+    <text x="856" y="180" text-anchor="middle" font-size="12.5" font-weight="500" fill="#3C4043">Auto-Import &amp; Parse Variants</text>
+
+    <!-- Step 2: 5 Parallel Annotators -->
+    <rect x="722" y="235" width="268" height="305" rx="14" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+    <text x="856" y="262" text-anchor="middle" font-size="14" font-weight="700" fill="#202124">Step 2: 5 Parallel Annotators</text>
+    <text x="856" y="280" text-anchor="middle" font-size="12" font-weight="600" fill="#5F6368">(Parallel Execution)</text>
+
+    <!-- Pill 1: AlphaGenome (Google Blue) -->
+    <rect x="736" y="295" width="240" height="36" rx="18" fill="#E8F0FE" stroke="#4285F4" stroke-width="1.5" />
+    <text x="856" y="318" text-anchor="middle" font-size="12.5" font-weight="600" fill="#174EA6">AlphaGenome AVI Scorer</text>
+
+    <!-- Pill 2: ClinVar (Google Red) -->
+    <rect x="736" y="340" width="240" height="36" rx="18" fill="#FCE8E6" stroke="#EA4335" stroke-width="1.5" />
+    <text x="856" y="363" text-anchor="middle" font-size="12.5" font-weight="600" fill="#C5221F">ClinVar (v.2024-06-03)</text>
+
+    <!-- Pill 3: gnomAD (Google Yellow) -->
+    <rect x="736" y="385" width="240" height="36" rx="18" fill="#FEF7E0" stroke="#FBBC04" stroke-width="1.5" />
+    <text x="856" y="408" text-anchor="middle" font-size="12.5" font-weight="600" fill="#B06000">gnomAD (v4)</text>
+
+    <!-- Pill 4: GWAS Catalog (Google Green) -->
+    <rect x="736" y="430" width="240" height="36" rx="18" fill="#E6F4EA" stroke="#34A853" stroke-width="1.5" />
+    <text x="856" y="453" text-anchor="middle" font-size="12.5" font-weight="600" fill="#137333">GWAS Catalog (v.1.0)</text>
+
+    <!-- Pill 5: PharmGKB & CPIC (Google Teal/Cyan) -->
+    <rect x="736" y="475" width="240" height="36" rx="18" fill="#E4F7FB" stroke="#12B5CB" stroke-width="1.5" />
+    <text x="856" y="498" text-anchor="middle" font-size="12.5" font-weight="600" fill="#007B83">PharmGKB &amp; CPIC</text>
+
+    <!-- Step 3: Synthesizer & Critic Loop -->
+    <rect x="722" y="565" width="268" height="105" rx="14" fill="#FFFFFF" stroke="#EA4335" stroke-width="2" />
+    <rect x="786" y="575" width="140" height="20" rx="10" fill="#FCE8E6" stroke="#EA4335" stroke-width="1" />
+    <text x="856" y="589" text-anchor="middle" font-size="10" font-weight="700" fill="#C5221F" letter-spacing="0.4">AUDIT &amp; QUALITY</text>
+    <text x="856" y="618" text-anchor="middle" font-size="14" font-weight="700" fill="#C5221F">Step 3: Synthesizer &amp; Critic</text>
+    <text x="856" y="638" text-anchor="middle" font-size="14" font-weight="700" fill="#C5221F">Loop (Max 2 Iterations)</text>
+    <text x="856" y="658" text-anchor="middle" font-size="11.5" font-weight="500" fill="#5F6368">Automated Quality Audit</text>
+  </g>
+
+  <!-- ==================== COLUMN 4: OUTPUTS (Google Green) ==================== -->
+  <g id="col4">
+    <rect x="1042" y="40" width="300" height="688" rx="20" fill="#F6FBF7" stroke="#CEEAD6" stroke-width="1.5" />
+    <rect x="1042" y="40" width="300" height="6" rx="3" fill="#34A853" />
+    <text x="1192" y="85" text-anchor="middle" font-size="18" font-weight="700" fill="#202124" letter-spacing="0.5">4. OUTPUTS</text>
+
+    <!-- Card 1: 6-Section Variant Dossier -->
+    <rect x="1058" y="125" width="268" height="150" rx="16" fill="#FFFFFF" stroke="#34A853" stroke-width="2" />
+    <rect x="1117" y="140" width="150" height="22" rx="11" fill="#E6F4EA" stroke="#34A853" stroke-width="1" />
+    <text x="1192" y="155" text-anchor="middle" font-size="10.5" font-weight="700" fill="#137333" letter-spacing="0.4">CLINICAL DOSSIER</text>
+    <text x="1192" y="195" text-anchor="middle" font-size="16" font-weight="700" fill="#137333">6-Section Variant</text>
+    <text x="1192" y="218" text-anchor="middle" font-size="16" font-weight="700" fill="#137333">Dossier (Markdown)</text>
+    <line x1="1090" y1="238" x2="1294" y2="238" stroke="#E8EAED" stroke-width="1.5" />
+    <text x="1192" y="258" text-anchor="middle" font-size="12" font-weight="500" fill="#5F6368">Saved to gs://.../dossiers/</text>
+
+    <!-- Card 2: AlphaGenome Atlas Links -->
+    <rect x="1058" y="300" width="268" height="150" rx="16" fill="#FFFFFF" stroke="#4285F4" stroke-width="2" />
+    <rect x="1117" y="315" width="150" height="22" rx="11" fill="#E8F0FE" stroke="#4285F4" stroke-width="1" />
+    <text x="1192" y="330" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1A73E8" letter-spacing="0.4">DEEP-LINKS</text>
+    <text x="1192" y="370" text-anchor="middle" font-size="16" font-weight="700" fill="#174EA6">AlphaGenome</text>
+    <text x="1192" y="393" text-anchor="middle" font-size="16" font-weight="700" fill="#174EA6">Atlas Links</text>
+    <line x1="1090" y1="413" x2="1294" y2="413" stroke="#E8EAED" stroke-width="1.5" />
+    <text x="1192" y="433" text-anchor="middle" font-size="12" font-weight="500" fill="#5F6368">1-Click Interactive Locus Views</text>
+
+    <!-- Card 3: ACMG & PGx Action Matrix -->
+    <rect x="1058" y="475" width="268" height="150" rx="16" fill="#FFFFFF" stroke="#34A853" stroke-width="2" />
+    <rect x="1117" y="490" width="150" height="22" rx="11" fill="#E6F4EA" stroke="#34A853" stroke-width="1" />
+    <text x="1192" y="505" text-anchor="middle" font-size="10.5" font-weight="700" fill="#137333" letter-spacing="0.4">ACTIONABLE MATRIX</text>
+    <text x="1192" y="545" text-anchor="middle" font-size="16" font-weight="700" fill="#137333">ACMG &amp; PGx</text>
+    <text x="1192" y="568" text-anchor="middle" font-size="16" font-weight="700" fill="#137333">Action Matrix</text>
+    <line x1="1090" y1="588" x2="1294" y2="588" stroke="#E8EAED" stroke-width="1.5" />
+    <text x="1192" y="608" text-anchor="middle" font-size="12" font-weight="500" fill="#5F6368">Pathogenicity &amp; CPIC Dosing</text>
+  </g>
+
+  <!-- ==================== CONNECTING ARROWS ==================== -->
+  <!-- Col 1 to Col 2 -->
+  <line x1="318" y1="252" x2="350" y2="252" stroke="#5F6368" stroke-width="2.5" />
+  <line x1="318" y1="542" x2="350" y2="542" stroke="#5F6368" stroke-width="2.5" />
+  <line x1="350" y1="252" x2="350" y2="542" stroke="#5F6368" stroke-width="2.5" />
+  <line x1="350" y1="375" x2="380" y2="375" stroke="#5F6368" stroke-width="2.5" />
+  <polygon points="378,368 386,375 378,382" fill="#5F6368" />
+
+  <!-- Inside Col 2: Skills to Root Agent -->
+  <line x1="520" y1="275" x2="520" y2="294" stroke="#FBBC04" stroke-width="2.5" />
+  <polygon points="513,292 520,300 527,292" fill="#FBBC04" />
+
+  <!-- Inside Col 2: GCS Tools <--> Root Agent -->
+  <line x1="520" y1="456" x2="520" y2="469" stroke="#1A73E8" stroke-width="2.5" />
+  <polygon points="513,458 520,450 527,458" fill="#1A73E8" />
+  <polygon points="513,467 520,475 527,467" fill="#1A73E8" />
+
+  <!-- Col 2 to Col 3 (Root Agent to Step 1) -->
+  <line x1="654" y1="375" x2="688" y2="375" stroke="#5F6368" stroke-width="2.5" />
+  <line x1="688" y1="375" x2="688" y2="167" stroke="#5F6368" stroke-width="2.5" />
+  <line x1="688" y1="167" x2="716" y2="167" stroke="#5F6368" stroke-width="2.5" />
+  <polygon points="714,160 722,167 714,174" fill="#5F6368" />
+
+  <!-- Inside Col 3: Step 1 to Step 2 -->
+  <line x1="856" y1="210" x2="856" y2="229" stroke="#5F6368" stroke-width="2.5" />
+  <polygon points="849,227 856,235 863,227" fill="#5F6368" />
+
+  <!-- Inside Col 3: Step 2 to Step 3 -->
+  <line x1="856" y1="540" x2="856" y2="559" stroke="#5F6368" stroke-width="2.5" />
+  <polygon points="849,557 856,565 863,557" fill="#5F6368" />
+
+  <!-- Col 3 to Col 4 (Step 3 to Outputs) -->
+  <line x1="990" y1="617" x2="1024" y2="617" stroke="#5F6368" stroke-width="2.5" />
+  <line x1="1024" y1="200" x2="1024" y2="617" stroke="#5F6368" stroke-width="2.5" />
+
+  <line x1="1024" y1="200" x2="1052" y2="200" stroke="#5F6368" stroke-width="2.5" />
+  <polygon points="1050,193 1058,200 1050,207" fill="#5F6368" />
+
+  <line x1="1024" y1="375" x2="1052" y2="375" stroke="#5F6368" stroke-width="2.5" />
+  <polygon points="1050,368 1058,375 1050,382" fill="#5F6368" />
+
+  <line x1="1024" y1="550" x2="1052" y2="550" stroke="#5F6368" stroke-width="2.5" />
+  <polygon points="1050,543 1058,550 1050,557" fill="#5F6368" />
+
+</svg>

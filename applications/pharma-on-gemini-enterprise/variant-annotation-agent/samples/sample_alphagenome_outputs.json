@@ -1,0 +1,271 @@
+{
+  "benchmark_variants": [
+    {
+      "variant_id": "rs12740374",
+      "grch38_coordinates": "chr1:109274977:G>T",
+      "gene_symbol": "SORT1",
+      "consequence": "intron_variant",
+      "mechanism": "Creates a C/EBP transcription factor binding site altering hepatic SORT1 expression and circulating LDL-C levels",
+      "alphagenome_prediction": {
+        "avi_raw": 0.884,
+        "avi_quantile": 0.9982,
+        "avi_phred": 27.45,
+        "impact_tier": "High",
+        "multimodal_tracks": {
+          "rna_seq_expression_delta": 0.72,
+          "cage_tss_perturbation": 0.65,
+          "dnase_hypersensitivity": 0.84,
+          "atac_seq_accessibility": 0.89,
+          "chip_tf_binding_disruption": 0.94,
+          "chip_histone_h3k27ac": 0.81,
+          "chip_histone_h3k4me3": 0.62,
+          "splice_donor_gain": 0.0,
+          "splice_donor_loss": 0.0,
+          "splice_acceptor_gain": 0.0,
+          "splice_acceptor_loss": 0.0,
+          "alphamissense_pathogenicity": 0.05,
+          "phylop_vertebrate_conservation": 1.95,
+          "phastcons_primate_conservation": 0.78
+        },
+        "atlas_urls": {
+          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?variant=chr1:109274977:G>T",
+          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?locus=chr1:109274477-109275477"
+        }
+      },
+      "clinvar_annotation": {
+        "clinical_significance": "Other / Risk factor",
+        "gold_stars": 1,
+        "review_status": "criteria provided, single submitter",
+        "disease_traits": ["Myocardial infarction, susceptibility to", "Low density lipoprotein cholesterol level quantitative trait locus 1"],
+        "citation": "ClinVar (v.2024–06-03) (Landrum et al. 2018)"
+      },
+      "gnomad_v4": {
+        "joint_af": 0.228,
+        "exome_af": 0.215,
+        "genome_af": 0.231,
+        "ancestry_frequencies": {
+          "afr": 0.082,
+          "amr": 0.245,
+          "asj": 0.210,
+          "eas": 0.041,
+          "fin": 0.224,
+          "mid": 0.218,
+          "nfe": 0.252,
+          "sas": 0.198
+        },
+        "acmg_frequency_tier": "BA1 (Benign Stand-alone, AF >= 5% in general population)",
+        "gene_constraint": {
+          "gene": "SORT1",
+          "pli": 0.12,
+          "loeuf": 0.88,
+          "status": "LoF tolerant"
+        },
+        "citation": "gnomAD (v4) (Karczewski et al. 2020)"
+      },
+      "gwas_catalog": {
+        "lead_snp": "rs12740374",
+        "top_associations": [
+          {
+            "trait": "Low density lipoprotein cholesterol measurement",
+            "efo_trait": "EFO_0004611",
+            "p_value": 1.2e-180,
+            "risk_allele": "rs12740374-G",
+            "study_accession": "GCST90025960"
+          },
+          {
+            "trait": "Coronary artery disease",
+            "efo_trait": "EFO_0001645",
+            "p_value": 4.5e-42,
+            "risk_allele": "rs12740374-G",
+            "study_accession": "GCST004741"
+          }
+        ],
+        "citation": "GWAS Catalog (v.1.0) (Sollis et al. 2023)"
+      },
+      "pharmgkb": {
+        "status": "No direct CPIC pharmacogenomic actionable guideline",
+        "evidence_level": "None",
+        "citation": "PharmGKB (Whirl-Carrillo et al. 2012, 2021)"
+      }
+    },
+    {
+      "variant_id": "rs334",
+      "grch38_coordinates": "chr11:5227002:T>A",
+      "gene_symbol": "HBB",
+      "consequence": "missense_variant (p.Glu7Val / HbS)",
+      "mechanism": "Beta-globin Glu7Val mutation causing pathological hemoglobin polymerization under deoxygenated conditions",
+      "alphagenome_prediction": {
+        "avi_raw": 0.942,
+        "avi_quantile": 0.9996,
+        "avi_phred": 33.98,
+        "impact_tier": "High",
+        "multimodal_tracks": {
+          "rna_seq_expression_delta": 0.12,
+          "cage_tss_perturbation": 0.05,
+          "dnase_hypersensitivity": 0.15,
+          "atac_seq_accessibility": 0.18,
+          "chip_tf_binding_disruption": 0.22,
+          "chip_histone_h3k27ac": 0.14,
+          "chip_histone_h3k4me3": 0.10,
+          "splice_donor_gain": 0.0,
+          "splice_donor_loss": 0.0,
+          "splice_acceptor_gain": 0.0,
+          "splice_acceptor_loss": 0.0,
+          "alphamissense_pathogenicity": 0.892,
+          "phylop_vertebrate_conservation": 6.82,
+          "phastcons_primate_conservation": 0.99
+        },
+        "atlas_urls": {
+          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?variant=chr11:5227002:T>A",
+          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?locus=chr11:5226502-5227502"
+        }
+      },
+      "clinvar_annotation": {
+        "clinical_significance": "Pathogenic",
+        "gold_stars": 4,
+        "review_status": "practice guideline",
+        "disease_traits": ["Sickle cell disease", "Sickle cell-beta-thalassemia disease", "Malaria resistance"],
+        "citation": "ClinVar (v.2024–06-03) (Landrum et al. 2018)"
+      },
+      "gnomad_v4": {
+        "joint_af": 0.0245,
+        "exome_af": 0.0261,
+        "genome_af": 0.0229,
+        "ancestry_frequencies": {
+          "afr": 0.089,
+          "amr": 0.007,
+          "asj": 0.0001,
+          "eas": 0.00002,
+          "fin": 0.00001,
+          "mid": 0.015,
+          "nfe": 0.0002,
+          "sas": 0.003
+        },
+        "acmg_frequency_tier": "BS1 (Strong Benign threshold met overall, but disease-specific threshold and heterozygote advantage in malaria-endemic populations requires careful curation)",
+        "gene_constraint": {
+          "gene": "HBB",
+          "pli": 0.001,
+          "loeuf": 1.45,
+          "status": "Recessive gene constraint profile (heterozygotes asymptomatic / sickle trait)"
+        },
+        "citation": "gnomAD (v4) (Karczewski et al. 2020)"
+      },
+      "gwas_catalog": {
+        "lead_snp": "rs334",
+        "top_associations": [
+          {
+            "trait": "Sickle cell anemia",
+            "efo_trait": "EFO_0000701",
+            "p_value": 1.0e-300,
+            "risk_allele": "rs334-A",
+            "study_accession": "GCST006802"
+          },
+          {
+            "trait": "Severe malaria resistance",
+            "efo_trait": "EFO_0004944",
+            "p_value": 2.1e-110,
+            "risk_allele": "rs334-A",
+            "study_accession": "GCST003890"
+          }
+        ],
+        "citation": "GWAS Catalog (v.1.0) (Sollis et al. 2023)"
+      },
+      "pharmgkb": {
+        "status": "Indirect PGx implications for hydroxyurea and voxelotor response in sickle cell disease",
+        "evidence_level": "Level 3",
+        "citation": "PharmGKB (Whirl-Carrillo et al. 2012, 2021)"
+      }
+    },
+    {
+      "variant_id": "rs4244285",
+      "grch38_coordinates": "chr10:94781859:C>T",
+      "gene_symbol": "CYP2C19",
+      "consequence": "splice_donor_variant (*2 allele)",
+      "mechanism": "c.681G>A (p.Pro227=) abolishes the canonical exon 5 splice donor site causing an aberrant 40-bp cryptic exon inclusion, frameshift, premature stop, and complete loss of CYP2C19 catalytic activity",
+      "alphagenome_prediction": {
+        "avi_raw": 0.965,
+        "avi_quantile": 0.9998,
+        "avi_phred": 36.99,
+        "impact_tier": "High",
+        "multimodal_tracks": {
+          "rna_seq_expression_delta": 0.45,
+          "cage_tss_perturbation": 0.08,
+          "dnase_hypersensitivity": 0.12,
+          "atac_seq_accessibility": 0.14,
+          "chip_tf_binding_disruption": 0.18,
+          "chip_histone_h3k27ac": 0.11,
+          "chip_histone_h3k4me3": 0.09,
+          "splice_donor_gain": 0.0,
+          "splice_donor_loss": 0.985,
+          "splice_acceptor_gain": 0.0,
+          "splice_acceptor_loss": 0.0,
+          "alphamissense_pathogenicity": 0.02,
+          "phylop_vertebrate_conservation": 5.42,
+          "phastcons_primate_conservation": 0.98
+        },
+        "atlas_urls": {
+          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?variant=chr10:94781859:C>T",
+          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?locus=chr10:94781359-94782359"
+        }
+      },
+      "clinvar_annotation": {
+        "clinical_significance": "Pathogenic / Drug Response",
+        "gold_stars": 3,
+        "review_status": "reviewed by expert panel (ClinGen Pharmacogenomics VCEP)",
+        "disease_traits": ["Poor clopidogrel metabolizer", "CYP2C19 poor metabolizer phenotype"],
+        "citation": "ClinVar (v.2024–06-03) (Landrum et al. 2018)"
+      },
+      "gnomad_v4": {
+        "joint_af": 0.182,
+        "exome_af": 0.178,
+        "genome_af": 0.185,
+        "ancestry_frequencies": {
+          "afr": 0.172,
+          "amr": 0.112,
+          "asj": 0.145,
+          "eas": 0.298,
+          "fin": 0.138,
+          "mid": 0.142,
+          "nfe": 0.151,
+          "sas": 0.324
+        },
+        "acmg_frequency_tier": "BA1 (Benign Stand-alone in mendelian disease triage; high frequency common PGx variant with high carrier rate worldwide)",
+        "gene_constraint": {
+          "gene": "CYP2C19",
+          "pli": 0.000,
+          "loeuf": 1.12,
+          "status": "LoF tolerant (detoxification enzyme with redundant family members)"
+        },
+        "citation": "gnomAD (v4) (Karczewski et al. 2020)"
+      },
+      "gwas_catalog": {
+        "lead_snp": "rs4244285",
+        "top_associations": [
+          {
+            "trait": "Clopidogrel resistance",
+            "efo_trait": "EFO_0004953",
+            "p_value": 3.4e-65,
+            "risk_allele": "rs4244285-T",
+            "study_accession": "GCST001289"
+          },
+          {
+            "trait": "Platelet aggregation measurement",
+            "efo_trait": "EFO_0004652",
+            "p_value": 1.8e-48,
+            "risk_allele": "rs4244285-T",
+            "study_accession": "GCST003112"
+          }
+        ],
+        "citation": "GWAS Catalog (v.1.0) (Sollis et al. 2023)"
+      },
+      "pharmgkb": {
+        "gene": "CYP2C19",
+        "star_allele": "*2",
+        "evidence_level": "Level 1A",
+        "affected_drugs": ["clopidogrel", "citalopram", "escitalopram", "voriconazole", "omeprazole"],
+        "dosing_guideline": "CPIC Guideline for Clopidogrel: In intermediate (*1/*2) or poor (*2/*2) metabolizers undergoing PCI, clopidogrel efficacy is significantly reduced due to impaired bioactivation. CPIC strongly recommends an alternative P2Y12 platelet inhibitor (e.g., prasugrel 10 mg daily or ticagrelor 90 mg twice daily) if not contraindicated.",
+        "citation": "PharmGKB (Whirl-Carrillo et al. 2012, 2021)"
+      }
+    }
+  ]
+}
