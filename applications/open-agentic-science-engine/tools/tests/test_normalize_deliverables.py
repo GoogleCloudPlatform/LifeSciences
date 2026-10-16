@@ -30,6 +30,7 @@ Covers:
 
 from __future__ import annotations
 
+import copy
 import sys
 from pathlib import Path
 
@@ -161,11 +162,21 @@ def test_normalize_plain_string_lists_unchanged():
 
 
 def test_normalize_returns_new_dict():
-    """normalize_deliverables returns a new dict, not a mutated input."""
+    """normalize_deliverables returns a new canonical dict, input untouched.
+
+    Under the ``required_classes`` deliverables contract, the legacy
+    ``layer_0_classes`` key is mapped to the canonical ``required_classes``
+    key, and ``layer_0_classes`` is re-derived from it.
+    """
     original = {"layer_0_classes": ["docking"]}
+    snapshot = copy.deepcopy(original)
     result = normalize_deliverables(original)
     assert result is not original
-    assert result == original
+    assert result == {
+        "required_classes": ["docking"],
+        "layer_0_classes": ["docking"],
+    }
+    assert original == snapshot, "input dict must not be mutated"
 
 
 # ---------------------------------------------------------------------------

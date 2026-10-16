@@ -52,7 +52,20 @@ def test_prox_dependencies_have_an_independent_install_transaction() -> None:
     requirements = (TOOLS / "requirements-hypex.txt").read_text()
     for dependency in ("scipy", "scikit-learn", "networkx"):
         assert dependency in requirements
-    assert 'pip install -r "${SCRIPT_DIR}/requirements-hypex.txt"' in INSTALL
+    # Check tokens rather than an exact string, so harmless flag reordering
+    # does not break the test. Guard the properties that matter: the hypex
+    # requirements get their own pip transaction, and it is hash-pinned.
+    hypex_req = '"${SCRIPT_DIR}/requirements-hypex.txt"'
+    install_lines = [
+        line.split()
+        for line in INSTALL.splitlines()
+        if "pip install" in line and hypex_req in line
+    ]
+    assert len(install_lines) == 1, install_lines
+    tokens = install_lines[0]
+    assert tokens.count("-r") == 1, "hypex deps must be an independent install"
+    assert tokens[tokens.index("-r") + 1] == hypex_req
+    assert "--require-hashes" in tokens
 
 
 def test_generated_environment_activates_configured_venv() -> None:

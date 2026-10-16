@@ -21,6 +21,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from google.auth.exceptions import DefaultCredentialsError
+
 from oase.commands.doctor import (
     _CAPABILITY_VALIDATED,
     _HELP_MARKERS,
@@ -170,6 +172,12 @@ class TestHypexCapabilitySnapshot(unittest.TestCase):
             mock.patch(
                 "oase.commands.doctor.env.tools_home",
                 return_value=Path("/definitely/missing/oase-tools"),
+            ),
+            # Keep the test hermetic: google.auth.default() would otherwise
+            # probe the GCE metadata server over the network.
+            mock.patch(
+                "google.auth.default",
+                side_effect=DefaultCredentialsError("no credentials in tests"),
             ),
         ):
             snapshot = get_capability_snapshot()

@@ -26,24 +26,15 @@ Covers:
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-# Patch optional dependencies before importing the module under test.
-_mock_requests = MagicMock()
-_mock_yaml = MagicMock()
-_module_patches = patch.dict(
-    "sys.modules",
-    {"requests": _mock_requests, "yaml": _mock_yaml},
-)
-_module_patches.start()
-
-from oase.commands.homology import (  # noqa: E402
+from oase.commands.homology import (
     _UNIPROT_RE,
     _format_fasta,
     _resolve_gene_to_accession,
     _search_orthologs,
 )
-from oase.core.errors import UsageError  # noqa: E402
+from oase.core.errors import UsageError
 
 # ---------------------------------------------------------------------------
 # Test fixtures

@@ -574,7 +574,11 @@ def _build_compound_artifact(
     "--name",
     "slug_override",
     default=None,
-    help="Override the output filename slug (default: CID as string).",
+    help=(
+        "Override the output filename slug. The sanitized name gets the CID "
+        "appended (NAME-CID) so multiple CIDs never collide "
+        "(default: CID as string)."
+    ),
 )
 @out_option
 @output_options

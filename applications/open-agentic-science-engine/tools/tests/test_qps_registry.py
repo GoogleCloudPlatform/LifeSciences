@@ -29,12 +29,8 @@ import ast
 import unittest
 from pathlib import Path
 from typing import ClassVar
-from unittest.mock import MagicMock, patch
 
-# Patch optional dependencies before importing the module under test.
-with patch.dict("sys.modules", {"requests": MagicMock(), "click": MagicMock()}):
-    from oase.core.qps import HOST_QPS, qps_for_host
-
+from oase.core.qps import HOST_QPS, qps_for_host
 
 # Root of the commands package, relative to the repository layout.
 _COMMANDS_DIR = Path(__file__).resolve().parent.parent / "oase" / "commands"

@@ -33,27 +33,17 @@ from __future__ import annotations
 
 import json
 import tempfile
+import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-# Patch optional dependencies before importing the module under test.
-_mock_requests = MagicMock()
-_mock_yaml = MagicMock()
-_module_patches = patch.dict(
-    "sys.modules",
-    {"requests": _mock_requests, "yaml": _mock_yaml},
-)
-_module_patches.start()
-
-import unittest  # noqa: E402
-
-from oase.commands.tox import (  # noqa: E402
+from oase.commands.tox import (
     VALID_DOSE_CONTEXTS,
     _compute_ti_values,
     _detect_same_study,
 )
-from oase.core.provenance import RELAY_CODES  # noqa: E402
+from oase.core.provenance import RELAY_CODES
 
 # ---------------------------------------------------------------------------
 # Fixture helpers

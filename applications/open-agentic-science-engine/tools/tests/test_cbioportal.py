@@ -28,28 +28,17 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-# Patch optional dependencies before importing the module under test.
-# Keep the patch active for the entire module so @patch decorators work.
-# Note: click is NOT mocked — CliRunner tests need the real click package.
-_mock_requests = MagicMock()
-_mock_yaml = MagicMock()
-_module_patches = patch.dict(
-    "sys.modules",
-    {"requests": _mock_requests, "yaml": _mock_yaml},
-)
-_module_patches.start()
-
-from oase.commands import cbioportal as cbioportal_mod  # noqa: E402
-from oase.commands.cbioportal import (  # noqa: E402
+from oase.commands import cbioportal as cbioportal_mod
+from oase.commands.cbioportal import (
     ARTIFACT_CLASS,
     TOOL,
     _fetch_studies,
     _slugify,
 )
-from oase.core.provenance import RELAY_CODES  # noqa: E402
-from oase.core.thresholds import _DEFAULTS  # noqa: E402
+from oase.core.provenance import RELAY_CODES
+from oase.core.thresholds import _DEFAULTS
 
 # Sample cBioPortal study records for mocking
 _SAMPLE_STUDIES = [

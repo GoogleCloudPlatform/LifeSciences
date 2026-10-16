@@ -29,22 +29,12 @@ from __future__ import annotations
 
 import json
 import tempfile
+import unittest
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-# Patch optional dependencies before importing the module under test.
-_mock_requests = MagicMock()
-_mock_yaml = MagicMock()
-_module_patches = patch.dict(
-    "sys.modules",
-    {"requests": _mock_requests, "yaml": _mock_yaml},
-)
-_module_patches.start()
-
-import unittest  # noqa: E402
-
-from oase.commands.pubchem import (  # noqa: E402
+from oase.commands.pubchem import (
     _build_compound_artifact,
     _extract_smiles_from_full_record,
     _needs_fallback,
@@ -474,12 +464,12 @@ class TestFetchSlugOverride(unittest.TestCase):
         self.assertEqual(exit_code, 0, f"exit {exit_code}:\n{output}")
 
         self.assertIn(
-            "aspirin.pubchem-compound.artifact.json",
+            "aspirin-2244.pubchem-compound.artifact.json",
             files,
             "custom-slug artifact not written",
         )
         self.assertIn(
-            "aspirin.pubchem-compound.meta.json",
+            "aspirin-2244.pubchem-compound.meta.json",
             files,
             "custom-slug sidecar not written",
         )
