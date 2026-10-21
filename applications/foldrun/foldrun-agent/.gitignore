@@ -106,6 +106,7 @@ celerybeat.pid
 
 # Environments
 .env
+!.env.example
 .venv
 .venv*
 env/
@@ -144,6 +145,10 @@ dmypy.json
 # User-specific files
 .terraform*
 .Terraform*
+
+# Terraform state.
+*.tfstate
+*.tfstate.*
 
 
 tmp*
@@ -185,10 +190,8 @@ testem.log
 .DS_Store
 Thumbs.db
 *.vscode*
-
 # ADK
 .adk/
-
 # Agent CLI specific
 .persist_vector_store
 tests/load_test/.results/*.html
@@ -198,6 +201,14 @@ my_env.tfvars
 .saved_chats
 .env
 .google-agents-cli/
+deployment_metadata.json
+deployment_metadata.json.lock
+.requirements.txt
 
 # A2A Inspector
 tools/a2a-inspector/
+
+# Credentials and private keys
+*.pem
+*-key.json
+credentials*.json

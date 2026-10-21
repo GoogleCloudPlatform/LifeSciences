@@ -13,6 +13,7 @@
 # limitations under the License.
 
 name: foldrun-agent
+acli_version: 1.10.0
 agent_directory: foldrun_app
 create_params:
   deployment_target: agent_runtime

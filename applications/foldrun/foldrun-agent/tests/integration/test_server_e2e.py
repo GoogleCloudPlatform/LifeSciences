@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import json
 import logging
 import os
@@ -23,16 +24,17 @@ import uuid
 from collections.abc import Iterator
 from typing import Any
 
+import httpx
 import pytest
 import requests
+from a2a.client import ClientConfig, create_client
 from a2a.types import (
     Message,
-    MessageSendParams,
     Part,
     Role,
-    SendStreamingMessageRequest,
-    SendStreamingMessageResponse,
-    TextPart,
+    SendMessageRequest,
+    StreamResponse,
+    TaskState,
 )
 from requests.exceptions import RequestException
 
@@ -44,7 +46,6 @@ BASE_URL = "http://127.0.0.1:8000"
 RUN_SSE_URL = BASE_URL + "/run_sse"
 A2A_RPC_URL = BASE_URL + "/a2a/foldrun_app/"
 AGENT_CARD_URL = A2A_RPC_URL + ".well-known/agent-card.json"
-FEEDBACK_URL = BASE_URL + "/feedback"
 
 HEADERS = {"Content-Type": "application/json"}
 
@@ -69,6 +70,8 @@ def start_server() -> subprocess.Popen[str]:
     ]
     env = os.environ.copy()
     env["INTEGRATION_TEST"] = "TRUE"
+    # Advertise a loopback URL so the A2A client can reach the card's transport.
+    env["APP_URL"] = BASE_URL
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -166,72 +169,67 @@ def test_a2a_chat_stream(server_fixture: subprocess.Popen[str]) -> None:
     """Test the A2A route using the JSON-RPC streaming protocol."""
     logger.info("Starting A2A chat stream test")
 
-    message = Message(
-        message_id=f"msg-user-{uuid.uuid4()}",
-        role=Role.user,
-        parts=[Part(root=TextPart(text="Hi!"))],
-    )
-    request = SendStreamingMessageRequest(
-        id="test-req-001",
-        params=MessageSendParams(message=message),
-    )
-    response = requests.post(
-        A2A_RPC_URL,
-        headers=HEADERS,
-        json=request.model_dump(mode="json", exclude_none=True),
-        stream=True,
-        timeout=60,
-    )
-    assert response.status_code == 200
+    async def _stream() -> list[StreamResponse]:
+        config = ClientConfig(
+            streaming=True,
+            httpx_client=httpx.AsyncClient(timeout=60.0),
+        )
+        client = await create_client(A2A_RPC_URL.rstrip("/"), config)
+        message = Message(
+            message_id=f"msg-user-{uuid.uuid4()}",
+            role=Role.ROLE_USER,
+            parts=[Part(text="Hi!")],
+        )
+        return [chunk async for chunk in client.send_message(SendMessageRequest(message=message))]
 
-    responses: list[SendStreamingMessageResponse] = []
-    for line in response.iter_lines():
-        if line:
-            line_str = line.decode("utf-8")
-            if line_str.startswith("data: "):
-                responses.append(
-                    SendStreamingMessageResponse.model_validate(json.loads(line_str[6:]))
-                )
-
+    responses = asyncio.run(_stream())
     assert responses, "No responses received from stream"
 
-    final_responses = [
-        r.root
-        for r in responses
-        if hasattr(r.root, "result")
-        and hasattr(r.root.result, "final")
-        and r.root.result.final is True
-    ]
-    assert final_responses, "No final response received"
-    assert final_responses[-1].result.status.state == "completed"
+    def _is_completed(chunk: StreamResponse) -> bool:
+        if chunk.HasField("status_update"):
+            return chunk.status_update.status.state == TaskState.TASK_STATE_COMPLETED
+        if chunk.HasField("task"):
+            return chunk.task.status.state == TaskState.TASK_STATE_COMPLETED
+        return False
+
+    assert any(_is_completed(chunk) for chunk in responses), (
+        "No completed task received from stream"
+    )
 
 
 def test_agent_card(server_fixture: subprocess.Popen[str]) -> None:
     """Test that the A2A agent card is served at the well-known URI."""
-    response = requests.get(AGENT_CARD_URL, timeout=10)
-    assert response.status_code == 200, f"A2A endpoint returned {response.status_code}"
+    for _ in range(3):
+        response = requests.get(AGENT_CARD_URL, timeout=10)
+        assert response.status_code == 200, f"A2A endpoint returned {response.status_code}"
 
-    served_agent_card = response.json()
-    for field in ("name", "description", "skills", "capabilities", "url", "version"):
-        assert field in served_agent_card, f"Missing field in agent card: {field}"
+        served_agent_card = response.json()
+        # supportedInterfaces is the A2A 1.0 marker (replaces url/preferredTransport).
+        for field in (
+            "name",
+            "description",
+            "skills",
+            "capabilities",
+            "version",
+            "supportedInterfaces",
+        ):
+            assert field in served_agent_card, f"Missing field in agent card: {field}"
 
-
-def test_collect_feedback(server_fixture: subprocess.Popen[str]) -> None:
-    """Test the feedback collection endpoint (/feedback)."""
-    feedback_data = {
-        "score": 4,
-        "user_id": "test-user-456",
-        "session_id": "test-session-456",
-        "text": "Great response!",
-    }
-    response = requests.post(FEEDBACK_URL, json=feedback_data, headers=HEADERS, timeout=10)
-    assert response.status_code == 200
+        interfaces = served_agent_card.get("supportedInterfaces", [])
+        v03_interfaces = [
+            i
+            for i in interfaces
+            if i.get("protocolBinding") == "JSONRPC" and i.get("protocolVersion") == "0.3"
+        ]
+        assert len(v03_interfaces) == 1, (
+            f"Expected exactly one v0.3 interface, found {len(v03_interfaces)}"
+        )
 
 
 def test_reasoning_engine_stream(server_fixture: subprocess.Popen[str]) -> None:
     """The reasoning_engine adapter (/api/stream_reasoning_engine) runs the agent.
 
-    This is the contract Agent Engine forwards :streamQuery calls to.
+    This is the contract Agent Runtime forwards :streamQuery calls to.
     """
     response = requests.post(
         f"{BASE_URL}/api/stream_reasoning_engine",
@@ -253,3 +251,27 @@ def test_reasoning_engine_stream(server_fixture: subprocess.Popen[str]) -> None:
         for event in events
     )
     assert has_text, "No text content in reasoning_engine events"
+
+
+def test_reasoning_engine_sync_stream(server_fixture: subprocess.Popen[str]) -> None:
+    """The reasoning_engine adapter supports sync generators via stream_query."""
+    response = requests.post(
+        f"{BASE_URL}/api/stream_reasoning_engine",
+        headers=HEADERS,
+        json={
+            "class_method": "stream_query",
+            "input": {"user_id": f"u-{uuid.uuid4()}", "message": "Hi!"},
+        },
+        stream=True,
+        timeout=60,
+    )
+    assert response.status_code == 200
+
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    assert events, "No events from reasoning_engine adapter"
+    has_text = any(
+        (event.get("content") or {}).get("parts")
+        and any(part.get("text") for part in event["content"]["parts"])
+        for event in events
+    )
+    assert has_text, "No text content in reasoning_engine sync events"

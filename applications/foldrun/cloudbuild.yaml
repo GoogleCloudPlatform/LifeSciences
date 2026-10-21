@@ -306,7 +306,7 @@ steps:
         [[ -n "$$NETWORK_ID" ]] && ENV_VARS="$$ENV_VARS,NETWORK=$$NETWORK_ID"
         [[ -n "$$NETWORK_PROJECT_NUMBER" ]] && ENV_VARS="$$ENV_VARS,NETWORK_PROJECT_NUMBER=$$NETWORK_PROJECT_NUMBER"
 
-        uvx google-agents-cli@0.6.1 deploy \
+        uvx google-agents-cli@1.10.0 deploy \
             --project="$$PROJECT_ID" \
             --region="$$REGION" \
             --deployment-target=agent_runtime \
@@ -343,7 +343,7 @@ steps:
 
         # Run publish command
         export GOOGLE_CLOUD_PROJECT="$$PROJECT_ID"
-        uvx google-agents-cli@0.6.1 publish gemini-enterprise \
+        uvx google-agents-cli@1.10.0 publish gemini-enterprise \
           --agent-runtime-id="$$AGENT_RUNTIME_ID" \
           --gemini-enterprise-app-id="$$GEMINI_ENTERPRISE_APP_ID" \
           --display-name="FoldRun" \

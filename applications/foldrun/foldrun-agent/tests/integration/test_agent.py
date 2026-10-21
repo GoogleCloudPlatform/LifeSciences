@@ -12,29 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from app.agent import root_agent
+import pytest
 from google.adk.agents.run_config import RunConfig, StreamingMode
-from google.adk.artifacts import InMemoryArtifactService
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 
-def test_agent_stream() -> None:
+@pytest.mark.integration
+def test_agent_stream(runner) -> None:
     """
     Integration test for the agent stream functionality.
     Tests that the agent returns valid streaming responses.
     """
 
-    session_service = InMemorySessionService()
-    artifact_service = InMemoryArtifactService()
-
-    session = session_service.create_session_sync(user_id="test_user", app_name="test")
-    runner = Runner(
-        agent=root_agent,
-        session_service=session_service,
-        artifact_service=artifact_service,
-        app_name="test",
+    session = runner.session_service.create_session_sync(
+        user_id="test_user", app_name=runner.app_name
     )
 
     message = types.Content(role="user", parts=[types.Part.from_text(text="Why is the sky blue?")])

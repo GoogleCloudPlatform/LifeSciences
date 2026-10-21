@@ -11,8 +11,9 @@ authors = [
 
 dependencies = [
     # ADK and AI Platform
-    "google-adk[gcp]>=2.0.0,<3.0.0",
-    "google-cloud-aiplatform[adk,agent-engines]>=1.156.0",
+    "google-adk[gcp,otel-gcp,bigquery-analytics]>=2.9.2,<3.0.0",
+    "opentelemetry-resourcedetector-gcp<=1.12.0a0",
+    "google-cloud-aiplatform[evaluation,agent-engines]>=1.156.0,<2.0.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
     "nest-asyncio>=1.5.0",
@@ -33,10 +34,9 @@ dependencies = [
     "biopython>=1.81",
     "numpy>=1.24.0",
     "requests",
-    "a2a-sdk[http-server]~=0.3.22",
+    "a2a-sdk[http-server]>=1.0,<2",
     "aiohttp>=3.13.4",
-    "gcsfs>=2024.11.0",
-    "opentelemetry-instrumentation-google-genai>=0.1.0,<1.0.0",
+    "gcsfs>=2026.10.0",
     "protobuf>=6.31.1,<7.0.0",
 ]
 
@@ -48,6 +48,10 @@ dev = [
 lint = [
     "ruff>=0.4.6,<1.0.0",
     "ty>=0.0.1a0",
+]
+eval = [
+    "google-adk[eval]>=2.9.2,<3.0.0",
+    "google-cloud-aiplatform[evaluation]>=1.156.0,<2.0.0",
 ]
 
 [project.scripts]

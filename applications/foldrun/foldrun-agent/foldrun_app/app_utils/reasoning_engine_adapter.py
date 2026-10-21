@@ -14,21 +14,28 @@
 
 """Serve the reasoning_engine ``{class_method, input}`` contract over HTTP.
 
-Exists to guarantee support for the Vertex AI Console Playground and Gemini
-Enterprise (via ADK registration), which both invoke the engine through this
-contract. Agent Engine forwards calls to ``/api/reasoning_engine`` (sync) and
+Exists to guarantee support for the Google Cloud console playground and Gemini
+(via ADK registration), which both invoke the engine through this contract.
+Agent Runtime forwards calls to ``/api/reasoning_engine`` (sync) and
 ``/api/stream_reasoning_engine`` (streaming); dispatch is limited to the
-:class:`AdkApp` ``register_operations()`` methods so the wire output matches a
-packaged Agent Engine.
+:class:`AdkApp` ``register_operations()`` methods so the wire output matches an
+agent packaged for Agent Runtime.
 """
 
 import inspect
 import json
+from collections.abc import AsyncIterable
 
 from fastapi import FastAPI, HTTPException, Request, encoders, responses
+from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
 from vertexai.agent_engines.templates.adk import AdkApp
 
 from foldrun_app.app_utils import services
+
+
+def _no_op_instrumentor_builder(project_id: str) -> None:
+    """No-op so set_up() keeps the startup instrumentor and generate_content spans."""
+    return None
 
 
 def attach_reasoning_engine_routes(app: FastAPI) -> None:
@@ -48,6 +55,7 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
                 app=adk_app,
                 session_service_builder=services.get_session_service,
                 artifact_service_builder=services.get_artifact_service,
+                instrumentor_builder=_no_op_instrumentor_builder,
             )
             runtime.set_up()
             operations = runtime.register_operations()
@@ -73,7 +81,9 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
         method = resolve_method(body["class_method"], streaming=True)
 
         async def generator():
-            async for event in method(**(body.get("input") or {})):
+            stream = method(**(body.get("input") or {}))
+            events = stream if isinstance(stream, AsyncIterable) else iterate_in_threadpool(stream)
+            async for event in events:
                 yield json.dumps(encoders.jsonable_encoder(event)) + "\n"
 
         return responses.StreamingResponse(content=generator(), media_type="application/json")
@@ -83,5 +93,8 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
         body = await request.json()
         method = resolve_method(body["class_method"], streaming=False)
         kwargs = body.get("input") or {}
-        output = await method(**kwargs) if inspect.iscoroutinefunction(method) else method(**kwargs)
+        if inspect.iscoroutinefunction(method):
+            output = await method(**kwargs)
+        else:
+            output = await run_in_threadpool(method, **kwargs)
         return responses.JSONResponse(content=encoders.jsonable_encoder({"output": output}))

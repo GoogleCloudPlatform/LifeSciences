@@ -1,0 +1,43 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "greeting",
+      "prompt": {
+        "role": "user",
+        "parts": [{"text": "Hello, what can you help me with?"}]
+      }
+    },
+    {
+      "eval_case_id": "model_selection_monomer_vs_complex",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "When should I use AlphaFold2 for monomer folding versus Boltz-2 or AlphaFold3 for complex structure prediction in FoldRun?"
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "ligand_complex_capabilities",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Which structure prediction models in FoldRun support folding a protein bound to a small-molecule SMILES ligand?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "FoldRun supports protein-ligand complex prediction with small-molecule SMILES or CCD ligands using AlphaFold3, Boltz-2, and OpenFold3, whereas AlphaFold2 only supports standard amino acid monomer and multimer protein sequences."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
