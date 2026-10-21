@@ -114,18 +114,32 @@ async def _generate_image_bytes(
     return {"status": "error", "message": last_err}
 
 
-async def _generate(prompt: str, asset_id: str, aspect_ratio: str) -> dict:
+async def _generate(
+    prompt: str,
+    asset_id: str,
+    aspect_ratio: str,
+    tool_context: ToolContext | None = None,
+) -> dict:
     result = await _generate_image_bytes(
         f"CONTENT DESCRIPTION:\n{prompt}{_STYLE_SUFFIX}", aspect_ratio
     )
     if result["status"] != "success":
         return result
-    token = save_asset(asset_id, result["data"])
+    try:
+        token = await save_asset(asset_id, result["data"], tool_context=tool_context)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Infographic generated but saving the asset failed: {exc}",
+        }
     return {"status": "success", "token": token, "model": result["model"]}
 
 
 async def make_infographic(
-    description: str, asset_id: str, aspect_ratio: str = "16:9"
+    description: str,
+    asset_id: str,
+    aspect_ratio: str = "16:9",
+    tool_context: ToolContext | None = None,
 ) -> dict:
     """Generate a conceptual infographic / comparison slide with Nano Banana Pro
     and store it as an embeddable asset.
@@ -147,7 +161,9 @@ async def make_infographic(
         `![Illustrative: caption](token)` in the whitepaper markdown, or
         {status: "error", message} on failure (proceed without the image).
     """
-    return await _generate(description, asset_id, aspect_ratio)
+    return await _generate(
+        description, asset_id, aspect_ratio, tool_context=tool_context
+    )
 
 
 _SLIDE_STYLE = (

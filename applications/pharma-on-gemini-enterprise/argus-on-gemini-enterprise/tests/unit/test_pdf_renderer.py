@@ -12,32 +12,106 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for PDF whitepaper rendering and security controls."""
+"""Unit tests for PDF whitepaper rendering and per-session asset security controls."""
 
+import io
 from unittest.mock import patch
 
 import pytest
+from google.adk.agents import LlmAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.artifacts import InMemoryArtifactService
+from google.adk.sessions import InMemorySessionService
+from google.adk.tools import ToolContext
+from PIL import Image
 
 from app.tools import pdf_renderer
-from app.tools.assets import save_asset
+from app.tools.charts import bar_chart
+from app.tools.whitepaper import generate_whitepaper_pdf
 
-# Minimal valid 1x1 transparent PNG
-_ONE_PIXEL_PNG = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-    b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00"
-    b"\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+_TEST_AGENT = LlmAgent(name="test_pdf_agent", model="gemini-3.8-flash")
+
+
+def _make_valid_png_bytes() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), color="#0b2545").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+_VALID_PNG = _make_valid_png_bytes()
+
+
+async def _make_tool_context(
+    session_service: InMemorySessionService,
+    artifact_service: InMemoryArtifactService,
+    *,
+    user_id: str,
+) -> ToolContext:
+    session = await session_service.create_session(app_name="argus", user_id=user_id)
+    inv_ctx = InvocationContext(
+        session_service=session_service,
+        artifact_service=artifact_service,
+        invocation_id=f"inv-{session.id}",
+        agent=_TEST_AGENT,
+        session=session,
+    )
+    return ToolContext(inv_ctx)
 
 
 def test_render_whitepaper_pdf_with_valid_asset():
-    """Legitimate markdown and registered asset:// images render into PDF bytes."""
-    token = save_asset("unit_test_chart", _ONE_PIXEL_PNG)
+    """Legitimate markdown and in-memory session asset:// images render into PDF bytes."""
+    token = "asset://unit_test_chart"
     pdf_bytes = pdf_renderer.render_whitepaper_pdf(
         markdown_text=f"## Executive Summary\n\n![Runway Chart]({token})\n",
         title="Target Assessment",
         subtitle="Phase 2 Oncology Pipeline",
+        assets={token: _VALID_PNG},
     )
     assert pdf_bytes.startswith(b"%PDF-")
+
+
+@pytest.mark.asyncio
+async def test_blocks_cross_session_asset_leakage_in_whitepaper_pdf():
+    """Reproduces b/575340811 PoC: Session 2 cannot embed Session 1's asset://chart_burn."""
+    session_svc = InMemorySessionService()
+    artifact_svc = InMemoryArtifactService()
+
+    ctx_session_1 = await _make_tool_context(
+        session_svc, artifact_svc, user_id="user_1"
+    )
+    ctx_session_2 = await _make_tool_context(
+        session_svc, artifact_svc, user_id="user_2"
+    )
+
+    # 1. Session 1 creates a confidential chart under predictable ID "chart_burn"
+    chart_res = await bar_chart(
+        asset_id="chart_burn",
+        title="Target Confidential Burn",
+        categories=["Q1", "Q2"],
+        values=[10.0, 20.0],
+        tool_context=ctx_session_1,
+    )
+    assert chart_res == {"status": "success", "token": "asset://chart_burn"}
+
+    # 2. Session 2 attempts to render a whitepaper referencing asset://chart_burn
+    res_session_2 = await generate_whitepaper_pdf(
+        markdown_body="## Financials\n\n![Financials](asset://chart_burn)\n",
+        target_name="Competitor Target",
+        subtitle="Assessment",
+        tool_context=ctx_session_2,
+    )
+    assert res_session_2["status"] == "error"
+    assert "Unauthorized or missing session asset" in res_session_2["message"]
+
+    # 3. Session 1 can render its own chart_burn into a whitepaper PDF artifact
+    res_session_1 = await generate_whitepaper_pdf(
+        markdown_body="## Financials\n\n![Financials](asset://chart_burn)\n",
+        target_name="Confidential Target",
+        subtitle="Assessment",
+        tool_context=ctx_session_1,
+    )
+    assert res_session_1["status"] == "success"
+    assert res_session_1["bytes"] > 0
 
 
 def test_blocks_remote_http_resource_fetch():

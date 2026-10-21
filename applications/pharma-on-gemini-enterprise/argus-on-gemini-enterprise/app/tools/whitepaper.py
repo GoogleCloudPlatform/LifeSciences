@@ -20,6 +20,7 @@ import re
 from google.adk.tools import ToolContext
 from google.genai import types
 
+from .assets import load_markdown_assets
 from .pdf_renderer import render_whitepaper_pdf
 
 
@@ -53,10 +54,12 @@ async def generate_whitepaper_pdf(
         {status: "error", message} on failure.
     """
     try:
+        session_assets = await load_markdown_assets(markdown_body, tool_context)
         pdf_bytes = render_whitepaper_pdf(
             markdown_body,
             title=f"Acquisition Assessment: {target_name}",
             subtitle=subtitle,
+            assets=session_assets,
         )
     except Exception as exc:  # rendering is the only likely failure point
         return {"status": "error", "message": f"PDF render failed: {exc}"}

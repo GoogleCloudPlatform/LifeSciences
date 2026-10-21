@@ -27,6 +27,7 @@ import matplotlib
 
 matplotlib.use("Agg")  # headless, container-safe
 import matplotlib.pyplot as plt
+from google.adk.tools import ToolContext
 
 from .assets import save_asset
 
@@ -54,20 +55,32 @@ def _set_x_category_labels(ax, labels: list[str]) -> None:
         ax.set_xticklabels(wrapped, fontsize=8.5)
 
 
-def _finish(fig, asset_id: str) -> str:
+async def _finish(
+    fig,
+    asset_id: str,
+    tool_context: ToolContext | None,
+) -> dict:
     fig.tight_layout()
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
     plt.close(fig)
-    return save_asset(asset_id, buf.getvalue())
+    try:
+        token = await save_asset(asset_id, buf.getvalue(), tool_context=tool_context)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Chart rendered but saving the asset failed: {exc}",
+        }
+    return {"status": "success", "token": token}
 
 
-def bar_chart(
+async def bar_chart(
     asset_id: str,
     title: str,
     categories: list[str],
     values: list[float],
     y_label: str = "",
+    tool_context: ToolContext | None = None,
 ) -> dict:
     """Render a vertical bar chart PNG (e.g. burn by quarter, R&D vs G&A, ORR by
     cohort) and store it as an embeddable asset.
@@ -97,15 +110,16 @@ def bar_chart(
         ax.spines[spine].set_visible(False)
     ax.grid(axis="y", color="#e3e7ee", linewidth=0.7)
     ax.set_axisbelow(True)
-    return {"status": "success", "token": _finish(fig, asset_id)}
+    return await _finish(fig, asset_id, tool_context)
 
 
-def line_chart(
+async def line_chart(
     asset_id: str,
     title: str,
     x_labels: list[str],
     series: dict[str, list[float]],
     y_label: str = "",
+    tool_context: ToolContext | None = None,
 ) -> dict:
     """Render a multi-series line chart PNG (e.g. cash balance and burn over
     time, enrollment trajectory) and store it as an embeddable asset.
@@ -140,15 +154,16 @@ def line_chart(
     ax.set_axisbelow(True)
     if len(series) > 1:
         ax.legend(frameon=False, fontsize=8)
-    return {"status": "success", "token": _finish(fig, asset_id)}
+    return await _finish(fig, asset_id, tool_context)
 
 
-def horizontal_bar_chart(
+async def horizontal_bar_chart(
     asset_id: str,
     title: str,
     labels: list[str],
     values: list[float],
     x_label: str = "",
+    tool_context: ToolContext | None = None,
 ) -> dict:
     """Render a horizontal bar chart PNG, ideal for ranked comparisons (e.g.
     peak-sales by indication, competitor ORR ranking, TAM by segment).
@@ -178,4 +193,4 @@ def horizontal_bar_chart(
         ax.spines[spine].set_visible(False)
     ax.grid(axis="x", color="#e3e7ee", linewidth=0.7)
     ax.set_axisbelow(True)
-    return {"status": "success", "token": _finish(fig, asset_id)}
+    return await _finish(fig, asset_id, tool_context)

@@ -12,81 +12,138 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for secure asset storage in app.tools.assets."""
+"""Unit tests for session-scoped ADK ArtifactService asset storage in app.tools.assets."""
 
-import os
-import stat
+from __future__ import annotations
 
 import pytest
+from google.adk.agents import LlmAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.artifacts import InMemoryArtifactService
+from google.adk.sessions import InMemorySessionService
+from google.adk.tools import ToolContext
 
 from app.tools import assets
 
-
-def test_asset_dir_is_unique_and_restricted():
-    """Verify _ASSET_DIR is created via mkdtemp with restricted 0o700 permissions."""
-    assert os.path.isdir(assets._ASSET_DIR)
-    basename = os.path.basename(assets._ASSET_DIR)
-    assert basename.startswith("argus_assets_")
-    assert basename != "argus_assets"
-    mode = stat.S_IMODE(os.stat(assets._ASSET_DIR).st_mode)
-    assert mode == 0o700
+_TEST_AGENT = LlmAgent(name="test_asset_agent", model="gemini-3.8-flash")
 
 
-def test_save_asset_prevents_symlink_following(tmp_path):
-    """Verify save_asset uses O_NOFOLLOW and refuses to overwrite symlink targets."""
-    victim_file = tmp_path / "sensitive_target.txt"
-    victim_file.write_text("original secret content", encoding="utf-8")
-
-    asset_id = "symlink_test_asset"
-    symlink_path = os.path.join(assets._ASSET_DIR, f"{asset_id}.png")
-    if os.path.lexists(symlink_path):
-        os.unlink(symlink_path)
-    os.symlink(victim_file, symlink_path)
-
-    try:
-        with pytest.raises(OSError):
-            assets.save_asset(asset_id, b"malicious png payload")
-        # Victim file must remain completely untouched
-        assert victim_file.read_text(encoding="utf-8") == "original secret content"
-    finally:
-        if os.path.lexists(symlink_path):
-            os.unlink(symlink_path)
+async def _make_tool_context(
+    session_service: InMemorySessionService,
+    artifact_service: InMemoryArtifactService,
+    *,
+    user_id: str,
+    app_name: str = "argus",
+) -> ToolContext:
+    session = await session_service.create_session(app_name=app_name, user_id=user_id)
+    inv_ctx = InvocationContext(
+        session_service=session_service,
+        artifact_service=artifact_service,
+        invocation_id=f"inv-{session.id}",
+        agent=_TEST_AGENT,
+        session=session,
+    )
+    return ToolContext(inv_ctx)
 
 
-def test_save_asset_file_permissions_and_roundtrip():
-    """Verify saved assets have 0o600 permissions and resolve properly."""
-    token = assets.save_asset("chart_runway_test", b"\x89PNG\r\n\x1a\n")
+@pytest.mark.asyncio
+async def test_save_and_load_asset_roundtrip_and_delta_suppression() -> None:
+    """Saved assets persist in ADK ArtifactService, suppress intermediate artifact_delta, and resolve in markdown."""
+    session_svc = InMemorySessionService()
+    artifact_svc = InMemoryArtifactService()
+    ctx = await _make_tool_context(session_svc, artifact_svc, user_id="analyst_1")
+
+    payload = b"\x89PNG\r\n\x1a\npayload_runway"
+    token = await assets.save_asset("chart_runway_test", payload, tool_context=ctx)
     assert token == "asset://chart_runway_test"
 
-    resolved = assets.asset_path("chart_runway_test")
-    assert resolved is not None
-    assert os.path.isfile(resolved)
-    mode = stat.S_IMODE(os.stat(resolved).st_mode)
-    assert mode == 0o600
+    # Intermediate chart PNG must not remain in event.actions.artifact_delta
+    assert (
+        assets.artifact_filename("chart_runway_test") not in ctx.actions.artifact_delta
+    )
+
+    loaded = await assets.load_asset("chart_runway_test", tool_context=ctx)
+    assert loaded == payload
 
     md = "Here is ![Runway](asset://chart_runway_test) and ![Unknown](asset://missing)"
-    rendered = assets.resolve_tokens_to_paths(md)
-    assert resolved in rendered
-    assert "asset://missing" in rendered
+    resolved_map = await assets.load_markdown_assets(md, tool_context=ctx)
+    assert resolved_map == {"asset://chart_runway_test": payload}
 
 
-def test_asset_path_sanitization_and_containment(tmp_path):
-    """Verify asset_path sanitizes traversal attempts and blocks symlink escapes."""
-    outside_file = tmp_path / "outside.png"
-    outside_file.write_bytes(b"outside")
+@pytest.mark.asyncio
+async def test_cross_session_and_cross_user_isolation() -> None:
+    """Assets saved in one session cannot be read or overwritten by another session or user (OSB-v1-292)."""
+    session_svc = InMemorySessionService()
+    artifact_svc = InMemoryArtifactService()
 
-    # Traversal attempt is sanitized to safe characters inside _ASSET_DIR
-    assert assets.asset_path("../../etc/passwd") is None
+    ctx_session_1 = await _make_tool_context(
+        session_svc, artifact_svc, user_id="user_a"
+    )
+    ctx_session_2 = await _make_tool_context(
+        session_svc, artifact_svc, user_id="user_a"
+    )
+    ctx_user_b = await _make_tool_context(session_svc, artifact_svc, user_id="user_b")
 
-    # Symlink inside _ASSET_DIR pointing outside must be rejected by realpath containment
-    escape_id = "symlink_escape_asset"
-    symlink_path = os.path.join(assets._ASSET_DIR, f"{escape_id}.png")
-    if os.path.lexists(symlink_path):
-        os.unlink(symlink_path)
-    os.symlink(outside_file, symlink_path)
+    secret_png_s1 = b"\x89PNG\r\n\x1a\nconfidential_session_1_burn"
+    await assets.save_asset("chart_burn", secret_png_s1, tool_context=ctx_session_1)
 
-    try:
-        assert assets.asset_path(escape_id) is None
-    finally:
-        if os.path.lexists(symlink_path):
-            os.unlink(symlink_path)
+    # Another session for the same user or a different user cannot load Session 1's asset
+    assert await assets.load_asset("chart_burn", tool_context=ctx_session_2) is None
+    assert await assets.load_asset("chart_burn", tool_context=ctx_user_b) is None
+    assert (
+        await assets.load_markdown_assets(
+            "![Burn](asset://chart_burn)", tool_context=ctx_session_2
+        )
+        == {}
+    )
+    assert (
+        await assets.load_markdown_assets(
+            "![Burn](asset://chart_burn)", tool_context=ctx_user_b
+        )
+        == {}
+    )
+
+    # Saving the same predictable asset_id in Session 2 does not overwrite Session 1
+    png_s2 = b"\x89PNG\r\n\x1a\nsession_2_burn"
+    await assets.save_asset("chart_burn", png_s2, tool_context=ctx_session_2)
+
+    assert (
+        await assets.load_asset("chart_burn", tool_context=ctx_session_1)
+        == secret_png_s1
+    )
+    assert await assets.load_asset("chart_burn", tool_context=ctx_session_2) == png_s2
+
+
+@pytest.mark.asyncio
+async def test_user_namespace_prefix_and_traversal_sanitization() -> None:
+    """Malicious `user:` prefix or path traversal characters in asset_id cannot escape session scope."""
+    session_svc = InMemorySessionService()
+    artifact_svc = InMemoryArtifactService()
+
+    ctx_1 = await _make_tool_context(session_svc, artifact_svc, user_id="same_user")
+    ctx_2 = await _make_tool_context(session_svc, artifact_svc, user_id="same_user")
+
+    # Attempt to inject ADK `user:` cross-session namespace prefix
+    token = await assets.save_asset("user:chart_burn", b"s1_data", tool_context=ctx_1)
+    assert token == "asset://user_chart_burn"
+    filename = assets.artifact_filename("user:chart_burn")
+    assert not filename.startswith("user:")
+    assert filename == "asset_user_chart_burn.png"
+
+    # Must not be visible in another session of the same user
+    assert await assets.load_asset("user:chart_burn", tool_context=ctx_2) is None
+    assert await assets.load_asset("user_chart_burn", tool_context=ctx_2) is None
+
+    # Traversal characters are sanitized
+    assert assets.sanitize_asset_id("../../etc/passwd") == "______etc_passwd"
+
+
+@pytest.mark.asyncio
+async def test_missing_tool_context_rejected() -> None:
+    """All asset store operations require a non-null ToolContext."""
+    with pytest.raises(ValueError, match="tool_context is required"):
+        await assets.save_asset("chart_burn", b"data", tool_context=None)
+    with pytest.raises(ValueError, match="tool_context is required"):
+        await assets.load_asset("chart_burn", tool_context=None)
+    with pytest.raises(ValueError, match="tool_context is required"):
+        await assets.load_markdown_assets("![x](asset://chart_burn)", tool_context=None)

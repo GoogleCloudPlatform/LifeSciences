@@ -18,17 +18,20 @@ Pure-Python pipeline (markdown -> HTML -> xhtml2pdf) so it runs unmodified on
 Agent Runtime — no native rendering dependencies.
 """
 
+from __future__ import annotations
+
+import functools
 import html as html_lib
 import io
 import re
+from collections.abc import Mapping
 from datetime import date
-from pathlib import Path
 from urllib.parse import urlparse
 
 import markdown
 from xhtml2pdf import pisa
 
-from .assets import _ASSET_DIR, resolve_tokens_to_paths
+from .assets import sanitize_asset_id
 
 # The LLM sometimes emits LaTeX/MathJax, which xhtml2pdf cannot render. Convert
 # the common tokens to plain Unicode/text so figures read correctly in the PDF.
@@ -125,20 +128,34 @@ def _sanitize_html(html_text: str) -> str:
     return _DANGEROUS_TAG_RE.sub("", cleaned)
 
 
-def _safe_link_callback(uri: str, rel: str | None = None) -> str:
-    """Restrict xhtml2pdf resource resolution strictly to _ASSET_DIR.
+_ASSET_URI_RE = re.compile(r"^asset://([A-Za-z0-9_\-]+)$")
 
-    Blocks network schemes (http://, https://, ftp://, file://, data:, etc.)
-    and verifies that canonical filesystem paths stay within _ASSET_DIR.
+
+def _safe_link_callback(
+    uri: str,
+    rel: str | None = None,
+    *,
+    assets: Mapping[str, bytes] | None = None,
+) -> bytes:
+    """Resolve xhtml2pdf image resources strictly from in-memory session assets.
+
+    Permits only `asset://<id>` tokens present in the current session's `assets`
+    mapping (returning raw PNG bytes via xhtml2pdf's BytesFileUri). Blocks all
+    external URI schemes (http://, https://, ftp://, file://, data:, etc.) and
+    all local filesystem paths.
     """
+    del rel
+    m = _ASSET_URI_RE.match(uri.strip())
+    if m:
+        token = f"asset://{sanitize_asset_id(m.group(1))}"
+        if assets and token in assets:
+            return assets[token]
+        raise ValueError(f"Unauthorized or missing session asset: {uri}")
+
     parsed = urlparse(uri)
     if parsed.scheme:
         raise ValueError(f"Disallowed resource URI scheme: {parsed.scheme}")
-    allowed_root = Path(_ASSET_DIR).resolve()
-    candidate = Path(uri).resolve()
-    if not candidate.is_relative_to(allowed_root):
-        raise ValueError(f"Unauthorized resource path outside asset directory: {uri}")
-    return str(candidate)
+    raise ValueError(f"Unauthorized resource path outside session assets: {uri}")
 
 
 def _format_footnotes(html: str) -> str:
@@ -205,7 +222,12 @@ sup { font-size: 6.5pt; color: #13315c; }
 """
 
 
-def render_whitepaper_pdf(markdown_text: str, title: str, subtitle: str = "") -> bytes:
+def render_whitepaper_pdf(
+    markdown_text: str,
+    title: str,
+    subtitle: str = "",
+    assets: Mapping[str, bytes] | None = None,
+) -> bytes:
     """Convert a markdown whitepaper into styled PDF bytes.
 
     Args:
@@ -213,12 +235,14 @@ def render_whitepaper_pdf(markdown_text: str, title: str, subtitle: str = "") ->
             (headings, tables, lists, blockquotes supported).
         title: Document title placed on the header block.
         subtitle: Optional subtitle (e.g. "Acquisition Assessment: <target>").
+        assets: Optional per-session mapping of `asset://<id>` tokens to PNG bytes
+            loaded from the caller's ADK ArtifactService.
 
     Returns:
         PDF file contents as bytes. Raises RuntimeError on render failure.
     """
     sanitized_md = _sanitize_html(markdown_text)
-    prepared = resolve_tokens_to_paths(_dedupe_stutters(_sanitize_latex(sanitized_md)))
+    prepared = _dedupe_stutters(_sanitize_latex(sanitized_md))
     body_html = _sanitize_html(
         _format_footnotes(
             markdown.markdown(
@@ -254,7 +278,7 @@ def render_whitepaper_pdf(markdown_text: str, title: str, subtitle: str = "") ->
         html,
         dest=buf,
         encoding="utf-8",
-        link_callback=_safe_link_callback,
+        link_callback=functools.partial(_safe_link_callback, assets=assets),
     )
     if result.err:
         raise RuntimeError(f"PDF rendering failed with {result.err} error(s)")

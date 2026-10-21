@@ -14,15 +14,15 @@
 
 import asyncio
 import importlib
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 from google.adk.tools import ToolContext
+from google.genai import types
 
 import app.tools.edgar
-from app.tools.assets import asset_path, resolve_tokens_to_paths, save_asset
+from app.tools.assets import load_asset, load_markdown_assets, save_asset
 from app.tools.charts import bar_chart, horizontal_bar_chart, line_chart
 from app.tools.edgar import _cik10
 from app.tools.infographic import generate_slide, make_infographic
@@ -565,39 +565,62 @@ def test_dedupe_stutters() -> None:
     assert _dedupe_stutters("FDA FDA review") == "FDA review"
 
 
-def test_asset_store() -> None:
-    token = save_asset("test_asset", b"dummy_png_bytes")
+@pytest.mark.asyncio
+async def test_asset_store() -> None:
+    store: dict[str, types.Part] = {}
+    mock_ctx = MagicMock(spec=ToolContext)
+    mock_ctx.actions = MagicMock(artifact_delta={})
+
+    async def _save(filename: str, artifact: types.Part) -> int:
+        store[filename] = artifact
+        mock_ctx.actions.artifact_delta[filename] = 0
+        return 0
+
+    async def _load(filename: str) -> types.Part | None:
+        return store.get(filename)
+
+    mock_ctx.save_artifact = AsyncMock(side_effect=_save)
+    mock_ctx.load_artifact = AsyncMock(side_effect=_load)
+
+    token = await save_asset("test_asset", b"dummy_png_bytes", tool_context=mock_ctx)
     assert token == "asset://test_asset"
-    path = asset_path("test_asset")
-    assert path is not None
-    assert os.path.exists(path)
-    resolved = resolve_tokens_to_paths(f"![Image]({token})")
-    assert path in resolved
+    loaded = await load_asset("test_asset", tool_context=mock_ctx)
+    assert loaded == b"dummy_png_bytes"
+    resolved = await load_markdown_assets(f"![Image]({token})", tool_context=mock_ctx)
+    assert resolved == {token: b"dummy_png_bytes"}
 
 
-def test_charts_generation() -> None:
-    res = bar_chart(
+@pytest.mark.asyncio
+async def test_charts_generation() -> None:
+    mock_ctx = MagicMock(spec=ToolContext)
+    mock_ctx.actions = MagicMock(artifact_delta={})
+    mock_ctx.save_artifact = AsyncMock(return_value=0)
+
+    res = await bar_chart(
         asset_id="test_bar",
         title="Test Bar",
         categories=["A", "B", "C"],
         values=[10.0, 20.0, 30.0],
+        tool_context=mock_ctx,
     )
     assert res["status"] == "success"
     assert res["token"] == "asset://test_bar"
 
-    res_line = line_chart(
+    res_line = await line_chart(
         asset_id="test_line",
         title="Test Line",
         x_labels=["Q1", "Q2"],
         series={"Revenue": [10.0, 20.0]},
+        tool_context=mock_ctx,
     )
     assert res_line["status"] == "success"
 
-    res_hbar = horizontal_bar_chart(
+    res_hbar = await horizontal_bar_chart(
         asset_id="test_hbar",
         title="Test Horizontal Bar",
         labels=["Alpha", "Beta"],
         values=[5.0, 15.0],
+        tool_context=mock_ctx,
     )
     assert res_hbar["status"] == "success"
 
@@ -615,11 +638,21 @@ async def test_make_infographic() -> None:
     mock_response.candidates = [MagicMock(content=MagicMock(parts=[mock_part]))]
     mock_aclient.models.generate_content.return_value = mock_response
 
+    mock_tool_context = MagicMock(spec=ToolContext)
+    mock_tool_context.actions = MagicMock(artifact_delta={})
+    mock_tool_context.save_artifact = AsyncMock(return_value=0)
+
     with patch("app.tools.infographic._create_client", return_value=mock_client):
-        res = await make_infographic("A 2x2 matrix", "test_info_asset", "16:9")
+        res = await make_infographic(
+            "A 2x2 matrix",
+            "test_info_asset",
+            "16:9",
+            tool_context=mock_tool_context,
+        )
         assert res["status"] == "success"
         assert res["token"] == "asset://test_info_asset"
         mock_aclient.models.generate_content.assert_awaited()
+        mock_tool_context.save_artifact.assert_awaited_once()
 
 
 @pytest.mark.asyncio

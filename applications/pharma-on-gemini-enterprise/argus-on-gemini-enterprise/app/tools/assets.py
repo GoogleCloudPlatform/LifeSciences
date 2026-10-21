@@ -12,55 +12,96 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Per-invocation asset store for generated images/charts.
+"""Per-session asset store for generated images/charts backed by ADK ArtifactService.
 
-Chart and infographic tools write PNG bytes here and return a lightweight
-`asset://<id>` token. The whitepaper markdown references assets with normal
-markdown image syntax, e.g. `![Cash runway](asset://chart_runway)`, and the PDF
-renderer resolves those tokens to the actual image files at render time.
-
-Using a token + temp file (rather than base64 inline in the markdown) keeps the
-markdown compact for the LLM and works reliably with xhtml2pdf's file-based
-image loading, including inside the Agent Engine container (writes to /tmp).
+Chart and infographic tools persist PNG bytes as session-scoped ADK artifacts via
+`tool_context.save_artifact` and return a lightweight `asset://<id>` token. The
+whitepaper markdown references assets with standard markdown image syntax, e.g.
+`![Cash runway](asset://chart_runway)`, and `generate_whitepaper_pdf` loads only
+the active user/session's artifacts via `tool_context.load_artifact` for in-memory
+PDF rendering.
 """
 
-import os
-import re
-import tempfile
+from __future__ import annotations
 
-_ASSET_DIR = tempfile.mkdtemp(prefix="argus_assets_")
+import re
+
+from google.adk.tools import ToolContext
+from google.genai import types
 
 _TOKEN_RE = re.compile(r"asset://([A-Za-z0-9_\-]+)")
 
 
-def save_asset(asset_id: str, png_bytes: bytes) -> str:
-    """Persist PNG bytes under an id and return the `asset://<id>` token."""
-    asset_id = re.sub(r"[^A-Za-z0-9_\-]", "_", asset_id)
-    path = os.path.join(_ASSET_DIR, f"{asset_id}.png")
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(path, flags, 0o600)
-    with os.fdopen(fd, "wb") as f:
-        f.write(png_bytes)
-    return f"asset://{asset_id}"
+def sanitize_asset_id(asset_id: str) -> str:
+    """Sanitize an asset identifier to safe token characters (`[A-Za-z0-9_-]`)."""
+    cleaned = re.sub(r"[^A-Za-z0-9_\-]", "_", asset_id)
+    return cleaned or "asset"
 
 
-def asset_path(asset_id: str) -> str | None:
-    asset_id = re.sub(r"[^A-Za-z0-9_\-]", "_", asset_id)
-    path = os.path.join(_ASSET_DIR, f"{asset_id}.png")
-    real_base = os.path.realpath(_ASSET_DIR)
-    real_path = os.path.realpath(path)
-    if os.path.commonpath([real_base, real_path]) != real_base:
-        return None
-    return real_path if os.path.isfile(real_path) else None
+def artifact_filename(asset_id: str) -> str:
+    """Return a session-scoped ADK artifact filename (never `user:`-prefixed)."""
+    return f"asset_{sanitize_asset_id(asset_id)}.png"
 
 
-def resolve_tokens_to_paths(markdown_text: str) -> str:
-    """Replace `asset://<id>` tokens with absolute file paths so the markdown
-    image tags point at real files for the PDF renderer. Unknown tokens are
-    left as-is (they will simply render as broken/absent images)."""
+async def save_asset(
+    asset_id: str,
+    png_bytes: bytes,
+    tool_context: ToolContext | None,
+) -> str:
+    """Persist PNG bytes in the current session's ADK ArtifactService and return `asset://<id>`."""
+    if tool_context is None:
+        raise ValueError(
+            "tool_context is required to save session-scoped assets in ArtifactService."
+        )
+    clean_id = sanitize_asset_id(asset_id)
+    filename = artifact_filename(clean_id)
+    part = types.Part.from_bytes(data=png_bytes, mime_type="image/png")
+    await tool_context.save_artifact(filename=filename, artifact=part)
 
-    def repl(m: re.Match) -> str:
-        p = asset_path(m.group(1))
-        return p if p else m.group(0)
+    # Intermediate chart/infographic PNGs are embedded into the whitepaper PDF;
+    # suppress their individual artifact_delta entries so Gemini Enterprise only
+    # renders the final whitepaper PDF card.
+    actions = getattr(tool_context, "actions", None)
+    artifact_delta = getattr(actions, "artifact_delta", None)
+    if isinstance(artifact_delta, dict):
+        artifact_delta.pop(filename, None)
 
-    return _TOKEN_RE.sub(repl, markdown_text)
+    return f"asset://{clean_id}"
+
+
+async def load_asset(
+    asset_id: str,
+    tool_context: ToolContext | None,
+) -> bytes | None:
+    """Load PNG bytes for `asset_id` from the current session's ADK ArtifactService."""
+    if tool_context is None:
+        raise ValueError(
+            "tool_context is required to load session-scoped assets from ArtifactService."
+        )
+    filename = artifact_filename(asset_id)
+    part = await tool_context.load_artifact(filename=filename)
+    if part is not None and getattr(part, "inline_data", None) is not None:
+        return part.inline_data.data
+    return None
+
+
+async def load_markdown_assets(
+    markdown_text: str,
+    tool_context: ToolContext | None,
+) -> dict[str, bytes]:
+    """Load all `asset://<id>` tokens referenced in `markdown_text` for the current session."""
+    if tool_context is None:
+        raise ValueError(
+            "tool_context is required to load session-scoped assets from ArtifactService."
+        )
+    assets: dict[str, bytes] = {}
+    seen: set[str] = set()
+    for match in _TOKEN_RE.finditer(markdown_text):
+        clean_id = sanitize_asset_id(match.group(1))
+        if clean_id in seen:
+            continue
+        seen.add(clean_id)
+        data = await load_asset(clean_id, tool_context)
+        if data is not None:
+            assets[f"asset://{clean_id}"] = data
+    return assets
