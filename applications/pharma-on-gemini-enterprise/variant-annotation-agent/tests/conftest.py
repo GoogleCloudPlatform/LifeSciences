@@ -25,7 +25,7 @@ if str(APP_ROOT) not in sys.path:
 
 # Set test environment defaults before app.agent is imported
 os.environ.setdefault("SKIP_DEEPMIND_SKILLS_FETCH", "1")
-os.environ["GOOGLE_CLOUD_PROJECT"] = "test-genomics-project"
-os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
-os.environ["COORDINATOR_MODEL_NAME"] = "gemini-4-argon"
-os.environ["WORKER_MODEL_NAME"] = "gemini-3.8-flash"
+os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test-genomics-project")
+os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")
+os.environ.setdefault("COORDINATOR_MODEL_NAME", "gemini-4-argon")
+os.environ.setdefault("WORKER_MODEL_NAME", "gemini-3.8-flash")

@@ -201,7 +201,7 @@ flowchart TD
 ├── README.md                                  # Architecture, GCS Bucket Guide & Deployment
 ├── pyproject.toml                             # Dependencies & build config (uv / hatchling, Python 3.13)
 ├── uv.lock                                    # Pinned dependency lockfile
-├── agents-cli-manifest.yaml                   # Manifest for google-agents-cli@1.8.0
+├── agents-cli-manifest.yaml                   # Manifest for google-agents-cli@1.11.0
 ├── Dockerfile                                 # Container image for Cloud Run / Agent Runtime
 ├── assets/
 │   └── architecture.png                       # High-resolution architectural design visual

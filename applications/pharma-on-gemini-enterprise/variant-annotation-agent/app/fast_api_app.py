@@ -106,6 +106,8 @@ app.description = (
     "gnomAD v4, GWAS Catalog, and PharmGKB."
 )
 
+# Proxy routes so the Google Cloud console playground (reasoning_engine SDK) can
+# talk to this agent alongside the native adk_api routes.
 attach_reasoning_engine_routes(app)
 
 

@@ -646,8 +646,8 @@ class TestAgentSmoke:
         assert "gnomad_ancestry_af_sample_alphagenome_variants.png" in artifact_keys
 
     def test_deployability_fastapi_a2a_and_adk_app(self, monkeypatch):
+        from agentplatform.frameworks.adk import AdkApp
         from fastapi.testclient import TestClient
-        from vertexai.agent_engines.templates.adk import AdkApp
 
         from app.app_utils import services
         from app.fast_api_app import app as fastapi_app
@@ -677,9 +677,7 @@ class TestAgentSmoke:
             patch("app.fast_api_app.logger", mock_fb_logger),
             TestClient(fastapi_app) as client,
         ):
-            card_resp = client.get(
-                "/a2a/alphagenome_variant_agent/.well-known/agent-card.json"
-            )
+            card_resp = client.get("/a2a/app/.well-known/agent-card.json")
             assert card_resp.status_code == 200
             card_json = card_resp.json()
             assert card_json["name"] == "alphagenome_variant_agent"

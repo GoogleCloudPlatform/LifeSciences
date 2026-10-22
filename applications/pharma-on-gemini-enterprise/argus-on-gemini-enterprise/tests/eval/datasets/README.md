@@ -35,7 +35,7 @@ agents-cli eval generate --url https://my-agent.run.app --app-name app
 
 ## Dataset Format
 
-Each dataset file follows the Gemini Enterprise Agent Platform Evaluation
+Each dataset file follows the Gemini platform evaluation
 dataset format. An eval case may use **either** of two shapes — both are
 valid input to `agents-cli eval generate`:
 

@@ -74,7 +74,7 @@ app: FastAPI = get_fast_api_app(
 app.title = "argus-agent"
 app.description = "API for interacting with the Agent argus-agent"
 
-# Proxy routes so the Vertex AI Console Playground (reasoning_engine SDK) can
+# Proxy routes so the Google Cloud console playground (reasoning_engine SDK) can
 # talk to this agent alongside the native adk_api routes.
 attach_reasoning_engine_routes(app)
 

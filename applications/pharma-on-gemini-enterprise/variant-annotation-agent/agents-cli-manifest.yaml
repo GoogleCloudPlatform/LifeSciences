@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: alphagenome-variant-annotation-agent
-acli_version: 1.8.0
+name: alphagenome-variant-agent
+acli_version: 1.11.0
 agent_directory: app
 create_params:
   deployment_target: agent_runtime

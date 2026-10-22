@@ -237,4 +237,4 @@ alphagenome_variant_agent = Workflow(
 )
 
 root_agent = alphagenome_variant_agent
-app = App(root_agent=alphagenome_variant_agent, name="alphagenome_variant_agent")
+app = App(root_agent=alphagenome_variant_agent, name="app")

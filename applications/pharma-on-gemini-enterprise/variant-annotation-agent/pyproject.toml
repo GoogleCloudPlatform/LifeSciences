@@ -20,11 +20,12 @@ readme = "README.md"
 requires-python = "~=3.13.0"
 dependencies = [
     "a2a-sdk[http-server]>=1.0,<2",
-    "aiohttp>=3.10.0",
+    "aiohttp>=3.13.4",
     "fastapi>=0.115.0",
-    "gcsfs>=2024.11.0",
-    "google-adk[gcp,otel-gcp]>=2.9.2,<3.0.0",
-    "google-cloud-aiplatform[agent-engines]>=1.156.0,<2.0.0",
+    "gcsfs>=2026.10.0",
+    "google-adk[gcp,otel-gcp,bigquery-analytics]>=2.12.0,<3.0.0",
+    "google-cloud-agentplatform[agent-engines]>=2.2.0,<3.0.0",
+    "google-cloud-aiplatform[evaluation]>=2.2.0,<3.0.0",
     "google-cloud-logging>=3.12.0,<4.0.0",
     "google-cloud-storage>=2.14.0",
     "google-genai>=1.0.0",
@@ -49,10 +50,12 @@ dev = [
 
 [project.optional-dependencies]
 eval = [
-    "google-adk[eval]>=2.0.0,<3.0.0",
+    "google-adk[eval]>=2.12.0,<3.0.0",
+    "google-cloud-aiplatform[evaluation]>=2.2.0,<3.0.0",
 ]
 lint = [
     "ruff>=0.4.6,<1.0.0",
+    "ty>=0.0.1a0",
 ]
 
 [tool.ruff]
@@ -74,6 +77,27 @@ ignore = ["E501", "C901", "B006", "E402", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+
+[tool.ty]
+# ty is Astral's Rust-based type checker (same team as ruff/uv)
+# See: https://docs.astral.sh/ty/
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+exclude = [".venv/**"]
+
+[tool.ty.rules]
+# Ignore common issues with third-party libraries and dynamic code patterns
+unresolved-import = "ignore"
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-return-type = "ignore"
+possibly-missing-attribute = "ignore"
+not-subscriptable = "ignore"
+deprecated = "warn"
 
 [build-system]
 requires = ["hatchling"]

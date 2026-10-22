@@ -17,7 +17,7 @@ metrics_to_run:
 
 custom_metrics:
   # Default: local LLM-as-judge (see response_quality.py). Runs in-process via
-  # google-genai on Agent Platform (ADC) or Google AI Studio (GEMINI_API_KEY).
+  # google-genai on Gemini platform (ADC) or Google AI Studio (GEMINI_API_KEY).
   - name: custom_response_quality
     custom_function_file: response_quality.py
   - name: agent_turn_count

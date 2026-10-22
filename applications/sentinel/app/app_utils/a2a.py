@@ -16,8 +16,8 @@
 
 func:`attach_a2a_routes` registers the dynamic
 agent-card endpoint and the JSON-RPC endpoint so the same app serves A2A
-alongside the adk_api routes, reachable by A2A clients and Gemini Enterprise A2A
-registration.
+alongside the adk_api routes, reachable by A2A clients and by A2A registration
+with Gemini.
 """
 
 from __future__ import annotations
@@ -50,11 +50,14 @@ _ADK_AGENT_EXECUTOR_EXTENSION_URI = (
 )
 
 
-async def _add_v0_3_compat_interface(card: AgentCard) -> AgentCard:
+def _add_v0_3_compat_interface(card: AgentCard) -> AgentCard:
     """Advertise a v0.3 JSON-RPC interface so the served card stays consumable by
-    v0.3 A2A clients — notably Gemini Enterprise registration, whose validator
+    v0.3 A2A clients — notably registration with Gemini, whose validator
     still requires the 0.3 card shape (top-level ``url``/``protocolVersion``)."""
-    if card.supported_interfaces:
+    if card.supported_interfaces and not any(
+        i.protocol_binding == "JSONRPC" and i.protocol_version == "0.3"
+        for i in card.supported_interfaces
+    ):
         card.supported_interfaces.append(
             AgentInterface(
                 protocol_binding="JSONRPC",
@@ -137,6 +140,9 @@ async def attach_a2a_routes(
         agent_version=resolved_agent_version,
     ).build()
 
+    # Advertise a v0.3 JSON-RPC interface for registration with Gemini.
+    agent_card = _add_v0_3_compat_interface(agent_card)
+
     request_handler = DefaultRequestHandler(
         agent_executor=A2aAgentExecutor(runner=runner, force_new_version=True),
         task_store=task_store,
@@ -147,7 +153,6 @@ async def attach_a2a_routes(
         app,
         agent_card_routes=create_agent_card_routes(
             agent_card,
-            card_modifier=_add_v0_3_compat_interface,
             card_url=f"{rpc_path}{AGENT_CARD_WELL_KNOWN_PATH}",
         ),
         jsonrpc_routes=create_jsonrpc_routes(

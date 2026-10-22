@@ -14,20 +14,20 @@
 
 """Serve the reasoning_engine ``{class_method, input}`` contract over HTTP.
 
-Exists to guarantee support for the Vertex AI Console Playground and Gemini
-(via ADK registration), which both invoke the engine through this
-contract. Agent Engine forwards calls to ``/api/reasoning_engine`` (sync) and
+Exists to guarantee support for the Google Cloud console playground and Gemini
+(via ADK registration), which both invoke the engine through this contract.
+Agent Runtime forwards calls to ``/api/reasoning_engine`` (sync) and
 ``/api/stream_reasoning_engine`` (streaming); dispatch is limited to the
-:class:`AdkApp` ``register_operations()`` methods so the wire output matches a
-packaged Agent Engine.
+:class:`AdkApp` ``register_operations()`` methods so the wire output matches an
+agent packaged for Agent Runtime.
 """
 
 import inspect
 import json
 
+from agentplatform.frameworks.adk import AdkApp
 from fastapi import FastAPI, HTTPException, Request, encoders, responses
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
-from vertexai.agent_engines.templates.adk import AdkApp
 
 from app.app_utils import services
 
@@ -81,13 +81,18 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
         body = await request.json()
         method = resolve_method(body["class_method"], streaming=True)
         kwargs = body.get("input") or {}
+        stream = (
+            await method(**kwargs)
+            if inspect.iscoroutinefunction(method)
+            else method(**kwargs)
+        )
 
         async def generator():
-            if inspect.isasyncgenfunction(method):
-                async for event in method(**kwargs):
+            if hasattr(stream, "__aiter__"):
+                async for event in stream:
                     yield json.dumps(encoders.jsonable_encoder(event)) + "\n"
             else:
-                async for event in iterate_in_threadpool(method(**kwargs)):
+                async for event in iterate_in_threadpool(stream):
                     yield json.dumps(encoders.jsonable_encoder(event)) + "\n"
 
         return responses.StreamingResponse(
@@ -99,11 +104,10 @@ def attach_reasoning_engine_routes(app: FastAPI) -> None:
         body = await request.json()
         method = resolve_method(body["class_method"], streaming=False)
         kwargs = body.get("input") or {}
-        output = (
-            await method(**kwargs)
-            if inspect.iscoroutinefunction(method)
-            else await run_in_threadpool(method, **kwargs)
-        )
+        if inspect.iscoroutinefunction(method):
+            output = await method(**kwargs)
+        else:
+            output = await run_in_threadpool(method, **kwargs)
         return responses.JSONResponse(
             content=encoders.jsonable_encoder({"output": output})
         )
