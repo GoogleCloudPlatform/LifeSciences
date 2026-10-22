@@ -21,6 +21,7 @@ import gzip
 import io
 import json
 import os
+import pathlib
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -132,32 +133,111 @@ def list_alphagenome_bucket_files(
         }
 
 
+def _resolve_gcs_blob_target(
+    gcs_uri_or_blob: str,
+) -> tuple[str, str, str] | dict[str, Any]:
+    """Resolves either a `gs://<bucket>/<blob>` URI or a relative blob path against `_resolve_default_bucket()`."""
+    cleaned = gcs_uri_or_blob.strip().strip("'\"`")
+    if not cleaned:
+        return {
+            "status": "error",
+            "message": "Empty GCS URI or blob path provided.",
+            "variants": [],
+        }
+
+    lowered = cleaned.lower()
+    if lowered.startswith(("http://", "https://")):
+        return {
+            "status": "error",
+            "message": f"HTTP(S) URLs are not supported in '{cleaned}'. Expected 'gs://<bucket>/<path>' or a relative bucket blob path.",
+            "variants": [],
+        }
+    if "://" in lowered and not lowered.startswith("gs://"):
+        return {
+            "status": "error",
+            "message": f"Unsupported URI scheme in '{cleaned}'. Expected 'gs://<bucket>/<path>' or a relative bucket blob path.",
+            "variants": [],
+        }
+
+    if lowered.startswith("gs://"):
+        normalized_uri = "gs://" + cleaned[5:]
+        match = _GCS_URI_PATTERN.match(normalized_uri)
+        if not match or not match.group("blob"):
+            return {
+                "status": "error",
+                "message": f"Invalid GCS URI '{cleaned}'. Expected 'gs://<bucket>/<path>' or a relative blob path.",
+                "variants": [],
+            }
+        bucket_name = match.group("bucket")
+        blob_name = match.group("blob").lstrip("/")
+        if not blob_name or ".." in pathlib.PurePosixPath(blob_name).parts:
+            return {
+                "status": "error",
+                "message": f"Invalid GCS blob path in '{cleaned}'.",
+                "variants": [],
+            }
+        return bucket_name, blob_name, f"gs://{bucket_name}/{blob_name}"
+
+    blob_rel = cleaned.lstrip("/")
+    if not blob_rel or ".." in pathlib.PurePosixPath(blob_rel).parts:
+        return {
+            "status": "error",
+            "message": f"Invalid GCS blob path '{cleaned}': path traversal is not allowed.",
+            "variants": [],
+        }
+
+    default_target = _resolve_default_bucket()
+    if not default_target:
+        return {
+            "status": "error",
+            "message": (
+                f"Relative GCS blob path '{cleaned}' requires ALPHAGENOME_GCS_BUCKET "
+                "or GOOGLE_CLOUD_PROJECT to resolve the default bucket."
+            ),
+            "variants": [],
+        }
+
+    bucket_name, default_prefix = _parse_gcs_uri(default_target)
+    norm_prefix = default_prefix.strip("/")
+    if norm_prefix and not blob_rel.startswith(f"{norm_prefix}/"):
+        blob_name = f"{norm_prefix}/{blob_rel}"
+    else:
+        blob_name = blob_rel
+
+    if not bucket_name or not blob_name:
+        return {
+            "status": "error",
+            "message": f"Unable to resolve bucket and blob for '{cleaned}'.",
+            "variants": [],
+        }
+
+    return bucket_name, blob_name, f"gs://{bucket_name}/{blob_name}"
+
+
 def import_alphagenome_from_gcs(
     gcs_uri: str,
     top_n: int = 25,
 ) -> dict[str, Any]:
     """Downloads an AlphaGenome file from GCS, parses variants, and computes AVI scores.
 
-    Supports .json, .tsv, .csv, .vcf, and .vcf.gz formats with strict size bounds.
+    Supports both full `gs://<bucket>/<blob_path>` URIs and relative blob paths
+    (e.g., `samples/sample_alphagenome_variants.vcf`) resolved against the default
+    `ALPHAGENOME_GCS_BUCKET` / `<GOOGLE_CLOUD_PROJECT>-alphagenome-outputs` bucket.
+    Supports .json, .jsonl, .tsv, .csv, .vcf, and .vcf.gz formats with strict size bounds.
 
     Args:
-        gcs_uri: Full Google Cloud Storage URI (gs://<bucket>/<blob_path>).
+        gcs_uri: Full Google Cloud Storage URI (`gs://<bucket>/<blob_path>`) or a relative
+            blob path inside the default AlphaGenome bucket (e.g. `samples/sample_alphagenome_variants.vcf`).
         top_n: Maximum number of parsed variants to return (default 25).
 
     Returns:
         Parsed variant records with AVI Phred tiers, modality scores, and Atlas deep-links.
     """
-    cleaned_uri = gcs_uri.strip()
-    match = _GCS_URI_PATTERN.match(cleaned_uri)
-    if not match or not match.group("blob"):
-        return {
-            "status": "error",
-            "message": f"Invalid GCS URI '{cleaned_uri}'. Expected 'gs://<bucket>/<path>'.",
-            "variants": [],
-        }
+    resolved = _resolve_gcs_blob_target(gcs_uri)
+    if isinstance(resolved, dict):
+        return resolved
 
-    bucket_name = match.group("bucket")
-    blob_name = match.group("blob")
+    bucket_name, blob_name, cleaned_uri = resolved
 
     try:
         client = storage.Client()

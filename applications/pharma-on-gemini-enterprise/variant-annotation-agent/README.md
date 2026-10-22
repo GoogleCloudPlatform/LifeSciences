@@ -12,10 +12,10 @@ Welcome to the **Variant Annotation Agent** repository. This repository contains
   1. **Import AlphaGenome Outputs from Google Cloud Storage (`gs://`) Buckets or Chat Uploads**:
      Directly list and import AlphaGenome output files (`.json`, `.jsonl`, `.tsv`, `.csv`, `.vcf`, `.vcf.gz`) stored in your Google Cloud Storage bucket (`gs://<bucket>/<path>`), or upload/paste AlphaGenome predictions and GRCh38 `chr:pos:ref>alt` / `rsID` identifiers directly in chat.
   2. **Compute & Interpret AlphaGenome Variant Impact (AVI) Scores**:
-     Extract or compute **AVI Phred** ($-10 \log_{10}(1 - \text{quantile})$), **AVI Raw**, **AVI Quantile**, **Impact Tiers** (*High* $\ge 20$, *Moderate-High* $15\text{–}19.99$, *Moderate* $10\text{–}14.99$, *Low* $< 10$), and **18-Modality Attribution Weights** (`MERGED_SPLICING`, `MAX_ABS_RNA_SEQ`, `MAX_ABS_ATAC`, `MAX_ABS_DNASE`, `MAX_ABS_CHIP_TF`, `MAX_ABS_CHIP_HISTONE`, `MAX_ABS_CAGE`, `MAX_ABS_PROCAP`, `MAX_ABS_POLYADENYLATION`, `MAX_ABS_CONTACT_MAPS`, `ALPHAMISSENSE`, `CACTUS_241_WAY`, `PROTEIN_TERMINATION`, `START_LOST`, `STOP_LOST`, `PHASTCONS_470_WAY`, `IS_INSERTION`, `IS_DELETION`), plus clickable **AlphaGenome Atlas** deep-links.
+     Extract or compute **AVI Phred** ($-10 \log_{10}(\text{avi\_quantile})$), **AVI Raw**, **AVI Tail Quantile** ($\text{tail} = 1 - \text{CDF}$), **Impact Tiers** (*High* $\ge 20$, *Moderate-High* $15\text{–}19.99$, *Moderate* $10\text{–}14.99$, *Low* $< 10$), and **18-Modality Attribution Weights** (`MERGED_SPLICING`, `MAX_ABS_RNA_SEQ`, `MAX_ABS_ATAC`, `MAX_ABS_DNASE`, `MAX_ABS_CHIP_TF`, `MAX_ABS_CHIP_HISTONE`, `MAX_ABS_CAGE`, `MAX_ABS_PROCAP`, `MAX_ABS_POLYADENYLATION`, `MAX_ABS_CONTACT_MAPS`, `ALPHAMISSENSE`, `CACTUS_241_WAY`, `PROTEIN_TERMINATION`, `START_LOST`, `STOP_LOST`, `PHASTCONS_470_WAY`, `IS_INSERTION`, `IS_DELETION`), plus clickable **AlphaGenome Atlas** deep-links.
   3. **Annotate Variants in Parallel Across Four Authoritative Genomic Databases**:
      * **ClinVar (v.2024–06-03)** (Landrum et al. 2018) — Germline clinical significance, ACMG classifications, review status gold stars (0–4 stars), and disease phenotypes.
-     * **gnomAD (v4)** (Karczewski et al. 2020) — Joint, exome, and genome allele frequencies across 807,162 individuals on GRCh38, continental ancestry breakdown, ACMG frequency tiers (`BA1`, `BS1`, `PM2_Supporting`), and gene loss-of-function constraint (`pLI`, `LOEUF`).
+     * **gnomAD (v4)** (Karczewski et al. 2020; Chen et al. 2024) — Joint, exome, and genome allele frequencies across 807,162 individuals on GRCh38, continental ancestry breakdown, ACMG frequency tiers (`BA1`, `BS1`, `PM2_Supporting`), and gene loss-of-function constraint (`pLI`, `LOEUF`).
      * **GWAS Catalog (v.1.0)** (Sollis et al. 2023) — Genome-wide significant trait associations, p-values, odds ratios/betas, risk alleles, and Experimental Factor Ontology (EFO) terms.
      * **PharmGKB** (Whirl-Carrillo et al. 2012, 2021) — Pharmacogenomic clinical evidence levels (`1A`–`4`), VIP star-allele designations, activity scores, and CPIC therapeutic dosing guidelines.
   4. **Custom Clinical Playbooks + Scoped Google Cloud Agent Registry (`SkillToolset`)**:
@@ -37,14 +37,14 @@ Users can connect and import their AlphaGenome output files from Google Cloud St
 
 ---
 
-### Option 1: Pass Any `gs://` Link Directly in Chat Prompts (Zero Code Changes)
+### Option 1: Pass Any `gs://` Link or Relative Bucket Path Directly in Chat Prompts (Zero Code Changes)
 
-Once deployed, the agent's `PrepVariantRequest` pre-importer (`app/sub_agents/variant_annotation_pipeline.py`) and GCS tools (`app/tools/gcs_bucket.py`) automatically detect any `gs://<bucket>/<path>` link in a user prompt.
+Once deployed, the agent's `PrepVariantRequest` pre-importer (`app/sub_agents/variant_annotation_pipeline.py`) and GCS tools (`app/tools/gcs_bucket.py`) automatically detect any `gs://<bucket>/<path>` link or relative blob path (resolved against `ALPHAGENOME_GCS_BUCKET` / `<project_id>-alphagenome-outputs`) in a user prompt.
 
 * **To list files in your bucket or folder:**
   > *"List the AlphaGenome output files in `gs://my-alphagenome-bucket/cohort-2026/`."*
-* **To import, score, and generate a full 6-section clinical dossier:**
-  > *"Import and annotate all variants from `gs://my-alphagenome-bucket/cohort-2026/alphagenome_variants.vcf` using the variant annotation pipeline."*
+* **To import, score, and generate a full 6-section clinical dossier (via `gs://` URI or relative path):**
+  > *"Import and annotate all variants from `samples/sample_alphagenome_variants.vcf` using the variant annotation pipeline."*
 
 > **IAM Note:** By default, Terraform creates `<project_id>-alphagenome-outputs` (or binds `var.alphagenome_bucket_name`) and grants the deployed Agent Runtime's Workload Identity `roles/storage.objectAdmin` and `roles/storage.legacyBucketReader` scoped strictly to that bucket. For additional buckets, see [Additional Bucket IAM](#additional-bucket-iam-optional) below.
 
@@ -110,9 +110,9 @@ gcloud storage buckets add-iam-policy-binding gs://your-external-alphagenome-buc
 
 ---
 
-### Where Generated Dossiers & Atlas Metadata Are Saved in Your Bucket (`gs://<bucket>/dossiers/`)
+### Where Generated Dossiers, Charts & Atlas Metadata Are Saved (`save_artifact` + `gs://<bucket>/dossiers/`)
 
-Every time `variant_annotation_pipeline` finishes validating a report (`FinalizeVariantReport`), it automatically saves **two persistent output artifacts** into the `dossiers/` folder of your configured Google Cloud Storage bucket via `save_dossier_to_gcs()` (`app/tools/gcs_bucket.py`):
+Every time `variant_annotation_pipeline` finishes validating a report (`FinalizeVariantReport`), it registers **native downloadable artifacts** (`dossier_<slug>.md`, `alphagenome_modalities_<slug>.png`, and `gnomad_ancestry_af_<slug>.png`) directly in Gemini Enterprise's **Artifacts drawer** via ADK `save_artifact`, and saves **two persistent output artifacts** into the `dossiers/` folder of your configured Google Cloud Storage bucket via `save_dossier_to_gcs()` (`app/tools/gcs_bucket.py`):
 
 ```text
 gs://<your-alphagenome-bucket>/
@@ -280,7 +280,7 @@ flowchart TD
 
 * **AlphaGenome & Science Skills**: Google DeepMind. *Building a Library of Skills for AI Agents in Science.* Technical Report, 2026 (`https://github.com/google-deepmind/science-skills`).
 * **ClinVar (v.2024–06-03)**: Landrum MJ, et al. *ClinVar: improving access to variant interpretations and supporting evidence.* Nucleic Acids Res. 2018;46(D1):D1062–D1067.
-* **gnomAD (v4)**: Karczewski KJ, et al. *The mutational constraint spectrum quantified from variation in 141,456 humans.* Nature. 2020;581(7809):434–443.
+* **gnomAD (v4)**: Karczewski et al. 2020; Chen et al. 2024- https://gnomad.broadinstitute.org/publications
 * **GWAS Catalog (v.1.0)**: Sollis E, et al. *The NHGRI-EBI GWAS Catalog: knowledgebase and deposition resource.* Nucleic Acids Res. 2023;51(D1):D977–D985.
 * **PharmGKB**: Whirl-Carrillo M, et al. *Pharmacogenomics knowledge for personalized medicine.* Clin Pharmacol Ther. 2012;92(4):414–417; and Clin Pharmacol Ther. 2021;110(3):563–572.
 

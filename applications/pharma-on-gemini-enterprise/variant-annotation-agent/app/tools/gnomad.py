@@ -74,6 +74,7 @@ async def query_gnomad_variant(
     query VariantFrequencies($variantId: String!, $dataset: DatasetId!) {
       variant(variantId: $variantId, dataset: $dataset) {
         variant_id
+        rsids
         chrom
         pos
         ref
@@ -81,8 +82,16 @@ async def query_gnomad_variant(
         joint {
           ac
           an
-          af
           homozygote_count
+          hemizygote_count
+          faf95 {
+            popmax
+            popmax_population
+          }
+          faf99 {
+            popmax
+            popmax_population
+          }
           populations {
             id
             ac
@@ -95,6 +104,14 @@ async def query_gnomad_variant(
           an
           af
           homozygote_count
+          faf95 {
+            popmax
+            popmax_population
+          }
+          faf99 {
+            popmax
+            popmax_population
+          }
           populations {
             id
             ac
@@ -107,6 +124,14 @@ async def query_gnomad_variant(
           an
           af
           homozygote_count
+          faf95 {
+            popmax
+            popmax_population
+          }
+          faf99 {
+            popmax
+            popmax_population
+          }
           populations {
             id
             ac
@@ -131,8 +156,17 @@ async def query_gnomad_variant(
             "citation": GNOMAD_CITATION,
         }
 
-    data = resp.get("data", {}).get("variant")
+    data = (resp.get("data") or {}).get("variant")
     if not data:
+        errors = resp.get("errors") or []
+        if errors:
+            err_msgs = "; ".join(str(err.get("message", err)) for err in errors)
+            if "not found" not in err_msgs.lower():
+                return {
+                    "status": "error",
+                    "message": f"gnomAD GraphQL error for {variant_id}: {err_msgs}",
+                    "citation": GNOMAD_CITATION,
+                }
         return {
             "status": "success",
             "variant_id": variant_id,
@@ -171,8 +205,8 @@ async def query_gnomad_variant(
 
     ancestry_dict: dict[str, dict[str, Any]] = {}
     for pop in pop_sources:
-        pop_id = pop.get("id")
-        if not pop_id:
+        pop_id = str(pop.get("id") or "").strip()
+        if not pop_id or "_" in pop_id or pop_id.upper() in {"XX", "XY"}:
             continue
         if pop_id not in ancestry_dict:
             ancestry_dict[pop_id] = {"ac": 0, "an": 0, "homozygotes": 0}
@@ -190,9 +224,13 @@ async def query_gnomad_variant(
             "homozygotes": counts["homozygotes"],
         }
 
+    faf95 = joint.get("faf95") or exome.get("faf95") or genome.get("faf95")
+    faf99 = joint.get("faf99") or exome.get("faf99") or genome.get("faf99")
+
     return {
         "status": "success",
         "variant_id": variant_id,
+        "rsids": data.get("rsids") or [],
         "found_in_gnomad": True,
         "joint_af": joint_af,
         "allele_frequency": joint_af,
@@ -202,6 +240,8 @@ async def query_gnomad_variant(
         "exome_af": exome.get("af"),
         "genome_af": genome.get("af"),
         "homozygotes": total_homozygotes,
+        "faf95": faf95,
+        "faf99": faf99,
         "acmg_frequency_tier": evaluate_acmg_frequency_tier(joint_af),
         "populations": populations_summary,
         "citation": GNOMAD_CITATION,
@@ -230,8 +270,11 @@ async def query_gene_constraint(gene_symbol: str) -> dict[str, Any]:
           oe_lof_lower
           oe_lof_upper
           oe_mis
-          z_mis
-          z_syn
+          oe_mis_lower
+          oe_mis_upper
+          lof_z
+          mis_z
+          syn_z
         }
       }
     }
@@ -251,8 +294,16 @@ async def query_gene_constraint(gene_symbol: str) -> dict[str, Any]:
             "citation": GNOMAD_CITATION,
         }
 
-    gene_data = resp.get("data", {}).get("gene")
+    gene_data = (resp.get("data") or {}).get("gene")
     if not gene_data:
+        errors = resp.get("errors") or []
+        if errors:
+            err_msgs = "; ".join(str(err.get("message", err)) for err in errors)
+            return {
+                "status": "error",
+                "message": f"gnomAD constraint error for '{gene_symbol}': {err_msgs}",
+                "citation": GNOMAD_CITATION,
+            }
         return {
             "status": "error",
             "message": f"Gene '{gene_symbol}' not found in gnomAD",
@@ -270,6 +321,16 @@ async def query_gene_constraint(gene_symbol: str) -> dict[str, Any]:
         if constraint.get("oe_lof_upper") is not None
         else constraint.get("loeuf")
     )
+    mis_z = (
+        constraint.get("mis_z")
+        if constraint.get("mis_z") is not None
+        else constraint.get("z_mis")
+    )
+    syn_z = (
+        constraint.get("syn_z")
+        if constraint.get("syn_z") is not None
+        else constraint.get("z_syn")
+    )
 
     is_constrained = (pli is not None and pli >= 0.9) or (
         loeuf is not None and loeuf < 0.35
@@ -282,8 +343,10 @@ async def query_gene_constraint(gene_symbol: str) -> dict[str, Any]:
         "pli": pli,
         "loeuf": loeuf,
         "oe_lof": constraint.get("oe_lof"),
-        "mis_z": constraint.get("z_mis"),
-        "syn_z": constraint.get("z_syn"),
+        "oe_mis": constraint.get("oe_mis"),
+        "lof_z": constraint.get("lof_z"),
+        "mis_z": mis_z,
+        "syn_z": syn_z,
         "is_lof_intolerant": is_constrained,
         "interpretation": (
             "Highly constrained against Loss-of-Function (pLI >= 0.9 or LOEUF < 0.35; PVS1 eligible)"

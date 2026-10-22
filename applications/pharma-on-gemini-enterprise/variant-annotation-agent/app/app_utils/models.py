@@ -19,10 +19,30 @@ from __future__ import annotations
 import os
 
 from google.adk.models.google_llm import Gemini
+from google.adk.planners import BuiltInPlanner
 from google.genai import types
 
 PRO_MODEL = os.getenv("COORDINATOR_MODEL_NAME", "gemini-4-argon")
 FLASH_MODEL = os.getenv("WORKER_MODEL_NAME", "gemini-3.8-flash")
+
+# Surface model reasoning as thought summaries in Gemini Enterprise and Agent Engine traces.
+# Toggle off via SHOW_THOUGHTS=0 if needed.
+_SHOW_THOUGHTS = os.getenv("SHOW_THOUGHTS", "1").strip().lower() not in (
+    "0",
+    "false",
+    "no",
+    "",
+)
+
+
+def get_thinking_planner() -> BuiltInPlanner | None:
+    """Returns a BuiltInPlanner with include_thoughts=True when enabled."""
+    if not _SHOW_THOUGHTS:
+        return None
+    return BuiltInPlanner(thinking_config=types.ThinkingConfig(include_thoughts=True))
+
+
+THINKING_PLANNER = get_thinking_planner()
 
 # Retry configuration for model calls to handle transient 429 RESOURCE_EXHAUSTED
 # and 5xx server errors across both agent and genai client layers.

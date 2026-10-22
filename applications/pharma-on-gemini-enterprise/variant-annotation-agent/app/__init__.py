@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Annotation Agent for AlphaGenome package."""
+"""AlphaGenome — Variant Annotation Agent package."""
 
-from .agent import alphagenome_variant_agent, app, root_agent
+from .agent import alphagenome_variant_agent, app, coordinator_agent, root_agent
 
 __all__ = [
     "alphagenome_variant_agent",
     "app",
+    "coordinator_agent",
     "root_agent",
 ]

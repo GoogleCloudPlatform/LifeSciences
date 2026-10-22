@@ -101,9 +101,9 @@ app: FastAPI = get_fast_api_app(
 )
 app.title = "alphagenome-variant-annotation-agent"
 app.description = (
-    "API for interacting with Annotation Agent for AlphaGenome: "
-    "Multimodal AlphaGenome predictions, AVI Phred scoring, ClinVar, gnomAD v4, "
-    "GWAS Catalog, and PharmGKB annotation."
+    "AlphaGenome — Variant Annotation: Scores variants across 18 AlphaGenome "
+    "modalities (AVI Phred, Atlas links) and builds ACMG dossiers with ClinVar, "
+    "gnomAD v4, GWAS Catalog, and PharmGKB."
 )
 
 attach_reasoning_engine_routes(app)
@@ -113,5 +113,10 @@ attach_reasoning_engine_routes(app)
 def collect_feedback(feedback: Feedback) -> dict[str, str]:
     """Collect and log user evaluation feedback."""
     if logger:
-        logger.log_struct(feedback.model_dump())
+        try:
+            logger.log_struct(feedback.model_dump())
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "Failed logging feedback to Cloud Logging: %s", exc
+            )
     return {"status": "success"}

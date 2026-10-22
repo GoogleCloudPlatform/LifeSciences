@@ -2,13 +2,13 @@
   "benchmark_variants": [
     {
       "variant_id": "rs12740374",
-      "grch38_coordinates": "chr1:109274977:G>T",
-      "gene_symbol": "SORT1",
-      "consequence": "intron_variant",
-      "mechanism": "Creates a C/EBP transcription factor binding site altering hepatic SORT1 expression and circulating LDL-C levels",
+      "grch38_coordinates": "chr1:109274968:G>T",
+      "gene_symbol": "CELSR2",
+      "consequence": "3_prime_UTR_variant",
+      "mechanism": "Located in the 3' UTR of CELSR2 (ENST00000271332 / NM_001408.3); creates a hepatic C/EBP transcription factor binding site altering distal SORT1 expression and circulating LDL-C levels",
       "alphagenome_prediction": {
         "avi_raw": 0.884,
-        "avi_quantile": 0.9982,
+        "avi_quantile": 0.0018,
         "avi_phred": 27.45,
         "impact_tier": "High",
         "multimodal_tracks": {
@@ -28,8 +28,8 @@
           "phastcons_primate_conservation": 0.78
         },
         "atlas_urls": {
-          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?variant=chr1:109274977:G>T",
-          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?locus=chr1:109274477-109275477"
+          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?q=chr1:109274968:G%3ET&m=variant&lItems=avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES",
+          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?q=chr1:109273968-109275968&m=locus&lItems=avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES"
         }
       },
       "clinvar_annotation": {
@@ -96,7 +96,7 @@
       "mechanism": "Beta-globin Glu7Val mutation causing pathological hemoglobin polymerization under deoxygenated conditions",
       "alphagenome_prediction": {
         "avi_raw": 0.942,
-        "avi_quantile": 0.9996,
+        "avi_quantile": 0.0004,
         "avi_phred": 33.98,
         "impact_tier": "High",
         "multimodal_tracks": {
@@ -116,14 +116,14 @@
           "phastcons_primate_conservation": 0.99
         },
         "atlas_urls": {
-          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?variant=chr11:5227002:T>A",
-          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?locus=chr11:5226502-5227502"
+          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?q=chr11:5227002:T%3EA&m=variant&lItems=avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES",
+          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?q=chr11:5226502-5227502&m=locus&lItems=avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES"
         }
       },
       "clinvar_annotation": {
         "clinical_significance": "Pathogenic",
-        "gold_stars": 4,
-        "review_status": "practice guideline",
+        "gold_stars": 2,
+        "review_status": "criteria provided, multiple submitters, no conflicts",
         "disease_traits": ["Sickle cell disease", "Sickle cell-beta-thalassemia disease", "Malaria resistance"],
         "citation": "ClinVar (v.2024–06-03) (Landrum et al. 2018)"
       },
@@ -184,7 +184,7 @@
       "mechanism": "c.681G>A (p.Pro227=) abolishes the canonical exon 5 splice donor site causing an aberrant 40-bp cryptic exon inclusion, frameshift, premature stop, and complete loss of CYP2C19 catalytic activity",
       "alphagenome_prediction": {
         "avi_raw": 0.965,
-        "avi_quantile": 0.9998,
+        "avi_quantile": 0.0002,
         "avi_phred": 36.99,
         "impact_tier": "High",
         "multimodal_tracks": {
@@ -204,8 +204,8 @@
           "phastcons_primate_conservation": 0.98
         },
         "atlas_urls": {
-          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?variant=chr10:94781859:C>T",
-          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?locus=chr10:94781359-94782359"
+          "variant_view": "https://deepmind.google.com/science/alphagenome/atlas?q=chr10:94781859:C%3ET&m=variant&lItems=avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES",
+          "locus_view": "https://deepmind.google.com/science/alphagenome/atlas?q=chr10:94781359-94782359&m=locus&lItems=avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES"
         }
       },
       "clinvar_annotation": {

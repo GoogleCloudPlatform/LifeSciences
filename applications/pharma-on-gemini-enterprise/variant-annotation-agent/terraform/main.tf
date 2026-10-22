@@ -39,8 +39,8 @@ module "agent_infra" {
   project_id       = var.project_id
   region           = var.region
   agent_id         = "alphagenome-variant-agent"
-  display_name     = "Annotation Agent for AlphaGenome"
-  description      = "Genomic variant impact scoring and multi-database annotation agent. Imports AlphaGenome outputs from Google Cloud Storage (gs://) buckets or chat uploads, computes AlphaGenome Variant Impact (AVI) Phred and 18-modality attribution scores, builds AlphaGenome Atlas deep-links, and annotates variants in parallel across ClinVar (v.2024-06-03) (Landrum et al. 2018), gnomAD (v4) (Karczewski et al. 2020), GWAS Catalog (v.1.0) (Sollis et al. 2023), and PharmGKB (Whirl-Carrillo et al. 2012, 2021)."
+  display_name     = "AlphaGenome — Variant Annotation"
+  description      = "Scores variants across 18 AlphaGenome modalities (AVI Phred, Atlas links) and builds ACMG dossiers with ClinVar, gnomAD v4, GWAS Catalog, and PharmGKB. Try: rs12740374, chr11:5227002:T>A, or samples/sample_alphagenome_variants.vcf."
   logs_bucket_name = var.logs_bucket_name
 }
 

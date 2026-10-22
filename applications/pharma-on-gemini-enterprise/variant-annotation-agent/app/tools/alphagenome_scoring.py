@@ -21,6 +21,7 @@ import io
 import json
 import math
 import re
+import urllib.parse
 from typing import Any
 
 from ._http import fetch_json
@@ -77,43 +78,54 @@ def compute_avi_score(
     quantile: float | None = None,
     phred: float | None = None,
 ) -> dict[str, Any]:
-    """Computes and aligns AVI metrics across raw, quantile, and Phred scales.
+    """Computes and aligns AVI metrics across raw, tail-quantile, and Phred scales.
 
-    If phred is missing but quantile is provided:
-      phred = -10 * log10(max(1.0 - quantile, 1e-6))
-    If quantile is missing but phred is provided:
-      quantile = 1.0 - 10^(-phred / 10)
+    Follows the official AlphaGenome Atlas AVI schema (`alphagenome_atlas_avi.py`):
+      - `avi_quantile` (`quantile`) is the tail quantile `1 - CDF` in `[1e-7, 1.0]`,
+        where smaller values indicate rarer, higher-impact variants
+        (e.g., `quantile = 0.01` -> `top_percentile = 1.0%` -> `phred = 20.0`).
+      - If `phred` is missing but `quantile` is provided:
+        `phred = -10 * log10(clamp(quantile, 1e-7, 1.0))`
+      - If `quantile` is missing but `phred` is provided:
+        `quantile = max(1e-7, 10^(-phred / 10))`
     """
+    r_val: float | None = float(raw_score) if raw_score is not None else None
+
     if phred is not None:
-        p_val = float(phred)
+        p_val = max(0.0, float(phred))
         q_val = (
-            quantile if quantile is not None else (1.0 - math.pow(10.0, -p_val / 10.0))
+            min(1.0, max(1e-7, float(quantile)))
+            if quantile is not None
+            else max(1e-7, math.pow(10.0, -p_val / 10.0))
         )
-        r_val = raw_score if raw_score is not None else p_val / 10.0
     elif quantile is not None:
-        q_val = float(quantile)
-        clamped_diff = max(1.0 - q_val, 1e-6)
-        p_val = -10.0 * math.log10(clamped_diff)
-        r_val = raw_score if raw_score is not None else q_val * 2.5
-    elif raw_score is not None:
-        r_val = float(raw_score)
-        q_val = 1.0 / (1.0 + math.exp(-0.8 * r_val))
-        clamped_diff = max(1.0 - q_val, 1e-6)
-        p_val = -10.0 * math.log10(clamped_diff)
+        q_val = min(1.0, max(1e-7, float(quantile)))
+        p_val = max(0.0, -10.0 * math.log10(q_val))
+    elif r_val is not None:
+        cdf = 1.0 / (1.0 + math.exp(-0.8 * r_val))
+        q_val = max(1e-7, 1.0 - cdf)
+        p_val = max(0.0, -10.0 * math.log10(q_val))
     else:
-        r_val, q_val, p_val = 0.0, 0.0, 0.0
+        q_val, p_val = 1.0, 0.0
 
     p_val_rounded = round(p_val, 2)
+    q_val_rounded = round(q_val, 6)
+    top_pct = round(q_val * 100.0, 5)
+    raw_rounded = round(r_val, 4) if r_val is not None else None
     tier = classify_avi_tier(p_val_rounded)
     return {
-        "avi_raw": round(r_val, 4),
-        "raw_score": round(r_val, 4),
-        "avi_quantile": round(q_val, 4),
-        "quantile": round(q_val, 4),
+        "avi_raw": raw_rounded,
+        "raw_score": raw_rounded,
+        "avi_quantile": q_val_rounded,
+        "quantile": q_val_rounded,
+        "top_percentile": top_pct,
         "avi_phred": p_val_rounded,
         "phred": p_val_rounded,
         "impact_tier": tier,
     }
+
+
+DEFAULT_ATLAS_LITEMS = "avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES"
 
 
 def build_alphagenome_atlas_url(
@@ -126,8 +138,8 @@ def build_alphagenome_atlas_url(
     """Generates AlphaGenome Atlas deep-links for single-variant and locus view.
 
     Format:
-      variant: chr{chrom}:{pos}:{ref}>{alt}
-      locus: chr{chrom}:{start}-{end} (1-based closed)
+      variant: chr{chrom}:{pos}:{ref}>{alt} -> ?q=chr{chrom}:{pos}:{ref}%3E{alt}&m=variant&lItems=...
+      locus: chr{chrom}:{start}-{end} (1-based closed) -> ?q=chr{chrom}:{start}-{end}&m=locus&lItems=...
     """
     chrom_bare = re.sub(r"^chr", "", str(chromosome).strip(), flags=re.IGNORECASE)
     chrom = f"chr{chrom_bare}"
@@ -138,185 +150,215 @@ def build_alphagenome_atlas_url(
     locus_str = f"{chrom}:{start}-{end}"
 
     base_url = "https://deepmind.google.com/science/alphagenome/atlas"
+    variant_query = urllib.parse.urlencode(
+        {"q": variant_str, "m": "variant", "lItems": DEFAULT_ATLAS_LITEMS},
+        quote_via=urllib.parse.quote,
+        safe=":,-",
+    )
+    locus_query = urllib.parse.urlencode(
+        {"q": locus_str, "m": "locus", "lItems": DEFAULT_ATLAS_LITEMS},
+        quote_via=urllib.parse.quote,
+        safe=":,-",
+    )
     return {
-        "variant_url": f"{base_url}?variant={variant_str}",
-        "locus_url": f"{base_url}?locus={locus_str}",
+        "variant_url": f"{base_url}?{variant_query}",
+        "locus_url": f"{base_url}?{locus_query}",
         "variant_formatted": variant_str,
         "locus_formatted": locus_str,
     }
 
 
-_BENCHMARK_PREDICTIONS: dict[str, dict[str, Any]] = {
-    "rs12740374": {
-        "gene_symbol": "SORT1",
-        "consequence": "non_coding_transcript_exon_variant / enhancer_variant",
-        "avi_raw": 0.884,
-        "avi_quantile": 0.9982,
-        "avi_phred": 27.45,
-        "impact_tier": "High Impact",
-        "multimodal_tracks": {
-            "MAX_ABS_CHIP_TF": 0.94,
-            "MAX_ABS_ATAC": 0.89,
-            "MAX_ABS_DNASE": 0.84,
-            "MAX_ABS_CHIP_HISTONE": 0.81,
-            "MAX_ABS_RNA_SEQ": 0.72,
-            "MAX_ABS_CAGE": 0.65,
-            "PHASTCONS_470_WAY": 0.78,
-            "CACTUS_241_WAY": 1.95,
-            "MERGED_SPLICING": 0.0,
-            "ALPHAMISSENSE": 0.05,
-        },
-        "mechanism": "Creates a hepatic C/EBP (CEBPA) transcription factor binding site at 1p13.3, increasing hepatic SORT1 expression and lowering circulating LDL-C.",
-    },
-    "rs334": {
-        "gene_symbol": "HBB",
-        "consequence": "missense_variant (p.Glu7Val / HbS)",
-        "avi_raw": 0.942,
-        "avi_quantile": 0.9996,
-        "avi_phred": 33.98,
-        "impact_tier": "High Impact",
-        "multimodal_tracks": {
-            "ALPHAMISSENSE": 0.892,
-            "PHASTCONS_470_WAY": 0.99,
-            "CACTUS_241_WAY": 6.82,
-            "MAX_ABS_CHIP_TF": 0.22,
-            "MAX_ABS_ATAC": 0.18,
-            "MAX_ABS_DNASE": 0.15,
-            "MAX_ABS_RNA_SEQ": 0.12,
-            "MERGED_SPLICING": 0.0,
-        },
-        "mechanism": "Beta-globin p.Glu7Val substitution driving hemoglobin S polymerization under deoxygenated conditions.",
-    },
-    "rs4244285": {
-        "gene_symbol": "CYP2C19",
-        "consequence": "splice_donor_variant (CYP2C19*2, c.681G>A)",
-        "avi_raw": 0.965,
-        "avi_quantile": 0.9998,
-        "avi_phred": 36.99,
-        "impact_tier": "High Impact",
-        "multimodal_tracks": {
-            "MERGED_SPLICING": 0.985,
-            "PHASTCONS_470_WAY": 0.98,
-            "CACTUS_241_WAY": 5.42,
-            "MAX_ABS_RNA_SEQ": 0.45,
-            "MAX_ABS_CHIP_TF": 0.18,
-            "MAX_ABS_ATAC": 0.14,
-            "ALPHAMISSENSE": 0.02,
-        },
-        "mechanism": "Creates an aberrant cryptic splice donor in exon 5 of CYP2C19 (*2 allele), causing a 40-bp deletion frameshift and loss of catalytic function.",
-    },
-}
+_FLANKING_CONSEQUENCE_TERMS = frozenset(
+    {"upstream_gene_variant", "downstream_gene_variant", "intergenic_variant"}
+)
 
 
-def _estimate_avi_from_vep(
-    consequence: str | None,
-    impact: str | None,
-    sift_score: float | None,
-    polyphen_score: float | None,
-) -> tuple[dict[str, Any], dict[str, float]]:
-    """Estimates a heuristic impact score from Ensembl VEP consequence annotations when raw AlphaGenome track files are not provided.
+def _select_best_vep_transcript(
+    tcs: list[dict[str, Any]],
+    most_severe: str | None = None,
+    expected_alt: str | None = None,
+) -> dict[str, Any] | None:
+    """Selects the highest-priority overlapping Ensembl VEP transcript consequence.
 
-    Explicitly tags the output with `scoring_source = "ensembl_vep_heuristic"` so
-    downstream agents and reports distinguish VEP consequence heuristics from
-    AlphaGenome 18-modality foundation model predictions.
+    Prioritizes:
+      1. Matching variant allele (for multi-allelic rsIDs)
+      2. Overlapping transcripts over flanking upstream/downstream transcripts
+      3. Transcripts carrying `most_severe_consequence`
+      4. MANE Select (`mane_select` / `MANE_Select`) and Ensembl canonical transcripts
+      5. Coding consequence (`hgvsp`), `protein_coding` biotype, and `hgvsc`
     """
-    cons = (consequence or "").lower()
-    imp = (impact or "").upper()
+    exp_alt = expected_alt.strip().upper() if expected_alt else ""
+    best_key: tuple[int, ...] | None = None
+    best_tc: dict[str, Any] | None = None
 
-    if "splice" in cons:
-        q = 0.9995
-        raw = 0.955
-    elif "stop_gained" in cons or "frameshift" in cons or "start_lost" in cons:
-        q = 0.9997
-        raw = 0.972
-    elif "missense" in cons:
-        pp = (
-            polyphen_score
-            if polyphen_score is not None
-            else (1.0 - sift_score if sift_score is not None else 0.88)
+    for idx, tc in enumerate(tcs or []):
+        if not isinstance(tc, dict) or not tc.get("gene_symbol"):
+            continue
+        terms = [str(t) for t in (tc.get("consequence_terms") or []) if t]
+        var_allele = str(tc.get("variant_allele") or "").strip().upper()
+        allele_ok = 1 if (not exp_alt or not var_allele or var_allele == exp_alt) else 0
+        is_flanking = (
+            bool(terms) and set(terms).issubset(_FLANKING_CONSEQUENCE_TERMS)
+        ) or (tc.get("distance") is not None)
+        is_overlapping = 0 if is_flanking else 1
+        matches_severe = 1 if (most_severe and most_severe in terms) else 0
+        mane_list = tc.get("mane") or []
+        is_mane = (
+            1
+            if (
+                bool(tc.get("mane_select"))
+                or (isinstance(mane_list, list) and "MANE_Select" in mane_list)
+            )
+            else 0
         )
-        am_score = round(min(max(float(pp), 0.15), 0.995), 4)
-        if am_score >= 0.8:
-            q = 0.9994
-            raw = 0.935
-        elif am_score >= 0.5:
-            q = 0.9920
-            raw = 0.780
-        else:
-            q = 0.8800
-            raw = 0.420
-    elif (
-        "regulatory" in cons
-        or "tf_binding" in cons
-        or "promoter" in cons
-        or "5_prime_utr" in cons
-        or "3_prime_utr" in cons
-    ):
-        q = 0.9850
-        raw = 0.740
-    elif imp == "HIGH":
-        q = 0.9990
-        raw = 0.910
-    elif imp == "MODERATE":
-        q = 0.9900
-        raw = 0.750
-    else:
-        q = 0.7500
-        raw = 0.350
+        is_canonical = 1 if tc.get("canonical") == 1 else 0
+        has_hgvsp = 1 if bool(tc.get("hgvsp")) else 0
+        is_coding = 1 if tc.get("biotype") == "protein_coding" else 0
+        has_hgvsc = 1 if bool(tc.get("hgvsc")) else 0
 
-    score_dict = compute_avi_score(raw_score=raw, quantile=q)
-    score_dict["scoring_source"] = "ensembl_vep_heuristic"
-    return score_dict, {}
+        rank = (
+            allele_ok,
+            is_overlapping,
+            matches_severe,
+            is_mane,
+            is_canonical,
+            has_hgvsp,
+            is_coding,
+            has_hgvsc,
+            -idx,
+        )
+        if best_key is None or rank > best_key:
+            best_key = rank
+            best_tc = tc
+
+    return best_tc
+
+
+def _extract_vep_fields(
+    first_hit: dict[str, Any],
+    expected_alt: str | None = None,
+) -> dict[str, Any]:
+    """Extracts canonical/MANE transcript, HGVS, and consequence fields from a VEP record."""
+    most_severe = first_hit.get("most_severe_consequence")
+    tcs = first_hit.get("transcript_consequences") or []
+    best_tc = _select_best_vep_transcript(
+        tcs, most_severe=most_severe, expected_alt=expected_alt
+    )
+
+    matched_rsid: str | None = None
+    hit_id = str(first_hit.get("id") or "").strip()
+    if _RSID_RE.match(hit_id):
+        matched_rsid = hit_id.lower()
+    else:
+        for cv in first_hit.get("colocated_variants") or []:
+            cv_id = str((cv or {}).get("id") or "").strip()
+            if _RSID_RE.match(cv_id):
+                matched_rsid = cv_id.lower()
+                break
+
+    if not best_tc:
+        return {
+            "rsid": matched_rsid,
+            "gene_symbol": None,
+            "gene_id": None,
+            "transcript_id": None,
+            "mane_select": None,
+            "hgvsc": None,
+            "hgvsp": None,
+            "amino_acids": None,
+            "protein_start": None,
+            "impact": None,
+            "sift_score": None,
+            "sift_prediction": None,
+            "polyphen_score": None,
+            "polyphen_prediction": None,
+            "consequence": most_severe,
+            "most_severe_consequence": most_severe,
+        }
+
+    tc_terms = [str(t) for t in (best_tc.get("consequence_terms") or []) if t]
+    selected_consequence = (
+        most_severe
+        if (most_severe and most_severe in tc_terms)
+        else (tc_terms[0] if tc_terms else most_severe)
+    )
+    return {
+        "rsid": matched_rsid,
+        "gene_symbol": best_tc.get("gene_symbol"),
+        "gene_id": best_tc.get("gene_id"),
+        "transcript_id": best_tc.get("transcript_id"),
+        "mane_select": best_tc.get("mane_select"),
+        "hgvsc": best_tc.get("hgvsc"),
+        "hgvsp": best_tc.get("hgvsp"),
+        "amino_acids": best_tc.get("amino_acids"),
+        "protein_start": best_tc.get("protein_start"),
+        "impact": best_tc.get("impact"),
+        "sift_score": best_tc.get("sift_score"),
+        "sift_prediction": best_tc.get("sift_prediction"),
+        "polyphen_score": best_tc.get("polyphen_score"),
+        "polyphen_prediction": best_tc.get("polyphen_prediction"),
+        "consequence": selected_consequence,
+        "most_severe_consequence": selected_consequence,
+    }
 
 
 async def resolve_variant_coordinates(variant_identifier: str) -> dict[str, Any]:
     """Resolves a variant string (rsID or chr:pos:ref>alt) to GRCh38 genomic coordinates.
 
-    Uses Ensembl GRCh38 REST API for rsID lookups and attaches AlphaGenome Atlas URLs
-    and AVI scoring metrics.
+    Uses Ensembl GRCh38 VEP REST API (`canonical=1`, `mane=1`) for transcript/HGVS
+    annotation and attaches AlphaGenome Atlas deep-links. Never fabricates numeric
+    AlphaGenome AVI or 18-modality track scores when raw score files are not supplied.
     """
     ident = variant_identifier.strip()
     match = _COORD_RE.match(ident)
     if match:
-        chrom = re.sub(r"^chr", "", match.group("chrom"), flags=re.IGNORECASE)
+        chrom = re.sub(r"^chr", "", match.group("chrom"), flags=re.IGNORECASE).upper()
         pos = int(match.group("pos"))
         ref = match.group("ref").upper()
         alt = match.group("alt").upper()
         atlas_links = build_alphagenome_atlas_url(chrom, pos, ref, alt)
-        coord_key = f"chr{chrom.replace('chr', '')}:{pos}:{ref}>{alt}"
-        bench = None
-        matched_rsid: str | None = None
-        if coord_key in ("chr1:109274977:G>T", "chr1:109274968:G>T"):
-            matched_rsid = "rs12740374"
-            bench = _BENCHMARK_PREDICTIONS[matched_rsid]
-        elif coord_key == "chr11:5227002:T>A":
-            matched_rsid = "rs334"
-            bench = _BENCHMARK_PREDICTIONS[matched_rsid]
-        elif coord_key == "chr10:94781859:C>T":
-            matched_rsid = "rs4244285"
-            bench = _BENCHMARK_PREDICTIONS[matched_rsid]
         result: dict[str, Any] = {
             "status": "success",
             "source": "coordinate_format",
+            "scoring_source": "atlas_link_only",
             "chromosome": chrom,
             "position": pos,
             "ref": ref,
             "alt": alt,
-            "rsid": matched_rsid,
-            "gene_symbol": bench["gene_symbol"] if bench else None,
+            "rsid": None,
+            "gene_symbol": None,
+            "transcript_id": None,
+            "mane_select": None,
+            "avi_score": None,
+            "multimodal_tracks": {},
             "atlas_links": atlas_links,
         }
-        if bench:
-            avi_score = compute_avi_score(
-                raw_score=bench["avi_raw"],
-                quantile=bench["avi_quantile"],
-                phred=bench["avi_phred"],
+        region_url = (
+            f"https://rest.ensembl.org/vep/human/region/{chrom}:{pos}-{pos}:1/{alt}"
+        )
+        try:
+            vep_data = await fetch_json(
+                region_url,
+                params={
+                    "content-type": "application/json",
+                    "hgvs": 1,
+                    "canonical": 1,
+                    "mane": 1,
+                },
+                headers={"Content-Type": "application/json"},
             )
-            avi_score["scoring_source"] = "alphagenome_model"
-            result["scoring_source"] = "alphagenome_model"
-            result["avi_score"] = avi_score
-            result["multimodal_tracks"] = bench["multimodal_tracks"]
-            result["mechanism"] = bench["mechanism"]
+            if (
+                vep_data
+                and isinstance(vep_data, list)
+                and isinstance(vep_data[0], dict)
+            ):
+                vep_fields = _extract_vep_fields(vep_data[0], expected_alt=alt)
+                for k, v in vep_fields.items():
+                    if v is not None:
+                        result[k] = v
+                result["source"] = "ensembl_vep"
+        except Exception:
+            pass
         return result
 
     if _RSID_RE.match(ident):
@@ -325,7 +367,12 @@ async def resolve_variant_coordinates(variant_identifier: str) -> dict[str, Any]
         try:
             vep_data = await fetch_json(
                 ensembl_url,
-                params={"content-type": "application/json", "hgvs": 1},
+                params={
+                    "content-type": "application/json",
+                    "hgvs": 1,
+                    "canonical": 1,
+                    "mane": 1,
+                },
                 headers={"Content-Type": "application/json"},
             )
             if vep_data and isinstance(vep_data, list) and len(vep_data) > 0:
@@ -338,87 +385,25 @@ async def resolve_variant_coordinates(variant_identifier: str) -> dict[str, Any]
                 alt = parts[1] if len(parts) > 1 else ""
                 all_alts = parts[1:] if len(parts) > 1 else []
 
-                gene_symbol = None
-                transcript_id = None
-                hgvsc = None
-                hgvsp = None
-                amino_acids = None
-                protein_start = None
-                impact = None
-                sift_score = None
-                sift_prediction = None
-                polyphen_score = None
-                polyphen_prediction = None
-
-                tcs = first_hit.get("transcript_consequences", [])
-                best_tc = None
-                for tc in tcs:
-                    if tc.get("gene_symbol"):
-                        if best_tc is None:
-                            best_tc = tc
-                        if tc.get("hgvsp") or tc.get("biotype") == "protein_coding":
-                            best_tc = tc
-                            if tc.get("hgvsp"):
-                                break
-                if best_tc:
-                    gene_symbol = best_tc.get("gene_symbol")
-                    transcript_id = best_tc.get("transcript_id")
-                    hgvsc = best_tc.get("hgvsc")
-                    hgvsp = best_tc.get("hgvsp")
-                    amino_acids = best_tc.get("amino_acids")
-                    protein_start = best_tc.get("protein_start")
-                    impact = best_tc.get("impact")
-                    sift_score = best_tc.get("sift_score")
-                    sift_prediction = best_tc.get("sift_prediction")
-                    polyphen_score = best_tc.get("polyphen_score")
-                    polyphen_prediction = best_tc.get("polyphen_prediction")
-
-                most_severe = first_hit.get("most_severe_consequence")
+                vep_fields = _extract_vep_fields(first_hit, expected_alt=alt)
                 atlas_links = build_alphagenome_atlas_url(chrom, pos, ref, alt)
 
-                if ident_lower in _BENCHMARK_PREDICTIONS:
-                    bench = _BENCHMARK_PREDICTIONS[ident_lower]
-                    avi_score = compute_avi_score(
-                        raw_score=bench["avi_raw"],
-                        quantile=bench["avi_quantile"],
-                        phred=bench["avi_phred"],
-                    )
-                    avi_score["scoring_source"] = "alphagenome_model"
-                    scoring_source = "alphagenome_model"
-                    tracks = bench["multimodal_tracks"]
-                    gene_symbol = gene_symbol or bench["gene_symbol"]
-                else:
-                    avi_score, tracks = _estimate_avi_from_vep(
-                        most_severe, impact, sift_score, polyphen_score
-                    )
-                    scoring_source = "ensembl_vep_heuristic"
-
-                return {
+                result_vep: dict[str, Any] = {
                     "status": "success",
                     "source": "ensembl_vep",
-                    "scoring_source": scoring_source,
+                    "scoring_source": "atlas_link_only",
                     "chromosome": chrom,
                     "position": pos,
                     "ref": ref,
                     "alt": alt,
                     "all_alt_alleles": all_alts,
+                    **vep_fields,
                     "rsid": ident_lower,
-                    "gene_symbol": gene_symbol,
-                    "transcript_id": transcript_id,
-                    "hgvsc": hgvsc,
-                    "hgvsp": hgvsp,
-                    "amino_acids": amino_acids,
-                    "protein_start": protein_start,
-                    "impact": impact,
-                    "sift_score": sift_score,
-                    "sift_prediction": sift_prediction,
-                    "polyphen_score": polyphen_score,
-                    "polyphen_prediction": polyphen_prediction,
-                    "most_severe_consequence": most_severe,
-                    "avi_score": avi_score,
-                    "multimodal_tracks": tracks,
+                    "avi_score": None,
+                    "multimodal_tracks": {},
                     "atlas_links": atlas_links,
                 }
+                return result_vep
             return {
                 "status": "error",
                 "message": f"Variant rsID '{ident}' not found in Ensembl VEP.",
@@ -488,13 +473,47 @@ def parse_and_score_alphagenome_output(
 
     parsed_variants: list[dict[str, Any]] = []
 
-    # 1. Try parsing as JSON
+    # 0. Guard against callers accidentally passing a GCS URI or relative file path string
+    #    instead of file contents (prevents false permission/format error hallucinations).
     trimmed = text_content.strip()
+    if (
+        isinstance(content_or_data, str)
+        and "\n" not in trimmed
+        and (
+            trimmed.lower().startswith("gs://")
+            or re.match(
+                r"^(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.(?:vcf\.gz|vcf|jsonl|json|tsv|csv)$",
+                trimmed,
+                re.IGNORECASE,
+            )
+        )
+    ):
+        return {
+            "status": "error",
+            "message": (
+                f"Input '{trimmed}' looks like a file path or GCS URI rather than file contents. "
+                "Call import_alphagenome_from_gcs(gcs_uri) to load files from Google Cloud Storage."
+            ),
+            "variants": [],
+        }
+
+    # 1. Try parsing as JSON or JSONL
     if (trimmed.startswith("{") and trimmed.endswith("}")) or (
         trimmed.startswith("[") and trimmed.endswith("]")
     ):
         try:
-            data = json.loads(trimmed)
+            try:
+                data = json.loads(trimmed)
+                json_fmt = "json"
+            except json.JSONDecodeError:
+                jsonl_lines = [ln.strip() for ln in trimmed.splitlines() if ln.strip()]
+                if not jsonl_lines or not all(
+                    ln.startswith("{") and ln.endswith("}") for ln in jsonl_lines
+                ):
+                    raise
+                data = [json.loads(ln) for ln in jsonl_lines]
+                json_fmt = "jsonl"
+
             if isinstance(data, list):
                 items = data
             else:
@@ -556,8 +575,18 @@ def parse_and_score_alphagenome_output(
                 if raw_s is None and modalities:
                     raw_s = sum(abs(v) for v in modalities.values())
 
-                score_info = compute_avi_score(raw_score=raw_s, quantile=q_s, phred=p_s)
-                score_info["scoring_source"] = "alphagenome_model"
+                has_ag_scores = any(x is not None for x in (raw_s, q_s, p_s)) or bool(
+                    modalities
+                )
+                if has_ag_scores:
+                    score_info: dict[str, Any] | None = compute_avi_score(
+                        raw_score=raw_s, quantile=q_s, phred=p_s
+                    )
+                    score_info["scoring_source"] = "alphagenome_model"
+                    row_source = "alphagenome_model"
+                else:
+                    score_info = None
+                    row_source = "atlas_link_only"
                 atlas_links = build_alphagenome_atlas_url(chrom, pos, ref, alt)
 
                 parsed_variants.append(
@@ -568,7 +597,7 @@ def parse_and_score_alphagenome_output(
                         "alt": alt,
                         "rsid": rsid,
                         "gene_symbol": gene,
-                        "scoring_source": "alphagenome_model",
+                        "scoring_source": row_source,
                         "avi_score": score_info,
                         "modalities": modalities,
                         "atlas_links": atlas_links,
@@ -576,7 +605,7 @@ def parse_and_score_alphagenome_output(
                 )
             return {
                 "status": "success",
-                "format": "json",
+                "format": json_fmt,
                 "count": len(parsed_variants),
                 "variants": parsed_variants,
             }
@@ -617,10 +646,15 @@ def parse_and_score_alphagenome_output(
                 m_gene = re.search(r"GENE=([^;\s]+)", info)
                 gene_val = m_gene.group(1) if m_gene else None
 
-                score_info = compute_avi_score(
-                    raw_score=raw_val, quantile=q_val, phred=phred_val
-                )
-                score_info["scoring_source"] = "alphagenome_model"
+                if any(x is not None for x in (raw_val, q_val, phred_val)):
+                    score_info = compute_avi_score(
+                        raw_score=raw_val, quantile=q_val, phred=phred_val
+                    )
+                    score_info["scoring_source"] = "alphagenome_model"
+                    row_source = "alphagenome_model"
+                else:
+                    score_info = None
+                    row_source = "atlas_link_only"
                 atlas_links = build_alphagenome_atlas_url(chrom, pos, ref, alt)
 
                 parsed_variants.append(
@@ -631,7 +665,7 @@ def parse_and_score_alphagenome_output(
                         "alt": alt,
                         "rsid": rsid,
                         "gene_symbol": gene_val,
-                        "scoring_source": "alphagenome_model",
+                        "scoring_source": row_source,
                         "avi_score": score_info,
                         "modalities": {},
                         "atlas_links": atlas_links,
@@ -708,10 +742,15 @@ def parse_and_score_alphagenome_output(
             raw_str = row.get("avi_raw") or row.get("AVI_RAW")
             raw_val = _safe_float(raw_str)
 
-            score_info = compute_avi_score(
-                raw_score=raw_val, quantile=quantile_val, phred=phred_val
-            )
-            score_info["scoring_source"] = "alphagenome_model"
+            if any(x is not None for x in (raw_val, quantile_val, phred_val)):
+                score_info = compute_avi_score(
+                    raw_score=raw_val, quantile=quantile_val, phred=phred_val
+                )
+                score_info["scoring_source"] = "alphagenome_model"
+                row_source = "alphagenome_model"
+            else:
+                score_info = None
+                row_source = "atlas_link_only"
             atlas_links = build_alphagenome_atlas_url(chrom, pos, ref, alt)
 
             parsed_variants.append(
@@ -722,7 +761,7 @@ def parse_and_score_alphagenome_output(
                     "alt": alt,
                     "rsid": rsid,
                     "gene_symbol": gene,
-                    "scoring_source": "alphagenome_model",
+                    "scoring_source": row_source,
                     "avi_score": score_info,
                     "modalities": {},
                     "atlas_links": atlas_links,

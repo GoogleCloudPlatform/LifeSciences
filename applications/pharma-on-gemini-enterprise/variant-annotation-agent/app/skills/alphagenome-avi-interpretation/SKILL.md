@@ -13,21 +13,21 @@ AlphaGenome produces multimodal functional predictions across 18 biological trac
 
 1. **AVI Raw (`avi_raw`)**:
    - Aggregate absolute feature divergence across 18 experimental and regulatory tracks.
-2. **AVI Quantile (`avi_quantile`)**:
-   - Empirical genome-wide percentile ranking ($0.0 \le Q \le 1.0$) calibrated against 3 billion human genomic positions.
+2. **AVI Tail Quantile (`avi_quantile`)**:
+   - Empirical genome-wide tail quantile ($\text{tail} = 1 - \text{CDF}$, $10^{-7} \le \text{avi\_quantile} \le 1.0$) calibrated against human genomic positions, where **smaller values indicate rarer, stronger functional impact** (e.g., `0.01` = top `1.0%` genome-wide impact).
 3. **AVI Phred (`avi_phred`)**:
    - Standardized log-scaled impact metric defined as:
-     $$\text{AVI}_{\text{phred}} = -10 \cdot \log_{10}(1 - \text{quantile})$$
-   - Matches clinical convention used by CADD and PolyPhen-2.
+     $$\text{AVI}_{\text{phred}} = -10 \cdot \log_{10}(\text{avi\_quantile})$$
+   - Matches clinical convention used by CADD (`Phred 20` = top `1%`, `Phred 30` = top `0.1%`).
 
 ## Phred Impact Tiering
 
-| Phred Score | Quantile Range | Tier Classification | Clinical / Biological Actionability |
-| :--- | :--- | :--- | :--- |
-| **$\ge 20.0$** | $\ge 99.0\text{th}$ | **High Impact** | Strong evidence of molecular perturbation; top 1% genome-wide impact. High priority for ACMG PP3 evidence. |
-| **$15.0\text{ – }19.99$** | $96.8\text{th – }98.9\text{th}$ | **Moderate-High Impact** | Significant regulatory or splicing alteration; top 3% genome-wide impact. |
-| **$10.0\text{ – }14.99$** | $90.0\text{th – }96.7\text{th}$ | **Moderate Impact** | Noticeable biological effect in specific cell types or assays; top 10% genome-wide impact. |
-| **$< 10.0$** | $< 90.0\text{th}$ | **Low / Baseline Impact** | Neutral or minimal functional effect; consistent with background genomic variation. |
+| Phred Score | Tail Quantile (`avi_quantile`) | Top Percentile | Tier Classification | Clinical / Biological Actionability |
+| :--- | :--- | :--- | :--- | :--- |
+| **$\ge 20.0$** | $\le 0.01$ | Top $\le 1.0\%$ | **High Impact** | Strong evidence of molecular perturbation; top 1% genome-wide impact. High priority for ACMG PP3 evidence. |
+| **$15.0\text{ – }19.99$** | $0.0101\text{ – }0.0316$ | Top $1.01\%\text{ – }3.16\%$ | **Moderate-High Impact** | Significant regulatory or splicing alteration; top 3.2% genome-wide impact. |
+| **$10.0\text{ – }14.99$** | $0.0317\text{ – }0.10$ | Top $3.17\%\text{ – }10.0\%$ | **Moderate Impact** | Noticeable biological effect in specific cell types or assays; top 10% genome-wide impact. |
+| **$< 10.0$** | $> 0.10$ | $> 10.0\%$ | **Low / Baseline Impact** | Neutral or minimal functional effect; consistent with background genomic variation. |
 
 ## 18 Evaluated AlphaGenome Modalities
 
@@ -52,6 +52,6 @@ AlphaGenome produces multimodal functional predictions across 18 biological trac
 
 ## AlphaGenome Atlas Linking Protocol
 
-Always provide direct exploration URLs for clinical reviewers:
-- **Variant View**: `https://deepmind.google.com/science/alphagenome/atlas?variant={chr}:{pos}:{ref}>{alt}`
-- **Locus View**: `https://deepmind.google.com/science/alphagenome/atlas?locus={chr}:{start}-{end}`
+Always provide direct exploration URLs for clinical reviewers using `q`, `m`, and `lItems` (never `?variant=` or `?locus=`):
+- **Variant View**: `https://deepmind.google.com/science/alphagenome/atlas?q={chr}:{pos}:{ref}%3E{alt}&m=variant&lItems=avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES`
+- **Locus View**: `https://deepmind.google.com/science/alphagenome/atlas?q={chr}:{start}-{end}&m=locus&lItems=avi,section:RNA_SEQ,section:DNASE,section:DNASE:REF_SCORES`

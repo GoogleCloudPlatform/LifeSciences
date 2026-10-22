@@ -18,8 +18,10 @@ from __future__ import annotations
 
 from google.adk.agents import LlmAgent
 
-from app.app_utils.models import FLASH_MODEL, get_gemini_model
+from app.app_utils.formatting import pad_and_sanitize_llm_response
+from app.app_utils.models import FLASH_MODEL, get_gemini_model, get_thinking_planner
 from app.tools.alphagenome_scoring import resolve_variant_coordinates
+from app.tools.charts import render_gnomad_ancestry_chart
 from app.tools.clinvar import search_clinvar
 from app.tools.gnomad import query_gene_constraint, query_gnomad_variant
 from app.tools.gwas_catalog import query_gwas_catalog
@@ -42,7 +44,7 @@ Your role is to query, interpret, and cross-reference evidence from the four cor
 
 2. gnomAD (v4) (Karczewski et al. 2020):
    - Query variant allele frequencies using `query_gnomad_variant(chromosome, position, ref, alt)`.
-   - Report joint, exome, and genome allele frequencies (AF), counts (AC, AN), and homozygotes across continental ancestries (AFR, AMR, ASJ, EAS, FIN, MID, NFE, SAS).
+   - Report joint, exome, and genome allele frequencies (AF), counts (AC, AN), and homozygotes across continental ancestries (AFR, AMR, ASJ, EAS, FIN, MID, NFE, SAS), and optionally render an ancestry AF bar chart via `render_gnomad_ancestry_chart`.
    - Apply ACMG population frequency criteria:
      * BA1: AF >= 0.05 (Stand-alone Benign)
      * BS1: AF >= 0.01 (Strong Benign)
@@ -61,14 +63,16 @@ Your role is to query, interpret, and cross-reference evidence from the four cor
    - Report star-allele definition, activity score, PharmGKB evidence level (1A to 4), affected drugs, and CPIC dosing recommendations.
    - Always cite: PharmGKB (Whirl-Carrillo et al. 2012, 2021)
 
-Coordinate Resolution:
-If the user provides an rsID or coordinate string without broken-down fields, use `resolve_variant_coordinates` first.
+Coordinate Resolution & Formatting:
+- If the user provides an rsID or coordinate string without broken-down fields, use `resolve_variant_coordinates` first.
+- Never wrap gene symbols, protein names, or histone marks in dollar-sign math delimiters (`$...$`); use plain text or backticks.
 """
 
 database_lookup_agent = LlmAgent(
     name="database_lookup_agent",
     description="Cross-references genomic variants across ClinVar, gnomAD v4, GWAS Catalog, and PharmGKB.",
     model=get_gemini_model(FLASH_MODEL),
+    planner=get_thinking_planner(),
     instruction=DATABASE_LOOKUP_AGENT_PROMPT,
     tools=[
         resolve_variant_coordinates,
@@ -77,5 +81,7 @@ database_lookup_agent = LlmAgent(
         query_gene_constraint,
         query_gwas_catalog,
         query_pharmgkb_variant,
+        render_gnomad_ancestry_chart,
     ],
+    after_model_callback=pad_and_sanitize_llm_response,
 )

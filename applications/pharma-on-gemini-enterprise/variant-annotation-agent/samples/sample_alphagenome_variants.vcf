@@ -4,14 +4,14 @@
 ##INFO=<ID=GENE,Number=1,Type=String,Description="Ensembl canonical gene symbol">
 ##INFO=<ID=CONSEQUENCE,Number=1,Type=String,Description="Molecular consequence from VEP">
 ##INFO=<ID=AVI_RAW,Number=1,Type=Float,Description="AlphaGenome Variant Impact Raw Multi-track Score">
-##INFO=<ID=AVI_Q,Number=1,Type=Float,Description="AlphaGenome Variant Impact Genome-wide Quantile">
-##INFO=<ID=AVI_PHRED,Number=1,Type=Float,Description="AlphaGenome Variant Impact Phred Score (-10*log10(1-Q))">
+##INFO=<ID=AVI_Q,Number=1,Type=Float,Description="AlphaGenome Variant Impact Tail Quantile (1-CDF)">
+##INFO=<ID=AVI_PHRED,Number=1,Type=Float,Description="AlphaGenome Variant Impact Phred Score (-10*log10(AVI_Q))">
 ##INFO=<ID=AVI_TIER,Number=1,Type=String,Description="AlphaGenome Variant Impact Tier (High, Moderate-High, Moderate, Low)">
 ##INFO=<ID=PRIMARY_TRACK,Number=1,Type=String,Description="Top contributing AlphaGenome track">
 ##contig=<ID=chr1,length=248956422>
 ##contig=<ID=chr10,length=133797422>
 ##contig=<ID=chr11,length=135086622>
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
-chr1	109274977	rs12740374	G	T	.	PASS	RS=rs12740374;GENE=SORT1;CONSEQUENCE=intron_variant;AVI_RAW=0.884;AVI_Q=0.9982;AVI_PHRED=27.45;AVI_TIER=High;PRIMARY_TRACK=chip_tf_binding_disruption
-chr11	5227002	rs334	T	A	.	PASS	RS=rs334;GENE=HBB;CONSEQUENCE=missense_variant;AVI_RAW=0.942;AVI_Q=0.9996;AVI_PHRED=33.98;AVI_TIER=High;PRIMARY_TRACK=alphamissense_pathogenicity
-chr10	94781859	rs4244285	C	T	.	PASS	RS=rs4244285;GENE=CYP2C19;CONSEQUENCE=splice_donor_variant;AVI_RAW=0.965;AVI_Q=0.9998;AVI_PHRED=36.99;AVI_TIER=High;PRIMARY_TRACK=splice_donor_loss
+chr1	109274968	rs12740374	G	T	.	PASS	RS=rs12740374;GENE=CELSR2;CONSEQUENCE=3_prime_UTR_variant;AVI_RAW=0.884;AVI_Q=0.0018;AVI_PHRED=27.45;AVI_TIER=High;PRIMARY_TRACK=chip_tf_binding_disruption
+chr11	5227002	rs334	T	A	.	PASS	RS=rs334;GENE=HBB;CONSEQUENCE=missense_variant;AVI_RAW=0.942;AVI_Q=0.0004;AVI_PHRED=33.98;AVI_TIER=High;PRIMARY_TRACK=alphamissense_pathogenicity
+chr10	94781859	rs4244285	C	T	.	PASS	RS=rs4244285;GENE=CYP2C19;CONSEQUENCE=splice_donor_variant;AVI_RAW=0.965;AVI_Q=0.0002;AVI_PHRED=36.99;AVI_TIER=High;PRIMARY_TRACK=splice_donor_loss

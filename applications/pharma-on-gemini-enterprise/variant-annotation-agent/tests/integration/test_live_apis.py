@@ -17,6 +17,8 @@
 import pytest
 
 from app.tools.alphagenome_scoring import resolve_variant_coordinates
+from app.tools.clinvar import search_clinvar
+from app.tools.gnomad import query_gene_constraint, query_gnomad_variant
 from app.tools.gwas_catalog import query_gwas_catalog
 from app.tools.pharmgkb import query_pharmgkb_variant
 
@@ -47,10 +49,55 @@ async def test_live_pharmgkb_cpic_cyp2c19():
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_live_ensembl_vep_resolution():
-    """Verify Ensembl GRCh38 VEP REST API resolves rs334 to chromosome 11 coords."""
+    """Verify Ensembl GRCh38 VEP REST API resolves rs334 and rs12740374 MANE transcripts."""
     res = await resolve_variant_coordinates("rs334")
     assert res["status"] == "success"
     assert res["chromosome"] in ("chr11", "11")
     assert res["position"] == 5227002
     assert res["ref"] == "T"
     assert res["alt"] == "A"
+    assert res["avi_score"] is None
+
+    res_celsr2 = await resolve_variant_coordinates("rs12740374")
+    assert res_celsr2["status"] == "success"
+    assert res_celsr2["position"] == 109274968
+    assert res_celsr2["gene_symbol"] == "CELSR2"
+    assert res_celsr2["transcript_id"] == "ENST00000271332"
+    assert res_celsr2["consequence"] == "3_prime_UTR_variant"
+    assert res_celsr2["avi_score"] is None
+
+    res_coord = await resolve_variant_coordinates("chr1:109274968:G>T")
+    assert res_coord["status"] == "success"
+    assert res_coord["gene_symbol"] == "CELSR2"
+    assert res_coord["transcript_id"] == "ENST00000271332"
+    assert res_coord["avi_score"] is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_live_clinvar_rs334_canonical_record_15333():
+    """Verify ClinVar returns canonical 2-star Pathogenic single-SNV HbS record 15333 first."""
+    res = await search_clinvar(
+        "rs334", chromosome="11", position=5227002, ref="T", alt="A"
+    )
+    assert res["status"] == "success"
+    assert res["top_clinvar_id"] == "15333"
+    assert "pathogenic" in res["clinical_significance"].lower()
+    assert res["gold_stars"] >= 2
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_live_gnomad_v4_variant_and_constraint():
+    """Verify live gnomAD v4 GraphQL queries succeed without 400 Bad Request."""
+    var_res = await query_gnomad_variant("1", 109274968, "G", "T")
+    assert var_res["status"] == "success"
+    assert var_res["found_in_gnomad"] is True
+    assert var_res["allele_frequency"] > 0.05
+    assert var_res["faf95"] is not None
+
+    cons_res = await query_gene_constraint("CELSR2")
+    assert cons_res["status"] == "success"
+    assert cons_res["pli"] is not None
+    assert cons_res["loeuf"] is not None
+    assert cons_res["mis_z"] is not None

@@ -1,9 +1,9 @@
 rsid	chrom	pos	ref	alt	gene	consequence	avi_raw	avi_quantile	avi_phred	impact_tier	top_track
-rs12740374	chr1	109274977	G	T	SORT1	intron_variant	0.884	0.9982	27.45	High	chip_tf_binding_disruption
-rs334	chr11	5227002	T	A	HBB	missense_variant	0.942	0.9996	33.98	High	alphamissense_pathogenicity
-rs4244285	chr10	94781859	C	T	CYP2C19	splice_donor_variant	0.965	0.9998	36.99	High	splice_donor_loss
-rs7903146	chr10	112998590	C	T	TCF7L2	intron_variant	0.821	0.9912	20.56	High	atac_seq_accessibility
-rs6025	chr1	169549811	C	T	F5	missense_variant	0.745	0.9754	16.09	Moderate-High	phylop_vertebrate_conservation
-rs1801133	chr1	11796321	G	A	MTHFR	missense_variant	0.582	0.9124	10.57	Moderate	alphamissense_pathogenicity
-rs12979860	chr19	39248425	C	T	IFNL4	upstream_gene_variant	0.768	0.9820	17.45	Moderate-High	rna_seq_expression_delta
-rs1042713	chr5	148826868	A	G	ADRB2	missense_variant	0.312	0.6540	4.61	Low	chip_tf_binding_disruption
+rs12740374	chr1	109274968	G	T	CELSR2	3_prime_UTR_variant	0.884	0.0018	27.45	High	chip_tf_binding_disruption
+rs334	chr11	5227002	T	A	HBB	missense_variant	0.942	0.0004	33.98	High	alphamissense_pathogenicity
+rs4244285	chr10	94781859	C	T	CYP2C19	splice_donor_variant	0.965	0.0002	36.99	High	splice_donor_loss
+rs7903146	chr10	112998590	C	T	TCF7L2	intron_variant	0.821	0.0088	20.56	High	atac_seq_accessibility
+rs6025	chr1	169549811	C	T	F5	missense_variant	0.745	0.0246	16.09	Moderate-High	phylop_vertebrate_conservation
+rs1801133	chr1	11796321	G	A	MTHFR	missense_variant	0.582	0.0876	10.57	Moderate	alphamissense_pathogenicity
+rs12979860	chr19	39248425	C	T	IFNL4	upstream_gene_variant	0.768	0.0180	17.45	Moderate-High	rna_seq_expression_delta
+rs1042713	chr5	148826868	A	G	ADRB2	missense_variant	0.312	0.3460	4.61	Low	chip_tf_binding_disruption

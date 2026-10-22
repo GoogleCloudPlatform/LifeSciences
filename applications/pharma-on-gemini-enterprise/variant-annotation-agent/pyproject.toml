@@ -15,7 +15,7 @@
 [project]
 name = "alphagenome-variant-annotation-agent"
 version = "0.1.0"
-description = "Annotation Agent for AlphaGenome: Multi-agent system for multimodal variant interpretation, AVI scoring, ClinVar, gnomAD v4, GWAS Catalog, and PharmGKB."
+description = "AlphaGenome — Variant Annotation: Scores variants across 18 AlphaGenome modalities (AVI Phred, Atlas links) and builds ACMG dossiers with ClinVar, gnomAD v4, GWAS Catalog, and PharmGKB."
 readme = "README.md"
 requires-python = "~=3.13.0"
 dependencies = [
