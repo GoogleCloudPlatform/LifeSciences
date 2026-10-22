@@ -72,6 +72,18 @@ class OF3Config(CoreConfig):
         return os.getenv("OF3_CCD_PATH", "of3/ccd")
 
     @property
+    def rfam_path(self) -> str:
+        """NFS-relative path to Rfam RNA database file."""
+        return os.getenv("OF3_RFAM_PATH", os.getenv("RFAM_PATH", "rfam/rfam.fasta"))
+
+    @property
+    def rnacentral_path(self) -> str:
+        """NFS-relative path to RNAcentral RNA database file."""
+        return os.getenv(
+            "OF3_RNACENTRAL_PATH", os.getenv("RNACENTRAL_PATH", "rnacentral/rnacentral.fasta")
+        )
+
+    @property
     def viewer_url(self) -> str:
         """Cloud Run viewer service URL."""
         return os.getenv("FOLDRUN_VIEWER_URL", "")
