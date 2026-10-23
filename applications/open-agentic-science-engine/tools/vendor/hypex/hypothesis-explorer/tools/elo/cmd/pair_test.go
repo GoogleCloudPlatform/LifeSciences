@@ -955,3 +955,42 @@ func TestEloPair_Integration_RematchWindowFlag(t *testing.T) {
 		t.Errorf("window=0 should allow the pair, got %d pairs: %v", len(pairs0), pairs0)
 	}
 }
+
+// TestEloPair_Integration_SwissFreshRun verifies that 'elo pair --strategy swiss'
+// pairs hypotheses that have no rating yet, so a fresh run gets its first matches.
+func TestEloPair_Integration_SwissFreshRun(t *testing.T) {
+	runDir := t.TempDir()
+
+	hypDir := filepath.Join(runDir, "hypotheses")
+	if err := os.MkdirAll(hypDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"H-0001", "H-0002", "H-0003", "H-0004"} {
+		data, _ := json.Marshal(map[string]string{"id": id, "title": "Hypothesis " + id})
+		if err := os.WriteFile(filepath.Join(hypDir, id+".json"), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"pair", "--run-dir", runDir, "--epoch", "0", "--budget", "2", "--strategy", "swiss"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("elo pair --strategy swiss failed: %v", err)
+	}
+	var pairs []pairing.Pair
+	if err := json.Unmarshal(out.Bytes(), &pairs); err != nil {
+		t.Fatalf("parsing output %q: %v", out.String(), err)
+	}
+	if len(pairs) != 2 {
+		t.Fatalf("expected 2 pairs on a fresh run, got %d: %v", len(pairs), pairs)
+	}
+	seen := make(map[string]bool)
+	for _, p := range pairs {
+		seen[p.A], seen[p.B] = true, true
+	}
+	if len(seen) != 4 {
+		t.Errorf("expected all 4 unrated hypotheses paired once, got %v", pairs)
+	}
+}
