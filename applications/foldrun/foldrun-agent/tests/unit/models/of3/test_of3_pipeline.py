@@ -564,6 +564,94 @@ class TestOF3MSAPipelineCacheBehavior:
             f"{tpl_chain['template_alignment_file_path']}"
         )
 
+    def test_rna_msa_executes_nhmmer_against_default_databases_yaml_paths(
+        self, tmp_path, monkeypatch
+    ):
+        """Verify RNA chains run nhmmer against rfam/rfam.fasta and rnacentral/rnacentral.fasta
+        and do not falsely treat an empty cache directory as a cache hit.
+        """
+        import importlib
+        import json
+        import subprocess
+
+        import foldrun_app.models.of3.pipeline.config as pipeline_config
+
+        for var in ("OF3_RFAM_PATH", "RFAM_PATH", "OF3_RNACENTRAL_PATH", "RNACENTRAL_PATH"):
+            monkeypatch.delenv(var, raising=False)
+        importlib.reload(pipeline_config)
+
+        msa_func = self._get_msa_func()
+
+        nfs_mount = tmp_path / "nfs"
+        (nfs_mount / "rfam").mkdir(parents=True)
+        (nfs_mount / "rnacentral").mkdir(parents=True)
+        (nfs_mount / "rfam" / "rfam.fasta").write_text(">rfam1\nACGUACGU\n")
+        (nfs_mount / "rnacentral" / "rnacentral.fasta").write_text(">rnac1\nACGUACGU\n")
+        for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
+            (nfs_mount / db_name).write_text(">dummy\nACDEFGHIK\n")
+
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90.fasta",
+                "mgnify": "mgnify.fasta",
+                "pdb_seqres": "pdb_seqres.fasta",
+                "rfam": pipeline_config.RFAM_PATH,
+                "rnacentral": pipeline_config.RNACENTRAL_PATH,
+            },
+        )
+
+        query_input = tmp_path / "rna_query.json"
+        query_input.write_text(
+            json.dumps(
+                {
+                    "queries": {
+                        "rna_q": {
+                            "chains": [
+                                {
+                                    "molecule_type": "rna",
+                                    "chain_ids": ["R"],
+                                    "sequence": "ACGUACGUACGU",
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+        )
+        query_artifact = self._make_artifact(path=str(query_input), uri=str(query_input))
+
+        called_cmds = []
+
+        def _fake_run(cmd, check=True):
+            called_cmds.append(cmd)
+            out_idx = cmd.index("-A") + 1
+            with open(cmd[out_idx], "w") as f:
+                f.write("# STOCKHOLM 1.0\n//\n")
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        out_rna_path = tmp_path / "out_rna.json"
+        out_rna_artifact = self._make_artifact(path=str(out_rna_path), uri=str(out_rna_path))
+
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_rna_artifact,
+            use_templates=False,
+        )
+
+        assert len(called_cmds) == 2
+        assert called_cmds[0][0] == "nhmmer"
+        assert str(nfs_mount / "rfam" / "rfam.fasta") in called_cmds[0]
+        assert str(nfs_mount / "rnacentral" / "rnacentral.fasta") in called_cmds[1]
+
+        rna_result = json.loads(out_rna_path.read_text())
+        rna_chain = rna_result["queries"]["rna_q"]["chains"][0]
+        assert len(rna_chain["main_msa_file_paths"]) == 2
+        assert all(os.path.isfile(p) for p in rna_chain["main_msa_file_paths"])
+
 
 class TestOF3SubmitPredictionToolCuEq:
     """Verify OF3SubmitPredictionTool handling of cuEquivariance triangle kernels."""

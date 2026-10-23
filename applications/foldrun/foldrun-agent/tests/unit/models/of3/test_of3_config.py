@@ -59,6 +59,24 @@ class TestOF3Config:
         config = OF3Config()
         assert config.ccd_path == "of3/ccd"
 
+    def test_config_rna_database_default_paths(self, monkeypatch):
+        """Ensure OF3Config and pipeline.config default to databases.yaml NFS paths."""
+        import importlib
+
+        import foldrun_app.models.of3.pipeline.config as pipeline_config
+        from foldrun_app.models.of3.config import OF3Config
+
+        for var in ("OF3_RFAM_PATH", "RFAM_PATH", "OF3_RNACENTRAL_PATH", "RNACENTRAL_PATH"):
+            monkeypatch.delenv(var, raising=False)
+
+        importlib.reload(pipeline_config)
+        config = OF3Config()
+
+        assert config.rfam_path == "rfam/rfam.fasta"
+        assert config.rnacentral_path == "rnacentral/rnacentral.fasta"
+        assert pipeline_config.RFAM_PATH == "rfam/rfam.fasta"
+        assert pipeline_config.RNACENTRAL_PATH == "rnacentral/rnacentral.fasta"
+
     def test_config_missing_image(self, monkeypatch):
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.setattr("foldrun_app.core.config.load_dotenv", lambda *a, **kw: None)

@@ -49,6 +49,8 @@ UNIPROT_PATH = os.getenv("UNIPROT_PATH", "uniprot/uniprot.fasta")
 # mmcif_files/ contains flat .cif files used for template featurization
 PDB_MMCIF_PATH = os.getenv("PDB_MMCIF_PATH", "pdb_mmcif/mmcif_files")
 
-# RNA database paths (OF3-specific, relative to NFS mount point)
-RFAM_PATH = os.getenv("RFAM_PATH", "of3/rfam/Rfam.cm")
-RNACENTRAL_PATH = os.getenv("RNACENTRAL_PATH", "of3/rnacentral/rnacentral_active.fasta")
+# RNA database paths (OF3-specific, relative to NFS mount point; matches databases.yaml)
+RFAM_PATH = os.getenv("OF3_RFAM_PATH", os.getenv("RFAM_PATH", "rfam/rfam.fasta"))
+RNACENTRAL_PATH = os.getenv(
+    "OF3_RNACENTRAL_PATH", os.getenv("RNACENTRAL_PATH", "rnacentral/rnacentral.fasta")
+)

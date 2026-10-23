@@ -116,7 +116,7 @@ def msa_pipeline_of3(
                 else:
                     required_files = []
 
-                cache_hit = True
+                cache_hit = bool(required_files)
                 for f in required_files:
                     if not os.path.exists(os.path.join(seq_cache_dir, f)):
                         cache_hit = False
