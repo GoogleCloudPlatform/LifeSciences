@@ -37,12 +37,14 @@ from ..common import (
     output_options,
     pass_state,
 )
-from ..core.errors import ProjectRootError, SchemaError
+from ..core.errors import ProjectRootError
 from ..core.output import Emitter
 from ..core.triage import (
     TriageBudget,
     run_triage,
 )
+
+ARTIFACT_CLASS = "triage"
 
 
 @click.group()
@@ -260,8 +262,8 @@ def run_cmd(
         target = Path(out)
     else:
         try:
-            target = state.project().artifact_dir("triage", None)
-        except (ProjectRootError, SchemaError):
+            target = state.project().artifact_dir(ARTIFACT_CLASS, None)
+        except ProjectRootError:
             target = None
 
     if target is not None:
