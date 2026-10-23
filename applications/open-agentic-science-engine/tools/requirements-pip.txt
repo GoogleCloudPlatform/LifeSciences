@@ -11,8 +11,8 @@
 #   pip download pip==<new-version> --no-deps -d /tmp/pip-dl
 #   pip hash /tmp/pip-dl/pip-<new-version>-py3-none-any.whl
 
-pip==26.2.1 \
-    --hash=sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e
+pip==26.2.2 \
+    --hash=sha256:fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70
 
 # setuptools is upgraded so the editable install (--no-build-isolation) can
 # use the integrated bdist_wheel command (available since setuptools 70.1).
