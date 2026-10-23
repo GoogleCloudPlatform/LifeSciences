@@ -15,7 +15,7 @@
 # AlphaFold Structure Viewer - Cloud Run Dockerfile
 
 # Stage 1: Build environment
-FROM python:3.13-slim AS builder
+FROM python:3.15-slim AS builder
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /bin/
@@ -29,7 +29,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev --no-editable
 
 # Stage 2: Runtime image
-FROM python:3.13-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 
