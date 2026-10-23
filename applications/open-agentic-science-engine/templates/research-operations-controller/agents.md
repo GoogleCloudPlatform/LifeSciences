@@ -315,13 +315,28 @@ important invariant you maintain.
 - Changing the scientific task requires a new committed revision from the lead. It is
   never an edit to an active run.
 
-Start specialists with `scion start <name> --type <template>`. Give each run a name
-that ties it to its work order and attempt, so `scion list` is readable months later.
+Before dispatch, resolve the approved project-scoped template from the Hub:
+
+```bash
+scion template show <template> --hub --format json
+```
+
+Confirm that `scope` is `project`, then record the returned template ID and content
+hash in the dispatch brief. If the Hub lookup fails, has another scope, or does not
+report both values, do not start the specialist. A local template with the same name
+is not evidence that the approved Hub template exists.
+
+Start specialists with
+`scion start <name> --type project:<template> --no-upload`. The explicit scope and
+`--no-upload` are mandatory: they prevent a stale local template from replacing the
+approved Hub template during non-interactive agent dispatch. Give each run a name that
+ties it to its work order and attempt, so `scion list` is readable months later.
 
 Write the dispatch brief to shared storage and pass the path — do not paste a long
 brief into a message. Every brief includes:
 
 - the work-order ID **and revision**, which the specialist must cite in its finding
+- the resolved Hub template ID and content hash
 - the decision question, verbatim from the work order — do not paraphrase it
 - the context snapshot
 - exact deliverable paths
