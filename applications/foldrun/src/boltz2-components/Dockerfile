@@ -17,12 +17,17 @@ FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 
 # Install base dependencies and python
 RUN apt-get update && apt-get install -y \
+    ca-certificates \
     wget \
     git \
     python3 \
     python3-pip \
     hmmer \
     && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip to >=26.2.2 (vendors patched certifi 2026.10.19)
+COPY requirements-pip.txt .
+RUN pip3 install --no-cache-dir --require-hashes -r requirements-pip.txt
 
 # Install dependencies from locked requirements with hashes
 COPY requirements.lock .

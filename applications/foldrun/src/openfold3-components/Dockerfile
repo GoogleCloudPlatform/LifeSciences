@@ -23,6 +23,7 @@ FROM openfoldconsortium/openfold3:${OF3_VERSION}
 # Also configure /etc/ld.so.conf.d/nvidia.conf to match nvidia/cuda base images, because
 # upstream built 0.5-pixi FROM ubuntu:22.04 instead of FROM nvidia/cuda.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
         hmmer \
     && rm -rf /var/lib/apt/lists/* \
     && printf "/usr/local/nvidia/lib\n/usr/local/nvidia/lib64\n" > /etc/ld.so.conf.d/nvidia.conf
@@ -50,11 +51,21 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
     TORCH_EXTENSIONS_DIR=${OF3_ENV_PREFIX}/caches/torch_extensions \
     CUTLASS_PATH=DS_IGNORE_CUTLASS_DETECTION
 
+# Update ca-certificates, certifi, and pip in the Pixi openfold3-cuda12 environment
+# to remediate the October 2026 eMudhra (emSign) CA compromise.
+RUN CONDA_OVERRIDE_CUDA=12.0 /root/.pixi/bin/pixi update \
+    --manifest-path /opt/pixi-project/pixi.toml \
+    -e openfold3-cuda12 \
+    -p linux-64-cuda12 \
+    ca-certificates certifi pip
+
 # Build-time contract check (executed without ENTRYPOINT, matching KFP runtime):
-# Verify pip, openfold3, torch, CLI binaries, and that all libtorch_cuda.so shared
+# Verify pip, openfold3, torch, certifi, CLI binaries, and that all libtorch_cuda.so shared
 # libraries resolve cleanly via LD_LIBRARY_PATH.
 RUN python3 -m pip --version \
     && python3 -c "import importlib.metadata, os, openfold3, torch; print('openfold3', importlib.metadata.version('openfold3'), 'torch', torch.__version__); lib = os.path.join(os.path.dirname(torch.__file__), 'lib', 'libtorch_cuda.so'); assert os.path.isfile(lib), lib" \
+    && python3 -c "import certifi; print('certifi', certifi.__version__); assert tuple(int(x) for x in certifi.__version__.split('.')) >= (2026, 10, 19), certifi.__version__" \
+    && python3 -c "import pip; print('pip', pip.__version__); assert tuple(int(x) for x in pip.__version__.split('.')) >= (26, 2, 2), pip.__version__" \
     && ! ldd "${OF3_ENV_PREFIX}"/lib/python*/site-packages/torch/lib/libtorch_cuda.so | grep -q "not found" \
     && command -v run_openfold jackhmmer nhmmer
 

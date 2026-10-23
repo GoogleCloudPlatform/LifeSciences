@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ARG CUDA=12.2.2
-FROM nvidia/cuda:${CUDA}-cudnn8-runtime-ubuntu20.04
+FROM nvidia/cuda:${CUDA}-cudnn8-runtime-ubuntu22.04
 # FROM directive resets ARGS, so we specify again (the value is retained if
 # previously set).
 ARG CUDA
@@ -26,6 +26,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update --quiet \
     && apt-get install --no-install-recommends --yes --quiet \
         build-essential \
+        ca-certificates \
         cmake \
         cuda-command-line-tools-$(cut -f1,2 -d- <<< ${CUDA//./-}) \
         git \
@@ -62,14 +63,18 @@ RUN wget -q -P /tmp \
 ENV PATH="/opt/conda/bin:$PATH"
 ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
 RUN conda install --quiet --yes --channel nvidia/label/cuda-${CUDA} \
-      conda==24.11.1 pip python=3.11 cuda==${CUDA} \
+      conda==24.11.1 'ca-certificates>=2026.10' 'certifi>=2026.10.19' 'pip>=26.2.2' python=3.11 cuda==${CUDA} \
     && conda clean --all --force-pkgs-dirs --yes
 
-# Currently needed to avoid undefined_symbol error before running any system tools like git.
-RUN ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.7 /opt/conda/lib/libffi.so.7
+# Symlink system libffi if needed to avoid undefined_symbol error before running system tools.
+RUN if [ -f /usr/lib/x86_64-linux-gnu/libffi.so.8 ]; then ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.8 /opt/conda/lib/libffi.so.8; elif [ -f /usr/lib/x86_64-linux-gnu/libffi.so.7 ]; then ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.7 /opt/conda/lib/libffi.so.7; fi
 
 # Set LD_LIBRARY_PATH after the fix.
 ENV LD_LIBRARY_PATH="/opt/conda/lib:$LD_LIBRARY_PATH"
+
+# Upgrade pip to >=26.2.2 with hashes (vendors patched certifi 2026.10.19)
+COPY requirements-pip.txt .
+RUN pip3 install --no-cache-dir --require-hashes -r requirements-pip.txt
 
 RUN git clone https://github.com/deepmind/alphafold.git /app/alphafold
 RUN git -C /app/alphafold reset --hard $AF2_VERSION
