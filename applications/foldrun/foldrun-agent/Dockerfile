@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /bin/
