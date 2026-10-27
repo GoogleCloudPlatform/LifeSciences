@@ -91,7 +91,7 @@ class OF3Tool(BaseTool):
         No relax phase, no MMseqs2 GPU data pipeline — simpler than AF2.
 
         Args:
-            gpu_type: GPU type for predict phase ('auto', 'A100', 'A100_80GB').
+            gpu_type: GPU type for predict phase ('auto', 'L4', 'A100', 'A100_80GB').
             num_gpus: Number of GPUs (1, 2, 4, 8).
             num_tokens: Total input tokens for auto GPU selection.
 
@@ -101,8 +101,16 @@ class OF3Tool(BaseTool):
         if gpu_type == "auto":
             gpu_type = self._recommend_gpu(num_tokens)
             logger.info(f"Auto-selected GPU: {gpu_type} (num_tokens={num_tokens})")
+        elif gpu_type.upper() == "L4":
+            logger.warning("OpenFold3 requires at least 40GB VRAM; upgrading requested L4 to A100")
+            gpu_type = "A100"
 
         configs = {
+            "L4": {
+                "predict_machine": "g2-standard-12",
+                "predict_accel": "NVIDIA_L4",
+                "predict_count": 1,
+            },
             "A100": {
                 "predict_machine": "a2-highgpu-1g",
                 "predict_accel": "NVIDIA_TESLA_A100",
@@ -117,11 +125,17 @@ class OF3Tool(BaseTool):
 
         config = configs.get(gpu_type, configs["A100"]).copy()
 
-        # Enforce supported GPUs logic
-        supported = self.config.supported_gpus
+        # Enforce supported GPUs logic (>= 40GB VRAM required; never downgrade to 24GB L4)
+        upgrade_path = ["A100", "A100_80GB"]
+        supported = [g for g in self.config.supported_gpus if g in upgrade_path]
+        if not supported:
+            raise ValueError(
+                f"OpenFold3 requires at least 40GB VRAM (A100 or A100_80GB), "
+                f"but none are supported in this environment! (Supported: {self.config.supported_gpus})"
+            )
+
         if gpu_type not in supported:
             original_type = gpu_type
-            upgrade_path = ["A100", "A100_80GB"]
 
             try:
                 start_idx = upgrade_path.index(original_type)
@@ -134,23 +148,25 @@ class OF3Tool(BaseTool):
                     new_type = candidate
                     break
 
+            if not new_type:
+                for candidate in reversed(upgrade_path[:start_idx]):
+                    if candidate in supported:
+                        new_type = candidate
+                        break
+
             if new_type:
                 logger.warning(
-                    f"Requested GPU '{original_type}' not supported. Auto-upgrading to '{new_type}'."
+                    f"Requested GPU '{original_type}' not supported. Auto-selecting '{new_type}'."
                 )
                 gpu_type = new_type
                 config = configs.get(gpu_type).copy()
-            elif supported:
-                fallback = supported[0]
+            else:
+                fallback = supported[-1]
                 logger.warning(
                     f"Requested GPU '{original_type}' not supported. Falling back to '{fallback}'."
                 )
                 gpu_type = fallback
                 config = configs.get(gpu_type, configs["A100"]).copy()
-            else:
-                raise ValueError(
-                    f"No GPUs are supported in this environment! (Supported: {supported})"
-                )
 
         # Multi-GPU machine types
         if num_gpus > 1 and gpu_type in ["A100", "A100_80GB"]:

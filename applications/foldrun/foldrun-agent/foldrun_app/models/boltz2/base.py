@@ -89,7 +89,7 @@ class BOLTZ2Tool(BaseTool):
         No relax phase, no MMseqs2 GPU data pipeline — simpler than AF2.
 
         Args:
-            gpu_type: GPU type for predict phase ('auto', 'A100', 'A100_80GB').
+            gpu_type: GPU type for predict phase ('auto', 'L4', 'A100', 'A100_80GB').
             num_gpus: Number of GPUs (1, 2, 4, 8).
             num_tokens: Total input tokens for auto GPU selection.
 
@@ -101,6 +101,11 @@ class BOLTZ2Tool(BaseTool):
             logger.info(f"Auto-selected GPU: {gpu_type} (num_tokens={num_tokens})")
 
         configs = {
+            "L4": {
+                "predict_machine": "g2-standard-12",
+                "predict_accel": "NVIDIA_L4",
+                "predict_count": 1,
+            },
             "A100": {
                 "predict_machine": "a2-highgpu-1g",
                 "predict_accel": "NVIDIA_TESLA_A100",
@@ -118,17 +123,21 @@ class BOLTZ2Tool(BaseTool):
                 f"Unsupported GPU type '{gpu_type}' for Boltz-2. Supported types: {list(configs.keys())}"
             )
 
-        # Enforce supported GPUs logic (only accelerators supported by both environment and Boltz-2)
-        supported = [g for g in self.config.supported_gpus if g in configs]
+        # Enforce supported GPUs logic:
+        # Never auto-downgrade >=40GB requests (auto, A100, A100_80GB) to 24GB L4.
+        # L4 is only used when explicitly requested via gpu_type == "L4".
+        explicit_l4 = gpu_type == "L4"
+        allowed_pool = ["L4", "A100", "A100_80GB"] if explicit_l4 else ["A100", "A100_80GB"]
+        supported = [g for g in self.config.supported_gpus if g in allowed_pool]
         if not supported:
             raise ValueError(
                 f"No Boltz-2 compatible GPUs are supported in this environment! "
-                f"(Supported: {self.config.supported_gpus})"
+                f"(Supported: {self.config.supported_gpus}; >=40GB A100/A100_80GB required unless gpu_type='L4')"
             )
 
         if gpu_type not in supported:
             original_type = gpu_type
-            upgrade_path = ["A100", "A100_80GB"]
+            upgrade_path = allowed_pool
 
             try:
                 start_idx = upgrade_path.index(original_type)
@@ -141,13 +150,19 @@ class BOLTZ2Tool(BaseTool):
                     new_type = candidate
                     break
 
+            if not new_type:
+                for candidate in reversed(upgrade_path[:start_idx]):
+                    if candidate in supported:
+                        new_type = candidate
+                        break
+
             if new_type:
                 logger.warning(
-                    f"Requested GPU '{original_type}' not supported. Auto-upgrading to '{new_type}'."
+                    f"Requested GPU '{original_type}' not supported. Auto-selecting '{new_type}'."
                 )
                 gpu_type = new_type
             else:
-                fallback = supported[0]
+                fallback = supported[-1]
                 logger.warning(
                     f"Requested GPU '{original_type}' not supported. Falling back to '{fallback}'."
                 )

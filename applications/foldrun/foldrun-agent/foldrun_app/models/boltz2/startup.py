@@ -68,15 +68,13 @@ def _auto_detect_gpus(config):
         ordered_support = detect_supported_gpus(config.project_id, config.region)
 
         if ordered_support:
-            # BOLTZ2 only supports A100 and above — filter out L4
-            boltz2_supported = [g for g in ordered_support if g in ("A100", "A100_80GB")]
+            # BOLTZ2 supports A100, A100_80GB, and L4
+            boltz2_supported = [g for g in ordered_support if g in ("A100", "A100_80GB", "L4")]
             if boltz2_supported:
                 config.set_supported_gpus(boltz2_supported)
                 logger.info(f"Auto-configured BOLTZ2 supported GPUs: {boltz2_supported}")
             else:
-                logger.warning(
-                    "No A100+ GPUs found! BOLTZ2 requires at least A100. Keeping defaults."
-                )
+                logger.warning("No A100/L4 GPUs found! Keeping defaults.")
         else:
             logger.warning("No GPUs found with limit > 0! Keeping defaults.")
 

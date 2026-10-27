@@ -108,22 +108,58 @@ class TestBOLTZ2HardwareConfig:
         assert config["predict_machine"] == "a2-highgpu-4g"
         assert config["predict_count"] == 4
 
-    def test_unsupported_environment_only_l4_raises(self):
-        """When environment only supports L4, Boltz-2 must raise ValueError instead of falling back to A100."""
+    def test_unsupported_environment_raises(self):
+        """When environment has no compatible GPUs, Boltz-2 must raise ValueError."""
+        from foldrun_app.models.boltz2.base import BOLTZ2Tool
+
+        tool = BOLTZ2Tool({"name": "test", "description": "test"})
+        tool.config.set_supported_gpus(["V100"])
+        with pytest.raises(ValueError):
+            tool._get_hardware_config("auto", num_tokens=500)
+
+    def test_unsupported_environment_only_l4_auto_raises(self):
+        """When environment only supports L4, auto and >=40GB requests must raise ValueError instead of downgrading to L4."""
         from foldrun_app.models.boltz2.base import BOLTZ2Tool
 
         tool = BOLTZ2Tool({"name": "test", "description": "test"})
         tool.config.set_supported_gpus(["L4"])
         with pytest.raises(ValueError):
             tool._get_hardware_config("auto", num_tokens=500)
+        with pytest.raises(ValueError):
+            tool._get_hardware_config("A100")
 
-    def test_explicit_unsupported_gpu_l4_raises(self):
-        """Explicitly requesting unsupported GPU like L4 must raise ValueError."""
+    def test_explicit_unsupported_gpu_raises(self):
+        """Explicitly requesting unsupported GPU like V100 must raise ValueError."""
         from foldrun_app.models.boltz2.base import BOLTZ2Tool
 
         tool = BOLTZ2Tool({"name": "test", "description": "test"})
         with pytest.raises(ValueError):
-            tool._get_hardware_config("L4")
+            tool._get_hardware_config("V100")
+
+    def test_explicit_l4_supported(self):
+        """Explicitly requesting L4 must configure g2-standard-12 and NVIDIA_L4."""
+        from foldrun_app.models.boltz2.base import BOLTZ2Tool
+
+        tool = BOLTZ2Tool({"name": "test", "description": "test"})
+        config = tool._get_hardware_config("L4")
+        assert config["predict_accel"] == "NVIDIA_L4"
+        assert config["predict_machine"] == "g2-standard-12"
+        assert config["predict_count"] == 1
+
+        tool.config.set_supported_gpus(["L4"])
+        l4_only_config = tool._get_hardware_config("L4")
+        assert l4_only_config["predict_accel"] == "NVIDIA_L4"
+        assert l4_only_config["predict_machine"] == "g2-standard-12"
+
+    def test_explicit_l4_upgrades_when_l4_not_supported(self):
+        """Explicit L4 request upgrades along [L4, A100, A100_80GB] when L4 quota is unavailable."""
+        from foldrun_app.models.boltz2.base import BOLTZ2Tool
+
+        tool = BOLTZ2Tool({"name": "test", "description": "test"})
+        tool.config.set_supported_gpus(["A100"])
+        config = tool._get_hardware_config("L4")
+        assert config["predict_accel"] == "NVIDIA_TESLA_A100"
+        assert config["predict_machine"] == "a2-highgpu-1g"
 
     def test_fallback_skips_unsupported_accelerators(self):
         """Fallback selection should only consider GPUs supported by both environment and Boltz-2."""
@@ -133,3 +169,19 @@ class TestBOLTZ2HardwareConfig:
         tool.config.set_supported_gpus(["L4", "A100"])
         config = tool._get_hardware_config("A100_80GB")
         assert config["predict_accel"] == "NVIDIA_TESLA_A100"
+
+
+class TestBOLTZ2StartupGPUDetection:
+    """Test startup GPU quota auto-detection retains L4 alongside A100 tiers."""
+
+    def test_startup_retains_l4_and_a100(self):
+        from foldrun_app.models.boltz2.config import BOLTZ2Config
+        from foldrun_app.models.boltz2.startup import _auto_detect_gpus
+
+        config = BOLTZ2Config()
+        with patch(
+            "foldrun_app.core.hardware.detect_supported_gpus",
+            return_value=["L4", "A100", "V100"],
+        ):
+            _auto_detect_gpus(config)
+        assert config.supported_gpus == ["L4", "A100"]

@@ -109,3 +109,49 @@ class TestOF3HardwareConfig:
         config = tool._get_hardware_config("A100", num_gpus=4)
         assert config["predict_machine"] == "a2-highgpu-4g"
         assert config["predict_count"] == 4
+
+    def test_explicit_l4_upgrades_to_a100(self):
+        """OpenFold3 requires >=40GB VRAM and upgrades explicit L4 requests to A100."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        tool = OF3Tool({"name": "test", "description": "test"})
+        config = tool._get_hardware_config("L4")
+        assert config["predict_accel"] == "NVIDIA_TESLA_A100"
+        assert config["predict_machine"] == "a2-highgpu-1g"
+
+    def test_only_l4_environment_raises(self):
+        """When environment only supports L4, OF3 must raise ValueError rather than running on 24GB VRAM."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        tool = OF3Tool({"name": "test", "description": "test"})
+        tool.config.set_supported_gpus(["L4"])
+        with pytest.raises(ValueError):
+            tool._get_hardware_config("auto", num_tokens=500)
+        with pytest.raises(ValueError):
+            tool._get_hardware_config("L4")
+
+    def test_fallback_never_downgrades_to_l4(self):
+        """When supported_gpus includes L4 and A100, A100_80GB falls back to A100, never L4."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        tool = OF3Tool({"name": "test", "description": "test"})
+        tool.config.set_supported_gpus(["L4", "A100"])
+        config = tool._get_hardware_config("A100_80GB")
+        assert config["predict_accel"] == "NVIDIA_TESLA_A100"
+        assert config["predict_machine"] == "a2-highgpu-1g"
+
+
+class TestOF3StartupGPUDetection:
+    """Test startup GPU quota auto-detection retains L4 alongside A100 tiers."""
+
+    def test_startup_retains_l4_and_a100(self):
+        from foldrun_app.models.of3.config import OF3Config
+        from foldrun_app.models.of3.startup import _auto_detect_gpus
+
+        config = OF3Config()
+        with patch(
+            "foldrun_app.core.hardware.detect_supported_gpus",
+            return_value=["L4", "A100", "V100"],
+        ):
+            _auto_detect_gpus(config)
+        assert config.supported_gpus == ["L4", "A100"]

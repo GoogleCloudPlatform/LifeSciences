@@ -175,6 +175,7 @@ class OF3SubmitPredictionTool(OF3Tool):
 
         resolved_gpu = hardware_config["predict_accel"]
         accel_to_label = {
+            "NVIDIA_L4": "l4",
             "NVIDIA_TESLA_A100": "a100",
             "NVIDIA_A100_80GB": "a100-80gb",
         }

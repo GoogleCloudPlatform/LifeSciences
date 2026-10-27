@@ -72,7 +72,7 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
                 'input': FASTA content, BOLTZ2 JSON content, or file path,
                 'job_name': Optional job name,
                 'num_model_seeds': Number of seeds (default: 1),
-                'gpu_type': 'auto', 'A100', or 'A100_80GB',
+                'gpu_type': 'auto', 'L4', 'A100', or 'A100_80GB',
                 'enable_flex_start': Enable DWS FLEX_START (default: true),
             }
 
@@ -153,6 +153,7 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
 
         resolved_gpu = hardware_config["predict_accel"]
         accel_to_label = {
+            "NVIDIA_L4": "l4",
             "NVIDIA_TESLA_A100": "a100",
             "NVIDIA_A100_80GB": "a100-80gb",
         }
