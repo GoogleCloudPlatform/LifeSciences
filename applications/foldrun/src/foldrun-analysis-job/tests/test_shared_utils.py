@@ -277,3 +277,101 @@ class TestBuildAndUploadRunArchive:
         assert data == {"job_id": "job-123", "status": "ok"}
         mock_blob.download_as_text.assert_called_once_with()
         mock_blob.download_as_string.assert_not_called()
+
+
+class TestSharedUtilsFixes:
+    """Regression tests for NaN sanitization, GCS URI validation, zstd cap, and mmCIF parsing."""
+
+    def test_sanitize_data_replaces_nan_inf_with_none(self):
+        import numpy as np
+
+        raw = {
+            "a": float("nan"),
+            "b": float("inf"),
+            "c": float("-inf"),
+            "d": np.float32("nan"),
+            "e": [1.0, float("nan"), 92.5],
+        }
+        cleaned = shared_utils._sanitize_json_floats(raw)
+        assert cleaned == {
+            "a": None,
+            "b": None,
+            "c": None,
+            "d": None,
+            "e": [1.0, None, 92.5],
+        }
+
+    def test_calculate_plddt_stats_empty_and_all_nan_never_fabricates(self):
+        empty_stats = shared_utils.calculate_plddt_stats([])
+        assert empty_stats["mean"] is None
+        assert empty_stats["min"] is None
+        assert empty_stats["max"] is None
+        assert empty_stats["confidence_category"] == "uncomputed"
+
+        nan_stats = shared_utils.calculate_plddt_stats([float("nan"), None])
+        assert nan_stats["mean"] is None
+        assert nan_stats["confidence_category"] == "uncomputed"
+        assert shared_utils.get_quality_assessment(None) == "uncomputed"
+
+    def test_validate_gcs_uri_in_bucket_preserves_s_and_g_bucket_chars(self):
+        import pytest
+
+        bucket, obj = shared_utils.validate_gcs_uri_in_bucket(
+            "gs://storage-bucket/analysis/summary.json",
+            expected_bucket="storage-bucket",
+        )
+        assert bucket == "storage-bucket"
+        assert obj == "analysis/summary.json"
+
+        with pytest.raises(ValueError, match="Unauthorized GCS bucket"):
+            shared_utils.validate_gcs_uri_in_bucket(
+                "gs://other-bucket/analysis/summary.json",
+                expected_bucket="storage-bucket",
+            )
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            shared_utils.validate_gcs_uri_in_bucket(
+                "gs://storage-bucket/analysis/../secret.json",
+                expected_bucket="storage-bucket",
+            )
+
+    def test_parse_cif_chains_headerless_18col_mmcif_and_fixed_pdb_and_nan_bfactor(
+        self,
+    ):
+        import pytest
+
+        mmcif_18 = (
+            "ATOM 1 N N . MET A 1 1 ? 10.123 20.456 30.789 1.00 88.50 ? 1 MET A N 1\n"
+            "ATOM 2 CA C . MET A 1 1 ? 11.123 21.456 31.789 1.00 nan ? 1 MET A CA 1\n"
+            "ATOM 3 N N . GLY B 2 1 ? 12.123 22.456 32.789 1.00 76.25 ? 1 GLY B N 1\n"
+        )
+        chains, plddts = shared_utils.parse_cif_chains(mmcif_18, extract_plddt=True)
+        assert [c["chain_id"] for c in chains] == ["A", "B"]
+        assert chains[0]["atom_count"] == 2
+        assert chains[0]["residue_count"] == 1
+        assert chains[1]["atom_count"] == 1
+        assert plddts == [pytest.approx(88.50), None, pytest.approx(76.25)]
+
+        pdb_text = (
+            "ATOM      1  N   MET A   1      10.123  20.456  30.789  1.00 91.20           N\n"
+            "ATOM      2  CA  MET A   1      11.123  21.456  31.789  1.00 93.40           C\n"
+        )
+        pdb_chains, pdb_plddts = shared_utils.parse_cif_chains(
+            pdb_text, extract_plddt=True
+        )
+        assert len(pdb_chains) == 1
+        assert pdb_chains[0]["chain_id"] == "A"
+        assert pdb_chains[0]["residue_count"] == 1
+        assert pdb_plddts == [pytest.approx(91.20), pytest.approx(93.40)]
+
+    def test_decompress_zst_bytes_roundtrip_and_size_cap(self):
+        import pytest
+        import zstandard as zstd
+
+        payload = b'{"iptm": null, "ptm": 0.89, "ranking_score": 0.89}'
+        compressed = zstd.ZstdCompressor().compress(payload)
+        assert shared_utils.decompress_zst_bytes(compressed) == payload
+
+        big_compressed = zstd.ZstdCompressor().compress(b"A" * 4096)
+        with pytest.raises(ValueError, match="exceeds safety limit"):
+            shared_utils.decompress_zst_bytes(big_compressed, max_bytes=1024)

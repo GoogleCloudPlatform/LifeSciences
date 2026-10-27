@@ -56,6 +56,7 @@ resource "google_project_service" "apis" {
     "compute.googleapis.com",
     "file.googleapis.com",
     "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
     "iap.googleapis.com",
     "logging.googleapis.com",
     "run.googleapis.com",
@@ -112,13 +113,17 @@ locals {
   create_network = var.network_name == ""
 
   network_project_id     = var.network_project_id != "" ? var.network_project_id : var.project_id
-  network_project_number = var.network_project_number != "" ? var.network_project_number : data.google_project.project.number
+  network_project_number = var.network_project_number != "" ? var.network_project_number : data.google_project.network_project.number
 
   network_name = local.create_network ? google_compute_network.foldrun_vpc[0].name : var.network_name
   network_id   = local.create_network ? google_compute_network.foldrun_vpc[0].id : data.google_compute_network.existing_vpc[0].id
 
   subnet_name = local.create_network ? google_compute_subnetwork.foldrun_subnet[0].name : var.subnet_name
   subnet_id   = local.create_network ? google_compute_subnetwork.foldrun_subnet[0].id : data.google_compute_subnetwork.existing_subnet[0].id
+}
+
+data "google_project" "network_project" {
+  project_id = local.network_project_id
 }
 
 data "google_compute_network" "existing_vpc" {

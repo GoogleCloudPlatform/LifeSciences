@@ -14,6 +14,7 @@
 
 """Agent Platform utilities for pipeline management."""
 
+import json
 import logging
 from typing import Any
 
@@ -24,6 +25,23 @@ from google.cloud import aiplatform_v1 as vertex_ai
 from foldrun_app.core.vertex_utils import get_pipeline_job as get_pipeline_job
 
 logger = logging.getLogger(__name__)
+
+
+def _is_valid_proto_timestamp(dt: Any) -> bool:
+    """Return True if dt is a non-null timestamp after the unset protobuf epoch (year > 1970)."""
+    if not dt:
+        return False
+    year = getattr(dt, "year", None)
+    if isinstance(year, int) and year <= 1970:
+        return False
+    return True
+
+
+def _format_proto_timestamp(dt: Any) -> str | None:
+    """Format a protobuf/datetime timestamp as ISO-8601, ignoring unset epoch (<= 1970)."""
+    if not _is_valid_proto_timestamp(dt):
+        return None
+    return dt.isoformat()
 
 
 def _convert_proto_to_dict(obj: Any) -> Any:
@@ -108,22 +126,26 @@ def get_job_status(job: vertex_ai.PipelineJob) -> dict[str, Any]:
     Returns:
         Status dictionary
     """
+    create_ts = getattr(job, "create_time", None)
+    start_ts = getattr(job, "start_time", None)
+    end_ts = getattr(job, "end_time", None)
+
     status = {
         "job_id": job.name,
         "display_name": job.display_name,
         "state": job.state.name,
-        "create_time": job.create_time.isoformat() if job.create_time else None,
-        "start_time": job.start_time.isoformat() if job.start_time else None,
-        "end_time": job.end_time.isoformat() if job.end_time else None,
+        "create_time": _format_proto_timestamp(create_ts),
+        "start_time": _format_proto_timestamp(start_ts),
+        "end_time": _format_proto_timestamp(end_ts),
         "labels": dict(job.labels) if job.labels else {},
         "pipeline_spec": job.pipeline_spec.get("pipelineInfo", {}).get("name", "unknown")
         if job.pipeline_spec
         else "unknown",
     }
 
-    # Calculate duration if job is complete
-    if job.end_time and job.start_time:
-        duration = job.end_time - job.start_time
+    # Calculate duration if job is complete and start_time is not unset epoch
+    if _is_valid_proto_timestamp(end_ts) and _is_valid_proto_timestamp(start_ts):
+        duration = end_ts - start_ts
         status["duration_seconds"] = duration.total_seconds()
 
     if hasattr(job, "error") and job.error:
@@ -143,26 +165,34 @@ def get_task_details(job: vertex_ai.PipelineJob) -> dict[str, Any]:
         Task details dictionary including execution metadata like GPU type and flex_start settings
     """
     if not hasattr(job, "job_detail") or not job.job_detail:
-        return {"tasks": {}, "predictions": []}
+        return {"tasks": {}, "task_list": [], "predictions": []}
 
     tasks = {}
+    task_list = []
     predictions = []
+    job_display_name = getattr(job, "display_name", "") or ""
 
     for task in job.job_detail.task_details:
         task_info = {
             "task_id": task.task_id,
             "task_name": task.task_name,
             "state": task.state.name if hasattr(task, "state") else "UNKNOWN",
-            "create_time": task.create_time.isoformat()
-            if hasattr(task, "create_time") and task.create_time
-            else None,
-            "start_time": task.start_time.isoformat()
-            if hasattr(task, "start_time") and task.start_time
-            else None,
-            "end_time": task.end_time.isoformat()
-            if hasattr(task, "end_time") and task.end_time
-            else None,
+            "create_time": _format_proto_timestamp(getattr(task, "create_time", None)),
+            "start_time": _format_proto_timestamp(getattr(task, "start_time", None)),
+            "end_time": _format_proto_timestamp(getattr(task, "end_time", None)),
         }
+
+        # Extract CustomJob resource name from executor_detail.custom_job_detail.job or
+        # executor_detail.container_detail.main_job (primary) or execution.metadata (fallback)
+        custom_job_name = None
+        if hasattr(task, "executor_detail") and task.executor_detail:
+            cjd = getattr(task.executor_detail, "custom_job_detail", None)
+            if cjd and getattr(cjd, "job", ""):
+                custom_job_name = str(cjd.job)
+            if not custom_job_name:
+                cd = getattr(task.executor_detail, "container_detail", None)
+                if cd and getattr(cd, "main_job", ""):
+                    custom_job_name = str(cd.main_job)
 
         # Extract execution metadata (GPU type, flex_start, etc.)
         if hasattr(task, "execution") and task.execution:
@@ -171,6 +201,25 @@ def get_task_details(job: vertex_ai.PipelineJob) -> dict[str, Any]:
                 # Convert protobuf MapComposite to native dict
                 execution_metadata = _convert_proto_to_dict(task.execution.metadata)
             task_info["execution_metadata"] = execution_metadata
+            if not custom_job_name and "main_job" in execution_metadata:
+                custom_job_name = str(execution_metadata["main_job"])
+            elif not custom_job_name:
+                gcp_res_raw = execution_metadata.get(
+                    "output:gcp_resources"
+                ) or execution_metadata.get("gcp_resources")
+                if gcp_res_raw:
+                    try:
+                        resources = json.loads(gcp_res_raw)
+                        for res in resources.get("resources", []):
+                            if res.get("resourceType") == "CustomJob":
+                                custom_job_name = res.get("resourceUri")
+                                break
+                    except Exception:
+                        pass
+
+        if custom_job_name:
+            task_info["custom_job_name"] = custom_job_name
+            task_info["custom_job_id"] = custom_job_name.split("/")[-1]
 
         # Extract error information if task failed
         if hasattr(task, "error") and task.error:
@@ -180,6 +229,18 @@ def get_task_details(job: vertex_ai.PipelineJob) -> dict[str, Any]:
             }
 
         tasks[task.task_name] = task_info
+
+        # Filter out internal KFP DAG wrapper tasks
+        tname = task.task_name
+        is_wrapper = (
+            tname.startswith("for-loop-")
+            or tname.startswith("condition-")
+            or (job_display_name and tname == job_display_name)
+            or "-gw-" in tname
+            or "-inference-pipeline" in tname
+        )
+        if not is_wrapper:
+            task_list.append(task_info)
 
         # Extract prediction metrics
         if task.task_name == "predict" and hasattr(task, "outputs"):
@@ -208,6 +269,7 @@ def get_task_details(job: vertex_ai.PipelineJob) -> dict[str, Any]:
 
     return {
         "tasks": tasks,
+        "task_list": task_list,
         "predictions": predictions,
         "best_prediction": predictions[0] if predictions else None,
     }

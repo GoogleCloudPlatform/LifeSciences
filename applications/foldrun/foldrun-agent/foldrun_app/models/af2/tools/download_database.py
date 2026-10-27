@@ -165,7 +165,7 @@ class DownloadDatabaseTool(AF2Tool):
             f"echo '=== Download complete ==='\n"
             f"ls -lh {safe_dest_path_slash} | head -20\n"
             f"echo {shlex.quote(f'=== Backing up to GCS: {gcs_output_path} ===')}\n"
-            f"gcloud storage rsync --recursive {safe_dest_path_slash} {safe_gcs_output_path} 2>&1\n"
+            f"gcloud storage cp --recursive {safe_dest_path}/* {safe_gcs_output_path} 2>&1\n"
             f"echo '=== Done ==='\n"
         )
 
@@ -307,7 +307,7 @@ class ConvertMMseqs2Tool(AF2Tool):
                     "  exit 1",
                     "fi",
                     "echo '=== Syncing to GCS ==='",
-                    f"gcloud storage rsync --recursive {nfs_mount}/{subdir}/ gs://{self.config.databases_bucket_name}/{subdir}/ 2>&1",
+                    f"gcloud storage cp --recursive {shlex.quote(f'{nfs_mount}/{subdir}')}/* {shlex.quote(f'gs://{self.config.databases_bucket_name}/{subdir}/')} 2>&1",
                     f"echo '=== {db_name} conversion complete ==='",
                 ]
             )

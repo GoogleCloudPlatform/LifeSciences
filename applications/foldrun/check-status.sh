@@ -18,12 +18,15 @@
 # Use this script to check the deployment progress and health of your environment
 # ==============================================================================
 
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$_SCRIPT_DIR"
+
 PROJECT_ID=${1:?'Usage: ./check-status.sh <PROJECT_ID> [REGION]'}
 REGION=${2:-"us-central1"}
 TERRAFORM_DIR="terraform"
 
-# Switch to the correct account and project
-gcloud config set project "$PROJECT_ID" >/dev/null 2>&1
+# Scope gcloud commands to PROJECT_ID without mutating the user's global gcloud config
+export CLOUDSDK_CORE_PROJECT="$PROJECT_ID"
 
 echo "================================================================================"
 echo "🔍 FoldRun Ecosystem Status Checklist"

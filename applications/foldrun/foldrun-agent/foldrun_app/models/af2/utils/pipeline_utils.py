@@ -19,7 +19,11 @@ import os
 import threading
 from typing import Any
 
-from foldrun_app.core.pipeline_utils import compile_pipeline  # noqa: F401
+from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
+from foldrun_app.core.pipeline_utils import (  # noqa: F401
+    compile_pipeline,
+    model_pipeline_load_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,36 +41,20 @@ def load_vertex_pipeline(enable_flex_start: bool = False, msa_method: str = "jac
     Returns:
         Pipeline function
     """
-    import sys
-
-    with _PIPELINE_LOAD_LOCK:
-        # Add vertex_pipeline to sys.path so 'config' module can be imported
-        # This is needed for component compilation
-        vertex_pipeline_dir = os.path.join(os.path.dirname(__file__), "..", "pipeline")
-        vertex_pipeline_dir = os.path.abspath(vertex_pipeline_dir)
-
-        while vertex_pipeline_dir in sys.path:
-            sys.path.remove(vertex_pipeline_dir)
-        sys.path.insert(0, vertex_pipeline_dir)
-
-        # Evict cached 'config' module so AF2's pipeline/config.py is used.
-        # Both AF2 and OF3 components use `import config as config` (bare import).
-        # Python caches the first one — evicting ensures the correct config loads.
-        sys.modules.pop("config", None)
-
-        from foldrun_app.models.af2.pipeline.pipelines.alphafold_inference_pipeline import (
-            create_alphafold_inference_pipeline,
-        )
-
-        # Create pipeline with specified scheduling strategy
-        strategy = "FLEX_START" if enable_flex_start else "STANDARD"
-        logger.info(
-            f"Loading AlphaFold inference pipeline with {strategy} scheduling, msa_method={msa_method}"
-        )
-
-        pipeline = create_alphafold_inference_pipeline(strategy=strategy, msa_method=msa_method)
-
-        return pipeline
+    vertex_pipeline_dir = os.path.join(os.path.dirname(__file__), "..", "pipeline")
+    with GLOBAL_COMPILE_LOCK, _PIPELINE_LOAD_LOCK:
+        with model_pipeline_load_context(
+            pkg_prefix="foldrun_app.models.af2.pipeline",
+            vertex_pipeline_dir=vertex_pipeline_dir,
+            pipeline_module_name="alphafold_inference_pipeline",
+        ) as pipe_mod:
+            strategy = "FLEX_START" if enable_flex_start else "STANDARD"
+            logger.info(
+                f"Loading AlphaFold inference pipeline with {strategy} scheduling, msa_method={msa_method}"
+            )
+            return pipe_mod.create_alphafold_inference_pipeline(
+                strategy=strategy, msa_method=msa_method
+            )
 
 
 def get_pipeline_parameters(
