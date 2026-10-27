@@ -99,6 +99,11 @@ class CoreConfig:
         return os.getenv("FILESTORE_ID")
 
     @property
+    def filestore_location(self) -> str:
+        """Optional explicit Filestore location (region for REGIONAL/ENTERPRISE, zone for BASIC/ZONAL)."""
+        return os.getenv("FILESTORE_LOCATION", "")
+
+    @property
     def filestore_ip(self) -> str | None:
         return os.getenv("FILESTORE_IP")
 

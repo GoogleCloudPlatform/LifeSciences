@@ -94,7 +94,7 @@ Additionally, Terraform grants:
 │                                                         │
 │  ┌──────────────────────────────────────────┐            │
 │  │ Filestore NFS (10.1.0.0/16 peering)     │            │
-│  │ 4TB SSD — genetic databases             │            │
+│  │ 1 TiB Regional — genetic databases      │            │
 │  └──────────────────────────────────────────┘            │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -192,7 +192,7 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 | Resource | Name | Purpose |
 |----------|------|---------|
 | VPC + Subnet + Cloud NAT | `foldrun-network` | Private network with outbound internet |
-| Filestore | `foldrun-nfs` | 2.5TB NFS for genetic databases (Basic SSD) |
+| Filestore | `foldrun-nfs` | 1 TiB NFS for genetic databases (Regional, replicated across zones in the region) |
 | GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, AF3 results, analysis bundles |
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups + AF3 630 GB MSA bundle |
 | Artifact Registry | `foldrun-repo` | Container images |
@@ -488,14 +488,29 @@ uv run adk web foldrun_app
 
 | Component | Estimated Monthly Cost |
 |-----------|----------------------|
-| Filestore (2.5TB Basic SSD) | ~$770/mo |
+| Filestore (1 TiB Regional) | ~$461/mo |
 | GCS (~500GB databases + results) | ~$15/mo |
 | Agent Runtime (idle) | ~$0 (pay per query) |
 | Cloud Run (viewer + analysis, idle) | ~$0 (scale to zero) |
 | GPU predictions (per job) | $2–15 per job (L4: ~$2, A100: ~$8–15) |
 | Gemini API (per analysis) | ~$0.01–0.05 per analysis |
 
-The dominant cost is Filestore (~$770/mo). To reduce costs when not in use,
-consider deleting the Filestore and re-downloading databases when needed.
-Terraform ignores capacity changes after provisioning, so you can resize
-via Console or gcloud without drift.
+The dominant cost is Filestore (~$461/mo, us-central1 list price). FoldRun
+defaults to the `REGIONAL` tier at 1 TiB (`filestore_tier`,
+`filestore_capacity_gb`). This costs ~$307/mo less than the legacy
+`BASIC_SSD` tier, which has a 2.5 TiB minimum (~$768/mo). Regional capacity
+can be resized up or down in 1 GiB steps. Terraform ignores capacity changes
+after provisioning, so you can resize with the Console or gcloud without drift.
+A 1 TiB Regional instance has lower read throughput than Basic SSD
+(~120 MiB/s vs ~1,200 MiB/s), so concurrent CPU MSA steps run slower. See
+[README: Filestore Tier](README.md#filestore-tier) for the performance and
+cost options (`filestore_max_iops`).
+
+> **Upgrading an existing deployment:** switching from `BASIC_SSD` to `REGIONAL`
+> replaces the Filestore instance and **erases its contents**. Run
+> `--steps infra`, then restore databases with `--steps data` (option 2,
+> "Restore from a GCS bucket"). See
+> [README: Migrating an existing Basic SSD Filestore](README.md#migrating-an-existing-basic-ssd-filestore).
+
+To reduce costs further when not in use, delete the Filestore and restore
+databases from GCS when needed.

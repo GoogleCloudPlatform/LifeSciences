@@ -80,15 +80,40 @@ variable "network_project_number" {
 
 
 variable "filestore_tier" {
-  description = "Tier for the Filestore instance (BASIC_SSD avoids throughput throttling during concurrent database downloads)"
+  description = <<-EOT
+    Tier for the Filestore instance. Defaults to REGIONAL: replicated across zones in
+    var.region, resizable up or down in 1 GiB steps, with no 2.5 TiB minimum
+    (1 TiB is ~$461/mo in us-central1, compared with ~$768/mo for the 2.5 TiB legacy BASIC_SSD
+    minimum). REGIONAL and ENTERPRISE instances are created in var.region; BASIC_HDD,
+    BASIC_SSD, and ZONAL instances are created in local.zone (var.zone or <region>-a).
+    WARNING: changing the tier on an existing deployment makes Terraform replace the
+    instance, which erases all NFS data. Restore it from the GCS databases bucket
+    afterwards (see README "Migrating an existing Basic SSD Filestore").
+  EOT
   type        = string
-  default     = "BASIC_SSD"
+  default     = "REGIONAL"
+
+  validation {
+    condition     = contains(["REGIONAL", "ZONAL", "ENTERPRISE", "BASIC_SSD", "BASIC_HDD"], var.filestore_tier)
+    error_message = "filestore_tier must be one of REGIONAL, ZONAL, ENTERPRISE, BASIC_SSD, BASIC_HDD."
+  }
 }
 
 variable "filestore_capacity_gb" {
-  description = "Initial capacity for Filestore in GB (min 2560 for BASIC_SSD). AF2+OF3 reduced uses ~944GB, full BFD adds ~272GB. Capacity changes after provisioning are ignored by Terraform — resize freely via Console or gcloud."
+  description = "Initial Filestore capacity in GiB. REGIONAL: 1024 to 10239 in 1 GiB steps (sizes under 1024 also require filestore_max_iops > 0); ZONAL: min 1024; BASIC_HDD: min 1024; BASIC_SSD: min 2560. AF2 reduced + OF3 use ~944 GB and full BFD adds ~272 GB. Terraform ignores capacity changes after provisioning, so you can resize with the Console or gcloud without drift. REGIONAL and ZONAL can also shrink."
   type        = number
-  default     = 2560
+  default     = 1024
+}
+
+variable "filestore_max_iops" {
+  description = "Optional fixed IOPS for REGIONAL/ZONAL custom performance. 0 (default) keeps capacity-based performance (REGIONAL 1 TiB: ~12,000 read IOPS, ~120 MiB/s read). If > 0, billing changes to a per-instance fee + a lower per-GiB rate + a per-IOPS rate (see README cost table). Allowed range: 4,000-17,000 IOPS per TiB of capacity, and at least 2,000."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.filestore_max_iops == 0 || var.filestore_max_iops >= 2000
+    error_message = "filestore_max_iops must be 0 (capacity-based performance) or >= 2000."
+  }
 }
 
 variable "filestore_id" {

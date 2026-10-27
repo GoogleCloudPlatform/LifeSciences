@@ -198,66 +198,27 @@ class BaseTool:
 
     def _get_filestore_info(self):
         """
-        Get Filestore IP and network from Filestore API.
+        Get Filestore IP and network from Filestore API (supports REGIONAL and ZONAL/BASIC tiers).
 
         Returns:
             Tuple of (filestore_ip, filestore_network)
         """
-        # If already configured in env, use those values
         if self.config.filestore_ip and self.config.filestore_network:
             return self.config.filestore_ip, self.config.filestore_network
 
-        # Otherwise, fetch from Filestore API
         try:
-            from google.cloud import filestore_v1, resourcemanager_v3
+            from foldrun_app.core.batch import get_filestore_info
 
-            client = filestore_v1.CloudFilestoreManagerClient()
-            name = f"projects/{self.config.project_id}/locations/{self.config.zone}/instances/{self.config.filestore_id}"
-
-            instance = client.get_instance(name=name)
-            filestore_ip = instance.networks[0].ip_addresses[0]
-            filestore_network = instance.networks[0].network
-
-            # Get project number (needed for fully qualified network path)
-            projects_client = resourcemanager_v3.ProjectsClient()
-            project_name = f"projects/{self.config.project_id}"
-            project = projects_client.get_project(name=project_name)
-            project_number = project.name.split("/")[-1]  # Extract number from "projects/123456789"
-
-            # Ensure network is fully qualified as required by Agent Platform:
-            #   projects/{project_number}/global/networks/{network}
-            # Filestore API may return just the name or a project_id-based path.
-            match = re.match(r"projects/([^/]+)/global/networks/([^/]+)", filestore_network)
-            if match:
-                project_id_or_number = match.group(1)
-                network_name = match.group(2)
-
-                # Convert project_id to number if it's not already a number
-                if not project_id_or_number.isdigit():
-                    if self.config.network_project_number:
-                        project_number = self.config.network_project_number
-                    else:
-                        try:
-                            projects_client = resourcemanager_v3.ProjectsClient()
-                            project_name = f"projects/{project_id_or_number}"
-                            project = projects_client.get_project(name=project_name)
-                            project_number = project.name.split("/")[-1]
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to get project number for {project_id_or_number}: {e}. Using project ID as is."
-                            )
-                            project_number = project_id_or_number
-                else:
-                    project_number = project_id_or_number
-
-                filestore_network = f"projects/{project_number}/global/networks/{network_name}"
-            else:
-                network_name = filestore_network.split("/")[-1]
-                filestore_network = f"projects/{project_number}/global/networks/{network_name}"
-
-            logger.info(f"Retrieved Filestore info: IP={filestore_ip}, Network={filestore_network}")
-            return filestore_ip, filestore_network
-
+            return get_filestore_info(
+                project_id=self.config.project_id,
+                zone=self.config.zone,
+                filestore_id=self.config.filestore_id,
+                filestore_ip=self.config.filestore_ip,
+                filestore_network=self.config.filestore_network,
+                region=getattr(self.config, "region", None),
+                filestore_location=getattr(self.config, "filestore_location", None),
+                network_project_number=getattr(self.config, "network_project_number", None),
+            )
         except Exception as e:
             logger.error(f"Failed to retrieve Filestore info: {e}")
             raise
