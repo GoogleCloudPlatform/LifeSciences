@@ -15,10 +15,10 @@
 """Base class for Boltz2 tools."""
 
 import logging
-import os
 from typing import Any
 
 from foldrun_app.core.base_tool import BaseTool
+from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK, setup_compile_env_vars
 
 from .config import BOLTZ2Config
 
@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 class BOLTZ2Tool(BaseTool):
     """Base class for Boltz2 tools following ToolUniverse pattern."""
+
+    _compile_env_lock = GLOBAL_COMPILE_LOCK
 
     def __init__(self, tool_config: dict[str, Any], config: BOLTZ2Config | None = None):
         super().__init__(tool_config, config or BOLTZ2Config())
@@ -54,7 +56,7 @@ class BOLTZ2Tool(BaseTool):
             "DWS_MAX_WAIT_HOURS": str(hardware_config.get("dws_max_wait_hours", 168)),
         }
 
-        os.environ.update(env_vars)
+        return setup_compile_env_vars(env_vars, lock=self._compile_env_lock)
 
     @staticmethod
     def _recommend_gpu(num_tokens: int) -> str:

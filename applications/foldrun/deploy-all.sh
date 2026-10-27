@@ -56,6 +56,9 @@ usage() {
     echo "  --clean        Remove generated build artifacts (.egg-info, .venv, etc.)"
     echo "  --gemini-enterprise-app-id APP_ID"
     echo "                         App ID for Gemini Enterprise registration."
+    echo "  --network NETWORK      Existing VPC network name (Shared VPC / custom VPC)."
+    echo "  --subnet SUBNET        Existing subnetwork name (Shared VPC / custom VPC)."
+    echo "  --network-project-id P Host project ID for Shared VPC (defaults to PROJECT_ID)."
     echo ""
     echo "Environment variables:"
     echo "  DOWNLOAD_MODE      Database download mode: reduced (default), full, or core (weights only)"
@@ -146,6 +149,18 @@ while [[ $# -gt 0 ]]; do
             GEMINI_ENTERPRISE_APP_ID="$2"
             shift 2
             ;;
+        --network)
+            NETWORK_NAME="$2"
+            shift 2
+            ;;
+        --subnet)
+            SUBNET_NAME="$2"
+            shift 2
+            ;;
+        --network-project-id)
+            NETWORK_PROJECT_ID="$2"
+            shift 2
+            ;;
         --clean)
             echo "Cleaning generated build artifacts..."
             rm -rf foldrun-agent/.venv
@@ -174,6 +189,7 @@ done
 # and CI/CD injected values always take precedence.
 # ==============================================================================
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$_SCRIPT_DIR"
 if [[ -f "$_SCRIPT_DIR/.env" ]]; then
     echo "Loading configuration from $_SCRIPT_DIR/.env"
     while IFS='=' read -r key val; do
@@ -234,8 +250,28 @@ AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
 OF3_VERSION=${OF3_VERSION:-"0.5-pixi@sha256:8764f7320ff12c52e9b9ec6bb0047f71df0ab197d401d04a78a51f48e9913335"}
 BOLTZ_VERSION=${BOLTZ_VERSION:-"2.2.1"}
 ENABLE_VIEWER_IAP=${ENABLE_VIEWER_IAP:-"true"}
+NETWORK_NAME=${NETWORK_NAME:-""}
+SUBNET_NAME=${SUBNET_NAME:-""}
+NETWORK_PROJECT_ID=${NETWORK_PROJECT_ID:-""}
+NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER:-""}
 GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID:-""}
-IAP_ACCESS_DOMAIN=${IAP_ACCESS_DOMAIN:-$(gcloud config get-value account | awk -F '@' '{print $2}')}
+ACTIVE_ACCOUNT=$(gcloud config get-value account 2>/dev/null || echo "")
+DETECTED_DOMAIN=$(echo "$ACTIVE_ACCOUNT" | awk -F '@' '{print $2}')
+IAP_ACCESS_DOMAIN=${IAP_ACCESS_DOMAIN:-$DETECTED_DOMAIN}
+IAP_ACCESS_MEMBERS_JSON=${IAP_ACCESS_MEMBERS_JSON:-""}
+if [[ "$IAP_ACCESS_DOMAIN" == "gmail.com" || "$IAP_ACCESS_DOMAIN" == "googlemail.com" ]]; then
+    echo "NOTE: Consumer domain '$IAP_ACCESS_DOMAIN' cannot be used as a Google Cloud IAM domain principal."
+    IAP_ACCESS_DOMAIN=""
+    if [[ -z "$IAP_ACCESS_MEMBERS_JSON" && -n "$ACTIVE_ACCOUNT" ]]; then
+        IAP_ACCESS_MEMBERS_JSON="[\"user:${ACTIVE_ACCOUNT}\"]"
+    fi
+elif [[ "$IAP_ACCESS_DOMAIN" == *.gserviceaccount.com ]]; then
+    echo "NOTE: Service account domain '$IAP_ACCESS_DOMAIN' cannot be used as an IAP domain principal; skipping domain-wide IAP binding."
+    IAP_ACCESS_DOMAIN=""
+    if [[ -z "$IAP_ACCESS_MEMBERS_JSON" && -n "$ACTIVE_ACCOUNT" ]]; then
+        IAP_ACCESS_MEMBERS_JSON="[\"serviceAccount:${ACTIVE_ACCOUNT}\"]"
+    fi
+fi
 TERRAFORM_DIR="terraform"
 BUCKET_NAME="${PROJECT_ID}-foldrun-data"
 
@@ -334,6 +370,11 @@ EOF
             _tf() { echo "$tf_json" | python3 -c \
                 "import json,sys; d=json.load(sys.stdin); v=d.get('$1',{}).get('value',''); print(v) if v else None" \
                 2>/dev/null || true; }
+            tf_sa=$(_tf agent_sa_email)
+            if [[ -n "$tf_sa" ]] && [[ "$tf_sa" != *"@${PROJECT_ID}.iam.gserviceaccount.com" ]]; then
+                echo "Terraform state belongs to another project ($tf_sa); using standard conventions for $PROJECT_ID" >&2
+                exit 0
+            fi
             v=$(_tf gcs_bucket_name);        if [[ -n "$v" ]]; then echo "GCS_BUCKET=$v"; fi
             v=$(_tf artifact_registry_repo); if [[ -n "$v" ]]; then echo "AR_REPO=$v"; fi
             v=$(_tf filestore_id);           if [[ -n "$v" ]]; then echo "FILESTORE_ID=$v"; fi
@@ -354,6 +395,10 @@ EOF
             [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$key"="${!key:-$val}"
         done < "$_tf_env"
         rm -f "$_tf_env"
+    fi
+
+    if [[ -z "${NETWORK_PROJECT_NUMBER:-}" ]] && [[ -n "${NETWORK_PROJECT_ID:-}" ]]; then
+        export NETWORK_PROJECT_NUMBER=$(gcloud projects describe "$NETWORK_PROJECT_ID" --format='value(projectNumber)' 2>/dev/null || true)
     fi
 
     if [[ "${AF3_ENDPOINT_LOCATION,,}" == "global" ]] || [[ -z "${AF3_ENDPOINT_LOCATION:-}" ]]; then
@@ -444,6 +489,11 @@ EOF
     [[ -n "${FILESTORE_TIER:-}" ]] && TF_VARS+=(-var="filestore_tier=${FILESTORE_TIER}")
     [[ -n "${FILESTORE_CAPACITY_GB:-}" ]] && TF_VARS+=(-var="filestore_capacity_gb=${FILESTORE_CAPACITY_GB}")
     [[ -n "${FILESTORE_MAX_IOPS:-}" ]] && TF_VARS+=(-var="filestore_max_iops=${FILESTORE_MAX_IOPS}")
+    [[ -n "${IAP_ACCESS_MEMBERS_JSON:-}" ]] && TF_VARS+=(-var="iap_access_members=${IAP_ACCESS_MEMBERS_JSON}")
+    [[ -n "${NETWORK_NAME:-}" ]] && TF_VARS+=(-var="network_name=${NETWORK_NAME}")
+    [[ -n "${SUBNET_NAME:-}" ]] && TF_VARS+=(-var="subnet_name=${SUBNET_NAME}")
+    [[ -n "${NETWORK_PROJECT_ID:-}" ]] && TF_VARS+=(-var="network_project_id=${NETWORK_PROJECT_ID}")
+    [[ -n "${NETWORK_PROJECT_NUMBER:-}" ]] && TF_VARS+=(-var="network_project_number=${NETWORK_PROJECT_NUMBER}")
 
     # Plan first so we can stop before Terraform deletes the Filestore instance
     # (e.g. switching filestore_tier between BASIC_SSD, ZONAL, and REGIONAL). A

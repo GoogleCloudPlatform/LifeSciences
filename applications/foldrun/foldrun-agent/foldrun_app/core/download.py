@@ -39,6 +39,7 @@ from foldrun_app.core import batch as batch_utils
 logger = logging.getLogger(__name__)
 
 DATABASES_YAML = Path(__file__).parent.parent.parent / "databases.yaml"
+BUNDLED_DATABASES_YAML = Path(__file__).parent.parent / "databases.yaml"
 
 
 def _get_models(db_config: dict[str, Any]) -> list[str]:
@@ -58,10 +59,12 @@ def _get_models(db_config: dict[str, Any]) -> list[str]:
 def load_manifest(path: Path | None = None) -> dict[str, Any]:
     """Load and return the databases.yaml manifest.
 
-    Returns empty dict if the file doesn't exist (e.g., in Agent Runtime
-    where databases.yaml isn't bundled — download tools aren't used there).
+    Checks parent repo/container root first (DATABASES_YAML) and falls back to
+    bundled package location (BUNDLED_DATABASES_YAML). Returns empty dict if
+    neither exists (e.g., in Agent Runtime where download tools aren't used).
     """
-    path = path or DATABASES_YAML
+    if path is None:
+        path = DATABASES_YAML if DATABASES_YAML.exists() else BUNDLED_DATABASES_YAML
     if not path.exists():
         logger.warning(f"databases.yaml not found at {path}, download tools will be unavailable")
         return {"databases": {}, "modes": {}}
@@ -232,11 +235,11 @@ def submit_download(
     # Determine data source: GCS restore or internet download
     if source_bucket:
         source_gcs_path = f"gs://{source_bucket}/{nfs_path}/"
-        safe_source_gcs_path = shlex.quote(source_gcs_path)
+        safe_source_gcs_glob = shlex.quote(f"{source_gcs_path}*")
         safe_dest_path_slash = shlex.quote(f"{dest_path}/")
         download_script = (
             f"echo {shlex.quote(f'=== Restoring from GCS: {source_gcs_path} ===')}\n"
-            f"gcloud storage rsync --recursive {safe_source_gcs_path} {safe_dest_path_slash} 2>&1\n"
+            f"gcloud storage cp --recursive {safe_source_gcs_glob} {safe_dest_path_slash} 2>&1\n"
         )
         data_source = f"gcs:{source_bucket}"
     else:
@@ -259,7 +262,7 @@ def submit_download(
             f"else\n"
             f"  SYNC_SOURCE={safe_dest_path_slash}\n"
             f"fi\n"
-            f'gcloud storage rsync --recursive "$SYNC_SOURCE" {safe_gcs_path} 2>&1\n'
+            f'gcloud storage cp --recursive "${{SYNC_SOURCE%/}}"/* {safe_gcs_path} 2>&1\n'
         )
 
     full_script = (
@@ -274,10 +277,11 @@ def submit_download(
         f"echo '=== Done ==='\n"
     )
 
-    # Job ID: <model>-dl-<db_name>-<timestamp>
+    # Job ID: <model>-dl-<db_name>-<timestamp> (Cloud Batch requires ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    clean_model = _clean_label(model).replace("_", "-")
     clean_name = _clean_label(db_name).replace("_", "-")
-    job_id = f"{model}-dl-{clean_name}-{timestamp}"
+    job_id = f"{clean_model}-dl-{clean_name}-{timestamp}"[:62].rstrip("-")
 
     labels = {
         "task": "database-download",

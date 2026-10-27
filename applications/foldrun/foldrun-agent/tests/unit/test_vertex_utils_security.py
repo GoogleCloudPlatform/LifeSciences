@@ -100,3 +100,72 @@ class TestGetPipelineJobSecurity:
     def test_malformed_full_resource_name_rejected(self, bad_full_name):
         with pytest.raises(ValueError):
             get_pipeline_job(bad_full_name, "my-project", "us-central1")
+
+    @patch("google.cloud.aiplatform_v1.PipelineServiceClient")
+    def test_display_name_fallback_when_get_fails(self, mock_client_cls):
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_client.get_pipeline_job.side_effect = RuntimeError("404 Not Found")
+        matched_job = MagicMock()
+        mock_client.list_pipeline_jobs.return_value = [matched_job]
+
+        result = get_pipeline_job("af2-ubiquitin-display", "my-project", "us-central1")
+        assert result == matched_job
+        mock_client.list_pipeline_jobs.assert_called_once()
+
+
+class TestVertexTaskDetailsAndEpochGuard:
+    """Tests for get_task_details custom_job extraction and unset epoch start_time guard."""
+
+    def test_unset_epoch_start_time_ignored(self):
+        from datetime import datetime, timezone
+
+        from foldrun_app.models.af2.utils.vertex_utils import get_job_status, get_task_details
+
+        job = MagicMock()
+        job.name = "projects/my-project/locations/us-central1/pipelineJobs/job-1"
+        job.display_name = "my-pipeline-run"
+        job.state.name = "PIPELINE_STATE_PENDING"
+        job.create_time = datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc)
+        job.start_time = datetime(1970, 1, 1, 0, 0, tzinfo=timezone.utc)
+        job.end_time = datetime(2026, 4, 15, 12, 5, tzinfo=timezone.utc)
+        job.labels = {}
+        job.pipeline_spec = {}
+        job.error = None
+
+        status = get_job_status(job)
+        assert status["start_time"] is None
+        assert "duration_seconds" not in status
+
+        task = MagicMock()
+        task.task_id = 101
+        task.task_name = "predict"
+        task.state.name = "RUNNING"
+        task.create_time = datetime(2026, 4, 15, 12, 1, tzinfo=timezone.utc)
+        task.start_time = datetime(1970, 1, 1, 0, 0, tzinfo=timezone.utc)
+        task.end_time = None
+        task.executor_detail = None
+        task.execution.metadata = {
+            "output:gcp_resources": '{"resources":[{"resourceType":"CustomJob","resourceUri":"projects/123/locations/us-central1/customJobs/98765"}]}'
+        }
+        task.error = None
+        task.outputs = {}
+
+        wrapper_task = MagicMock()
+        wrapper_task.task_id = 100
+        wrapper_task.task_name = "for-loop-2"
+        wrapper_task.state.name = "RUNNING"
+        wrapper_task.create_time = None
+        wrapper_task.start_time = None
+        wrapper_task.end_time = None
+        wrapper_task.executor_detail = None
+        wrapper_task.execution = None
+        wrapper_task.error = None
+        wrapper_task.outputs = {}
+
+        job.job_detail.task_details = [wrapper_task, task]
+        details = get_task_details(job)
+        assert len(details["task_list"]) == 1
+        assert details["task_list"][0]["task_name"] == "predict"
+        assert details["task_list"][0]["start_time"] is None
+        assert details["task_list"][0]["custom_job_id"] == "98765"

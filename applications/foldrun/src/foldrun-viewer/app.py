@@ -14,11 +14,13 @@
 
 """
 FoldRun Structure Viewer
-Cloud Run web application for viewing AlphaFold2, OpenFold3, and Boltz-2 predictions
+Cloud Run web application for viewing AlphaFold2, AlphaFold 3, OpenFold3, and Boltz-2 predictions
 """
 
+import io
 import json
 import logging
+import math
 import os
 import re
 import tempfile
@@ -73,6 +75,42 @@ JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 SIGNED_URL_EXPIRATION_SECONDS = int(
     os.environ.get("SIGNED_URL_EXPIRATION_SECONDS", "3600")
 )
+MAX_DECOMPRESSED_ZST_BYTES = 512 * 1024 * 1024  # 512 MB cap for .zst decompression
+
+_MODEL_TYPE_ALIASES = {
+    "af2": "alphafold2",
+    "alphafold": "alphafold2",
+    "alphafold2": "alphafold2",
+    "af3": "alphafold3",
+    "alphafold3": "alphafold3",
+    "of3": "openfold3",
+    "openfold3": "openfold3",
+    "boltz": "boltz2",
+    "boltz-2": "boltz2",
+    "boltz2": "boltz2",
+}
+_SUPPORTED_MODEL_TYPES = frozenset(_MODEL_TYPE_ALIASES.values())
+_NONFINITE_TOKEN_RE = re.compile(r"^[+-]?(?:nan|inf|infinity)$", re.IGNORECASE)
+
+
+def _normalize_model_type(raw: str | None) -> str:
+    """Normalize raw model_type labels/params to canonical FoldRun identifiers."""
+    if not raw:
+        return ""
+    cleaned = str(raw).strip().lower()
+    return _MODEL_TYPE_ALIASES.get(cleaned, cleaned)
+
+
+def _infer_model_type_from_display_name(display_name: str) -> str:
+    """Infer canonical model_type from PipelineJob displayName when label is absent."""
+    lower = (display_name or "").lower()
+    if "af3" in lower or "alphafold3" in lower or "alphafold-3" in lower:
+        return "alphafold3"
+    if "of3" in lower or "openfold3" in lower or "openfold" in lower:
+        return "openfold3"
+    if "boltz" in lower:
+        return "boltz2"
+    return "alphafold2"
 
 
 def parse_gcs_uri(uri, allowed_extensions=None):
@@ -108,8 +146,136 @@ def parse_gcs_uri(uri, allowed_extensions=None):
     return bucket_name, blob_path
 
 
+def _sanitize_data(obj, key=None):
+    """Recursively replace NaN/Infinity floats with None (strict RFC 8259 JSON, never fabricated scores)."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_data(v, key=k) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_data(v, key=key) for v in obj]
+    return obj
+
+
+_sanitize_json_floats = _sanitize_data
+
+
+def _decompress_zst_bytes(
+    raw_bytes: bytes, max_bytes: int = MAX_DECOMPRESSED_ZST_BYTES
+) -> bytes:
+    """Decompress zstandard-compressed bytes with a strict size limit."""
+    import zstandard as zstd
+
+    dctx = zstd.ZstdDecompressor()
+    chunks: list[bytes] = []
+    total = 0
+    with dctx.stream_reader(io.BytesIO(raw_bytes)) as reader:
+        while True:
+            chunk = reader.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(
+                    f"Decompressed .zst payload exceeds safety limit of {max_bytes} bytes"
+                )
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _sanitize_structure_bfactors(content: str) -> str:
+    """Replace non-finite B-factor tokens in ATOM/HETATM records with 0.00 for 3Dmol.js.
+
+    Never fabricates high-confidence pLDDT values (such as 80.0/82.0) and avoids
+    touching chemical component IDs (e.g., sialic acid 'NAN').
+    """
+    out_lines: list[str] = []
+    in_atom_site_loop = False
+    atom_site_cols: list[str] = []
+    b_col_idx: int | None = None
+
+    for line in content.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped == "loop_":
+            in_atom_site_loop = False
+            atom_site_cols = []
+            b_col_idx = None
+            out_lines.append(line)
+            continue
+
+        if stripped.startswith("_atom_site."):
+            in_atom_site_loop = True
+            atom_site_cols.append(stripped)
+            if stripped == "_atom_site.B_iso_or_equiv":
+                b_col_idx = len(atom_site_cols) - 1
+            out_lines.append(line)
+            continue
+
+        if (
+            in_atom_site_loop
+            and stripped
+            and not stripped.startswith(("ATOM ", "HETATM ", "ATOM\t", "HETATM\t"))
+        ):
+            if stripped.startswith(("_", "#")):
+                in_atom_site_loop = False
+                atom_site_cols = []
+                b_col_idx = None
+            out_lines.append(line)
+            continue
+
+        if stripped.startswith(("ATOM ", "HETATM ", "ATOM\t", "HETATM\t")):
+            line_ending = (
+                "\r\n"
+                if line.endswith("\r\n")
+                else ("\n" if line.endswith("\n") else "")
+            )
+            body = line[: len(line) - len(line_ending)] if line_ending else line
+
+            # Headered mmCIF _atom_site loop with known B_iso_or_equiv column
+            if in_atom_site_loop and b_col_idx is not None:
+                tokens = body.split()
+                if b_col_idx < len(tokens) and _NONFINITE_TOKEN_RE.match(
+                    tokens[b_col_idx]
+                ):
+                    tokens[b_col_idx] = "0.00"
+                    out_lines.append(" ".join(tokens) + line_ending)
+                    continue
+                out_lines.append(line)
+                continue
+
+            # Fixed-width PDB ATOM/HETATM record (columns 61-66 are tempFactor)
+            tokens = body.split()
+            if len(body) >= 66 and len(tokens) <= 13 and "." not in tokens[4:6]:
+                bfac_slice = body[60:66].strip()
+                if bfac_slice and _NONFINITE_TOKEN_RE.match(bfac_slice):
+                    out_lines.append(
+                        body[:60] + f"{0.0:6.2f}" + body[66:] + line_ending
+                    )
+                    continue
+
+            # Headerless mmCIF record: B-factor is always at token index >= 10 (after x, y, z, occupancy)
+            changed = False
+            for idx in range(10, len(tokens)):
+                tok = tokens[idx]
+                if tok != "NAN" and _NONFINITE_TOKEN_RE.match(tok):
+                    tokens[idx] = "0.00"
+                    changed = True
+                elif tok == "NAN" and idx in (10, 14):
+                    tokens[idx] = "0.00"
+                    changed = True
+            if changed:
+                out_lines.append(" ".join(tokens) + line_ending)
+                continue
+
+        out_lines.append(line)
+
+    return "".join(out_lines)
+
+
 def load_gcs_file(uri, as_json=False, allowed_extensions=None):
-    """Load a file from GCS"""
+    """Load a file from GCS (transparently decompressing .zst objects)."""
     try:
         bucket_name, blob_path = parse_gcs_uri(
             uri, allowed_extensions=allowed_extensions
@@ -118,9 +284,15 @@ def load_gcs_file(uri, as_json=False, allowed_extensions=None):
         blob = bucket.blob(blob_path)
 
         content = blob.download_as_bytes()
+        if blob_path.lower().endswith(".zst"):
+            content = _decompress_zst_bytes(content)
 
         if as_json:
-            return json.loads(content.decode("utf-8"))
+            parsed = json.loads(
+                content.decode("utf-8"),
+                parse_constant=lambda _: None,
+            )
+            return _sanitize_data(parsed)
 
         return content.decode("utf-8")
 
@@ -131,15 +303,18 @@ def load_gcs_file(uri, as_json=False, allowed_extensions=None):
 
 def get_pdb_content(pdb_uri):
     """Get PDB file content from GCS"""
-    return load_gcs_file(pdb_uri, allowed_extensions=(".pdb",))
+    content = load_gcs_file(pdb_uri, allowed_extensions=(".pdb", ".pdb.zst"))
+    return _sanitize_structure_bfactors(content)
 
 
 def _resolve_summary_and_uri(job_id=None, summary_uri=None):
     """Resolve and load analysis summary JSON together with its canonical gs:// URI."""
     if summary_uri:
-        parse_gcs_uri(summary_uri, allowed_extensions=(".json",))
+        parse_gcs_uri(summary_uri, allowed_extensions=(".json", ".json.zst"))
         return (
-            load_gcs_file(summary_uri, as_json=True, allowed_extensions=(".json",)),
+            load_gcs_file(
+                summary_uri, as_json=True, allowed_extensions=(".json", ".json.zst")
+            ),
             summary_uri,
         )
 
@@ -151,22 +326,49 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
 
     bucket = storage_client.bucket(BUCKET_NAME)
 
-    # Check AlphaFold 3 predictions directory first
+    # 1. Check AlphaFold 3 predictions directory first
     af3_summary_path = f"af3_predictions/{job_id}/analysis/summary.json"
     if bucket.blob(af3_summary_path).exists():
         uri = f"gs://{BUCKET_NAME}/{af3_summary_path}"
         return load_gcs_file(uri, as_json=True), uri
 
-    match = re.search(r"(\d{8})\d{6}$", job_id)
-    if not match:
-        raise ValueError(f"Cannot extract date from job_id: {job_id}")
+    # 2. Exact lookup via Vertex AI PipelineJob runtimeConfig.gcsOutputDirectory
+    try:
+        safe_job_id = urllib.parse.quote(str(job_id), safe="")
+        authed = _get_authed_session()
+        pj_url = (
+            f"https://{REGION}-aiplatform.googleapis.com/v1"
+            f"/projects/{PROJECT_ID}/locations/{REGION}/pipelineJobs/{safe_job_id}"
+        )
+        pj_resp = authed.get(pj_url, timeout=10)
+        if pj_resp.ok:
+            pj = pj_resp.json()
+            gcs_output_dir = (
+                pj.get("runtimeConfig", {}).get("gcsOutputDirectory", "").rstrip("/")
+            )
+            if gcs_output_dir.startswith(f"gs://{BUCKET_NAME}/"):
+                exact_uri = f"{gcs_output_dir}/analysis/summary.json"
+                return load_gcs_file(exact_uri, as_json=True), exact_uri
+    except Exception as e:
+        logger.debug(
+            f"Direct PipelineJob lookup for {job_id} fell back to GCS scan: {e}"
+        )
 
-    date_prefix = match.group(1)  # YYYYMMDD
-    prefix = f"pipeline_runs/{date_prefix}"
+    # 3. Fallback: extract date portion if present, or scan pipeline_runs/
+    match = re.search(r"(\d{8})\d{6}$", job_id)
+    date_prefix = match.group(1) if match else ""
+    prefix = f"pipeline_runs/{date_prefix}" if date_prefix else "pipeline_runs/"
 
     summary_blobs = list(
         bucket.list_blobs(prefix=prefix, match_glob="**/analysis/summary.json")
     )
+
+    if not summary_blobs and date_prefix:
+        summary_blobs = list(
+            bucket.list_blobs(
+                prefix="pipeline_runs/", match_glob="**/analysis/summary.json"
+            )
+        )
 
     if not summary_blobs:
         all_blobs = list(bucket.list_blobs(prefix=prefix))
@@ -174,15 +376,37 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
             b for b in all_blobs if b.name.endswith("/analysis/summary.json")
         ]
 
+    if not summary_blobs and date_prefix:
+        all_blobs = list(bucket.list_blobs(prefix="pipeline_runs/"))
+        summary_blobs = [
+            b for b in all_blobs if b.name.endswith("/analysis/summary.json")
+        ]
+
     if not summary_blobs:
         raise FileNotFoundError(
             f"No analysis summary found for job {job_id}. "
-            f"Searched gs://{BUCKET_NAME}/{af3_summary_path} and gs://{BUCKET_NAME}/{prefix}*/analysis/summary.json"
+            f"Searched gs://{BUCKET_NAME}/{af3_summary_path} and gs://{BUCKET_NAME}/pipeline_runs/**/analysis/summary.json"
         )
 
-    if len(summary_blobs) == 1:
+    if len(summary_blobs) == 1 and date_prefix:
         uri = f"gs://{BUCKET_NAME}/{summary_blobs[0].name}"
         return load_gcs_file(uri, as_json=True), uri
+
+    # Check if any summary.json matches job_id in its blob path
+    for blob in summary_blobs:
+        if job_id in blob.name:
+            uri = f"gs://{BUCKET_NAME}/{blob.name}"
+            return load_gcs_file(uri, as_json=True), uri
+
+    # Check if any summary.json matches job_id in its JSON payload
+    for blob in summary_blobs:
+        try:
+            uri = f"gs://{BUCKET_NAME}/{blob.name}"
+            data = load_gcs_file(uri, as_json=True)
+            if isinstance(data, dict) and data.get("job_id") == job_id:
+                return data, uri
+        except Exception:
+            continue
 
     full_ts = re.search(r"(\d{14})$", job_id)
     if full_ts:
@@ -200,6 +424,11 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
                     uri = f"gs://{BUCKET_NAME}/{blob.name}"
                     return load_gcs_file(uri, as_json=True), uri
 
+    if not date_prefix:
+        raise FileNotFoundError(
+            f"No analysis summary matching custom job_id '{job_id}' found under pipeline_runs/"
+        )
+
     summary_blobs.sort(key=lambda b: b.name, reverse=True)
     uri = f"gs://{BUCKET_NAME}/{summary_blobs[0].name}"
     return load_gcs_file(uri, as_json=True), uri
@@ -208,8 +437,8 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
 def get_analysis_summary(job_id=None, summary_uri=None):
     """Get enhanced analysis summary from GCS.
 
-    When given a job_id, searches for the analysis summary by extracting the
-    date from the pipeline job name and scanning matching pipeline_runs/ dirs.
+    When given a job_id, first checks af3_predictions/ and Vertex AI PipelineJob
+    runtimeConfig.gcsOutputDirectory, then falls back to scanning pipeline_runs/.
     """
     summary, _ = _resolve_summary_and_uri(job_id=job_id, summary_uri=summary_uri)
     return summary
@@ -231,8 +460,8 @@ def _scan_analysis_state():
     """Scan GCS for analysis state files in a single listing pass.
 
     Returns (complete, running):
-        complete: set of 14-digit timestamps (YYYYMMDDHHMMSS) where summary.json exists
-        running:  set of timestamps where analysis_metadata.json exists but summary.json does not
+        complete: set of run directory keys (e.g. '20260504224020' or custom slug) where summary.json exists
+        running:  set of run directory keys where analysis_metadata.json or task_config.json exists but summary.json does not
     """
     complete = set()
     has_metadata = set()
@@ -243,14 +472,18 @@ def _scan_analysis_state():
             name = blob.name
             if "/analysis/" not in name:
                 continue
-            m = re.search(r"pipeline_runs/(\d{8})_(\d{6})/", name)
-            if not m:
+            parts = name.split("/")
+            if len(parts) < 3 or parts[0] != "pipeline_runs":
                 continue
-            ts = m.group(1) + m.group(2)
+            run_dir = parts[1]
+            m = re.match(r"^(\d{8})_(\d{6})$", run_dir)
+            key = (m.group(1) + m.group(2)) if m else run_dir
             if name.endswith("/analysis/summary.json"):
-                complete.add(ts)
-            elif name.endswith("/analysis/analysis_metadata.json"):
-                has_metadata.add(ts)
+                complete.add(key)
+            elif name.endswith("/analysis/analysis_metadata.json") or name.endswith(
+                "/analysis/task_config.json"
+            ):
+                has_metadata.add(key)
     except Exception as e:
         logger.warning(f"Could not scan analysis state: {e}")
     running = has_metadata - complete
@@ -444,14 +677,15 @@ def get_pdb():
 
 @app.route("/api/cif")
 def get_cif():
-    """API endpoint to fetch CIF content (for OF3 and Boltz-2 predictions)"""
+    """API endpoint to fetch CIF content (supports .cif and .cif.zst)"""
     cif_uri = request.args.get("uri")
 
     if not cif_uri:
         return jsonify({"error": "uri parameter is required"}), 400
 
     try:
-        content = load_gcs_file(cif_uri, allowed_extensions=(".cif",))
+        content = load_gcs_file(cif_uri, allowed_extensions=(".cif", ".cif.zst"))
+        content = _sanitize_structure_bfactors(content)
         return content, 200, {"Content-Type": "text/plain"}
     except ValueError as e:
         logger.warning(f"Invalid CIF URI: {e}")
@@ -540,8 +774,39 @@ def list_jobs():
         resp.raise_for_status()
         data = resp.json()
 
+        raw_pipeline_jobs = list(data.get("pipelineJobs", []))
+        seen_job_ids = {
+            pj.get("name", "").split("/")[-1]
+            for pj in raw_pipeline_jobs
+            if pj.get("name")
+        }
+
+        # Best-effort secondary query for legacy / AF3 jobs labeled managed_by=foldrun
+        if not page_token:
+            try:
+                legacy_params = {
+                    "filter": "labels.managed_by=foldrun",
+                    "orderBy": "createTime desc",
+                    "pageSize": "20",
+                }
+                legacy_resp = authed.get(url, params=legacy_params, timeout=10)
+                if legacy_resp.ok:
+                    legacy_data = legacy_resp.json()
+                    for lpj in legacy_data.get("pipelineJobs", []):
+                        lid = lpj.get("name", "").split("/")[-1]
+                        if lid and lid not in seen_job_ids:
+                            seen_job_ids.add(lid)
+                            raw_pipeline_jobs.append(lpj)
+                    raw_pipeline_jobs.sort(
+                        key=lambda item: item.get("createTime", ""), reverse=True
+                    )
+            except Exception as legacy_err:
+                logger.debug(
+                    f"Secondary managed_by=foldrun query skipped: {legacy_err}"
+                )
+
         jobs = []
-        for pj in data.get("pipelineJobs", []):
+        for pj in raw_pipeline_jobs:
             labels = pj.get("labels", {})
             resource_name = pj.get("name", "")
             job_id = resource_name.split("/")[-1]
@@ -551,17 +816,22 @@ def list_jobs():
                 or job_id.startswith("alphafold3-idle-drain-")
             ):
                 continue
-            # Extract exact GCS timestamp from gcsOutputDirectory (e.g.
+            # Extract exact GCS timestamp or custom slug from gcsOutputDirectory (e.g.
             # "gs://bucket/pipeline_runs/20260504_224020" → "20260504224020").
-            # This is more reliable than parsing the job ID timestamp, which can
-            # differ by 1-2 seconds from the directory name — causing false
-            # positives when multiple jobs are submitted within seconds of each other.
             gcs_output_dir = pj.get("runtimeConfig", {}).get("gcsOutputDirectory", "")
             gcs_ts = None
             m = re.search(r"pipeline_runs/(\d{8})_(\d{6})", gcs_output_dir)
             if m:
                 gcs_ts = m.group(1) + m.group(2)
+            else:
+                m_dir = re.search(r"pipeline_runs/([^/]+)", gcs_output_dir)
+                if m_dir:
+                    gcs_ts = m_dir.group(1)
             disp_name = pj.get("displayName", job_id)
+            raw_mt = labels.get("model_type") or _infer_model_type_from_display_name(
+                disp_name
+            )
+            norm_mt = _normalize_model_type(raw_mt) or "alphafold2"
             pipeline_url = (
                 f"https://console.cloud.google.com/vertex-ai/pipelines/locations/"
                 f"{REGION}/runs/{job_id}?project={PROJECT_ID}"
@@ -569,7 +839,7 @@ def list_jobs():
             job_entry = {
                 "job_id": job_id,
                 "display_name": disp_name,
-                "model_type": labels.get("model_type", "alphafold2"),
+                "model_type": norm_mt,
                 "state": pj.get("state", "PIPELINE_STATE_UNSPECIFIED"),
                 "create_time": pj.get("createTime", ""),
                 "has_analysis": False,
@@ -703,12 +973,18 @@ def job_quality(job_id):
     """
     try:
         summary = get_analysis_summary(job_id=job_id)
-        # quality_metrics is nested under summary["summary"], not at the root
         qm = summary.get("summary", {}).get("quality_metrics", {})
+        qa = qm.get("quality_assessment", "") or summary.get("best_prediction", {}).get(
+            "quality_assessment", ""
+        )
+        if not isinstance(qa, str):
+            qa = ""
         return jsonify(
             {
-                "quality_assessment": qm.get("quality_assessment", ""),
-                "best_model_plddt": qm.get("best_model_plddt"),
+                "quality_assessment": qa,
+                "best_model_plddt": qm.get("best_model_plddt")
+                or qm.get("best_plddt")
+                or summary.get("best_prediction", {}).get("plddt_mean"),
                 "best_model_pae": qm.get("best_model_pae"),
             }
         )
@@ -717,9 +993,15 @@ def job_quality(job_id):
 
 
 def _discover_af3_predictions(job_prefix: str) -> list:
-    """Scan GCS for AF3 seed-*_sample-* outputs under af3_predictions/<job_name>/."""
-    bucket = storage_client.bucket(BUCKET_NAME)
-    base_prefix = f"{job_prefix.strip('/')}/"
+    """Scan GCS for AF3 seed-*_sample-* outputs (.cif/.cif.zst and .json/.json.zst)."""
+    if job_prefix.startswith("gs://"):
+        bucket_name, parsed_prefix = parse_gcs_uri(job_prefix)
+        base_prefix = f"{parsed_prefix.strip('/')}/"
+    else:
+        bucket_name = BUCKET_NAME
+        base_prefix = f"{job_prefix.strip('/')}/"
+
+    bucket = storage_client.bucket(bucket_name)
     sample_blobs: dict[str, dict] = {}
     top_cif = None
     top_sum = None
@@ -732,21 +1014,37 @@ def _discover_af3_predictions(job_prefix: str) -> list:
         if m_seed:
             s_key = m_seed.group(1)
             s_entry = sample_blobs.setdefault(s_key, {})
-            if bname.endswith(("_model.cif", "/model.cif")):
-                s_entry["cif_uri"] = f"gs://{BUCKET_NAME}/{bname}"
-            elif bname.endswith(
-                ("_summary_confidences.json", "/summary_confidences.json")
+            if bname.endswith(
+                ("_model.cif", "/model.cif", "_model.cif.zst", "/model.cif.zst")
             ):
-                s_entry["summary_uri"] = f"gs://{BUCKET_NAME}/{bname}"
-            elif bname.endswith(("_confidences.json", "/confidences.json")):
-                s_entry["confidences_uri"] = f"gs://{BUCKET_NAME}/{bname}"
+                s_entry["cif_uri"] = f"gs://{bucket_name}/{bname}"
+            elif bname.endswith(
+                (
+                    "_summary_confidences.json",
+                    "/summary_confidences.json",
+                    "_summary_confidences.json.zst",
+                    "/summary_confidences.json.zst",
+                )
+            ):
+                s_entry["summary_uri"] = f"gs://{bucket_name}/{bname}"
+            elif bname.endswith(
+                (
+                    "_confidences.json",
+                    "/confidences.json",
+                    "_confidences.json.zst",
+                    "/confidences.json.zst",
+                )
+            ):
+                s_entry["confidences_uri"] = f"gs://{bucket_name}/{bname}"
             continue
-        if bname.endswith("_model.cif"):
-            top_cif = f"gs://{BUCKET_NAME}/{bname}"
-        elif bname.endswith("_summary_confidences.json"):
-            top_sum = f"gs://{BUCKET_NAME}/{bname}"
-        elif bname.endswith("_confidences.json"):
-            top_conf = f"gs://{BUCKET_NAME}/{bname}"
+        if bname.endswith(("_model.cif", "_model.cif.zst")):
+            top_cif = f"gs://{bucket_name}/{bname}"
+        elif bname.endswith(
+            ("_summary_confidences.json", "_summary_confidences.json.zst")
+        ):
+            top_sum = f"gs://{bucket_name}/{bname}"
+        elif bname.endswith(("_confidences.json", "_confidences.json.zst")):
+            top_conf = f"gs://{bucket_name}/{bname}"
 
     predictions = [
         {
@@ -779,7 +1077,7 @@ def trigger_analysis():
     """
     data = request.get_json(silent=True) or {}
     job_id = data.get("job_id")
-    model_type = str(data.get("model_type", "alphafold2")).strip().lower()
+    explicit_model_type = data.get("model_type")
 
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
@@ -787,16 +1085,17 @@ def trigger_analysis():
     if not JOB_ID_PATTERN.fullmatch(str(job_id)):
         return jsonify({"error": "Invalid job_id format"}), 400
 
-    allowed_model_types = {"alphafold2", "alphafold3", "openfold3", "boltz2"}
-    if model_type not in allowed_model_types:
-        return jsonify(
-            {
-                "error": (
-                    f"Invalid model_type '{model_type}'. "
-                    f"Must be one of {sorted(allowed_model_types)}"
-                )
-            }
-        ), 400
+    if explicit_model_type is not None and str(explicit_model_type).strip() != "":
+        normalized_explicit = _normalize_model_type(explicit_model_type)
+        if normalized_explicit not in _SUPPORTED_MODEL_TYPES:
+            return jsonify(
+                {
+                    "error": (
+                        f"Unsupported model_type '{explicit_model_type}'. "
+                        f"Must be one of {sorted(_SUPPORTED_MODEL_TYPES)}"
+                    )
+                }
+            ), 400
 
     safe_job_id = urllib.parse.quote(str(job_id), safe="")
 
@@ -809,7 +1108,8 @@ def trigger_analysis():
             f"/projects/{PROJECT_ID}/locations/{REGION}/pipelineJobs/{safe_job_id}"
         )
         pj_resp = authed.get(pj_url, timeout=15)
-        if pj_resp.status_code == 404 and model_type == "alphafold3":
+        prelim_model_type = _normalize_model_type(explicit_model_type) or "alphafold2"
+        if pj_resp.status_code == 404 and prelim_model_type == "alphafold3":
             pj = {"displayName": str(job_id)}
             gcs_output_dir = f"gs://{BUCKET_NAME}/af3_predictions/{job_id}/"
         else:
@@ -823,6 +1123,16 @@ def trigger_analysis():
                 return jsonify(
                     {"error": "Could not determine gcs_output_directory for job"}
                 ), 400
+
+        raw_model_type = (
+            explicit_model_type
+            or pj.get("labels", {}).get("model_type")
+            or _infer_model_type_from_display_name(pj.get("displayName", ""))
+            or "alphafold2"
+        )
+        model_type = _normalize_model_type(raw_model_type)
+        if model_type not in _SUPPORTED_MODEL_TYPES:
+            return jsonify({"error": f"Unsupported model_type: {raw_model_type}"}), 400
 
         analysis_path = f"{gcs_output_dir}analysis/"
         af3_extra_cfg: dict = {}
@@ -838,8 +1148,14 @@ def trigger_analysis():
                 or str(job_id)
             )
             af3_prefix = f"af3_predictions/{af3_job_name}"
-            analysis_path = f"gs://{BUCKET_NAME}/{af3_prefix}/analysis/"
             raw_predictions = _discover_af3_predictions(af3_prefix)
+            if raw_predictions and any(
+                "/af3_predictions/" in p.get("cif_uri", "") for p in raw_predictions
+            ):
+                analysis_path = f"gs://{BUCKET_NAME}/{af3_prefix}/analysis/"
+            else:
+                raw_predictions = _discover_af3_predictions(gcs_output_dir)
+                analysis_path = f"{gcs_output_dir}analysis/"
             af3_extra_cfg = {
                 "job_id": af3_job_name,
                 "pipeline_job_id": str(job_id),
@@ -915,6 +1231,7 @@ def trigger_analysis():
             ]
 
         task_config = {
+            "model_type": model_type,
             "job_id": job_id,
             "analysis_path": analysis_path,
             "task_config_uri": f"{analysis_path}task_config.json",
@@ -930,12 +1247,13 @@ def trigger_analysis():
             json.dumps(task_config, indent=2), content_type="application/json"
         )
 
-        # Trigger the Cloud Run analysis job via REST API
+        # Trigger the Cloud Run analysis job via REST API (capped at 25 parallel tasks)
+        task_count = max(1, min(len(raw_predictions), 25))
         cr_job_path = f"projects/{PROJECT_ID}/locations/{REGION}/jobs/{cr_job_name}"
         cr_url = f"https://{REGION}-run.googleapis.com/v2/{cr_job_path}:run"
         cr_body = {
             "overrides": {
-                "taskCount": len(raw_predictions),
+                "taskCount": task_count,
                 "timeout": "600s",
                 "containerOverrides": [
                     {
@@ -974,7 +1292,7 @@ def trigger_analysis():
         )
 
         logger.info(
-            f"Triggered analysis for {job_id}: {len(raw_predictions)} tasks, job={cr_job_name}"
+            f"Triggered analysis for {job_id}: {task_count} tasks ({len(raw_predictions)} predictions), job={cr_job_name}"
         )
         return jsonify(
             {
@@ -982,6 +1300,7 @@ def trigger_analysis():
                 "job_id": job_id,
                 "model_type": model_type,
                 "total_predictions": len(raw_predictions),
+                "task_count": task_count,
                 "analysis_path": analysis_path,
             }
         )
@@ -1069,7 +1388,9 @@ def _ensure_bundle_in_gcs(summary: dict, summary_uri: str) -> str:
         ) as zf:
             zf.writestr(
                 "metrics/summary.json",
-                json.dumps(summary, indent=2, default=str),
+                json.dumps(
+                    _sanitize_data(summary), indent=2, default=str, allow_nan=False
+                ),
             )
             seen_arcnames.add("metrics/summary.json")
 
@@ -1083,7 +1404,12 @@ def _ensure_bundle_in_gcs(summary: dict, summary_uri: str) -> str:
             if affinity:
                 zf.writestr(
                     "metrics/affinity.json",
-                    json.dumps(affinity, indent=2, default=str),
+                    json.dumps(
+                        _sanitize_data(affinity),
+                        indent=2,
+                        default=str,
+                        allow_nan=False,
+                    ),
                 )
                 seen_arcnames.add("metrics/affinity.json")
 

@@ -20,6 +20,7 @@ import threading
 from typing import Any
 
 from foldrun_app.core.base_tool import BaseTool
+from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
 
 from .config import Config
 
@@ -73,7 +74,7 @@ class _CompileEnvContext:
 class AF2Tool(BaseTool):
     """Base class for AlphaFold2 tools following ToolUniverse pattern."""
 
-    _compile_env_lock = threading.RLock()
+    _compile_env_lock = GLOBAL_COMPILE_LOCK
 
     def __init__(self, tool_config: dict[str, Any], config: Config | None = None):
         """

@@ -52,6 +52,8 @@ from foldrun_app.core.download import (
     submit_downloads,
 )
 
+_DEFAULT_ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 
 def get_infra_params(config: CoreConfig) -> dict:
     """Resolve infrastructure parameters needed for Batch submission."""
@@ -82,7 +84,7 @@ def show_status(manifest):
     from foldrun_app.core.download import check_gcs_exists
     from foldrun_app.models.af2.tools.download_database import MMSEQS2_INDEXABLE_DATABASES
 
-    config = CoreConfig()
+    config = CoreConfig(env_path=_DEFAULT_ENV_PATH if os.path.exists(_DEFAULT_ENV_PATH) else None)
     gcs_bucket = config.databases_bucket_name
 
     databases = manifest.get("databases", {})
@@ -158,8 +160,8 @@ def list_databases(manifest):
 
     by_model = {}
     for name, db in databases.items():
-        model = db.get("model", "unknown")
-        by_model.setdefault(model, []).append((name, db))
+        for model in _get_models(db) or ["unknown"]:
+            by_model.setdefault(model, []).append((name, db))
 
     for model, dbs in sorted(by_model.items()):
         print(f"\n{model}:")
@@ -174,6 +176,8 @@ def main():
     parser = argparse.ArgumentParser(description="Submit database download jobs to Cloud Batch.")
     parser.add_argument(
         "--models",
+        "--model",
+        dest="models",
         help="Comma-separated list of models (e.g. af2,of3). Downloads all databases for those models.",
     )
     parser.add_argument(
@@ -234,7 +238,7 @@ def main():
 
     # Resolve which databases to download
     if args.db:
-        db_names = [args.db]
+        db_names = [d.strip() for d in args.db.split(",") if d.strip()]
     else:
         models = [m.strip() for m in args.models.split(",")]
         db_names = get_databases_for_models(manifest, models, args.mode)
@@ -243,7 +247,7 @@ def main():
         print("No databases to download.")
         return
 
-    config = CoreConfig()
+    config = CoreConfig(env_path=_DEFAULT_ENV_PATH if os.path.exists(_DEFAULT_ENV_PATH) else None)
 
     if args.dry_run:
         dry_run(db_names, config, manifest, args.force)
@@ -295,10 +299,11 @@ def main():
             print(f"    -> {job['nfs_destination']}")
 
     if errors > 0:
-        print(f"\nWARNING: {errors} jobs failed:")
+        print(f"\nERROR: {errors} jobs failed:")
         for job in result["jobs"]:
             if job["status"] == "error":
                 print(f"  - {job['database_name']}: {job['message']}")
+        sys.exit(1)
 
     print("\nDownloads run asynchronously in Cloud Batch.")
     print(

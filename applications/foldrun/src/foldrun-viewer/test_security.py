@@ -289,5 +289,221 @@ class TestArtifactDownloadEndpoints(unittest.TestCase):
             self.assertEqual(resp.get_data(), b"HEADER MOCK PDB\nEND\n")
 
 
+class TestScientificIntegrityAndBfactors(unittest.TestCase):
+    """Tests for strict RFC 8259 NaN/Inf sanitization, .zst decompression, and CIF B-factors."""
+
+    def setUp(self):
+        self.client = viewer_app.app.test_client()
+
+    def test_sanitize_data_converts_nonfinite_floats_to_none(self):
+        payload = {
+            "plddt_mean": float("nan"),
+            "std": float("nan"),
+            "iptm": float("inf"),
+            "delta_g": float("-inf"),
+            "valid": 91.5,
+            "nested": [1.0, float("nan"), float("inf")],
+        }
+        cleaned = viewer_app._sanitize_json_floats(payload)
+        self.assertIsNone(cleaned["plddt_mean"])
+        self.assertIsNone(cleaned["std"])
+        self.assertIsNone(cleaned["iptm"])
+        self.assertIsNone(cleaned["delta_g"])
+        self.assertEqual(cleaned["valid"], 91.5)
+        self.assertEqual(cleaned["nested"], [1.0, None, None])
+
+    def test_load_gcs_file_json_maps_nan_constants_to_none(self):
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        mock_blob.download_as_bytes.return_value = (
+            b'{"plddt_mean": NaN, "iptm": Infinity, "neg": -Infinity, "ptm": 0.88}'
+        )
+        mock_bucket.blob.return_value = mock_blob
+        with patch.object(
+            viewer_app.storage_client, "bucket", return_value=mock_bucket
+        ):
+            res = viewer_app.load_gcs_file(
+                "gs://allowed-foldrun-bucket/pipeline_runs/run1/analysis/summary.json",
+                as_json=True,
+                allowed_extensions=(".json",),
+            )
+        self.assertIsNone(res["plddt_mean"])
+        self.assertIsNone(res["iptm"])
+        self.assertIsNone(res["neg"])
+        self.assertEqual(res["ptm"], 0.88)
+
+    def test_cif_endpoint_sanitizes_bfactors_to_zero_and_preserves_nan_ligand(self):
+        cif_text = (
+            "data_design\n"
+            "loop_\n"
+            "_atom_site.group_PDB\n"
+            "_atom_site.id\n"
+            "_atom_site.type_symbol\n"
+            "_atom_site.label_atom_id\n"
+            "_atom_site.label_alt_id\n"
+            "_atom_site.label_comp_id\n"
+            "_atom_site.label_asym_id\n"
+            "_atom_site.label_entity_id\n"
+            "_atom_site.label_seq_id\n"
+            "_atom_site.pdbx_PDB_ins_code\n"
+            "_atom_site.Cartn_x\n"
+            "_atom_site.Cartn_y\n"
+            "_atom_site.Cartn_z\n"
+            "_atom_site.occupancy\n"
+            "_atom_site.B_iso_or_equiv\n"
+            "ATOM 1 C CA . ALA A 1 1 ? 1.000 2.000 3.000 1.00 NaN\n"
+            "HETATM 2 C C1 . NAN B 2 . ? 4.000 5.000 6.000 1.00 Inf\n"
+        )
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        mock_blob.download_as_bytes.return_value = cif_text.encode("utf-8")
+        mock_bucket.blob.return_value = mock_blob
+        with patch.object(
+            viewer_app.storage_client, "bucket", return_value=mock_bucket
+        ):
+            resp = self.client.get(
+                "/api/cif?uri=gs://allowed-foldrun-bucket/pipeline_runs/run1/design_0.cif"
+            )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertNotIn("NaN", body)
+        self.assertNotIn("Inf", body)
+        self.assertIn("ATOM 1 C CA . ALA A 1 1 ? 1.000 2.000 3.000 1.00 0.00", body)
+        self.assertIn("HETATM 2 C C1 . NAN B 2 . ? 4.000 5.000 6.000 1.00 0.00", body)
+
+    def test_cif_endpoint_accepts_cif_zst(self):
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        mock_blob.download_as_bytes.return_value = b"compressed-zst-bytes"
+        mock_bucket.blob.return_value = mock_blob
+        decompressed = (
+            b"ATOM 1 N N . MET A 1 1 ? 1.0 2.0 3.0 1.00 94.50 ? 1 MET A N 1\n"
+        )
+        with (
+            patch.object(viewer_app.storage_client, "bucket", return_value=mock_bucket),
+            patch.object(
+                viewer_app, "_decompress_zst_bytes", return_value=decompressed
+            ),
+        ):
+            resp = self.client.get(
+                "/api/cif?uri=gs://allowed-foldrun-bucket/pipeline_runs/af3_run/seed-1_sample-0/model.cif.zst"
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("94.50", resp.get_data(as_text=True))
+
+
+class TestCustomSlugResolutionAndAnalyzeRouting(unittest.TestCase):
+    """Tests for custom pipeline_runs/<slug>/ resolution, model_type normalization, and taskCount cap."""
+
+    def setUp(self):
+        self.client = viewer_app.app.test_client()
+
+    def test_normalize_model_type_aliases(self):
+        self.assertEqual(viewer_app._normalize_model_type("af2"), "alphafold2")
+        self.assertEqual(viewer_app._normalize_model_type("alphafold2"), "alphafold2")
+        self.assertEqual(viewer_app._normalize_model_type("af3"), "alphafold3")
+        self.assertEqual(viewer_app._normalize_model_type("alphafold3"), "alphafold3")
+        self.assertEqual(viewer_app._normalize_model_type("of3"), "openfold3")
+        self.assertEqual(viewer_app._normalize_model_type("boltz"), "boltz2")
+
+    def test_resolve_summary_and_uri_via_runtime_config_custom_slug(self):
+        mock_authed = MagicMock()
+        pj_resp = MagicMock()
+        pj_resp.ok = True
+        pj_resp.json.return_value = {
+            "runtimeConfig": {
+                "gcsOutputDirectory": "gs://allowed-foldrun-bucket/pipeline_runs/custom-boltz2-slug"
+            }
+        }
+        mock_authed.get.return_value = pj_resp
+
+        mock_bucket = MagicMock()
+        af3_blob = MagicMock()
+        af3_blob.exists.return_value = False
+        summary_blob = MagicMock()
+        summary_blob.download_as_bytes.return_value = (
+            b'{"job_id": "custom-job-42", "model_type": "boltz2"}'
+        )
+
+        def _blob_side_effect(path):
+            if path.startswith("af3_predictions/"):
+                return af3_blob
+            return summary_blob
+
+        mock_bucket.blob.side_effect = _blob_side_effect
+
+        with (
+            patch.object(viewer_app, "_get_authed_session", return_value=mock_authed),
+            patch.object(viewer_app.storage_client, "bucket", return_value=mock_bucket),
+        ):
+            summary, uri = viewer_app._resolve_summary_and_uri(job_id="custom-job-42")
+
+        self.assertEqual(
+            uri,
+            "gs://allowed-foldrun-bucket/pipeline_runs/custom-boltz2-slug/analysis/summary.json",
+        )
+        self.assertEqual(summary["job_id"], "custom-job-42")
+
+    def test_trigger_analysis_rejects_unknown_model_type(self):
+        resp = self.client.post(
+            "/api/analyze",
+            json={"job_id": "valid-job-123", "model_type": "nonexistent_model"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Unsupported model_type", resp.get_json()["error"])
+
+    def test_trigger_analysis_af3_discovers_zst_samples_and_caps_task_count(self):
+        mock_authed = MagicMock()
+        pj_resp = MagicMock()
+        pj_resp.status_code = 200
+        pj_resp.raise_for_status.return_value = None
+        pj_resp.json.return_value = {
+            "name": "projects/test-project/locations/us-central1/pipelineJobs/af3-job-1",
+            "labels": {"model_type": "af3", "managed_by": "foldrun"},
+            "runtimeConfig": {
+                "gcsOutputDirectory": "gs://allowed-foldrun-bucket/pipeline_runs/af3-run-01"
+            },
+        }
+        cr_resp = MagicMock()
+        cr_resp.raise_for_status.return_value = None
+        mock_authed.get.return_value = pj_resp
+        mock_authed.post.return_value = cr_resp
+
+        blob_list = []
+        for idx in range(30):
+            sample_dir = f"pipeline_runs/af3-run-01/seed-1_sample-{idx}"
+            for suffix in (
+                "model.cif.zst",
+                "summary_confidences.json.zst",
+                "confidences.json.zst",
+            ):
+                b = MagicMock()
+                b.name = f"{sample_dir}/{suffix}"
+                blob_list.append(b)
+
+        mock_bucket = MagicMock()
+        mock_bucket.list_blobs.side_effect = [
+            [],  # af3_predictions/ check
+            blob_list,  # pipeline_runs/af3-run-01 check
+        ]
+        mock_bucket.blob.return_value = MagicMock()
+
+        with (
+            patch.object(viewer_app, "_get_authed_session", return_value=mock_authed),
+            patch.object(viewer_app.storage_client, "bucket", return_value=mock_bucket),
+        ):
+            resp = self.client.post(
+                "/api/analyze", json={"job_id": "af3-job-1", "model_type": "af3"}
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload["model_type"], "alphafold3")
+        self.assertEqual(payload["total_predictions"], 30)
+        self.assertEqual(payload["task_count"], 25)
+        cr_call_json = mock_authed.post.call_args.kwargs["json"]
+        self.assertEqual(cr_call_json["overrides"]["taskCount"], 25)
+
+
 if __name__ == "__main__":
     unittest.main()

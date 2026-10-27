@@ -44,17 +44,17 @@ def estimate_job_cost(
 
     Args:
         job_type: Type of prediction job. Use "af2_monomer" for single-chain AF2,
-            "af2_multimer" for multi-chain AF2, "of3" for OpenFold3 predictions, or
-            "boltz2" for Boltz-2 predictions.
+            "af2_multimer" for multi-chain AF2, "af3" for AlphaFold3 predictions,
+            "of3" for OpenFold3 predictions, or "boltz2" for Boltz-2 predictions.
         gpu_type: GPU to use. "auto" selects based on sequence length (recommended).
-            Can also be "L4", "A100", or "A100_80GB".
-        sequence_length: Number of residues (AF2) or tokens (OF3/Boltz-2) in the input.
+            Can also be "L4", "A100", "A100_80GB", or "H100".
+        sequence_length: Number of residues (AF2) or tokens (AF3/OF3/Boltz-2) in the input.
             For multimers, use the total across all chains. Larger proteins take
             proportionally longer to predict.
         num_predictions_per_model: For AF2 multimer: predictions per model (default
-            5, giving 5 models x 5 = 25 total). For OF3/Boltz-2: number of seeds (default 5).
+            5, giving 5 models x 5 = 25 total). For AF3/OF3/Boltz-2: number of seeds (default 5).
             Ignored for AF2 monomer (always 5 models x 1).
-        num_diffusion_samples: OF3/Boltz-2 only — diffusion samples per seed (default 5).
+        num_diffusion_samples: AF3/OF3/Boltz-2 only — diffusion samples per seed (default 5).
             Ignored for AF2 jobs.
         region: GCP region (default: us-central1).
 
@@ -62,19 +62,21 @@ def estimate_job_cost(
         Dict with on_demand and dws_flex_start phase breakdowns, estimated totals,
         savings percentage, and pricing disclaimer.
     """
+    resolved_region = region if (region and region.lower() != "global") else "us-central1"
     return estimate_single_job(
         job_type=job_type,
         gpu_type=gpu_type,
         sequence_length=sequence_length,
         num_predictions_per_model=num_predictions_per_model,
         num_diffusion_samples=num_diffusion_samples,
-        region=region or "us-central1",
+        region=resolved_region,
     )
 
 
 def estimate_monthly_cost(
     af2_monomer_jobs: int = 0,
     af2_multimer_jobs: int = 0,
+    af3_jobs: int = 0,
     of3_jobs: int = 0,
     boltz2_jobs: int = 0,
     avg_sequence_length: int = 300,
@@ -91,7 +93,7 @@ def estimate_monthly_cost(
     Uses default prediction counts per job type:
     - AF2 monomer: 5 predictions (5 models x 1 seed)
     - AF2 multimer: 25 predictions (5 models x 5 seeds)
-    - OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures
+    - AF3/OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures
 
     Calculates total cost across three categories:
     - Compute: GPU prediction costs based on job volumes (varies by pricing mode)
@@ -101,6 +103,7 @@ def estimate_monthly_cost(
     Args:
         af2_monomer_jobs: Number of AF2 monomer jobs per month.
         af2_multimer_jobs: Number of AF2 multimer jobs per month.
+        af3_jobs: Number of AlphaFold3 jobs per month.
         of3_jobs: Number of OpenFold3 jobs per month.
         boltz2_jobs: Number of Boltz-2 jobs per month.
         avg_sequence_length: Average sequence length in residues/tokens. Larger
@@ -113,14 +116,16 @@ def estimate_monthly_cost(
         Dict with on_demand and dws_flex_start breakdowns, infrastructure, other
         costs, savings percentage, and pricing disclaimer.
     """
+    resolved_region = region if (region and region.lower() != "global") else "us-central1"
     return estimate_monthly(
         af2_monomer_jobs=af2_monomer_jobs,
         af2_multimer_jobs=af2_multimer_jobs,
+        af3_jobs=af3_jobs,
         of3_jobs=of3_jobs,
         boltz2_jobs=boltz2_jobs,
         avg_sequence_length=avg_sequence_length,
         include_infrastructure=include_infrastructure,
-        region=region or "us-central1",
+        region=resolved_region,
     )
 
 
@@ -159,11 +164,20 @@ def get_actual_job_costs(
         if not re.fullmatch(r"^[a-zA-Z0-9_-]+$", pipeline_job_id):
             return {"error": f"Invalid pipeline_job_id format: {pipeline_job_id!r}"}
 
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    region = os.getenv("GCP_REGION") or os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    project_id = (
+        os.getenv("GCP_PROJECT_ID")
+        or os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("VERTEX_PROJECT_ID")
+    )
+    raw_cloud_loc = os.getenv("GOOGLE_CLOUD_LOCATION") or ""
+    region = (
+        os.getenv("GCP_REGION")
+        or (raw_cloud_loc if raw_cloud_loc.lower() != "global" else "")
+        or "us-central1"
+    )
 
     if not project_id:
-        return {"error": "GOOGLE_CLOUD_PROJECT not configured"}
+        return {"error": "GCP_PROJECT_ID / GOOGLE_CLOUD_PROJECT not configured"}
 
     return get_actual_costs(
         project_id=project_id,
