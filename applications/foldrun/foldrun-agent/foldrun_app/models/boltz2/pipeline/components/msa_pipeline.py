@@ -127,6 +127,16 @@ def msa_pipeline_boltz2(
         if isinstance(seq_id, list):
             seq_id = seq_id[0]  # handle [A, B] identical chains
 
+        existing_msa = prot_data.get("msa")
+        if existing_msa and (
+            str(existing_msa).strip().lower() == "empty" or os.path.exists(str(existing_msa))
+        ):
+            logging.info(
+                f"Preserving pre-populated MSA for chain {seq_id}: {existing_msa} (skipping jackhmmer)"
+            )
+            num_msa_sequences += 1
+            continue
+
         sequence = prot_data.get("sequence", "")
         if not sequence:
             logging.warning(f"Empty sequence for chain {seq_id}, skipping MSA")
@@ -151,6 +161,16 @@ def msa_pipeline_boltz2(
         with open(tmp_fasta, "w") as f:
             f.write(f">protein_{seq_hash}\n{sequence}\n")
 
+        if not (os.path.exists(uniref90_path) and os.path.exists(mgnify_path)):
+            logging.warning(
+                f"Reference sequence databases not found on NFS ({uniref90_path}, {mgnify_path}); "
+                f"falling back to single-sequence mode (msa: empty) for chain {seq_id} (core mode)."
+            )
+            prot_data["msa"] = "empty"
+            shutil.rmtree(seq_dir, ignore_errors=True)
+            continue
+
+        combined_a3m = os.path.join(seq_dir, "combined.a3m")
         # Jackhmmer against uniref90
         uniref90_sto = os.path.join(seq_dir, "uniref90.sto")
         uniref90_a3m = os.path.join(seq_dir, "uniref90.a3m")
@@ -192,7 +212,6 @@ def msa_pipeline_boltz2(
         sto_to_a3m(mgnify_sto, mgnify_a3m)
 
         # Combine A3M files
-        combined_a3m = os.path.join(seq_dir, "combined.a3m")
         with open(combined_a3m, "w") as fout:
             with open(uniref90_a3m) as fin1, open(mgnify_a3m) as fin2:
                 fout.write(fin1.read())

@@ -14,15 +14,19 @@
 
 """Utility functions that encapsulate AlphaFold inference components.
 
-NOTE: This is a NON-EXECUTING reference copy for IDE support and type checking.
-The authoritative runtime copy lives at:
-  src/alphafold-components/src/components/alphafold_utils.py
+This is the AUTHORITATIVE copy that gets baked into the Docker container image
+(via Dockerfile: ADD src/components/alphafold_utils.py). It runs inside Agent Platform
+Pipeline tasks at execution time.
 
-That copy is baked into the Docker container image and runs inside Agent Platform
-Pipeline tasks. Any bug fixes or new functions MUST be applied there first.
+A duplicate copy exists at:
+  foldrun-agent/foldrun_app/models/af2/pipeline/components/alphafold_utils.py
 
-TODO: Eliminate this duplicate by referencing the authoritative copy directly
-(e.g. via symlink or shared package). See the authoritative copy for details.
+That copy is a non-executing reference used only for IDE support and type checking
+in the agent codebase. It is never imported at runtime.
+
+TODO: Eliminate the duplicate by having the agent-side code reference this file
+directly (e.g. via symlink or shared package). Maintaining two copies leads to
+drift — fixes applied to one copy may be missed in the other.
 """
 
 import glob
@@ -37,32 +41,12 @@ import time
 from collections.abc import Mapping
 
 import numpy as np
-from alphafold.common import (
-    protein,  # type: ignore
-    residue_constants,  # type: ignore
-)
-from alphafold.data import (
-    parsers,  # type: ignore
-    pipeline,  # type: ignore
-    pipeline_multimer,  # type: ignore
-    templates,  # type: ignore
-)
-from alphafold.data.pipeline import (
-    make_msa_features,  # type: ignore
-    make_sequence_features,  # type: ignore
-)
-from alphafold.data.tools import (
-    hhblits,  # type: ignore
-    hhsearch,  # type: ignore
-    hmmsearch,  # type: ignore
-    jackhmmer,  # type: ignore
-)
-from alphafold.model import (
-    config,  # type: ignore
-    data,  # type: ignore
-    model,  # type: ignore
-)
-from alphafold.relax import relax  # type: ignore
+from alphafold.common import protein, residue_constants
+from alphafold.data import parsers, pipeline, pipeline_multimer, templates
+from alphafold.data.pipeline import make_msa_features, make_sequence_features
+from alphafold.data.tools import hhblits, hhsearch, hmmsearch, jackhmmer
+from alphafold.model import config, data, model
+from alphafold.relax import relax
 
 JACKHMMER_BINARY_PATH = shutil.which("jackhmmer")
 HHBLITS_BINARY_PATH = shutil.which("hhblits")
@@ -73,6 +57,8 @@ HMMBUILD_BINARY_PATH = shutil.which("hmmbuild")
 MMSEQS2_BINARY_PATH = shutil.which("mmseqs")
 
 MAX_TEMPLATE_HITS = 20
+
+logger = logging.getLogger(__name__)
 
 
 def _load_features(features_path: str) -> dict[str, str]:
@@ -113,6 +99,236 @@ def _read_template_features(template_features_path) -> dict[str, str]:
     return template_features
 
 
+def _resolve_chain_msa_dir(msa_output_path: str, desc: str, chain_idx: int) -> str:
+    """Resolve and validate a per-chain MSA output directory inside msa_output_path.
+
+    Sanitizes the FASTA description into a safe single-component directory name
+    and enforces canonical path containment within ``msa_output_path``.
+    """
+    safe_desc = re.sub(r"[^a-zA-Z0-9._-]", "_", desc).strip("._")
+    if not safe_desc:
+        safe_desc = f"chain_{chain_idx}"
+    safe_desc = safe_desc[:128]
+
+    real_msa_root = os.path.realpath(msa_output_path)
+    chain_msa_dir = os.path.join(real_msa_root, safe_desc)
+    real_chain_dir = os.path.realpath(chain_msa_dir)
+    if (
+        os.path.commonpath([real_msa_root, real_chain_dir]) != real_msa_root
+        or real_chain_dir == real_msa_root
+    ):
+        raise ValueError(
+            f"Resolved chain MSA directory {real_chain_dir!r} escapes msa_output_path {real_msa_root!r}"
+        )
+    return real_chain_dir
+
+
+def _write_a3m_as_sto(a3m_str: str, sto_path: str):
+    """Convert A3M alignment to minimal Stockholm format for template search."""
+    lines = a3m_str.strip().split("\n")
+    names = []
+    seqs = []
+    current_name = None
+    current_seq = []
+    for line in lines:
+        if line.startswith(">"):
+            if current_name is not None:
+                names.append(current_name)
+                seqs.append("".join(current_seq))
+            current_name = line[1:].split()[0]
+            current_seq = []
+        else:
+            # Remove lowercase insertions for Stockholm format
+            current_seq.append("".join(c for c in line if not c.islower()))
+    if current_name is not None:
+        names.append(current_name)
+        seqs.append("".join(current_seq))
+
+    with open(sto_path, "w") as f:
+        f.write("# STOCKHOLM 1.0\n")
+        f.writelines(f"{name}\t{seq}\n" for name, seq in zip(names, seqs))
+        f.write("//\n")
+
+
+def _make_empty_template_features(num_res: int) -> dict[str, np.ndarray]:
+    """Build empty template feature arrays with valid ranks/shapes for num_res."""
+    n_atom_types = getattr(residue_constants, "atom_type_num", 37)
+    template_dtypes = getattr(templates, "TEMPLATE_FEATURES", {})
+    return {
+        "template_aatype": np.zeros(
+            (0, num_res, 22), dtype=template_dtypes.get("template_aatype", np.float32)
+        ),
+        "template_all_atom_masks": np.zeros(
+            (0, num_res, n_atom_types),
+            dtype=template_dtypes.get("template_all_atom_masks", np.float32),
+        ),
+        "template_all_atom_positions": np.zeros(
+            (0, num_res, n_atom_types, 3),
+            dtype=template_dtypes.get("template_all_atom_positions", np.float32),
+        ),
+        "template_domain_names": np.empty(
+            (0,), dtype=template_dtypes.get("template_domain_names", np.object_)
+        ),
+        "template_sequence": np.empty(
+            (0,), dtype=template_dtypes.get("template_sequence", np.object_)
+        ),
+        "template_sum_probs": np.zeros(
+            (0, 1), dtype=template_dtypes.get("template_sum_probs", np.float32)
+        ),
+    }
+
+
+def _normalize_template_features(
+    raw_template_features: Mapping[str, np.ndarray], num_res: int
+) -> dict[str, np.ndarray]:
+    """Ensure zero-hit template features have 3D/4D shapes expected by AF2."""
+    aatype = raw_template_features.get("template_aatype")
+    if aatype is None or aatype.size == 0 or aatype.ndim < 3:
+        return _make_empty_template_features(num_res)
+    return dict(raw_template_features)
+
+
+def _make_all_seq_msa_features(msa) -> dict[str, np.ndarray]:
+    """Construct *_all_seq MSA pairing features from a parsed MSA."""
+    all_seq_features = make_msa_features([msa])
+    msa_pairing_mod = getattr(pipeline_multimer, "msa_pairing", None)
+    base_msa_feats = getattr(
+        msa_pairing_mod,
+        "MSA_FEATURES",
+        ("msa", "msa_mask", "deletion_matrix", "deletion_matrix_int"),
+    )
+    valid_feats = (*base_msa_feats, "msa_species_identifiers")
+    return {f"{k}_all_seq": v for k, v in all_seq_features.items() if k in valid_feats}
+
+
+def _get_pdb_chain_ids() -> str | tuple | list:
+    """Return canonical AF2 PDB chain ID sequence ('ABCDEFGHIJKLMNOPQRSTUVWXYZ...')."""
+    for candidate in (
+        getattr(pipeline_multimer, "PDB_CHAIN_IDS", None),
+        getattr(protein, "PDB_CHAIN_IDS", None),
+    ):
+        if isinstance(candidate, (str, list, tuple)) and len(candidate) > 0:
+            return candidate
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+
+def _assemble_multimer_features(
+    per_chain_monomer_features: list[tuple[str, dict]],
+) -> dict:
+    """Convert per-chain monomer features with unique chain IDs, add assembly features, pair/merge, and pad."""
+    all_chain_features = {}
+    for chain_id, chain_feat in per_chain_monomer_features:
+        converted = pipeline_multimer.convert_monomer_features(chain_feat, chain_id=chain_id)
+        all_chain_features[chain_id] = converted
+
+    all_chain_features = pipeline_multimer.add_assembly_features(all_chain_features)
+    fp_mod = getattr(pipeline_multimer, "feature_processing", None)
+    pair_and_merge_fn = getattr(fp_mod, "pair_and_merge", None) or getattr(
+        pipeline_multimer, "_pair_and_merge", None
+    )
+    np_example = pair_and_merge_fn(all_chain_features=all_chain_features)
+    pad_msa_fn = getattr(pipeline_multimer, "pad_msa", None)
+    if pad_msa_fn is not None:
+        np_example = pad_msa_fn(np_example, 512)
+    return np_example
+
+
+def _run_single_sequence_fallback(
+    fasta_path: str,
+    run_multimer_system: bool,
+    msa_output_path: str,
+    features_output_path: str,
+) -> tuple[dict, dict[str, int]]:
+    """Generates single-sequence template-free features when reference databases are missing."""
+    logger.warning(
+        "Reference sequence databases not found on NFS; falling back to single-sequence "
+        "template-free feature generation (core mode)."
+    )
+    os.makedirs(msa_output_path, exist_ok=True)
+    with open(fasta_path) as f:
+        fasta_str = f.read()
+    sequences, sequence_descs = parsers.parse_fasta(fasta_str)
+
+    if not run_multimer_system:
+        seq, seq_desc, num_res = sequences[0], sequence_descs[0], len(sequences[0])
+        a3m_str = f">{seq_desc}\n{seq}\n"
+        sto_path = os.path.join(msa_output_path, "uniref90_hits.sto")
+        _write_a3m_as_sto(a3m_str, sto_path)
+        sequence_features = make_sequence_features(
+            sequence=seq, description=seq_desc, num_res=num_res
+        )
+        msa_features = make_msa_features(msas=[parsers.parse_a3m(a3m_str)])
+        template_features = _make_empty_template_features(num_res)
+        feature_dict = {
+            **sequence_features,
+            **msa_features,
+            **template_features,
+        }
+        with open(features_output_path, "wb") as f:
+            pickle.dump(feature_dict, f, protocol=4)
+        return feature_dict, {
+            os.path.join(os.path.basename(msa_output_path), "uniref90_hits.sto"): 1
+        }
+
+    # Multimer system fallback
+    pdb_chain_ids = _get_pdb_chain_ids()
+    if len(sequences) > len(pdb_chain_ids):
+        raise ValueError(
+            f"Cannot process more chains ({len(sequences)}) than PDB_CHAIN_IDS ({len(pdb_chain_ids)})."
+        )
+
+    is_homomer_or_monomer = len(set(sequences)) == 1
+    per_chain_features: list[tuple[str, dict]] = []
+    for chain_idx, (seq, desc) in enumerate(zip(sequences, sequence_descs)):
+        chain_id = pdb_chain_ids[chain_idx]
+        chain_fasta = os.path.join(msa_output_path, f"chain_{chain_id}.fasta")
+        with open(chain_fasta, "w") as f:
+            f.write(f">{desc}\n{seq}\n")
+
+        dir_label = f"{chain_id}_{desc}" if sequence_descs.count(desc) > 1 else desc
+        chain_msa_dir = _resolve_chain_msa_dir(msa_output_path, dir_label, chain_idx)
+        os.makedirs(chain_msa_dir, exist_ok=True)
+
+        a3m_str = f">{desc}\n{seq}\n"
+        sto_path = os.path.join(chain_msa_dir, "uniref90_hits.sto")
+        _write_a3m_as_sto(a3m_str, sto_path)
+        with open(sto_path) as f:
+            sto_str = f.read()
+        sto_msa = parsers.parse_stockholm(sto_str)
+
+        sequence_features = make_sequence_features(sequence=seq, description=desc, num_res=len(seq))
+        msa_features = make_msa_features(msas=[parsers.parse_a3m(a3m_str)])
+        template_features = _make_empty_template_features(len(seq))
+        chain_feat = {
+            **sequence_features,
+            **msa_features,
+            **template_features,
+        }
+        if not is_homomer_or_monomer:
+            chain_feat.update(_make_all_seq_msa_features(sto_msa))
+        per_chain_features.append((chain_id, chain_feat))
+
+    feature_dict = _assemble_multimer_features(per_chain_features)
+
+    with open(features_output_path, "wb") as f:
+        pickle.dump(feature_dict, f, protocol=4)
+
+    msas_metadata = {}
+    folders = [
+        os.path.join(msa_output_path, d)
+        for d in os.listdir(msa_output_path)
+        if os.path.isdir(os.path.join(msa_output_path, d))
+    ]
+    for folder in folders:
+        for file in os.listdir(folder):
+            filepath = os.path.join(folder, file)
+            if os.path.isfile(filepath):
+                key = os.path.join(folder.split(os.sep)[-1], file)
+                msas_metadata[key] = 1
+
+    return feature_dict, msas_metadata
+
+
 def run_data_pipeline(
     fasta_path: str,
     run_multimer_system: bool,
@@ -132,6 +348,18 @@ def run_data_pipeline(
     use_small_bfd: bool,
 ) -> tuple[dict, dict[str, int]]:
     """Runs AlphaFold data pipeline."""
+    if (
+        not os.path.exists(uniref90_database_path)
+        or (run_multimer_system and not os.path.exists(seqres_database_path))
+        or (not run_multimer_system and not glob.glob(f"{pdb70_database_path}_*"))
+    ):
+        return _run_single_sequence_fallback(
+            fasta_path=fasta_path,
+            run_multimer_system=run_multimer_system,
+            msa_output_path=msa_output_path,
+            features_output_path=features_output_path,
+        )
+
     if run_multimer_system:
         template_searcher = hmmsearch.Hmmsearch(
             binary_path=HMMSEARCH_BINARY_PATH,
@@ -232,11 +460,17 @@ def predict(
 ) -> Mapping[str, str]:
     """Runs inference on an AlphaFold model."""
 
+    # Ensure random_seed is a plain Python int, not a JAX traced value
+    # This fixes: TypeError: PRNG key seed must be an integer; got Traced<ShapedArray(float32[], weak_type=True)>
+    random_seed = int(random_seed)
+
     model_config = config.model_config(model_name)
     if run_multimer_system:
         model_config.model.num_ensemble_eval = num_ensemble
-    else:
+    elif "num_ensemble_eval" in model_config.data.eval:
         model_config.data.eval.num_ensemble_eval = num_ensemble
+    elif "num_ensemble" in model_config.data.eval:
+        model_config.data.eval.num_ensemble = num_ensemble
 
     model_params = data.get_model_haiku_params(model_name=model_name, data_dir=model_params_path)
     model_runner = model.RunModel(model_config, model_params)
@@ -272,11 +506,13 @@ def relax_protein(
     max_iterations: int = 0,
     tolerance: float = 2.39,
     stiffness: float = 10.0,
-    exclude_residues: list[str] = [],
+    exclude_residues: list[str] | None = None,
     max_outer_iterations: int = 3,
     use_gpu=False,
 ) -> Mapping[str, str]:
     """Runs AMBER relaxation."""
+    if exclude_residues is None:
+        exclude_residues = []
 
     with open(unrelaxed_protein_path) as f:
         unrelaxed_protein_pdb = f.read()
@@ -292,7 +528,7 @@ def relax_protein(
     )
     relaxed_protein_pdb, _, _ = amber_relaxer.process(prot=unrelaxed_structure)
 
-    logging.info(f"Saving relaxed protein to {relaxed_protein_path}")
+    logger.info(f"Saving relaxed protein to {relaxed_protein_path}")
     with open(relaxed_protein_path, "w") as f:
         f.write(relaxed_protein_pdb)
 
@@ -312,11 +548,13 @@ def predict_relax(
     max_iterations: int = 0,
     tolerance: float = 2.39,
     stiffness: float = 10.0,
-    exclude_residues: list[str] = [],
+    exclude_residues: list[str] | None = None,
     max_outer_iterations: int = 3,
     use_gpu=True,
 ) -> Mapping[str, str]:
     """Runs predictions and relaxations sequentially on all specified models."""
+    if exclude_residues is None:
+        exclude_residues = []
 
     model_names = {runner["model_name"] for runner in prediction_runners}
     runners = {}
@@ -324,7 +562,9 @@ def predict_relax(
         model_config = config.model_config(model_name)
         if run_multimer_system:
             model_config.model.num_ensemble_eval = num_ensemble
-        else:
+        elif "num_ensemble_eval" in model_config.data.eval:
+            model_config.data.eval.num_ensemble_eval = num_ensemble
+        elif "num_ensemble" in model_config.data.eval:
             model_config.data.eval.num_ensemble = num_ensemble
         model_params = data.get_model_haiku_params(
             model_name=model_name, data_dir=model_params_path
@@ -335,9 +575,12 @@ def predict_relax(
     model_runners = {}
     for runner in prediction_runners:
         prediction_name = f"{runner['model_name']}_pred_{runner['prediction_index']}"
-        model_runners[prediction_name] = (runners[runner["model_name"]], runner["random_seed"])
+        model_runners[prediction_name] = (
+            runners[runner["model_name"]],
+            int(runner["random_seed"]),
+        )
 
-    logging.info("Have %d models: %s", len(model_runners), list(model_runners.keys()))
+    logger.info("Have %d models: %s", len(model_runners), list(model_runners.keys()))
 
     if run_relax:
         amber_relaxer = relax.AmberRelaxation(
@@ -358,9 +601,9 @@ def predict_relax(
     relaxed_pdbs = {}
     ranking_confidences = {}
     for model_name, prediction_runner in model_runners.items():
-        logging.info("Running prediction %s", model_name)
+        logger.info("Running prediction %s", model_name)
         t_0 = time.time()
-        model_random_seed = prediction_runner[1]
+        model_random_seed = int(prediction_runner[1])
         model_runner = prediction_runner[0]
         processed_feature_dict = model_runner.process_features(
             feature_dict, random_seed=model_random_seed
@@ -373,7 +616,7 @@ def predict_relax(
         )
         t_diff = time.time() - t_0
         timings[f"predict_and_compile_{model_name}"] = t_diff
-        logging.info(
+        logger.info(
             "Total JAX model %s predict time (includes compilation time, see --benchmark): %.1fs",
             model_name,
             t_diff,
@@ -415,7 +658,7 @@ def predict_relax(
             with open(relaxed_output_path, "w") as f:
                 f.write(relaxed_pdb_str)
 
-    logging.info("Final timings  %s ", timings)
+    logger.info("Final timings  %s ", timings)
 
     return ranking_confidences
 
@@ -425,7 +668,7 @@ def aggregate(
     msa_paths: list[tuple[str, str]],
     template_features_path: str,
     output_features_path: str,
-) -> dict:
+) -> dict[str, str]:
     """Aggregates MSAs and template features to create model features."""
 
     # Create sequence features
@@ -521,6 +764,10 @@ def run_hhsearch(
         msa_for_templates = parsers.deduplicate_stockholm_msa(msa_str)
         msa_for_templates = parsers.remove_empty_columns_from_stockholm_msa(msa_for_templates)
         msa_for_templates = parsers.convert_stockholm_to_a3m(msa_for_templates)
+    elif msa_data_format == "a3m":
+        msa_for_templates = msa_str
+    else:
+        raise ValueError(f"Unsupported MSA format: {msa_data_format}")
 
     hhr_str = template_searcher.query(msa_for_templates)
     with open(template_hits_path, "w") as f:
@@ -592,7 +839,7 @@ def run_hmmsearch(
     with open(template_features_path, "wb") as f:
         pickle.dump(templates_result.features, f, protocol=4)
 
-    return parsers.parse_stockholm(template_hits), templates_result.features
+    return parsers.parse_stockholm(sto_str), templates_result.features
 
 
 def run_mmseqs2_search(
@@ -672,30 +919,6 @@ def run_mmseqs2_search(
     return n_seqs
 
 
-def _resolve_chain_msa_dir(msa_output_path: str, desc: str, chain_idx: int) -> str:
-    """Resolve and validate a per-chain MSA output directory inside msa_output_path.
-
-    Sanitizes the FASTA description into a safe single-component directory name
-    and enforces canonical path containment within ``msa_output_path``.
-    """
-    safe_desc = re.sub(r"[^a-zA-Z0-9._-]", "_", desc).strip("._")
-    if not safe_desc:
-        safe_desc = f"chain_{chain_idx}"
-    safe_desc = safe_desc[:128]
-
-    real_msa_root = os.path.realpath(msa_output_path)
-    chain_msa_dir = os.path.join(real_msa_root, safe_desc)
-    real_chain_dir = os.path.realpath(chain_msa_dir)
-    if (
-        os.path.commonpath([real_msa_root, real_chain_dir]) != real_msa_root
-        or real_chain_dir == real_msa_root
-    ):
-        raise ValueError(
-            f"Resolved chain MSA directory {real_chain_dir!r} escapes msa_output_path {real_msa_root!r}"
-        )
-    return real_chain_dir
-
-
 def run_mmseqs2_data_pipeline(
     fasta_path: str,
     run_multimer_system: bool,
@@ -721,12 +944,24 @@ def run_mmseqs2_data_pipeline(
 
     Only valid when use_small_bfd=True (all databases are FASTA format).
     """
-    logging.info("Starting MMseqs2-GPU data pipeline")
+    if (
+        (not os.path.exists(uniref90_database_path) and not glob.glob(f"{uniref90_mmseqs_path}*"))
+        or (run_multimer_system and not os.path.exists(seqres_database_path))
+        or (not run_multimer_system and not glob.glob(f"{pdb70_database_path}_*"))
+    ):
+        return _run_single_sequence_fallback(
+            fasta_path=fasta_path,
+            run_multimer_system=run_multimer_system,
+            msa_output_path=msa_output_path,
+            features_output_path=features_output_path,
+        )
+
+    logger.info("Starting MMseqs2-GPU data pipeline")
     os.makedirs(msa_output_path, exist_ok=True)
 
     # Detect GPU availability
     gpu_available = _check_gpu_available()
-    logging.info(f"GPU available for MMseqs2: {gpu_available}")
+    logger.info(f"GPU available for MMseqs2: {gpu_available}")
 
     # Parse input sequences (handles both monomer and multimer FASTA)
     with open(fasta_path) as f:
@@ -734,14 +969,22 @@ def run_mmseqs2_data_pipeline(
     sequences, descriptions = parsers.parse_fasta(fasta_str)
 
     if run_multimer_system:
-        # For multimer: process each chain separately, then combine
-        chain_features = []
+        pdb_chain_ids = _get_pdb_chain_ids()
+        if len(sequences) > len(pdb_chain_ids):
+            raise ValueError(
+                f"Cannot process more chains ({len(sequences)}) than PDB_CHAIN_IDS ({len(pdb_chain_ids)})."
+            )
+
+        is_homomer_or_monomer = len(set(sequences)) == 1
+        per_chain_features: list[tuple[str, dict]] = []
         for chain_idx, (seq, desc) in enumerate(zip(sequences, descriptions)):
-            chain_fasta = os.path.join(msa_output_path, f"chain_{chain_idx}.fasta")
+            chain_id = pdb_chain_ids[chain_idx]
+            chain_fasta = os.path.join(msa_output_path, f"chain_{chain_id}.fasta")
             with open(chain_fasta, "w") as f:
                 f.write(f">{desc}\n{seq}\n")
 
-            chain_msa_dir = _resolve_chain_msa_dir(msa_output_path, desc, chain_idx)
+            dir_label = f"{chain_id}_{desc}" if descriptions.count(desc) > 1 else desc
+            chain_msa_dir = _resolve_chain_msa_dir(msa_output_path, dir_label, chain_idx)
             os.makedirs(chain_msa_dir, exist_ok=True)
 
             chain_feat = _run_mmseqs2_single_chain(
@@ -760,28 +1003,32 @@ def run_mmseqs2_data_pipeline(
                 run_multimer_system=True,
                 gpu=gpu_available,
             )
-            chain_features.append(chain_feat)
 
-        # Run uniprot search for multimer pairing
-        all_chain_features = {}
-        for chain_idx, (_seq, desc) in enumerate(zip(sequences, descriptions)):
-            chain_fasta = os.path.join(msa_output_path, f"chain_{chain_idx}.fasta")
-            uniprot_runner = jackhmmer.Jackhmmer(
-                binary_path=JACKHMMER_BINARY_PATH,
-                database_path=uniprot_database_path,
-            )
-            uniprot_results = uniprot_runner.query(chain_fasta)[0]
-            uniprot_msa = parsers.parse_stockholm(uniprot_results["sto"])
-            chain_features[chain_idx].update(
-                pipeline_multimer.DataPipeline._all_seq_msa_features(chain_fasta, uniprot_msa)
-            )
-            all_chain_features[desc] = chain_features[chain_idx]
+            # Construct UniProt *_all_seq pairing features when 2+ unique sequences exist
+            if not is_homomer_or_monomer:
+                if uniprot_database_path and os.path.exists(uniprot_database_path):
+                    uniprot_runner = jackhmmer.Jackhmmer(
+                        binary_path=JACKHMMER_BINARY_PATH,
+                        database_path=uniprot_database_path,
+                    )
+                    uniprot_results = uniprot_runner.query(chain_fasta)[0]
+                    uniprot_sto_path = os.path.join(chain_msa_dir, "uniprot_hits.sto")
+                    with open(uniprot_sto_path, "w") as uf:
+                        uf.write(uniprot_results["sto"])
+                    uniprot_msa = parsers.parse_stockholm(uniprot_results["sto"])
+                else:
+                    fallback_sto_path = os.path.join(chain_msa_dir, "uniref90.sto")
+                    if os.path.exists(fallback_sto_path):
+                        with open(fallback_sto_path) as sf:
+                            uniprot_msa = parsers.parse_stockholm(sf.read())
+                    else:
+                        uniprot_msa = parsers.parse_a3m(f">{desc}\n{seq}\n")
+                chain_feat.update(_make_all_seq_msa_features(uniprot_msa))
 
-        # Pair and merge features
-        feature_dict = pipeline_multimer.DataPipeline._pair_and_merge(
-            all_chain_features=all_chain_features
-        )
-        feature_dict = pipeline_multimer.DataPipeline._pad_features(feature_dict)
+            per_chain_features.append((chain_id, chain_feat))
+
+        # Convert monomer features per chain ID, add assembly features, pair/merge, and pad
+        feature_dict = _assemble_multimer_features(per_chain_features)
     else:
         # Monomer: single chain
         if len(sequences) != 1:
@@ -845,7 +1092,8 @@ def run_mmseqs2_data_pipeline(
                 continue
             key = os.path.join(filepath.split(os.sep)[-2], filepath.split(os.sep)[-1])
             msas_metadata[key] = len(parsed)
-        except Exception:
+        except Exception as exc:
+            logger.debug("Skipping MSA metadata entry %s: %s", filepath, exc)
             continue
 
     return feature_dict, msas_metadata
@@ -854,7 +1102,7 @@ def run_mmseqs2_data_pipeline(
 def _check_gpu_available() -> bool:
     """Check if a CUDA GPU is available for MMseqs2."""
     try:
-        result = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5)
+        result = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5, check=False)
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
@@ -899,7 +1147,7 @@ def _run_mmseqs2_single_chain(
         a3m_path = os.path.join(msa_output_dir, f"{db_name}.a3m")
         tmp_dir = tempfile.mkdtemp(prefix=f"mmseqs2_{db_name}_")
         try:
-            logging.info(f"Running MMseqs2 search against {db_name} (gpu={gpu}, split={split})")
+            logger.info(f"Running MMseqs2 search against {db_name} (gpu={gpu}, split={split})")
             t_search = time.time()
             n_seqs = run_mmseqs2_search(
                 query_fasta=fasta_path,
@@ -910,7 +1158,7 @@ def _run_mmseqs2_single_chain(
                 max_seqs=max_seqs,
                 split=split,
             )
-            logging.info(f"MMseqs2 {db_name}: {n_seqs} sequences in {time.time() - t_search:.1f}s")
+            logger.info(f"MMseqs2 {db_name}: {n_seqs} sequences in {time.time() - t_search:.1f}s")
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -921,7 +1169,7 @@ def _run_mmseqs2_single_chain(
         msa = parsers.parse_a3m(a3m_str)
         msas.append(msa)
 
-    logging.info(f"All MMseqs2 searches done in {time.time() - t0:.1f}s")
+    logger.info(f"All MMseqs2 searches done in {time.time() - t0:.1f}s")
 
     # 2. Build sequence features
     sequence_features = make_sequence_features(
@@ -993,41 +1241,14 @@ def _run_mmseqs2_single_chain(
         query_sequence=sequence, hits=template_hits
     )
 
-    logging.info(f"Template search found {len(template_hits)} hits")
+    logger.info(f"Template search found {len(template_hits)} hits")
 
-    # 5. Combine all features
+    # 5. Combine all features (normalizing empty template shapes if 0 hits were found)
+    normalized_templates = _normalize_template_features(templates_result.features, num_res=num_res)
     feature_dict = {
         **sequence_features,
         **msa_features,
-        **templates_result.features,
+        **normalized_templates,
     }
 
     return feature_dict
-
-
-def _write_a3m_as_sto(a3m_str: str, sto_path: str):
-    """Convert A3M alignment to minimal Stockholm format for template search."""
-    lines = a3m_str.strip().split("\n")
-    names = []
-    seqs = []
-    current_name = None
-    current_seq = []
-    for line in lines:
-        if line.startswith(">"):
-            if current_name is not None:
-                names.append(current_name)
-                seqs.append("".join(current_seq))
-            current_name = line[1:].split()[0]
-            current_seq = []
-        else:
-            # Remove lowercase insertions for Stockholm format
-            current_seq.append("".join(c for c in line if not c.islower()))
-    if current_name is not None:
-        names.append(current_name)
-        seqs.append("".join(current_seq))
-
-    with open(sto_path, "w") as f:
-        f.write("# STOCKHOLM 1.0\n")
-        for name, seq in zip(names, seqs):
-            f.write(f"{name}\t{seq}\n")
-        f.write("//\n")

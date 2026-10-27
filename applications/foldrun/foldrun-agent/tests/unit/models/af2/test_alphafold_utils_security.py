@@ -157,9 +157,14 @@ class TestAlphaFoldUtilsPathTraversalSecurity:
             ["../../escaped_traversal", f"{tmp_path}/escaped_abs"],
         )
         mod.parsers.parse_stockholm.return_value = MagicMock()
-        mod.pipeline_multimer.DataPipeline._all_seq_msa_features.return_value = {}
-        mod.pipeline_multimer.DataPipeline._pair_and_merge.return_value = {"merged": True}
-        mod.pipeline_multimer.DataPipeline._pad_features.return_value = {"padded": True}
+        mod.make_msa_features.return_value = {}
+        mod.pipeline_multimer.convert_monomer_features.side_effect = lambda feat, chain_id: {
+            **feat,
+            "chain_id": chain_id,
+        }
+        mod.pipeline_multimer.add_assembly_features.side_effect = lambda feats: feats
+        mod.pipeline_multimer.feature_processing.pair_and_merge.return_value = {"merged": True}
+        mod.pipeline_multimer.pad_msa.return_value = {"padded": True}
 
         mock_jh_instance = MagicMock()
         mock_jh_instance.query.return_value = [{"sto": "# STOCKHOLM 1.0\n//\n"}]
@@ -171,9 +176,17 @@ class TestAlphaFoldUtilsPathTraversalSecurity:
             recorded_dirs.append(kwargs["msa_output_dir"])
             return {"chain_feat": True}
 
+        orig_exists = os.path.exists
+
+        def _mock_exists(path_str):
+            if str(path_str).startswith("/db"):
+                return True
+            return orig_exists(path_str)
+
         with (
             patch.object(mod, "_check_gpu_available", return_value=False),
             patch.object(mod, "_run_mmseqs2_single_chain", side_effect=_fake_single_chain),
+            patch.object(mod.os.path, "exists", side_effect=_mock_exists),
         ):
             feature_dict, _ = mod.run_mmseqs2_data_pipeline(
                 fasta_path=str(fasta_path),
@@ -204,3 +217,125 @@ class TestAlphaFoldUtilsPathTraversalSecurity:
 
         assert not (tmp_path / "escaped_traversal").exists()
         assert not (tmp_path / "escaped_abs").exists()
+
+
+def test_alphafold_utils_copies_remain_identical():
+    """Ensure container and agent copies of alphafold_utils.py never drift (Audit C6)."""
+    repo_root = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..")
+    )
+    comp_path = os.path.join(repo_root, _COMPONENT_UTILS_PATH)
+    agent_path = os.path.join(repo_root, _AGENT_UTILS_PATH)
+    with open(comp_path, encoding="utf-8") as f1, open(agent_path, encoding="utf-8") as f2:
+        assert f1.read() == f2.read(), (
+            f"{_COMPONENT_UTILS_PATH} and {_AGENT_UTILS_PATH} have drifted apart! "
+            "Keep both copies byte-for-byte identical."
+        )
+
+
+@pytest.mark.parametrize(
+    "module_path,module_name",
+    [
+        (_COMPONENT_UTILS_PATH, "alphafold_utils_component_core"),
+        (_AGENT_UTILS_PATH, "alphafold_utils_agent_core"),
+    ],
+)
+class TestAlphaFoldUtilsCoreModeFallback:
+    """Verify monomer and multimer core-mode fallback and pdb70 prefix checks."""
+
+    def test_monomer_falls_back_when_pdb70_prefix_absent_and_runs_when_present(
+        self, tmp_path, module_path, module_name
+    ):
+        """HH-suite pdb70 is a file prefix (pdb70_*), not a literal file."""
+        mod = _load_alphafold_utils_module(module_path, module_name)
+
+        fasta_path = tmp_path / "mono.fasta"
+        fasta_path.write_text(">mono\nACDEFGHIKL\n")
+        uniref_path = tmp_path / "uniref90.fasta"
+        uniref_path.write_text(">u1\nACDEFGHIKL\n")
+        pdb70_prefix = tmp_path / "pdb70"
+
+        with patch.object(
+            mod, "_run_single_sequence_fallback", return_value=({"fallback": True}, {})
+        ) as mock_fb:
+            res, _ = mod.run_mmseqs2_data_pipeline(
+                fasta_path=str(fasta_path),
+                run_multimer_system=False,
+                uniref90_mmseqs_path=str(tmp_path / "uniref90_db"),
+                mgnify_mmseqs_path=str(tmp_path / "mgnify_db"),
+                small_bfd_mmseqs_path=str(tmp_path / "small_bfd_db"),
+                uniref90_database_path=str(uniref_path),
+                mgnify_database_path=str(uniref_path),
+                uniprot_database_path="",
+                pdb70_database_path=str(pdb70_prefix),
+                obsolete_pdbs_path=str(tmp_path / "obsolete.dat"),
+                seqres_database_path="",
+                mmcif_path=str(tmp_path),
+                max_template_date="2026-01-01",
+                msa_output_path=str(tmp_path / "msas_fb"),
+                features_output_path=str(tmp_path / "features_fb.pkl"),
+            )
+            assert res == {"fallback": True}
+            mock_fb.assert_called_once()
+
+        # Creating a pdb70_* prefix file satisfies glob(f"{pdb70_database_path}_*")
+        (tmp_path / "pdb70_hhm.ffindex").write_text("0\t10\n")
+        mod.parsers.parse_fasta.return_value = (["ACDEFGHIKL"], ["mono"])
+        with (
+            patch.object(mod, "_run_single_sequence_fallback") as mock_no_fb,
+            patch.object(mod, "_check_gpu_available", return_value=False),
+            patch.object(mod, "_run_mmseqs2_single_chain", return_value={"full_msa": True}),
+        ):
+            res_full, _ = mod.run_mmseqs2_data_pipeline(
+                fasta_path=str(fasta_path),
+                run_multimer_system=False,
+                uniref90_mmseqs_path=str(tmp_path / "uniref90_db"),
+                mgnify_mmseqs_path=str(tmp_path / "mgnify_db"),
+                small_bfd_mmseqs_path=str(tmp_path / "small_bfd_db"),
+                uniref90_database_path=str(uniref_path),
+                mgnify_database_path=str(uniref_path),
+                uniprot_database_path="",
+                pdb70_database_path=str(pdb70_prefix),
+                obsolete_pdbs_path=str(tmp_path / "obsolete.dat"),
+                seqres_database_path="",
+                mmcif_path=str(tmp_path),
+                max_template_date="2026-01-01",
+                msa_output_path=str(tmp_path / "msas_full"),
+                features_output_path=str(tmp_path / "features_full.pkl"),
+            )
+            assert res_full == {"full_msa": True}
+            mock_no_fb.assert_not_called()
+
+    def test_multimer_falls_back_when_seqres_or_uniref90_missing(
+        self, tmp_path, module_path, module_name
+    ):
+        """Multimer routes to single-sequence fallback when pdb_seqres or uniref90 is absent."""
+        mod = _load_alphafold_utils_module(module_path, module_name)
+        fasta_path = tmp_path / "multi.fasta"
+        fasta_path.write_text(">A\nACDEFG\n>B\nMNPQRS\n")
+        uniref_path = tmp_path / "uniref90.fasta"
+        uniref_path.write_text(">u1\nACDEFG\n")
+
+        with patch.object(
+            mod, "_run_single_sequence_fallback", return_value=({"multimer_fb": True}, {})
+        ) as mock_fb:
+            res, _ = mod.run_data_pipeline(
+                fasta_path=str(fasta_path),
+                run_multimer_system=True,
+                uniref90_database_path=str(uniref_path),
+                mgnify_database_path=str(uniref_path),
+                bfd_database_path="",
+                small_bfd_database_path=str(uniref_path),
+                uniref30_database_path="",
+                uniprot_database_path="",
+                pdb70_database_path="",
+                obsolete_pdbs_path=str(tmp_path / "obsolete.dat"),
+                seqres_database_path=str(tmp_path / "missing_pdb_seqres.txt"),
+                mmcif_path=str(tmp_path),
+                max_template_date="2026-01-01",
+                msa_output_path=str(tmp_path / "msas_multi"),
+                features_output_path=str(tmp_path / "features_multi.pkl"),
+                use_small_bfd=True,
+            )
+            assert res == {"multimer_fb": True}
+            mock_fb.assert_called_once()

@@ -169,3 +169,149 @@ class TestBOLTZ2MSAPipelineSource:
         # All five intermediates must be listed for removal
         for name in ("tmp_fasta", "uniref90_sto", "uniref90_a3m", "mgnify_sto", "mgnify_a3m"):
             assert name in source
+
+
+class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
+    """Validate Boltz-2 core-mode single-sequence fallback and custom MSA preservation."""
+
+    @staticmethod
+    def _get_msa_func(monkeypatch):
+        import sys
+
+        from foldrun_app.models.boltz2.pipeline import config as boltz2_config
+
+        monkeypatch.setitem(sys.modules, "config", boltz2_config)
+        from foldrun_app.models.boltz2.pipeline.components.msa_pipeline import (
+            msa_pipeline_boltz2,
+        )
+
+        return msa_pipeline_boltz2.python_func
+
+    @staticmethod
+    def _make_artifact(path: str, uri: str = "", metadata: dict | None = None):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            path=path, uri=uri, metadata=metadata if metadata is not None else {}
+        )
+
+    def test_core_mode_missing_databases_emits_msa_empty_without_polluting_cache(
+        self, tmp_path, monkeypatch
+    ):
+        """When uniref90/mgnify are absent on NFS, msa_pipeline_boltz2 sets msa: empty and skips jackhmmer."""
+        import subprocess
+
+        import yaml
+
+        msa_func = self._get_msa_func(monkeypatch)
+
+        nfs_mount = tmp_path / "nfs"
+        nfs_mount.mkdir()
+        # Do NOT create uniref90.fasta or mgnify.fasta on NFS (simulates DOWNLOAD_MODE=core)
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90/uniref90.fasta",
+                "mgnify": "mgnify/mgy_clusters_2022_05.fa",
+            },
+        )
+
+        query_yaml = tmp_path / "query.yaml"
+        query_yaml.write_text(
+            yaml.safe_dump(
+                {
+                    "version": 1,
+                    "sequences": [
+                        {"protein": {"id": "A", "sequence": "ACDEFGHIKLMNPQRSTVWY"}},
+                        {"ligand": {"id": "L", "smiles": "CC(=O)O"}},
+                    ],
+                }
+            )
+        )
+        out_yaml = tmp_path / "updated_query.yaml"
+        out_artifact = self._make_artifact(path=str(out_yaml), uri=str(out_yaml))
+
+        invoked = []
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: invoked.append((a, kw)))
+
+        msa_func(
+            query_json=self._make_artifact(path=str(query_yaml), uri=str(query_yaml)),
+            ref_databases=ref_db,
+            updated_query_json=out_artifact,
+        )
+
+        assert invoked == [], "jackhmmer must not be called when reference DBs are absent"
+        updated = yaml.safe_load(out_yaml.read_text())
+        assert updated["sequences"][0]["protein"]["msa"] == "empty"
+        assert "msa" not in updated["sequences"][1]["ligand"]
+        assert out_artifact.metadata["msa_sequences"] == 0
+        # Temp dir should be cleaned up and cache should remain empty
+        assert list((nfs_mount / "boltz2_msas_tmp").iterdir()) == []
+        assert list((nfs_mount / "boltz2_msas_cache").iterdir()) == []
+
+    def test_preserves_custom_a3m_and_explicit_empty_msa_without_running_jackhmmer(
+        self, tmp_path, monkeypatch
+    ):
+        """User-supplied existing .a3m paths and msa: empty are preserved without running jackhmmer."""
+        import subprocess
+
+        import yaml
+
+        msa_func = self._get_msa_func(monkeypatch)
+
+        nfs_mount = tmp_path / "nfs"
+        nfs_mount.mkdir()
+        custom_a3m = tmp_path / "custom_alignment.a3m"
+        custom_a3m.write_text(">A\nACDEFGHIKL\n>homolog_1\nACDEFGHIKM\n")
+
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90/uniref90.fasta",
+                "mgnify": "mgnify/mgy_clusters_2022_05.fa",
+            },
+        )
+
+        query_yaml = tmp_path / "query_custom.yaml"
+        query_yaml.write_text(
+            yaml.safe_dump(
+                {
+                    "version": 1,
+                    "sequences": [
+                        {
+                            "protein": {
+                                "id": "A",
+                                "sequence": "ACDEFGHIKL",
+                                "msa": str(custom_a3m),
+                            }
+                        },
+                        {
+                            "protein": {
+                                "id": "B",
+                                "sequence": "MNPQRSTVWY",
+                                "msa": "empty",
+                            }
+                        },
+                    ],
+                }
+            )
+        )
+        out_yaml = tmp_path / "updated_custom.yaml"
+        out_artifact = self._make_artifact(path=str(out_yaml), uri=str(out_yaml))
+
+        invoked = []
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: invoked.append((a, kw)))
+
+        msa_func(
+            query_json=self._make_artifact(path=str(query_yaml), uri=str(query_yaml)),
+            ref_databases=ref_db,
+            updated_query_json=out_artifact,
+        )
+
+        assert invoked == [], "jackhmmer must not run when chains already specify valid msa"
+        updated = yaml.safe_load(out_yaml.read_text())
+        assert updated["sequences"][0]["protein"]["msa"] == str(custom_a3m)
+        assert updated["sequences"][1]["protein"]["msa"] == "empty"
+        assert out_artifact.metadata["msa_sequences"] == 2

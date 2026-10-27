@@ -215,11 +215,90 @@ class TestGetDatabasesForModels:
         assert "bfd" in dbs
         assert "small_bfd" not in dbs
 
+    def test_af2_core_mode(self, manifest):
+        dbs = get_databases_for_models(manifest, ["af2"], mode="core")
+        assert dbs == ["alphafold_params"]
+
     def test_of3_core_mode(self, manifest):
         dbs = get_databases_for_models(manifest, ["of3"], mode="core")
-        assert "of3_params" in dbs
-        assert "of3_ccd" in dbs
+        assert dbs == ["of3_params", "of3_ccd"]
         assert "rfam" not in dbs
+
+    def test_boltz_and_boltz2_core_mode(self, manifest):
+        assert get_databases_for_models(manifest, ["boltz"], mode="core") == ["boltz2_cache"]
+        assert get_databases_for_models(manifest, ["boltz2"], mode="core") == ["boltz2_cache"]
+
+    def test_combined_models_core_mode(self, manifest):
+        dbs = get_databases_for_models(manifest, ["af2", "of3", "boltz"], mode="core")
+        assert dbs == ["alphafold_params", "of3_params", "of3_ccd", "boltz2_cache"]
+
+    def test_download_all_databases_tool_supports_core_mode(self):
+        """DownloadAllDatabasesTool(download_mode='core') submits only alphafold_params."""
+        from unittest.mock import MagicMock, patch
+
+        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
+            from foldrun_app.models.af2.config import Config
+            from foldrun_app.models.af2.tools.download_all_databases import DownloadAllDatabasesTool
+
+            tool = DownloadAllDatabasesTool(
+                {"name": "download_all_databases", "description": "test"}, Config()
+            )
+
+        with (
+            patch(
+                "foldrun_app.models.af2.tools.download_database.DownloadDatabaseTool._get_filestore_info",
+                return_value=("10.0.0.1", "projects/123/global/networks/default"),
+            ),
+            patch("google.cloud.compute_v1.SubnetworksClient") as mock_subnets,
+            patch("foldrun_app.core.batch.submit_batch_job") as mock_submit,
+        ):
+            mock_subnet = MagicMock()
+            mock_subnet.name = "test-subnet"
+            mock_subnet.network = "projects/123/global/networks/default"
+            mock_subnets.return_value.list.return_value = [mock_subnet]
+            mock_submit.return_value = {
+                "job_id": "test-core-123",
+                "job_name": "test-core",
+                "console_url": "http://test",
+            }
+
+            result = tool.run({"download_mode": "core"})
+            assert result["status"] == "submitted"
+            assert result["download_mode"] == "core"
+            assert result["total_databases"] == 1
+            assert result["submitted_count"] == 1
+            assert [j["database_name"] for j in result["submitted_jobs"]] == ["alphafold_params"]
+
+    def test_setup_data_respects_download_mode_core_env_var(self, monkeypatch, capsys):
+        """scripts/setup_data.py resolves DOWNLOAD_MODE=core across af2, of3, and boltz."""
+        import importlib.util
+        import sys
+        from pathlib import Path
+        from unittest.mock import patch
+
+        script_path = Path(__file__).resolve().parents[2] / "scripts" / "setup_data.py"
+        spec = importlib.util.spec_from_file_location("setup_data_under_test", script_path)
+        assert spec is not None and spec.loader is not None
+        setup_data = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(setup_data)
+
+        monkeypatch.setenv("DOWNLOAD_MODELS", "af2,of3,boltz")
+        monkeypatch.setenv("DOWNLOAD_MODE", "core")
+        monkeypatch.setattr(sys, "argv", ["setup_data.py", "--dry-run", "--force"])
+
+        class _DummyCoreConfig:
+            databases_bucket_name = ""
+
+        with patch.object(setup_data, "CoreConfig", _DummyCoreConfig):
+            setup_data.main()
+
+        out = capsys.readouterr().out
+        assert "alphafold_params" in out
+        assert "of3_params" in out
+        assert "of3_ccd" in out
+        assert "boltz2_cache" in out
+        assert "uniref90" not in out
+        assert "mgnify" not in out
 
     def test_of3_full_mode(self, manifest):
         dbs = get_databases_for_models(manifest, ["of3"], mode="full")

@@ -99,6 +99,25 @@ def msa_pipeline_of3(
                 logging.warning(f"Empty sequence for chain {seq_key}, skipping MSA")
                 continue
 
+            custom_msa_paths = (
+                list(chain["main_msa_file_paths"]) if chain.get("main_msa_file_paths") else None
+            )
+            custom_template_path = (
+                chain["template_alignment_file_path"]
+                if chain.get("template_alignment_file_path")
+                else None
+            )
+            if custom_msa_paths and (
+                custom_template_path is not None or not use_templates or seq_type != "protein"
+            ):
+                logging.info(
+                    f"Preserving pre-populated MSA/template paths for chain {seq_key} (skipping HMMER)"
+                )
+                num_msa_chains += 1
+                if custom_template_path is not None:
+                    num_template_chains += 1
+                continue
+
             seq_hash = hashlib.sha256(sequence.encode()).hexdigest()
             seq_cache_dir = os.path.join(nfs_msa_cache_base, f"{seq_type}_{seq_hash}")
 
@@ -128,18 +147,24 @@ def msa_pipeline_of3(
                 logging.info(
                     f"Cache hit for chain {seq_key} ({seq_type}_{seq_hash}). Reusing MSAs."
                 )
-                msa_filenames = (
-                    ["uniref90_hits.sto", "mgnify_hits.sto"]
-                    if seq_type == "protein"
-                    else ["rfam_hits.sto", "rnacentral_hits.sto"]
-                )
-                chain["main_msa_file_paths"] = [
-                    os.path.join(seq_cache_dir, f)
-                    for f in msa_filenames
-                    if os.path.exists(os.path.join(seq_cache_dir, f))
-                ]
+                if custom_msa_paths is not None:
+                    chain["main_msa_file_paths"] = custom_msa_paths
+                else:
+                    msa_filenames = (
+                        ["uniref90_hits.sto", "mgnify_hits.sto"]
+                        if seq_type == "protein"
+                        else ["rfam_hits.sto", "rnacentral_hits.sto"]
+                    )
+                    chain["main_msa_file_paths"] = [
+                        os.path.join(seq_cache_dir, f)
+                        for f in msa_filenames
+                        if os.path.exists(os.path.join(seq_cache_dir, f))
+                    ]
                 num_msa_chains += 1
-                if seq_type == "protein" and use_templates and os.path.exists(pdb_seqres_path):
+                if custom_template_path is not None:
+                    chain["template_alignment_file_path"] = custom_template_path
+                    num_template_chains += 1
+                elif seq_type == "protein" and use_templates and os.path.exists(pdb_seqres_path):
                     chain["template_alignment_file_path"] = os.path.join(
                         seq_cache_dir, "pdb_seqres.sto"
                     )
@@ -163,57 +188,72 @@ def msa_pipeline_of3(
                 with open(tmp_fasta, "w") as f:
                     f.write(f">{seq_type}_{seq_hash}\n{sequence}\n")
 
-                msa_files = []
+                if custom_msa_paths is not None:
+                    chain["main_msa_file_paths"] = custom_msa_paths
+                    num_msa_chains += 1
+                else:
+                    msa_files = []
+                    uniref90_sto = os.path.join(seq_dir, "uniref90_hits.sto")
+                    if not (os.path.exists(uniref90_path) and os.path.exists(mgnify_path)):
+                        logging.warning(
+                            f"Reference sequence databases not found on NFS ({uniref90_path}, {mgnify_path}); "
+                            f"falling back to single-sequence Stockholm MSA for {seq_type}_{seq_hash} (core mode)."
+                        )
+                        with open(uniref90_sto, "w") as fout:
+                            fout.write(f"# STOCKHOLM 1.0\n{seq_type}_{seq_hash} {sequence}\n//\n")
+                        msa_files.append(uniref90_sto)
+                    else:
+                        # Jackhmmer against UniRef90.
+                        # File must be named "uniref90_hits.sto" — OF3's MSASettings.max_seq_counts
+                        # filters by basename and expects the "_hits" suffix for all MSA files.
+                        subprocess.run(
+                            [
+                                "jackhmmer",
+                                "--noali",
+                                "-N",
+                                "1",
+                                "--cpu",
+                                "8",
+                                "-A",
+                                uniref90_sto,
+                                tmp_fasta,
+                                uniref90_path,
+                            ],
+                            check=True,
+                        )
+                        msa_files.append(uniref90_sto)
 
-                # Jackhmmer against UniRef90.
-                # File must be named "uniref90_hits.sto" — OF3's MSASettings.max_seq_counts
-                # filters by basename and expects the "_hits" suffix for all MSA files.
-                uniref90_sto = os.path.join(seq_dir, "uniref90_hits.sto")
-                subprocess.run(
-                    [
-                        "jackhmmer",
-                        "--noali",
-                        "-N",
-                        "1",
-                        "--cpu",
-                        "8",
-                        "-A",
-                        uniref90_sto,
-                        tmp_fasta,
-                        uniref90_path,
-                    ],
-                    check=True,
-                )
-                msa_files.append(uniref90_sto)
+                        # Jackhmmer against MGnify ("mgnify_hits.sto" for same reason)
+                        mgnify_sto = os.path.join(seq_dir, "mgnify_hits.sto")
+                        subprocess.run(
+                            [
+                                "jackhmmer",
+                                "--noali",
+                                "-N",
+                                "1",
+                                "--cpu",
+                                "8",
+                                "-A",
+                                mgnify_sto,
+                                tmp_fasta,
+                                mgnify_path,
+                            ],
+                            check=True,
+                        )
+                        msa_files.append(mgnify_sto)
 
-                # Jackhmmer against MGnify ("mgnify_hits.sto" for same reason)
-                mgnify_sto = os.path.join(seq_dir, "mgnify_hits.sto")
-                subprocess.run(
-                    [
-                        "jackhmmer",
-                        "--noali",
-                        "-N",
-                        "1",
-                        "--cpu",
-                        "8",
-                        "-A",
-                        mgnify_sto,
-                        tmp_fasta,
-                        mgnify_path,
-                    ],
-                    check=True,
-                )
-                msa_files.append(mgnify_sto)
-
-                # Inject MSA paths into the chain dict (OF3 main_msa_file_paths field)
-                chain["main_msa_file_paths"] = msa_files
-                num_msa_chains += 1
+                    # Inject MSA paths into the chain dict (OF3 main_msa_file_paths field)
+                    chain["main_msa_file_paths"] = msa_files
+                    num_msa_chains += 1
 
                 # Template search: jackhmmer against pdb_seqres → Stockholm output.
                 # The .sto file is directly consumable by OF3's StoParser as
                 # template_alignment_file_path (see OF3 template how-to guide).
                 # We skip if pdb_seqres is not present (e.g. core-only install).
-                if use_templates:
+                if custom_template_path is not None:
+                    chain["template_alignment_file_path"] = custom_template_path
+                    num_template_chains += 1
+                elif use_templates:
                     if os.path.exists(pdb_seqres_path):
                         pdb_seqres_sto = os.path.join(seq_dir, "pdb_seqres.sto")
                         subprocess.run(
@@ -311,29 +351,40 @@ def msa_pipeline_of3(
                     f"Cache already populated for {seq_type}_{seq_hash}; merging newly generated files."
                 )
                 os.makedirs(seq_cache_dir, exist_ok=True)
+                upgrade_core_fallback = os.path.exists(
+                    os.path.join(seq_dir, "mgnify_hits.sto")
+                ) and not os.path.exists(os.path.join(seq_cache_dir, "mgnify_hits.sto"))
                 for fname in os.listdir(seq_dir):
                     src_file = os.path.join(seq_dir, fname)
                     dst_file = os.path.join(seq_cache_dir, fname)
-                    if os.path.isfile(src_file) and not os.path.exists(dst_file):
+                    if os.path.isfile(src_file) and (
+                        not os.path.exists(dst_file)
+                        or (upgrade_core_fallback and fname == "uniref90_hits.sto")
+                    ):
                         shutil.copy2(src_file, dst_file)
                 shutil.rmtree(seq_dir)
 
             # Point to the cache directory
             if os.path.exists(seq_cache_dir):
                 if seq_type in ("protein", "rna"):
-                    msa_filenames = (
-                        ["uniref90_hits.sto", "mgnify_hits.sto"]
-                        if seq_type == "protein"
-                        else ["rfam_hits.sto", "rnacentral_hits.sto"]
-                    )
-                    cached_msa_paths = [
-                        os.path.join(seq_cache_dir, f)
-                        for f in msa_filenames
-                        if os.path.exists(os.path.join(seq_cache_dir, f))
-                    ]
-                    if cached_msa_paths or seq_type == "protein":
-                        chain["main_msa_file_paths"] = cached_msa_paths
-                    if seq_type == "protein" and "template_alignment_file_path" in chain:
+                    if custom_msa_paths is not None:
+                        chain["main_msa_file_paths"] = custom_msa_paths
+                    else:
+                        msa_filenames = (
+                            ["uniref90_hits.sto", "mgnify_hits.sto"]
+                            if seq_type == "protein"
+                            else ["rfam_hits.sto", "rnacentral_hits.sto"]
+                        )
+                        cached_msa_paths = [
+                            os.path.join(seq_cache_dir, f)
+                            for f in msa_filenames
+                            if os.path.exists(os.path.join(seq_cache_dir, f))
+                        ]
+                        if cached_msa_paths or seq_type == "protein":
+                            chain["main_msa_file_paths"] = cached_msa_paths
+                    if custom_template_path is not None:
+                        chain["template_alignment_file_path"] = custom_template_path
+                    elif seq_type == "protein" and "template_alignment_file_path" in chain:
                         chain["template_alignment_file_path"] = os.path.join(
                             seq_cache_dir, "pdb_seqres.sto"
                         )
