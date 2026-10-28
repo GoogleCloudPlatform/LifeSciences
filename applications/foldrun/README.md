@@ -480,7 +480,7 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | Resource | Name | Purpose |
 |----------|------|---------|
 | VPC + Subnet | `foldrun-network` | Private network for Filestore + pipelines |
-| Filestore | `foldrun-nfs` | NFS for genetic databases (1 TiB Regional, multi-zone) |
+| Filestore | `foldrun-nfs` | NFS for genetic databases (2.5TB Basic SSD default; `ZONAL` / `REGIONAL` opt-in) |
 | GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, AF3 results, analysis bundles |
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups + AF3 630 GB MSA bundle |
 | Artifact Registry | `foldrun-repo` | Container images |
@@ -509,7 +509,7 @@ uv run adk web foldrun_app
 
 | Component | Estimated Cost |
 |-----------|---------------|
-| Filestore (1 TiB Regional) | ~$461/mo |
+| Filestore (2.5TB Basic SSD) | ~$770/mo |
 | GCS (~1TB database backups + AF3 630 GB MSA tar.gz) | ~$25/mo |
 | Artifact Registry (~16GB) | ~$2/mo |
 | Agent Runtime (idle) | ~$0 (pay per query) |
@@ -522,47 +522,51 @@ uv run adk web foldrun_app
 | Boltz-2 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
 | Gemini 3.1 Pro API (per expert analysis) | ~$0.01-0.05 per analysis |
 
-The dominant fixed cost is Filestore (~$461/mo). Prices in this section are us-central1 list prices from the [Filestore pricing page](https://cloud.google.com/filestore/pricing). AlphaFold 3 mounts its 630 GB MSA bundle directly onto the H100 VM's 3 TB local NVMe SSD at endpoint startup and automatically undeploys back to `$0.00/hr` after 20 minutes of inactivity. Terraform ignores Filestore capacity changes after provisioning, so you can resize with the Console or gcloud without drift. To stop fixed storage costs completely, delete the Filestore instance when not in use and restore databases from the GCS backup bucket when needed.
+The dominant fixed cost is Filestore (~$770/mo). Default databases (`af2`, `of3`, `boltz`) plus in-place decompression scratch and runtime MSA caches fit comfortably within the 2.5 TB provisioned, leaving room for full BFD (~272 GB) and GPU MMseqs2 index databases (~460 GB). `BASIC_SSD` avoids write/read throughput throttling during concurrent database downloads and CPU MSA scans. Prices in this section are `us-central1` list prices from the [Filestore pricing page](https://cloud.google.com/filestore/pricing). AlphaFold 3 mounts its 630 GB MSA bundle directly onto the H100 VM's 3 TB local NVMe SSD at endpoint startup and automatically undeploys back to `$0.00/hr` after 20 minutes of inactivity. Terraform ignores Filestore capacity changes after provisioning, so you can resize via Console or gcloud without drift. To stop fixed storage costs completely, delete the Filestore instance when not in use and restore databases from the GCS backup bucket when needed.
 
 ### Filestore Tier
 
-FoldRun provisions a **`REGIONAL`** Filestore instance by default (`filestore_tier = "REGIONAL"`, `filestore_capacity_gb = 1024`). Earlier releases used the legacy `BASIC_SSD` tier, which has a 2.5 TiB minimum. The current databases (AF2 reduced + OF3) use ~944 GB, so most of that 2.5 TiB was paid for but unused.
+FoldRun provisions a **`BASIC_SSD`** Filestore instance (`2,560 GiB`) by default (`filestore_tier = "BASIC_SSD"`, `filestore_capacity_gb = 2560`), and supports opting into **`ZONAL`** or **`REGIONAL`** tiers (plus optional custom performance via `filestore_max_iops`) through environment variables or Terraform variables.
 
-| Tier | Capacity | Location | Read IOPS / read throughput | Est. monthly |
-|------|----------|----------|-----------------------------|--------------|
-| `REGIONAL` (default, capacity-based performance) | 1 TiB | Region (replicated across zones) | ~12,000 / ~120 MiB/s | **~$461** |
-| `REGIONAL` + `filestore_max_iops = 4000` | 1 TiB | Region | 4,000 / ~94 MiB/s | ~$363 |
-| `REGIONAL` + `filestore_max_iops = 17000` | 1 TiB | Region | 17,000 / ~400 MiB/s | ~$714 |
-| `BASIC_SSD` (legacy) | 2.5 TiB minimum | Single zone | ~60,000 / ~1,200 MiB/s | ~$768 |
+| Tier | Capacity | Location | Read / Write IOPS | Read / Write throughput | Est. monthly (`us-central1`) |
+|------|----------|----------|-------------------|-------------------------|------------------------------|
+| **`BASIC_SSD` (default)** | **2.5 TiB min (`2,560 GiB`)** | **Single zone** | **~60,000 / ~25,000** | **~1,200 / ~350 MiB/s** | **~$768** |
+| `ZONAL` (opt-in, capacity-based) | 1.5 TiB (`1,536 GiB`) | Single zone | ~13,800 / ~3,900 | ~390 / ~132 MiB/s | ~$384 |
+| `ZONAL` (opt-in, fits MMseqs2 + full BFD) | 2.0 TiB (`2,048 GiB`) | Single zone | ~18,400 / ~5,200 | ~520 / ~176 MiB/s | ~$512 |
+| `REGIONAL` (opt-in, multi-zone HA) | 1.5 TiB (`1,536 GiB`) | Region (replicated across zones) | ~18,000 / ~6,000 | ~180 / ~150 MiB/s | ~$691 |
+| `REGIONAL` (opt-in, fits MMseqs2 + full BFD) | 2.0 TiB (`2,048 GiB`) | Region (replicated across zones) | ~24,000 / ~8,000 | ~240 / ~200 MiB/s | ~$922 |
+| `REGIONAL` + `filestore_max_iops = 4000` | 1.0 TiB (`1,024 GiB`) | Region | 4,000 / 1,200 | ~94 / **~32 MiB/s** | ~$363 |
 
-Regional instances:
+Choosing a tier and capacity:
 
-- **Cost less at FoldRun's data size.** Regional costs $0.45/GiB-month but has no 2.5 TiB minimum, so a 1 TiB instance is ~$307/mo (40%) cheaper than the smallest Basic SSD instance.
-- **Resize in both directions** in 1 GiB steps (100 GiB to 10,239 GiB, then 2.5 TiB steps up to 100 TiB). Basic tiers can only grow. If you add the full BFD database (~272 GB), grow the share to ~1,280 GiB (~$576/mo).
-- **Survive a zone outage.** Data is replicated synchronously across zones in `var.region`, and the instance lives in the region rather than in `local.zone`.
+- **`BASIC_SSD` (`2,560 GiB`, default)** gives the highest single-zone read/write bandwidth (`1,200 / 350 MiB/s`) for concurrent Cloud Batch database download/decompression jobs (`--steps data`) and uncached CPU MSA scans (`jackhmmer` / `hhblits` / `nhmmer`), with enough headroom for both `DOWNLOAD_MODE=full` (+272 GB) and GPU MMseqs2 indexes (+460 GB).
+- **`ZONAL` (`1,536` or `2,048 GiB`)** is the lowest-cost SSD scale-out option (`$0.25/GiB-mo` for 1–9.75 TiB, resizable up or down in 256 GiB steps) when `gs://{project}-foldrun-gdbs` already serves as your regional backup and synchronous multi-zone NFS replication is unnecessary.
+- **`REGIONAL` (`1,536` or `2,048 GiB`)** replicates data synchronously across zones in `var.region` and resizes up or down in 1 GiB steps (`$0.45/GiB-mo`), at lower throughput per TiB (`120 MiB/s` read / `100 MiB/s` write per TiB; scale-out tiers also require 4+ client VMs to reach aggregate bandwidth).
 
 > [!WARNING]
-> **Throughput trade-off.** A 1 TiB Regional instance has about one tenth of Basic SSD's sequential read throughput (~120 MiB/s vs ~1,200 MiB/s). Throughput scales linearly with capacity, and Filestore needs at least 4 client VMs to reach full aggregate throughput. Expect slower cold CPU MSA steps (`jackhmmer` / `nhmmer` scanning `uniref90`, `mgnify`, and BFD) when several uncached jobs run concurrently. Workloads using GPU `mmseqs2` (`msa_method="mmseqs2"`), single-sequence `DOWNLOAD_MODE=core`, AlphaFold 3 Dedicated Endpoints (which serve MSA from local NVMe SSD), or warm SHA-256 MSA/feature caches (`*_cache/`) avoid sequential NFS FASTA scans and are unaffected. If cold CPU-MSA latency matters more than storage cost, set `filestore_max_iops` (custom performance), increase `filestore_capacity_gb`, or use `ZONAL` / `BASIC_SSD`.
+> **Capacity & write-throughput sizing.** Avoid `1,024 GiB` (`1 TiB`) when downloading the full model set (`af2,of3,boltz`), running `DOWNLOAD_MODE=full` (+272 GB), or building GPU MMseqs2 indexes (`--steps convert` writes `uniref90_mmseqs`, `mgnify_mmseqs`, and `small_bfd_mmseqs` — **~460 GB** alongside the FASTA files, bringing total NFS usage to **~1.4+ TB**, which requires **at least `2,048 GiB`**). Also note that custom performance (`filestore_max_iops > 0`) weights writes at 3.33x IOPS: at `4,000` IOPS, write throughput drops to `~32 MiB/s`, heavily throttling concurrent `--steps data` setup.
 
-Custom performance (`filestore_max_iops > 0`) is billed differently: ~$40 per instance per month + $0.21/GiB-month + ~$0.027 per provisioned IOPS per month. It accepts 4,000-17,000 IOPS per TiB of capacity, with a minimum of 2,000 IOPS.
+Custom performance (`filestore_max_iops > 0`, supported on `ZONAL` and `REGIONAL`) is billed separately: `ZONAL` is ~$20/instance-mo + $0.12/GiB-mo + ~$0.0145/IOPS-mo, and `REGIONAL` is ~$40/instance-mo + $0.21/GiB-mo + ~$0.027/IOPS-mo (`us-central1` list prices; 4,000–17,000 IOPS per TiB in multiples of 100 for `< 10 TiB`, minimum 2,000 IOPS).
 
-#### Migrating an existing Basic SSD Filestore
+#### Switching Filestore tiers (e.g., opting into `ZONAL` or `REGIONAL`)
 
-Changing `filestore_tier` (and with it the location, which moves from zone to region) **replaces** the instance. Terraform deletes the old share, along with all databases and MSA caches on it, and creates a new empty share with a new IP. Databases are backed up to `gs://{project}-foldrun-gdbs` when they are downloaded, so the migration is a restore:
+Changing `filestore_tier` **replaces** the Filestore instance: Terraform deletes the existing share (including all databases and `*_cache/` directories) and creates a new empty share. Because databases are backed up to `gs://{project}-foldrun-gdbs` during download, switching tiers is a restore:
 
 ```bash
 # 1. Confirm the GCS backup has every database you need (the NFS copy is about to be deleted)
 gcloud storage ls gs://YOUR_PROJECT_ID-foldrun-gdbs/
 
-# 2. Replace the Filestore. deploy-all.sh detects that the plan deletes the instance
-#    and asks you to type REPLACE. In CI, set ALLOW_FILESTORE_REPLACE=true instead.
-./deploy-all.sh YOUR_PROJECT_ID us-central1 --steps infra
+# 2. Replace the Filestore with your chosen tier and capacity (e.g. 2 TiB ZONAL).
+#    deploy-all.sh detects that the plan deletes the instance and asks you to type REPLACE
+#    (or set ALLOW_FILESTORE_REPLACE=true in non-interactive CI).
+FILESTORE_TIER=ZONAL FILESTORE_CAPACITY_GB=2048 \
+  ./deploy-all.sh YOUR_PROJECT_ID us-central1 --steps infra
 
-# 3. Restore the databases from GCS onto the new Regional share (option 2: "Restore from a GCS bucket")
+# 3. Restore the databases from GCS onto the new share (option 2: "Restore from a GCS bucket")
 ./deploy-all.sh YOUR_PROJECT_ID us-central1 --steps data
 ```
 
-Cached MSAs and features (`af2_features_cache/`, `of3_msas_cache/`, `boltz2_msas_cache/`) are not backed up to GCS. They are rebuilt on demand. Pipelines look up the new IP from the Filestore API on each submission. If you pinned `FILESTORE_IP` / `FILESTORE_NETWORK` in `foldrun-agent/.env`, update or remove them. To keep a legacy deployment unchanged, set `filestore_tier = "BASIC_SSD"` and `filestore_capacity_gb = 2560` in your Terraform variables. The agent finds Filestore instances in either location: it checks `FILESTORE_LOCATION` if set, then `GCP_REGION`, then `GCP_ZONE`.
+Cached MSAs and features (`af2_features_cache/`, `of3_msas_cache/`, `boltz2_msas_cache/`) are not backed up to GCS and are rebuilt on demand. Pipelines and Batch jobs discover the instance automatically in either location (`FILESTORE_LOCATION` if set, otherwise `GCP_REGION` then `GCP_ZONE`). If you pinned `FILESTORE_IP` / `FILESTORE_NETWORK` in `foldrun-agent/.env`, update or remove them after replacement.
 
 ## Project Structure
 

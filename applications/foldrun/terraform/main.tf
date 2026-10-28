@@ -261,8 +261,33 @@ resource "google_filestore_instance" "foldrun_nfs" {
       error_message = "filestore_max_iops (custom performance) is only supported for REGIONAL and ZONAL tiers."
     }
     precondition {
+      condition = (
+        var.filestore_max_iops == 0 || (
+          var.filestore_capacity_gb < 10240 ? (
+            var.filestore_max_iops >= 2000 &&
+            var.filestore_max_iops % 100 == 0 &&
+            var.filestore_max_iops * 1024 >= var.filestore_capacity_gb * 4000 &&
+            var.filestore_max_iops * 1024 <= max(2000 * 1024, var.filestore_capacity_gb * 17000)
+            ) : (
+            var.filestore_max_iops % 1000 == 0 &&
+            var.filestore_max_iops * 1024 >= var.filestore_capacity_gb * 3000 &&
+            var.filestore_max_iops * 1024 <= var.filestore_capacity_gb * 7500
+          )
+        )
+      )
+      error_message = "filestore_max_iops must be >= 2000 and within the tier's IOPS-per-TiB range: for < 10 TiB, a multiple of 100 between 4,000 and 17,000 IOPS/TiB (2,000 IOPS floor for small REGIONAL instances); for >= 10 TiB, a multiple of 1,000 between 3,000 and 7,500 IOPS/TiB."
+    }
+    precondition {
+      condition     = var.filestore_tier != "REGIONAL" || var.filestore_capacity_gb >= 100
+      error_message = "REGIONAL tier requires filestore_capacity_gb >= 100."
+    }
+    precondition {
       condition     = var.filestore_tier != "REGIONAL" || var.filestore_capacity_gb >= 1024 || var.filestore_max_iops >= 2000
       error_message = "REGIONAL instances smaller than 1024 GiB require custom performance: set filestore_max_iops >= 2000."
+    }
+    precondition {
+      condition     = !contains(["ZONAL", "BASIC_HDD", "ENTERPRISE"], var.filestore_tier) || var.filestore_capacity_gb >= 1024
+      error_message = "ZONAL, BASIC_HDD, and ENTERPRISE tiers require filestore_capacity_gb >= 1024."
     }
     precondition {
       condition     = var.filestore_tier != "BASIC_SSD" || var.filestore_capacity_gb >= 2560

@@ -107,21 +107,22 @@ The estimator was calibrated against production job data from Agent Platform. Us
 
 | Service | List Price |
 |---|---|
-| Filestore Regional (default tier) | $0.45/GiB-month |
-| Filestore Basic SSD (legacy tier, 2.5 TiB minimum) | $0.30/GiB-month |
+| Filestore Basic SSD (default tier, 2.5 TiB minimum) | $0.30/GiB-month |
+| Filestore Zonal (opt-in, 1–9.75 TiB) | $0.25/GiB-month |
+| Filestore Regional (opt-in, multi-zone) | $0.45/GiB-month |
 | Cloud Storage Standard | $0.02/GiB-month |
 
 ## Always-On Infrastructure (estimated)
 
 | Component | Est. Monthly | Est. 12-Month |
 |---|---|---|
-| Filestore (1 TiB REGIONAL) | $461 | $5,530 |
+| Filestore (2.5TB BASIC_SSD) | $768 | $9,216 |
 | GCS (~1TB backups + growing results) | $25 | $300 |
 | Artifact Registry | $5 | $60 |
 | Agent Runtime | $50 | $600 |
 | Cloud Run (viewer) | $20 | $240 |
 | VPC / NAT | $45 | $540 |
-| **Infrastructure subtotal** | **~$606** | **~$7,270** |
+| **Infrastructure subtotal** | **~$913** | **~$10,956** |
 
 ## Per-Job Cost Estimates
 
@@ -189,10 +190,10 @@ AlphaFold 3 runs on a dedicated Vertex AI Online Endpoint (`a3-highgpu-1g`, 80GB
 
 | Category | On-Demand Monthly | On-Demand Annual | FLEX_START Monthly | FLEX_START Annual |
 |---|---|---|---|---|
-| Infrastructure (always-on) | $606 | $7,270 | $606 | $7,270 |
+| Infrastructure (always-on) | $913 | $10,956 | $913 | $10,956 |
 | Compute (GPU predictions) | $5,147 | $61,764 | $2,310 | $27,720 |
 | Other | $207 | $2,480 | $207 | $2,480 |
-| **Total** | **~$5,960** | **~$71,514** | **~$3,123** | **~$37,470** |
+| **Total** | **~$6,267** | **~$75,200** | **~$3,430** | **~$41,156** |
 
 FoldRun uses DWS FLEX_START by default, saving ~45% vs on-demand list pricing.
 
@@ -204,8 +205,8 @@ FoldRun uses DWS FLEX_START by default, saving ~45% vs on-demand list pricing.
 | **Fewer seeds per model** for multimer screening (1 instead of 5) | Up to 80% on multimer compute |
 | **CUD reservations** (1yr/3yr committed GPU usage) | Additional 20-40% beyond list pricing |
 | **Negotiated enterprise pricing** | Varies — check your Google Cloud contract |
-| **Filestore lifecycle** (delete when idle, restore from GCS) | Up to $461/mo during idle periods |
-| **Filestore tier** (`REGIONAL` 1 TiB instead of legacy `BASIC_SSD` 2.5 TiB) | ~$307/mo (already the default; reflected in the table above) |
+| **Filestore lifecycle** (delete when idle, restore from GCS) | Up to $768/mo during idle periods |
+| **Filestore tier** (opt-in `ZONAL` 1–2 TiB or `REGIONAL` 1 TiB instead of default `BASIC_SSD` 2.5 TiB) | ~$256–$512/mo (`ZONAL`) or ~$307/mo (`REGIONAL`) for lighter/cached workloads (see README Filestore Tier) |
 | **Reduced BFD** vs full BFD | Smaller Filestore, faster MSA |
 
 ## Scaling Notes

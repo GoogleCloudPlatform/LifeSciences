@@ -81,17 +81,19 @@ variable "network_project_number" {
 
 variable "filestore_tier" {
   description = <<-EOT
-    Tier for the Filestore instance. Defaults to REGIONAL: replicated across zones in
-    var.region, resizable up or down in 1 GiB steps, with no 2.5 TiB minimum
-    (1 TiB is ~$461/mo in us-central1, compared with ~$768/mo for the 2.5 TiB legacy BASIC_SSD
-    minimum). REGIONAL and ENTERPRISE instances are created in var.region; BASIC_HDD,
+    Tier for the Filestore instance. Defaults to BASIC_SSD (2.5 TiB minimum, ~$768/mo in
+    us-central1, ~1,200 MiB/s read / ~350 MiB/s write) so concurrent Cloud Batch database
+    downloads, CPU MSA scans, and optional MMseqs2 (~460 GB) or full BFD (~272 GB) indexes
+    fit without throughput throttling. Opt-in alternatives include ZONAL ($0.25/GiB-mo,
+    256 GiB steps from 1 TiB) and REGIONAL ($0.45/GiB-mo, multi-zone replicated, 1 GiB
+    steps). REGIONAL and ENTERPRISE instances are created in var.region; BASIC_HDD,
     BASIC_SSD, and ZONAL instances are created in local.zone (var.zone or <region>-a).
     WARNING: changing the tier on an existing deployment makes Terraform replace the
     instance, which erases all NFS data. Restore it from the GCS databases bucket
-    afterwards (see README "Migrating an existing Basic SSD Filestore").
+    afterwards (see README "Filestore Tier").
   EOT
   type        = string
-  default     = "REGIONAL"
+  default     = "BASIC_SSD"
 
   validation {
     condition     = contains(["REGIONAL", "ZONAL", "ENTERPRISE", "BASIC_SSD", "BASIC_HDD"], var.filestore_tier)
@@ -100,13 +102,13 @@ variable "filestore_tier" {
 }
 
 variable "filestore_capacity_gb" {
-  description = "Initial Filestore capacity in GiB. REGIONAL: 1024 to 10239 in 1 GiB steps (sizes under 1024 also require filestore_max_iops > 0); ZONAL: min 1024; BASIC_HDD: min 1024; BASIC_SSD: min 2560. AF2 reduced + OF3 use ~944 GB and full BFD adds ~272 GB. Terraform ignores capacity changes after provisioning, so you can resize with the Console or gcloud without drift. REGIONAL and ZONAL can also shrink."
+  description = "Initial Filestore capacity in GiB. Defaults to 2560 (2.5 TiB minimum for BASIC_SSD). ZONAL: min 1024 (256 GiB steps up to 9984); REGIONAL: 100 to 10239 in 1 GiB steps (sizes under 1024 require filestore_max_iops >= 2000); ENTERPRISE/BASIC_HDD: min 1024. Default AF2+OF3+Boltz databases plus download scratch and caches need ~1.1-1.5 TiB; full BFD adds ~272 GB and MMseqs2 GPU indexes add ~460 GB (use >= 2048 GiB). Terraform ignores capacity changes after provisioning, so you can resize via Console or gcloud without drift."
   type        = number
-  default     = 1024
+  default     = 2560
 }
 
 variable "filestore_max_iops" {
-  description = "Optional fixed IOPS for REGIONAL/ZONAL custom performance. 0 (default) keeps capacity-based performance (REGIONAL 1 TiB: ~12,000 read IOPS, ~120 MiB/s read). If > 0, billing changes to a per-instance fee + a lower per-GiB rate + a per-IOPS rate (see README cost table). Allowed range: 4,000-17,000 IOPS per TiB of capacity, and at least 2,000."
+  description = "Optional fixed IOPS for REGIONAL/ZONAL custom performance. 0 (default) keeps capacity-based performance. If > 0, billing changes to a per-instance fee + a lower per-GiB rate + a per-IOPS rate (see README Filestore Tier). For capacities < 10 TiB, must be a multiple of 100 between 4,000 and 17,000 IOPS per TiB of capacity (minimum 2,000 IOPS)."
   type        = number
   default     = 0
 

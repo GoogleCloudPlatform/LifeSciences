@@ -46,9 +46,8 @@ def filestore_location_candidates(
     """Ordered, de-duplicated Filestore locations to try.
 
     REGIONAL/ENTERPRISE instances live in a region and BASIC/ZONAL instances in
-    a zone. An explicit FILESTORE_LOCATION wins. Otherwise the region (the
-    default REGIONAL tier) is tried before the zone (legacy BASIC_SSD
-    deployments).
+    a zone. An explicit FILESTORE_LOCATION wins. Otherwise the region is tried
+    before the zone so both regional and zonal instances resolve automatically.
     """
     candidates: list[str] = []
     for loc in (location, region, zone):
@@ -93,7 +92,8 @@ def get_filestore_info(
     """Get Filestore IP and network, from env vars or Filestore API.
 
     The instance is looked up in ``filestore_location`` if set, otherwise in
-    ``region`` (REGIONAL tier) and then ``zone`` (legacy BASIC tiers).
+    ``region`` (opt-in REGIONAL/ENTERPRISE tiers) and then ``zone`` (default
+    BASIC_SSD and ZONAL/BASIC_HDD tiers).
 
     Returns:
         Tuple of (filestore_ip, filestore_network) where network is fully

@@ -78,8 +78,11 @@ usage() {
     echo "  AR_REPO            Artifact Registry repo name (default: foldrun-repo)"
     echo "  FILESTORE_ID       Filestore instance ID (default: foldrun-nfs)"
     echo "  FILESTORE_LOCATION Filestore location override (default: Terraform output or auto)"
+    echo "  FILESTORE_TIER     Filestore tier for --steps infra: BASIC_SSD (default), ZONAL, REGIONAL, ENTERPRISE, BASIC_HDD"
+    echo "  FILESTORE_CAPACITY_GB  Initial Filestore capacity in GiB for --steps infra (default: 2560)"
+    echo "  FILESTORE_MAX_IOPS Custom fixed IOPS for REGIONAL/ZONAL tiers (default: 0 = capacity-based)"
     echo "  ALLOW_FILESTORE_REPLACE  Set to true to let --steps infra replace (erase) the"
-    echo "                     Filestore without a prompt, e.g. BASIC_SSD -> REGIONAL migration"
+    echo "                     Filestore without a prompt when switching filestore_tier"
     echo "  AGENT_SA_EMAIL     Agent service account email"
     echo "  BUILD_SA_EMAIL     Cloud Build service account email"
     echo "  PIPELINES_SA_EMAIL Agent Platform Pipelines service account email"
@@ -438,9 +441,12 @@ EOF
         -var="af3_reservation_affinity_type=${AF3_RESERVATION_AFFINITY_TYPE}"
         -var="af3_capacity_pool=${AF3_CAPACITY_POOL}"
     )
+    [[ -n "${FILESTORE_TIER:-}" ]] && TF_VARS+=(-var="filestore_tier=${FILESTORE_TIER}")
+    [[ -n "${FILESTORE_CAPACITY_GB:-}" ]] && TF_VARS+=(-var="filestore_capacity_gb=${FILESTORE_CAPACITY_GB}")
+    [[ -n "${FILESTORE_MAX_IOPS:-}" ]] && TF_VARS+=(-var="filestore_max_iops=${FILESTORE_MAX_IOPS}")
 
     # Plan first so we can stop before Terraform deletes the Filestore instance
-    # (e.g. switching filestore_tier from legacy BASIC_SSD to REGIONAL). A
+    # (e.g. switching filestore_tier between BASIC_SSD, ZONAL, and REGIONAL). A
     # replacement erases all NFS databases and MSA caches.
     TF_PLAN_FILE=$(mktemp -t foldrun-tfplan.XXXXXX)
     terraform plan -input=false -out="$TF_PLAN_FILE" "${TF_VARS[@]}"
@@ -455,8 +461,8 @@ for rc in plan.get("resource_changes", []):
         echo ""
         echo "WARNING: this plan DELETES the Filestore instance: $FS_DELETE"
         echo "  All NFS databases and MSA caches on it will be lost. This is expected"
-        echo "  when migrating from BASIC_SSD to the REGIONAL tier. Restore databases"
-        echo "  afterwards with: $0 $PROJECT_ID $REGION --steps data  (option 2, GCS restore)"
+        echo "  when switching filestore_tier (e.g. BASIC_SSD <-> ZONAL / REGIONAL). Restore"
+        echo "  databases afterwards with: $0 $PROJECT_ID $REGION --steps data  (option 2, GCS restore)"
         if [[ -t 0 ]]; then
             read -p "  Type REPLACE to continue: " fs_confirm
         else
