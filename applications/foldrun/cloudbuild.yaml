@@ -245,9 +245,11 @@ steps:
       - 'AGENT_RUNTIME_ID=${_AGENT_RUNTIME_ID}'
       - 'MODEL_ENDPOINT_LOCATION=${_MODEL_ENDPOINT_LOCATION}'
       - 'REGION=${_REGION}'
+      - 'ZONE=${_ZONE}'
       - 'BUCKET_NAME=${_BUCKET_NAME}'
       - 'DATABASES_BUCKET=${_DATABASES_BUCKET}'
       - 'FILESTORE_ID=${_FILESTORE_ID}'
+      - 'FILESTORE_LOCATION=${_FILESTORE_LOCATION}'
       - 'AR_REPO=${_AR_REPO}'
       - 'FOLDRUN_VIEWER_URL=${_FOLDRUN_VIEWER_URL}'
       - 'PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}'
@@ -279,6 +281,8 @@ steps:
         # Create deployment_metadata.json to target the existing engine
         echo "{\"remote_agent_runtime_id\": \"$$AGENT_RUNTIME_ID\", \"deployment_target\": \"agent_runtime\"}" > deployment_metadata.json
 
+        _eff_zone="$${ZONE:-$${REGION}-a}"
+
         _AF3_LOC="$${AF3_ENDPOINT_LOCATION:-$$REGION}"
         if [[ "$${_AF3_LOC,,}" == "global" ]] || [[ -z "$$_AF3_LOC" ]]; then
           _AF3_LOC="$$REGION"
@@ -288,6 +292,7 @@ steps:
             "GOOGLE_GENAI_USE_ENTERPRISE=1"
             "GOOGLE_CLOUD_LOCATION=$$MODEL_ENDPOINT_LOCATION"
             "GCP_REGION=$$REGION"
+            "GCP_ZONE=$$_eff_zone"
             "GCS_BUCKET_NAME=$$BUCKET_NAME"
             "GCS_DATABASES_BUCKET=$$DATABASES_BUCKET"
             "FILESTORE_ID=$$FILESTORE_ID"
@@ -303,6 +308,7 @@ steps:
         )
 
         ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
+        [[ -n "$$FILESTORE_LOCATION" ]] && ENV_VARS="$$ENV_VARS,FILESTORE_LOCATION=$$FILESTORE_LOCATION"
         [[ -n "$$NETWORK_ID" ]] && ENV_VARS="$$ENV_VARS,NETWORK=$$NETWORK_ID"
         [[ -n "$$NETWORK_PROJECT_NUMBER" ]] && ENV_VARS="$$ENV_VARS,NETWORK_PROJECT_NUMBER=$$NETWORK_PROJECT_NUMBER"
 
@@ -358,12 +364,14 @@ steps:
 
 substitutions:
   _REGION: us-central1
+  _ZONE: ""
   _NETWORK_ID: ""
   _NETWORK_PROJECT_NUMBER: ""
   _AR_REPO: foldrun-repo
   _BUCKET_NAME: required_bucket_name
   _DATABASES_BUCKET: required_databases_bucket_name
   _FILESTORE_ID: foldrun-nfs
+  _FILESTORE_LOCATION: ""
   _AGENT_SA_EMAIL: required_sa_email
   _PIPELINES_SA_EMAIL: required_pipelines_sa_email
   _AF2_VERSION: "42719e135a62438aa651d2bc1d143626083c3703"

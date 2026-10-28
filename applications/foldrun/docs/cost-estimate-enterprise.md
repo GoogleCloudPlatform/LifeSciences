@@ -107,7 +107,9 @@ The estimator was calibrated against production job data from Agent Platform. Us
 
 | Service | List Price |
 |---|---|
-| Filestore Basic SSD | $0.30/GiB-month |
+| Filestore Basic SSD (default tier, 2.5 TiB minimum) | $0.30/GiB-month |
+| Filestore Zonal (opt-in, 1–9.75 TiB) | $0.25/GiB-month |
+| Filestore Regional (opt-in, multi-zone) | $0.45/GiB-month |
 | Cloud Storage Standard | $0.02/GiB-month |
 
 ## Always-On Infrastructure (estimated)
@@ -204,6 +206,7 @@ FoldRun uses DWS FLEX_START by default, saving ~45% vs on-demand list pricing.
 | **CUD reservations** (1yr/3yr committed GPU usage) | Additional 20-40% beyond list pricing |
 | **Negotiated enterprise pricing** | Varies — check your Google Cloud contract |
 | **Filestore lifecycle** (delete when idle, restore from GCS) | Up to $768/mo during idle periods |
+| **Filestore tier** (opt-in `ZONAL` 1–2 TiB or `REGIONAL` 1 TiB instead of default `BASIC_SSD` 2.5 TiB) | ~$256–$512/mo (`ZONAL`) or ~$307/mo (`REGIONAL`) for lighter/cached workloads (see README Filestore Tier) |
 | **Reduced BFD** vs full BFD | Smaller Filestore, faster MSA |
 
 ## Scaling Notes

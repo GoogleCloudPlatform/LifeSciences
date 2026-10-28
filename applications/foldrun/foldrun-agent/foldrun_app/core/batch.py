@@ -38,14 +38,62 @@ MACHINE_MEMORY_MB = {
 }
 
 
+def filestore_location_candidates(
+    location: str | None = None,
+    region: str | None = None,
+    zone: str | None = None,
+) -> list[str]:
+    """Ordered, de-duplicated Filestore locations to try.
+
+    REGIONAL/ENTERPRISE instances live in a region and BASIC/ZONAL instances in
+    a zone. An explicit FILESTORE_LOCATION wins. Otherwise the region is tried
+    before the zone so both regional and zonal instances resolve automatically.
+    """
+    candidates: list[str] = []
+    for loc in (location, region, zone):
+        if loc and loc not in candidates:
+            candidates.append(loc)
+    return candidates
+
+
+def get_filestore_instance(client, project_id: str, filestore_id: str, locations: list[str]):
+    """Fetch a Filestore instance, trying each candidate location in order.
+
+    Raises the last NotFound error if the instance is not found in any location.
+    """
+    from google.api_core import exceptions as gexc
+
+    if not locations:
+        raise ValueError("No Filestore location candidates provided")
+
+    last_error: Exception | None = None
+    for loc in locations:
+        name = f"projects/{project_id}/locations/{loc}/instances/{filestore_id}"
+        try:
+            instance = client.get_instance(name=name)
+            logger.info(f"Found Filestore instance {filestore_id} in {loc}")
+            return instance
+        except gexc.NotFound as e:
+            logger.debug(f"Filestore {filestore_id} not found in {loc}")
+            last_error = e
+    raise last_error
+
+
 def get_filestore_info(
     project_id: str,
     zone: str,
     filestore_id: str,
     filestore_ip: str | None = None,
     filestore_network: str | None = None,
+    region: str | None = None,
+    filestore_location: str | None = None,
+    network_project_number: str | None = None,
 ):
     """Get Filestore IP and network, from env vars or Filestore API.
+
+    The instance is looked up in ``filestore_location`` if set, otherwise in
+    ``region`` (opt-in REGIONAL/ENTERPRISE tiers) and then ``zone`` (default
+    BASIC_SSD and ZONAL/BASIC_HDD tiers).
 
     Returns:
         Tuple of (filestore_ip, filestore_network) where network is fully
@@ -57,8 +105,12 @@ def get_filestore_info(
     from google.cloud import filestore_v1
 
     client = filestore_v1.CloudFilestoreManagerClient()
-    name = f"projects/{project_id}/locations/{zone}/instances/{filestore_id}"
-    instance = client.get_instance(name=name)
+    instance = get_filestore_instance(
+        client,
+        project_id,
+        filestore_id,
+        filestore_location_candidates(filestore_location, region, zone),
+    )
     ip = instance.networks[0].ip_addresses[0]
     network = instance.networks[0].network
 
@@ -68,6 +120,8 @@ def get_filestore_info(
         network_name = parts[4]
         if network_project.isdigit():
             network = f"projects/{network_project}/global/networks/{network_name}"
+        elif network_project_number:
+            network = f"projects/{network_project_number}/global/networks/{network_name}"
         else:
             try:
                 net_project_number = get_project_number(network_project)
@@ -77,6 +131,19 @@ def get_filestore_info(
                     f"Failed to get project number for {network_project}: {e}. Using project ID."
                 )
                 network = f"projects/{network_project}/global/networks/{network_name}"
+    else:
+        network_name = parts[-1]
+        if network_project_number:
+            proj_num = network_project_number
+        else:
+            try:
+                proj_num = get_project_number(project_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get project number for {project_id}: {e}. Using project ID."
+                )
+                proj_num = project_id
+        network = f"projects/{proj_num}/global/networks/{network_name}"
 
     logger.info(f"Retrieved Filestore info: IP={ip}, Network={network}")
     return ip, network

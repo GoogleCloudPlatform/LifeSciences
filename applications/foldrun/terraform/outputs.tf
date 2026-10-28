@@ -27,6 +27,16 @@ output "filestore_id" {
   value       = google_filestore_instance.foldrun_nfs.name
 }
 
+output "filestore_location" {
+  description = "The Filestore location (region for REGIONAL/ENTERPRISE tiers, zone otherwise)"
+  value       = google_filestore_instance.foldrun_nfs.location
+}
+
+output "filestore_tier" {
+  description = "The Filestore service tier"
+  value       = google_filestore_instance.foldrun_nfs.tier
+}
+
 output "artifact_registry_repo" {
   description = "The Artifact Registry repository name"
   value       = google_artifact_registry_repository.foldrun_repo.name

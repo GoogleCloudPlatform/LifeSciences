@@ -61,6 +61,9 @@ def get_infra_params(config: CoreConfig) -> dict:
         filestore_id=config.filestore_id,
         filestore_ip=config.filestore_ip,
         filestore_network=config.filestore_network,
+        region=config.region,
+        filestore_location=config.filestore_location,
+        network_project_number=config.network_project_number,
     )
     return {
         "project_id": config.project_id,

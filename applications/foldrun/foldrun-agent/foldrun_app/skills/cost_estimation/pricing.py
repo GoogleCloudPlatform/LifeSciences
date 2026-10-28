@@ -22,6 +22,7 @@ Verified against Cloud Billing Catalog API on 2026-04-15.
 """
 
 import logging
+import os
 import re
 
 logger = logging.getLogger(__name__)
@@ -60,8 +61,24 @@ DEFAULT_PRICES = {
     "nvidia_l4_spot": 0.223100,
     "nvidia_a100_spot": 1.434100,
     "nvidia_a100_80gb_spot": 1.964000,
-    # --- Storage (per GiB-month) ---
+    # --- Storage (per GiB-month, us-central1 list prices) ---
+    # Filestore Basic SSD (default tier, 2.5 TiB minimum)
     "filestore_basic_ssd_gib_mo": 0.300000,
+    # Filestore Basic HDD (1 TiB minimum)
+    "filestore_basic_hdd_gib_mo": 0.160000,
+    # Filestore Zonal (capacity-based performance: 1-9.75 TiB vs 10-100 TiB)
+    "filestore_zonal_gib_mo": 0.250000,
+    "filestore_zonal_high_scale_gib_mo": 0.225000,
+    # Filestore Zonal custom performance ($20/instance-mo + $0.12/GiB-mo + $0.0145/IOPS-mo)
+    "filestore_zonal_custom_instance_mo": 20.000000,
+    "filestore_zonal_custom_gib_mo": 0.120000,
+    "filestore_zonal_custom_iops_mo": 0.014500,
+    # Filestore Regional / Enterprise (capacity-based performance)
+    "filestore_regional_gib_mo": 0.450000,
+    # Filestore Regional custom performance ($40/instance-mo + $0.21/GiB-mo + $0.027/IOPS-mo)
+    "filestore_regional_custom_instance_mo": 40.000000,
+    "filestore_regional_custom_gib_mo": 0.210000,
+    "filestore_regional_custom_iops_mo": 0.027000,
     "gcs_standard_gib_mo": 0.020000,
 }
 
@@ -366,18 +383,46 @@ def fetch_live_prices(region: str = "us-central1") -> dict | None:
 
         # Fetch Filestore prices
         for sku in client.list_skus(parent=FILESTORE_SERVICE):
-            if region not in sku.service_regions:
+            if region not in sku.service_regions or not sku.pricing_info:
                 continue
             desc = sku.description.lower()
-            if "basic" in desc and "ssd" in desc and "capacity" in desc:
-                if not sku.pricing_info:
-                    continue
-                expr = sku.pricing_info[0].pricing_expression
-                if expr.tiered_rates:
-                    rate = expr.tiered_rates[-1]
-                    prices["filestore_basic_ssd_gib_mo"] = (
-                        int(rate.unit_price.units) + rate.unit_price.nanos / 1e9
-                    )
+            if "backup" in desc or "snapshot" in desc or "small instance" in desc:
+                continue
+            expr = sku.pricing_info[0].pricing_expression
+            if not expr.tiered_rates:
+                continue
+            rate = expr.tiered_rates[-1]
+            unit_price = int(rate.unit_price.units) + rate.unit_price.nanos / 1e9
+
+            if "instance capacity" in desc and "regional" in desc:
+                prices["filestore_regional_custom_gib_mo"] = unit_price
+            elif "instance capacity" in desc and "zonal" in desc:
+                prices["filestore_zonal_custom_gib_mo"] = unit_price
+            elif "instance count" in desc and "regional" in desc:
+                prices["filestore_regional_custom_instance_mo"] = unit_price
+            elif "instance count" in desc and "zonal" in desc:
+                prices["filestore_zonal_custom_instance_mo"] = unit_price
+            elif "instance iops" in desc and "regional" in desc:
+                prices["filestore_regional_custom_iops_mo"] = unit_price
+            elif "instance iops" in desc and "zonal" in desc:
+                prices["filestore_zonal_custom_iops_mo"] = unit_price
+            elif "capacity" in desc and "basic" in desc and "ssd" in desc:
+                prices["filestore_basic_ssd_gib_mo"] = unit_price
+            elif "capacity" in desc and "basic" in desc and "hdd" in desc:
+                prices["filestore_basic_hdd_gib_mo"] = unit_price
+            elif "capacity" in desc and "regional" in desc and "enterprise" in desc:
+                prices["filestore_regional_gib_mo"] = unit_price
+            elif "capacity" in desc and "zonal" in desc:
+                first_nonzero = next(
+                    (
+                        int(r.unit_price.units) + r.unit_price.nanos / 1e9
+                        for r in expr.tiered_rates
+                        if r.unit_price.units or r.unit_price.nanos
+                    ),
+                    unit_price,
+                )
+                prices["filestore_zonal_gib_mo"] = first_nonzero
+                prices["filestore_zonal_high_scale_gib_mo"] = unit_price
 
         if len(prices) >= 10:
             logger.info(f"Fetched {len(prices)} live prices for {region}")
@@ -671,6 +716,76 @@ def _compute_items_for_mode(
     return items, round(total, 2)
 
 
+def estimate_filestore_monthly_cost(
+    tier: str = "BASIC_SSD",
+    capacity_gb: int | None = None,
+    max_iops: int = 0,
+    prices: dict | None = None,
+) -> tuple[str, float]:
+    """Calculate monthly Filestore cost and line-item label for a given tier, capacity, and IOPS.
+
+    Default BASIC_SSD pricing is $0.30/GiB-month (2560 GiB minimum = $768.00/mo).
+    Capacity-based opt-in tiers (us-central1 defaults):
+      - BASIC_HDD: $0.16/GiB-month (min 1024 GiB)
+      - ZONAL: $0.25/GiB-month (1-9.75 TiB) or $0.225/GiB-month (10-100 TiB)
+      - REGIONAL / ENTERPRISE: $0.45/GiB-month
+    Custom performance (max_iops > 0):
+      - REGIONAL: $40/instance-month + $0.21/GiB-month + $0.027/IOPS-month
+      - ZONAL: $20/instance-month + $0.12/GiB-month + $0.0145/IOPS-month
+    """
+    eff_prices = prices if prices is not None else DEFAULT_PRICES
+    eff_tier = (tier or "BASIC_SSD").strip().upper()
+    default_cap = 2560 if eff_tier == "BASIC_SSD" else 1024
+    cap_gib = capacity_gb if capacity_gb is not None and capacity_gb > 0 else default_cap
+
+    if max_iops > 0 and eff_tier == "REGIONAL":
+        inst_fee = eff_prices.get(
+            "filestore_regional_custom_instance_mo",
+            eff_prices.get("filestore_custom_instance_mo", 40.0),
+        )
+        gib_rate = eff_prices.get("filestore_regional_custom_gib_mo", 0.21)
+        iops_rate = eff_prices.get(
+            "filestore_regional_custom_iops_mo",
+            eff_prices.get("filestore_custom_iops_mo", 0.027),
+        )
+        cost = round(inst_fee + cap_gib * gib_rate + max_iops * iops_rate, 2)
+        return f"Filestore ({cap_gib} GiB Regional, {max_iops} IOPS)", cost
+
+    if max_iops > 0 and eff_tier == "ZONAL":
+        inst_fee = eff_prices.get("filestore_zonal_custom_instance_mo", 20.0)
+        gib_rate = eff_prices.get("filestore_zonal_custom_gib_mo", 0.12)
+        iops_rate = eff_prices.get("filestore_zonal_custom_iops_mo", 0.0145)
+        cost = round(inst_fee + cap_gib * gib_rate + max_iops * iops_rate, 2)
+        return f"Filestore ({cap_gib} GiB Zonal, {max_iops} IOPS)", cost
+
+    if eff_tier == "BASIC_SSD":
+        rate = eff_prices.get("filestore_basic_ssd_gib_mo", 0.30)
+        cost = round(cap_gib * rate, 2)
+        if cap_gib == 2560:
+            return "Filestore (2.5 TB Basic SSD)", cost
+        return f"Filestore ({cap_gib} GiB Basic SSD)", cost
+
+    if eff_tier == "BASIC_HDD":
+        rate = eff_prices.get("filestore_basic_hdd_gib_mo", 0.16)
+        return f"Filestore ({cap_gib} GiB Basic HDD)", round(cap_gib * rate, 2)
+
+    if eff_tier == "ZONAL":
+        if cap_gib >= 10240:
+            rate = eff_prices.get(
+                "filestore_zonal_high_scale_gib_mo",
+                eff_prices.get("filestore_zonal_gib_mo", 0.225),
+            )
+        else:
+            rate = eff_prices.get("filestore_zonal_gib_mo", 0.25)
+        return f"Filestore ({cap_gib} GiB Zonal)", round(cap_gib * rate, 2)
+
+    rate = eff_prices.get("filestore_regional_gib_mo", 0.45)
+    tier_label = "Regional" if eff_tier == "REGIONAL" else eff_tier.title()
+    if eff_tier == "REGIONAL" and cap_gib == 1024:
+        return "Filestore (1 TiB Regional)", round(cap_gib * rate, 2)
+    return f"Filestore ({cap_gib} GiB {tier_label})", round(cap_gib * rate, 2)
+
+
 def estimate_monthly(
     af2_monomer_jobs: int = 0,
     af2_multimer_jobs: int = 0,
@@ -730,12 +845,35 @@ def estimate_monthly(
     infra_total = 0.0
     infra_items = []
     if include_infrastructure:
-        for _key, item in INFRASTRUCTURE_MONTHLY.items():
-            infra_total += item["cost"]
+        filestore_tier = (os.getenv("FILESTORE_TIER") or "").strip().upper()
+        filestore_cap_str = (os.getenv("FILESTORE_CAPACITY_GB") or "").strip()
+        filestore_iops_str = (os.getenv("FILESTORE_MAX_IOPS") or "").strip()
+        for key, item in INFRASTRUCTURE_MONTHLY.items():
+            desc = item["description"]
+            cost = item["cost"]
+            if key in ("filestore_1tib_regional", "filestore_2_5tb_basic_ssd"):
+                eff_tier = filestore_tier or (
+                    "REGIONAL" if key == "filestore_1tib_regional" else "BASIC_SSD"
+                )
+                try:
+                    cap_gib = int(filestore_cap_str) if filestore_cap_str else None
+                except ValueError:
+                    cap_gib = None
+                try:
+                    max_iops = int(filestore_iops_str) if filestore_iops_str else 0
+                except ValueError:
+                    max_iops = 0
+                desc, cost = estimate_filestore_monthly_cost(
+                    tier=eff_tier,
+                    capacity_gb=cap_gib,
+                    max_iops=max_iops,
+                    prices=prices,
+                )
+            infra_total += cost
             infra_items.append(
                 {
-                    "item": item["description"],
-                    "monthly_cost": item["cost"],
+                    "item": desc,
+                    "monthly_cost": cost,
                 }
             )
 

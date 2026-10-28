@@ -94,7 +94,7 @@ Additionally, Terraform grants:
 │                                                         │
 │  ┌──────────────────────────────────────────┐            │
 │  │ Filestore NFS (10.1.0.0/16 peering)     │            │
-│  │ 4TB SSD — genetic databases             │            │
+│  │ 2.5TB SSD — genetic databases           │            │
 │  └──────────────────────────────────────────┘            │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -192,7 +192,7 @@ GCS_SOURCE_BUCKET=SOURCE_PROJECT-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 | Resource | Name | Purpose |
 |----------|------|---------|
 | VPC + Subnet + Cloud NAT | `foldrun-network` | Private network with outbound internet |
-| Filestore | `foldrun-nfs` | 2.5TB NFS for genetic databases (Basic SSD) |
+| Filestore | `foldrun-nfs` | 2.5TB NFS for genetic databases (Basic SSD default; `ZONAL` / `REGIONAL` opt-in) |
 | GCS Bucket | `{project}-foldrun-data` | Pipeline outputs, AF3 results, analysis bundles |
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups + AF3 630 GB MSA bundle |
 | Artifact Registry | `foldrun-repo` | Container images |
@@ -495,7 +495,20 @@ uv run adk web foldrun_app
 | GPU predictions (per job) | $2–15 per job (L4: ~$2, A100: ~$8–15) |
 | Gemini API (per analysis) | ~$0.01–0.05 per analysis |
 
-The dominant cost is Filestore (~$770/mo). To reduce costs when not in use,
-consider deleting the Filestore and re-downloading databases when needed.
-Terraform ignores capacity changes after provisioning, so you can resize
-via Console or gcloud without drift.
+The dominant cost is Filestore (~$770/mo, `us-central1` list price). FoldRun
+defaults to `BASIC_SSD` at 2.5 TiB (`filestore_tier`, `filestore_capacity_gb`)
+for high write/read bandwidth during concurrent database downloads and CPU MSA
+scans. You can opt into `ZONAL` (e.g., 1.5–2.0 TiB at ~$384–$512/mo) or
+multi-zone `REGIONAL` tiers via `FILESTORE_TIER` and `FILESTORE_CAPACITY_GB`; see
+[README: Filestore Tier](README.md#filestore-tier) for throughput, capacity, and
+custom-IOPS trade-offs (`filestore_max_iops`). Terraform ignores capacity changes
+after provisioning, so you can resize via Console or gcloud without drift.
+
+> **Switching tiers on an existing deployment:** changing `filestore_tier`
+> replaces the Filestore instance and **erases its contents**. Run
+> `--steps infra`, then restore databases with `--steps data` (option 2,
+> "Restore from a GCS bucket"). See
+> [README: Switching Filestore tiers](README.md#switching-filestore-tiers-eg-opting-into-zonal-or-regional).
+
+To reduce costs further when not in use, delete the Filestore and restore
+databases from GCS when needed.

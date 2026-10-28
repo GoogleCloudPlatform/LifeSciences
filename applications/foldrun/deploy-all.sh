@@ -77,6 +77,12 @@ usage() {
     echo "  DATABASES_BUCKET   Genomic databases bucket (default: PROJECT_ID-foldrun-gdbs)"
     echo "  AR_REPO            Artifact Registry repo name (default: foldrun-repo)"
     echo "  FILESTORE_ID       Filestore instance ID (default: foldrun-nfs)"
+    echo "  FILESTORE_LOCATION Filestore location override (default: Terraform output or auto)"
+    echo "  FILESTORE_TIER     Filestore tier for --steps infra: BASIC_SSD (default), ZONAL, REGIONAL, ENTERPRISE, BASIC_HDD"
+    echo "  FILESTORE_CAPACITY_GB  Initial Filestore capacity in GiB for --steps infra (default: 2560)"
+    echo "  FILESTORE_MAX_IOPS Custom fixed IOPS for REGIONAL/ZONAL tiers (default: 0 = capacity-based)"
+    echo "  ALLOW_FILESTORE_REPLACE  Set to true to let --steps infra replace (erase) the"
+    echo "                     Filestore without a prompt when switching filestore_tier"
     echo "  AGENT_SA_EMAIL     Agent service account email"
     echo "  BUILD_SA_EMAIL     Cloud Build service account email"
     echo "  PIPELINES_SA_EMAIL Agent Platform Pipelines service account email"
@@ -291,6 +297,7 @@ extract_terraform_outputs() {
     export GCS_BUCKET="${GCS_BUCKET:-${PROJECT_ID}-foldrun-data}"
     export AR_REPO="${AR_REPO:-foldrun-repo}"
     export FILESTORE_ID="${FILESTORE_ID:-foldrun-nfs}"
+    export FILESTORE_LOCATION="${FILESTORE_LOCATION:-}"
     export AGENT_SA_EMAIL="${AGENT_SA_EMAIL:-foldrun-agent-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export BUILD_SA_EMAIL="${BUILD_SA_EMAIL:-foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export PIPELINES_SA_EMAIL="${PIPELINES_SA_EMAIL:-pipelines-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
@@ -330,6 +337,7 @@ EOF
             v=$(_tf gcs_bucket_name);        if [[ -n "$v" ]]; then echo "GCS_BUCKET=$v"; fi
             v=$(_tf artifact_registry_repo); if [[ -n "$v" ]]; then echo "AR_REPO=$v"; fi
             v=$(_tf filestore_id);           if [[ -n "$v" ]]; then echo "FILESTORE_ID=$v"; fi
+            v=$(_tf filestore_location);     if [[ -n "$v" ]]; then echo "FILESTORE_LOCATION=$v"; fi
             v=$(_tf agent_sa_email);         if [[ -n "$v" ]]; then echo "AGENT_SA_EMAIL=$v"; fi
             v=$(_tf build_sa_email);         if [[ -n "$v" ]]; then echo "BUILD_SA_EMAIL=$v"; fi
             v=$(_tf pipelines_sa_email);     if [[ -n "$v" ]]; then echo "PIPELINES_SA_EMAIL=$v"; fi
@@ -367,6 +375,7 @@ EOF
     echo "  GCS_BUCKET=$GCS_BUCKET"
     echo "  AR_REPO=$AR_REPO"
     echo "  FILESTORE_ID=$FILESTORE_ID"
+    echo "  FILESTORE_LOCATION=${FILESTORE_LOCATION:-<auto: region, then zone>}"
     echo "  DATABASES_BUCKET=$DATABASES_BUCKET"
     echo "  AGENT_SA_EMAIL=$AGENT_SA_EMAIL"
     echo "  BUILD_SA_EMAIL=$BUILD_SA_EMAIL"
@@ -418,19 +427,56 @@ EOF
     cd "$TERRAFORM_DIR"
     export GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token 2>/dev/null || true)
     terraform init -reconfigure
-    echo "Running terraform apply..."
-    terraform apply -auto-approve \
-        -var="project_id=${PROJECT_ID}" \
-        -var="region=${REGION}" \
-        -var="zone=${ZONE}" \
-        -var="bucket_name=${BUCKET_NAME}" \
-        -var="iap_access_domain=${IAP_ACCESS_DOMAIN}" \
-        -var="enable_viewer_iap=${ENABLE_VIEWER_IAP}" \
-        -var="enable_af3=${ENABLE_AF3}" \
-        -var="af3_endpoint_location=${AF3_ENDPOINT_LOCATION}" \
-        -var="af3_use_dws=${AF3_USE_DWS}" \
-        -var="af3_reservation_affinity_type=${AF3_RESERVATION_AFFINITY_TYPE}" \
+    echo "Running terraform plan & apply..."
+    TF_VARS=(
+        -var="project_id=${PROJECT_ID}"
+        -var="region=${REGION}"
+        -var="zone=${ZONE}"
+        -var="bucket_name=${BUCKET_NAME}"
+        -var="iap_access_domain=${IAP_ACCESS_DOMAIN}"
+        -var="enable_viewer_iap=${ENABLE_VIEWER_IAP}"
+        -var="enable_af3=${ENABLE_AF3}"
+        -var="af3_endpoint_location=${AF3_ENDPOINT_LOCATION}"
+        -var="af3_use_dws=${AF3_USE_DWS}"
+        -var="af3_reservation_affinity_type=${AF3_RESERVATION_AFFINITY_TYPE}"
         -var="af3_capacity_pool=${AF3_CAPACITY_POOL}"
+    )
+    [[ -n "${FILESTORE_TIER:-}" ]] && TF_VARS+=(-var="filestore_tier=${FILESTORE_TIER}")
+    [[ -n "${FILESTORE_CAPACITY_GB:-}" ]] && TF_VARS+=(-var="filestore_capacity_gb=${FILESTORE_CAPACITY_GB}")
+    [[ -n "${FILESTORE_MAX_IOPS:-}" ]] && TF_VARS+=(-var="filestore_max_iops=${FILESTORE_MAX_IOPS}")
+
+    # Plan first so we can stop before Terraform deletes the Filestore instance
+    # (e.g. switching filestore_tier between BASIC_SSD, ZONAL, and REGIONAL). A
+    # replacement erases all NFS databases and MSA caches.
+    TF_PLAN_FILE=$(mktemp -t foldrun-tfplan.XXXXXX)
+    terraform plan -input=false -out="$TF_PLAN_FILE" "${TF_VARS[@]}"
+    FS_DELETE=$(terraform show -json "$TF_PLAN_FILE" | python3 -c '
+import json, sys
+plan = json.load(sys.stdin)
+for rc in plan.get("resource_changes", []):
+    if rc.get("type") == "google_filestore_instance" and "delete" in rc.get("change", {}).get("actions", []):
+        print(rc["address"])
+' 2>/dev/null || true)
+    if [[ -n "$FS_DELETE" ]] && [[ "${ALLOW_FILESTORE_REPLACE:-false}" != "true" ]]; then
+        echo ""
+        echo "WARNING: this plan DELETES the Filestore instance: $FS_DELETE"
+        echo "  All NFS databases and MSA caches on it will be lost. This is expected"
+        echo "  when switching filestore_tier (e.g. BASIC_SSD <-> ZONAL / REGIONAL). Restore"
+        echo "  databases afterwards with: $0 $PROJECT_ID $REGION --steps data  (option 2, GCS restore)"
+        if [[ -t 0 ]]; then
+            read -p "  Type REPLACE to continue: " fs_confirm
+        else
+            fs_confirm=""
+            echo "  Non-interactive shell: set ALLOW_FILESTORE_REPLACE=true to proceed."
+        fi
+        if [[ "$fs_confirm" != "REPLACE" ]]; then
+            rm -f "$TF_PLAN_FILE"
+            echo "Aborted: Filestore left unchanged."
+            exit 1
+        fi
+    fi
+    terraform apply -input=false "$TF_PLAN_FILE"
+    rm -f "$TF_PLAN_FILE"
     cd ..
 fi
 
@@ -443,8 +489,10 @@ if $run_build; then
     echo "Step 4: Building and Deploying Applications (Cloud Build)"
     echo "Substitutions:"
     echo "  _REGION=${REGION}"
+    echo "  _ZONE=${ZONE}"
     echo "  _BUCKET_NAME=${GCS_BUCKET}"
     echo "  _FILESTORE_ID=${FILESTORE_ID}"
+    echo "  _FILESTORE_LOCATION=${FILESTORE_LOCATION}"
     echo "  _AR_REPO=${AR_REPO}"
     echo "  _AGENT_SA_EMAIL=${AGENT_SA_EMAIL}"
     echo "  _PIPELINES_SA_EMAIL=${PIPELINES_SA_EMAIL}"
@@ -458,7 +506,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions="^;^_REGION=${REGION};_BUCKET_NAME=${GCS_BUCKET};_FILESTORE_ID=${FILESTORE_ID};_AR_REPO=${AR_REPO};_AGENT_SA_EMAIL=${AGENT_SA_EMAIL};_PIPELINES_SA_EMAIL=${PIPELINES_SA_EMAIL};_DATABASES_BUCKET=${DATABASES_BUCKET};_NETWORK_ID=${NETWORK_ID};_NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER};_AF2_VERSION=${AF2_VERSION};_OF3_VERSION=${OF3_VERSION};_BOLTZ_VERSION=${BOLTZ_VERSION};_BUILD_TARGET=${BUILD_TARGET};_MODEL_ENDPOINT_LOCATION=${MODEL_ENDPOINT_LOCATION};_AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION};_FOLDRUN_VIEWER_URL=${FOLDRUN_VIEWER_URL};_AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID};_GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID};_AF3_ENDPOINT=${AF3_ENDPOINT:-auto};_AF3_MODEL_ID=${AF3_MODEL_ID:-auto}" \
+        --substitutions="^;^_REGION=${REGION};_ZONE=${ZONE};_BUCKET_NAME=${GCS_BUCKET};_FILESTORE_ID=${FILESTORE_ID};_FILESTORE_LOCATION=${FILESTORE_LOCATION};_AR_REPO=${AR_REPO};_AGENT_SA_EMAIL=${AGENT_SA_EMAIL};_PIPELINES_SA_EMAIL=${PIPELINES_SA_EMAIL};_DATABASES_BUCKET=${DATABASES_BUCKET};_NETWORK_ID=${NETWORK_ID};_NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER};_AF2_VERSION=${AF2_VERSION};_OF3_VERSION=${OF3_VERSION};_BOLTZ_VERSION=${BOLTZ_VERSION};_BUILD_TARGET=${BUILD_TARGET};_MODEL_ENDPOINT_LOCATION=${MODEL_ENDPOINT_LOCATION};_AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION};_FOLDRUN_VIEWER_URL=${FOLDRUN_VIEWER_URL};_AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID};_GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID};_AF3_ENDPOINT=${AF3_ENDPOINT:-auto};_AF3_MODEL_ID=${AF3_MODEL_ID:-auto}" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi
@@ -473,6 +521,9 @@ if $run_data; then
     cd foldrun-agent
     export GCP_PROJECT_ID=$PROJECT_ID
     export GCP_REGION=$REGION
+    export GCP_ZONE=${ZONE:-${REGION}-a}
+    export FILESTORE_LOCATION=${FILESTORE_LOCATION:-}
+    export NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER:-}
     export GCS_BUCKET_NAME=$GCS_BUCKET
     export GCS_DATABASES_BUCKET=${DATABASES_BUCKET:-$GCS_BUCKET}
     export ALPHAFOLD_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/alphafold-components:latest
@@ -574,7 +625,12 @@ if $run_convert; then
     cd foldrun-agent
     export GCP_PROJECT_ID=$PROJECT_ID
     export GCP_REGION=$REGION
+    export GCP_ZONE=${ZONE:-${REGION}-a}
+    export FILESTORE_LOCATION=${FILESTORE_LOCATION:-}
+    export NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER:-}
+    export GCS_BUCKET_NAME=${GCS_BUCKET:-${PROJECT_ID}-foldrun-data}
     export GCS_DATABASES_BUCKET=${DATABASES_BUCKET:-${PROJECT_ID}-foldrun-gdbs}
+    export ALPHAFOLD_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/alphafold-components:latest
 
     # Determine which databases to convert
     if [[ -n "$DB_NAME" ]]; then
@@ -597,7 +653,12 @@ from foldrun_app.models.af2.tools.download_database import ConvertMMseqs2Tool
 import os
 os.environ.setdefault('GCP_PROJECT_ID', '$PROJECT_ID')
 os.environ.setdefault('GCP_REGION', '$REGION')
+os.environ.setdefault('GCP_ZONE', '$GCP_ZONE')
+if '$FILESTORE_LOCATION':
+    os.environ.setdefault('FILESTORE_LOCATION', '$FILESTORE_LOCATION')
+os.environ.setdefault('GCS_BUCKET_NAME', '$GCS_BUCKET_NAME')
 os.environ.setdefault('GCS_DATABASES_BUCKET', '$GCS_DATABASES_BUCKET')
+os.environ.setdefault('ALPHAFOLD_COMPONENTS_IMAGE', '$ALPHAFOLD_COMPONENTS_IMAGE')
 from foldrun_app.models.af2.config import Config
 config = Config()
 tool_config = {'name': 'convert_mmseqs2', 'description': 'Convert to MMseqs2'}
