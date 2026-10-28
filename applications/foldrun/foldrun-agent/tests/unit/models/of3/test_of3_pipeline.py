@@ -564,6 +564,206 @@ class TestOF3MSAPipelineCacheBehavior:
             f"{tpl_chain['template_alignment_file_path']}"
         )
 
+    def test_rna_msa_executes_nhmmer_against_default_databases_yaml_paths(
+        self, tmp_path, monkeypatch
+    ):
+        """Verify RNA chains run nhmmer against rfam/rfam.fasta and rnacentral/rnacentral.fasta,
+        properly handle empty cache directories when DBs are absent, and hit cache on subsequent runs.
+        """
+        import hashlib
+        import importlib
+        import json
+        import subprocess
+
+        import foldrun_app.models.of3.pipeline.config as pipeline_config
+
+        for var in ("OF3_RFAM_PATH", "RFAM_PATH", "OF3_RNACENTRAL_PATH", "RNACENTRAL_PATH"):
+            monkeypatch.delenv(var, raising=False)
+        importlib.reload(pipeline_config)
+
+        msa_func = self._get_msa_func()
+
+        nfs_mount = tmp_path / "nfs"
+        (nfs_mount / "rfam").mkdir(parents=True)
+        (nfs_mount / "rnacentral").mkdir(parents=True)
+        for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
+            (nfs_mount / db_name).write_text(">dummy\nACDEFGHIK\n")
+
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90.fasta",
+                "mgnify": "mgnify.fasta",
+                "pdb_seqres": "pdb_seqres.fasta",
+                "rfam": pipeline_config.RFAM_PATH,
+                "rnacentral": pipeline_config.RNACENTRAL_PATH,
+            },
+        )
+
+        seq = "ACGUACGUACGU"
+        seq_hash = hashlib.sha256(seq.encode()).hexdigest()
+        cache_dir = nfs_mount / "of3_msas_cache" / f"rna_{seq_hash}"
+        cache_dir.mkdir(parents=True)
+
+        query_input = tmp_path / "rna_query.json"
+        query_input.write_text(
+            json.dumps(
+                {
+                    "queries": {
+                        "rna_q": {
+                            "chains": [
+                                {
+                                    "molecule_type": "rna",
+                                    "chain_ids": ["R"],
+                                    "sequence": seq,
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+        )
+        query_artifact = self._make_artifact(path=str(query_input), uri=str(query_input))
+
+        called_cmds = []
+
+        def _fake_run(cmd, check=True):
+            called_cmds.append(cmd)
+            out_idx = cmd.index("-A") + 1
+            with open(cmd[out_idx], "w") as f:
+                f.write("# STOCKHOLM 1.0\n//\n")
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        # Step 1: Pre-created empty cache dir while RNA FASTA files are absent -> no nhmmer calls
+        out_empty_path = tmp_path / "out_empty.json"
+        out_empty_artifact = self._make_artifact(path=str(out_empty_path), uri=str(out_empty_path))
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_empty_artifact,
+            use_templates=False,
+        )
+
+        assert len(called_cmds) == 0
+        assert out_empty_artifact.metadata["msa_chains"] == 0
+        assert list(cache_dir.iterdir()) == []
+        empty_res = json.loads(out_empty_path.read_text())
+        empty_rna_chain = empty_res["queries"]["rna_q"]["chains"][0]
+        assert "main_msa_file_paths" not in empty_rna_chain
+
+        # Step 2: Create rfam.fasta and rnacentral.fasta -> runs nhmmer and populates cache
+        (nfs_mount / "rfam" / "rfam.fasta").write_text(">rfam1\nACGUACGU\n")
+        (nfs_mount / "rnacentral" / "rnacentral.fasta").write_text(">rnac1\nACGUACGU\n")
+
+        out_rna_path = tmp_path / "out_rna.json"
+        out_rna_artifact = self._make_artifact(path=str(out_rna_path), uri=str(out_rna_path))
+
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_rna_artifact,
+            use_templates=False,
+        )
+
+        assert len(called_cmds) == 2
+        assert called_cmds[0][0] == "nhmmer"
+        assert str(nfs_mount / "rfam" / "rfam.fasta") in called_cmds[0]
+        assert str(nfs_mount / "rnacentral" / "rnacentral.fasta") in called_cmds[1]
+        assert out_rna_artifact.metadata["msa_chains"] == 1
+
+        rna_result = json.loads(out_rna_path.read_text())
+        rna_chain = rna_result["queries"]["rna_q"]["chains"][0]
+        assert len(rna_chain["main_msa_file_paths"]) == 2
+        assert all(os.path.isfile(p) for p in rna_chain["main_msa_file_paths"])
+        assert any(p.endswith("rfam_hits.sto") for p in rna_chain["main_msa_file_paths"])
+        assert any(p.endswith("rnacentral_hits.sto") for p in rna_chain["main_msa_file_paths"])
+
+        # Step 3: Re-run to verify cache hit
+        out_hit_path = tmp_path / "out_hit.json"
+        out_hit_artifact = self._make_artifact(path=str(out_hit_path), uri=str(out_hit_path))
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_hit_artifact,
+            use_templates=False,
+        )
+
+        assert len(called_cmds) == 2  # No new nhmmer calls
+        assert out_hit_artifact.metadata["msa_chains"] == 1
+        hit_result = json.loads(out_hit_path.read_text())
+        hit_chain = hit_result["queries"]["rna_q"]["chains"][0]
+        assert len(hit_chain["main_msa_file_paths"]) == 2
+
+    def test_rna_msa_empty_metadata_paths_do_not_execute_against_mount_root(
+        self, tmp_path, monkeypatch
+    ):
+        """Verify that passing empty string metadata for rfam/rnacentral does not target mount root."""
+        import json
+        import subprocess
+
+        msa_func = self._get_msa_func()
+
+        nfs_mount = tmp_path / "nfs"
+        nfs_mount.mkdir(parents=True)
+        for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
+            (nfs_mount / db_name).write_text(">dummy\nACDEFGHIK\n")
+
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90.fasta",
+                "mgnify": "mgnify.fasta",
+                "pdb_seqres": "pdb_seqres.fasta",
+                "rfam": "",
+                "rnacentral": "",
+            },
+        )
+
+        query_input = tmp_path / "query_rna_empty.json"
+        query_input.write_text(
+            json.dumps(
+                {
+                    "queries": {
+                        "rna_q": {
+                            "chains": [
+                                {
+                                    "molecule_type": "rna",
+                                    "chain_ids": ["R"],
+                                    "sequence": "ACGUACGU",
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+        )
+        query_artifact = self._make_artifact(path=str(query_input), uri=str(query_input))
+        out_path = tmp_path / "out_rna_empty.json"
+        out_artifact = self._make_artifact(path=str(out_path), uri=str(out_path))
+
+        invoked_cmds = []
+
+        def _fake_run(cmd, check=True):
+            invoked_cmds.append(cmd)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_artifact,
+            use_templates=False,
+        )
+
+        assert len(invoked_cmds) == 0
+        assert out_artifact.metadata["msa_chains"] == 0
+        res = json.loads(out_path.read_text())
+        chain = res["queries"]["rna_q"]["chains"][0]
+        assert "main_msa_file_paths" not in chain
+
 
 class TestOF3SubmitPredictionToolCuEq:
     """Verify OF3SubmitPredictionTool handling of cuEquivariance triangle kernels."""
