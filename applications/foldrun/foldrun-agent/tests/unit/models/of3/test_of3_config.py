@@ -77,6 +77,39 @@ class TestOF3Config:
         assert pipeline_config.RFAM_PATH == "rfam/rfam.fasta"
         assert pipeline_config.RNACENTRAL_PATH == "rnacentral/rnacentral.fasta"
 
+    def test_config_rna_database_empty_string_env_fallbacks(self, monkeypatch):
+        """Verify empty string env overrides fall back to RFAM_PATH or default databases.yaml paths."""
+        import importlib
+
+        import foldrun_app.models.of3.pipeline.config as pipeline_config
+        from foldrun_app.models.of3.config import OF3Config
+
+        # Case 1: OF3_* is empty string, RFAM_PATH / RNACENTRAL_PATH are populated
+        monkeypatch.setenv("OF3_RFAM_PATH", "")
+        monkeypatch.setenv("RFAM_PATH", "fallback/rfam.fasta")
+        monkeypatch.setenv("OF3_RNACENTRAL_PATH", "")
+        monkeypatch.setenv("RNACENTRAL_PATH", "fallback/rnacentral.fasta")
+        importlib.reload(pipeline_config)
+
+        config = OF3Config()
+        assert config.rfam_path == "fallback/rfam.fasta"
+        assert config.rnacentral_path == "fallback/rnacentral.fasta"
+        assert pipeline_config.RFAM_PATH == "fallback/rfam.fasta"
+        assert pipeline_config.RNACENTRAL_PATH == "fallback/rnacentral.fasta"
+
+        # Case 2: Both OF3_* and fallback are empty strings -> falls back to databases.yaml defaults
+        monkeypatch.setenv("OF3_RFAM_PATH", "")
+        monkeypatch.setenv("RFAM_PATH", "")
+        monkeypatch.setenv("OF3_RNACENTRAL_PATH", "")
+        monkeypatch.setenv("RNACENTRAL_PATH", "")
+        importlib.reload(pipeline_config)
+
+        config = OF3Config()
+        assert config.rfam_path == "rfam/rfam.fasta"
+        assert config.rnacentral_path == "rnacentral/rnacentral.fasta"
+        assert pipeline_config.RFAM_PATH == "rfam/rfam.fasta"
+        assert pipeline_config.RNACENTRAL_PATH == "rnacentral/rnacentral.fasta"
+
     def test_config_missing_image(self, monkeypatch):
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.setattr("foldrun_app.core.config.load_dotenv", lambda *a, **kw: None)

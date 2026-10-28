@@ -74,13 +74,15 @@ class OF3Config(CoreConfig):
     @property
     def rfam_path(self) -> str:
         """NFS-relative path to Rfam RNA database file."""
-        return os.getenv("OF3_RFAM_PATH", os.getenv("RFAM_PATH", "rfam/rfam.fasta"))
+        return os.getenv("OF3_RFAM_PATH") or os.getenv("RFAM_PATH") or "rfam/rfam.fasta"
 
     @property
     def rnacentral_path(self) -> str:
         """NFS-relative path to RNAcentral RNA database file."""
-        return os.getenv(
-            "OF3_RNACENTRAL_PATH", os.getenv("RNACENTRAL_PATH", "rnacentral/rnacentral.fasta")
+        return (
+            os.getenv("OF3_RNACENTRAL_PATH")
+            or os.getenv("RNACENTRAL_PATH")
+            or "rnacentral/rnacentral.fasta"
         )
 
     @property

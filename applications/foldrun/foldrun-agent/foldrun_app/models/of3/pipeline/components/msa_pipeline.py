@@ -60,8 +60,10 @@ def msa_pipeline_of3(
     uniref90_path = os.path.join(mount_path, ref_databases.metadata["uniref90"])
     mgnify_path = os.path.join(mount_path, ref_databases.metadata["mgnify"])
     pdb_seqres_path = os.path.join(mount_path, ref_databases.metadata["pdb_seqres"])
-    rfam_path = os.path.join(mount_path, ref_databases.metadata.get("rfam", ""))
-    rnacentral_path = os.path.join(mount_path, ref_databases.metadata.get("rnacentral", ""))
+    rfam_rel = ref_databases.metadata.get("rfam") or ""
+    rnacentral_rel = ref_databases.metadata.get("rnacentral") or ""
+    rfam_path = os.path.join(mount_path, rfam_rel) if rfam_rel else ""
+    rnacentral_path = os.path.join(mount_path, rnacentral_rel) if rnacentral_rel else ""
 
     # Cache & Temp directories on NFS
     nfs_msa_cache_base = os.path.join(mount_path, "of3_msas_cache")
@@ -109,9 +111,9 @@ def msa_pipeline_of3(
                         required_files.append("pdb_seqres.sto")
                 elif seq_type == "rna":
                     required_files = []
-                    if rfam_path and os.path.exists(rfam_path):
+                    if rfam_path and os.path.isfile(rfam_path):
                         required_files.append("rfam_hits.sto")
-                    if rnacentral_path and os.path.exists(rnacentral_path):
+                    if rnacentral_path and os.path.isfile(rnacentral_path):
                         required_files.append("rnacentral_hits.sto")
                 else:
                     required_files = []
@@ -253,7 +255,7 @@ def msa_pipeline_of3(
                 rna_files = []
 
                 # nhmmer against Rfam ("rfam_hits.sto" per OF3 max_seq_counts convention)
-                if rfam_path and os.path.exists(rfam_path):
+                if rfam_path and os.path.isfile(rfam_path):
                     rfam_sto = os.path.join(seq_dir, "rfam_hits.sto")
                     subprocess.run(
                         [
@@ -271,7 +273,7 @@ def msa_pipeline_of3(
                     rna_files.append(rfam_sto)
 
                 # nhmmer against RNAcentral ("rnacentral_hits.sto" per same convention)
-                if rnacentral_path and os.path.exists(rnacentral_path):
+                if rnacentral_path and os.path.isfile(rnacentral_path):
                     rnacentral_sto = os.path.join(seq_dir, "rnacentral_hits.sto")
                     subprocess.run(
                         [
@@ -290,6 +292,13 @@ def msa_pipeline_of3(
 
                 if rna_files:
                     chain["main_msa_file_paths"] = rna_files
+                    num_msa_chains += 1
+                else:
+                    shutil.rmtree(seq_dir, ignore_errors=True)
+                    logging.info(
+                        f"No RNA reference databases found for {seq_key}; skipping cache promotion"
+                    )
+                    continue
 
                 logging.info(f"RNA MSA complete for {seq_key}")
 
@@ -317,11 +326,13 @@ def msa_pipeline_of3(
                         if seq_type == "protein"
                         else ["rfam_hits.sto", "rnacentral_hits.sto"]
                     )
-                    chain["main_msa_file_paths"] = [
+                    cached_msa_paths = [
                         os.path.join(seq_cache_dir, f)
                         for f in msa_filenames
                         if os.path.exists(os.path.join(seq_cache_dir, f))
                     ]
+                    if cached_msa_paths or seq_type == "protein":
+                        chain["main_msa_file_paths"] = cached_msa_paths
                     if seq_type == "protein" and "template_alignment_file_path" in chain:
                         chain["template_alignment_file_path"] = os.path.join(
                             seq_cache_dir, "pdb_seqres.sto"

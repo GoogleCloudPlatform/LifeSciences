@@ -101,11 +101,12 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
             "mgnify": config.MGNIFY_PATH,
             "pdb_seqres": config.PDB_SEQRES_PATH,
             "uniprot": config.UNIPROT_PATH,
-            "rfam": os.environ.get("OF3_RFAM_PATH", os.environ.get("RFAM_PATH", config.RFAM_PATH)),
-            "rnacentral": os.environ.get(
-                "OF3_RNACENTRAL_PATH",
-                os.environ.get("RNACENTRAL_PATH", config.RNACENTRAL_PATH),
-            ),
+            "rfam": os.environ.get("OF3_RFAM_PATH")
+            or os.environ.get("RFAM_PATH")
+            or config.RFAM_PATH,
+            "rnacentral": os.environ.get("OF3_RNACENTRAL_PATH")
+            or os.environ.get("RNACENTRAL_PATH")
+            or config.RNACENTRAL_PATH,
         }
 
         # Import query JSON from GCS
