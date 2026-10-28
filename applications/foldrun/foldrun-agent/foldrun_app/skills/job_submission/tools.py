@@ -182,8 +182,8 @@ def submit_of3_prediction(
             more independent predictions.
         num_diffusion_samples: Number of diffusion samples per seed
             (default: 5). More samples = more structural diversity.
-        gpu_type: GPU type. "auto" (default) selects A100 for <=2000 tokens,
-            A100_80GB for >2000. No L4 — OF3 requires minimum 40GB VRAM.
+        gpu_type: GPU type. "auto" (default) selects A100 for <=2200 tokens,
+            A100_80GB for >2200. No L4 — OF3 requires minimum 40GB VRAM.
         enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
         use_templates: Use PDB structural templates (default: true). Runs
             jackhmmer against pdb_seqres to find structural homologs, then
@@ -229,7 +229,9 @@ def submit_boltz2_prediction(
         num_diffusion_samples: Number of diffusion samples per seed
             (default: 5). More samples = more structural diversity.
         gpu_type: GPU type. "auto" (default) selects A100 for <=2000 tokens,
-            A100_80GB for >2000.
+            A100_80GB for >2000. Override with "L4" (explicit g2-standard-12 /
+            24GB VRAM tier for smaller targets <=1000 tokens), "A100", or
+            "A100_80GB".
         enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
     """
     validated_input = _validate_input_source(input, "input")

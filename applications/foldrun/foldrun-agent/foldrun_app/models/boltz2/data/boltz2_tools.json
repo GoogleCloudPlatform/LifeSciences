@@ -24,9 +24,10 @@
         },
         "gpu_type": {
           "type": "string",
-          "description": "GPU type: 'auto' (default, A100 for <=2000 tokens, A100_80GB for >2000), 'A100', or 'A100_80GB'. No L4 support — BOLTZ2 requires minimum 40GB VRAM.",
+          "description": "GPU type: 'auto' (default, A100 for <=2000 tokens, A100_80GB for >2000), 'L4' (explicit g2-standard-12 / NVIDIA_L4 24GB VRAM tier for smaller targets <=1000 tokens), 'A100', or 'A100_80GB'.",
           "enum": [
             "auto",
+            "L4",
             "A100",
             "A100_80GB"
           ]

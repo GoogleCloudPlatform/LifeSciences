@@ -24,7 +24,7 @@ and production access for FoldRun. For a quick-start overview, see [README.md](R
 | **AlphaFold 3** | 1x NVIDIA L4 (`--msa-free`) | **1x NVIDIA H100 80GB (`a3-highgpu-1g`)** | Auto-detects GCE reservations; auto-falls back across `H100_80GB -> A100_80GB -> A100 -> L4`; scales to zero (`$0.00/hr`) after 20m idle |
 | **AlphaFold 2** | 1x NVIDIA L4 | 1x NVIDIA A100 40GB | A100_80GB for >1,500 residues |
 | **OpenFold 3** | 1x NVIDIA A100 40GB | 1x NVIDIA A100 80GB | Minimum 40 GB VRAM |
-| **Boltz-2** | 1x NVIDIA A100 40GB | 1x NVIDIA A100 80GB | Minimum 40 GB VRAM |
+| **Boltz-2** | 1x NVIDIA L4 (explicit `gpu_type="L4"`, ≤1,000 tokens) | 1x NVIDIA A100 40GB / 80GB | `auto` selects A100 40GB (≤2,000 tokens) or A100 80GB (>2,000 tokens) |
 
 Check your quota on the [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu).
 Request increases early — approvals can take hours.

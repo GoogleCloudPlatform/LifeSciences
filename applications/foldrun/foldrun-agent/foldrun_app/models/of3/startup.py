@@ -68,13 +68,14 @@ def _auto_detect_gpus(config):
         ordered_support = detect_supported_gpus(config.project_id, config.region)
 
         if ordered_support:
-            # OF3 only supports A100 and above — filter out L4
-            of3_supported = [g for g in ordered_support if g in ("A100", "A100_80GB")]
+            # Retain L4 alongside A100 tiers so L4-only projects overwrite
+            # CoreConfig's default GPU list and fail fast in _get_hardware_config.
+            of3_supported = [g for g in ordered_support if g in ("A100", "A100_80GB", "L4")]
             if of3_supported:
                 config.set_supported_gpus(of3_supported)
                 logger.info(f"Auto-configured OF3 supported GPUs: {of3_supported}")
             else:
-                logger.warning("No A100+ GPUs found! OF3 requires at least A100. Keeping defaults.")
+                logger.warning("No A100/L4 GPUs found! Keeping defaults.")
         else:
             logger.warning("No GPUs found with limit > 0! Keeping defaults.")
 

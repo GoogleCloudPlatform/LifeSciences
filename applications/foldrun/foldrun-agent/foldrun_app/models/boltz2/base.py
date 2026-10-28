@@ -60,13 +60,13 @@ class BOLTZ2Tool(BaseTool):
     def _recommend_gpu(num_tokens: int) -> str:
         """Recommend GPU type based on total input tokens.
 
-        Boltz2 uses diffusion-based prediction — minimum A100 (40GB).
-
-        Auto-selection tiers:
+        Auto-selection defaults to >=40GB A100 tiers:
             <=2000 tokens  → A100     (40 GB VRAM)
             >2000 tokens   → A100_80GB (80 GB VRAM)
 
-        No L4 tier — BOLTZ2 requires at least 40GB VRAM.
+        L4 (g2-standard-12, 24 GB VRAM) is never auto-selected, as larger inputs
+        can OOM without cuEquivariance kernels, though callers can request it
+        explicitly via gpu_type='L4' for smaller targets (<=1000 tokens).
 
         Args:
             num_tokens: Total number of tokens (residues + nucleotides + ligand atoms)
@@ -89,18 +89,31 @@ class BOLTZ2Tool(BaseTool):
         No relax phase, no MMseqs2 GPU data pipeline — simpler than AF2.
 
         Args:
-            gpu_type: GPU type for predict phase ('auto', 'A100', 'A100_80GB').
+            gpu_type: GPU type for predict phase ('auto', 'L4', 'A100', 'A100_80GB').
+                Case-insensitive; hyphenated label forms like 'a100-80gb' are normalized.
             num_gpus: Number of GPUs (1, 2, 4, 8).
-            num_tokens: Total input tokens for auto GPU selection.
+            num_tokens: Total input tokens for auto GPU selection and L4 VRAM checks.
 
         Returns:
             Hardware configuration dictionary.
         """
+        normalized = (gpu_type or "auto").strip()
+        gpu_type = (
+            "auto"
+            if not normalized or normalized.lower() == "auto"
+            else normalized.upper().replace("-", "_")
+        )
+
         if gpu_type == "auto":
             gpu_type = self._recommend_gpu(num_tokens)
             logger.info(f"Auto-selected GPU: {gpu_type} (num_tokens={num_tokens})")
 
         configs = {
+            "L4": {
+                "predict_machine": "g2-standard-12",
+                "predict_accel": "NVIDIA_L4",
+                "predict_count": 1,
+            },
             "A100": {
                 "predict_machine": "a2-highgpu-1g",
                 "predict_accel": "NVIDIA_TESLA_A100",
@@ -118,17 +131,21 @@ class BOLTZ2Tool(BaseTool):
                 f"Unsupported GPU type '{gpu_type}' for Boltz-2. Supported types: {list(configs.keys())}"
             )
 
-        # Enforce supported GPUs logic (only accelerators supported by both environment and Boltz-2)
-        supported = [g for g in self.config.supported_gpus if g in configs]
+        # Enforce supported GPUs logic:
+        # Never auto-downgrade >=40GB requests (auto, A100, A100_80GB) to 24GB L4.
+        # L4 is only used when explicitly requested via gpu_type == "L4".
+        explicit_l4 = gpu_type == "L4"
+        allowed_pool = ["L4", "A100", "A100_80GB"] if explicit_l4 else ["A100", "A100_80GB"]
+        supported = [g for g in self.config.supported_gpus if g in allowed_pool]
         if not supported:
             raise ValueError(
                 f"No Boltz-2 compatible GPUs are supported in this environment! "
-                f"(Supported: {self.config.supported_gpus})"
+                f"(Supported: {self.config.supported_gpus}; >=40GB A100/A100_80GB required unless gpu_type='L4')"
             )
 
         if gpu_type not in supported:
             original_type = gpu_type
-            upgrade_path = ["A100", "A100_80GB"]
+            upgrade_path = allowed_pool
 
             try:
                 start_idx = upgrade_path.index(original_type)
@@ -141,17 +158,30 @@ class BOLTZ2Tool(BaseTool):
                     new_type = candidate
                     break
 
+            if not new_type:
+                for candidate in reversed(upgrade_path[:start_idx]):
+                    if candidate in supported:
+                        new_type = candidate
+                        break
+
             if new_type:
                 logger.warning(
-                    f"Requested GPU '{original_type}' not supported. Auto-upgrading to '{new_type}'."
+                    f"Requested GPU '{original_type}' not supported. Auto-selecting '{new_type}'."
                 )
                 gpu_type = new_type
             else:
-                fallback = supported[0]
+                fallback = supported[-1]
                 logger.warning(
                     f"Requested GPU '{original_type}' not supported. Falling back to '{fallback}'."
                 )
                 gpu_type = fallback
+
+        if gpu_type == "L4" and num_tokens > 1000:
+            logger.warning(
+                f"Boltz-2 input has {num_tokens} tokens (>1000) on 24GB L4 VRAM "
+                f"(--no_kernels --write_full_pde); high risk of GPU OOM during "
+                f"diffusion after CPU MSA completes. Consider gpu_type='A100' or 'A100_80GB'."
+            )
 
         config = configs[gpu_type].copy()
 

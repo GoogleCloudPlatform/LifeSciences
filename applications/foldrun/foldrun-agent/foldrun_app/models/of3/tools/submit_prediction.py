@@ -86,7 +86,7 @@ class OF3SubmitPredictionTool(OF3Tool):
         job_name = arguments.get("job_name", f"of3_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         num_model_seeds = arguments.get("num_model_seeds", 1)
         num_diffusion_samples = arguments.get("num_diffusion_samples", 5)
-        gpu_type = arguments.get("gpu_type", "auto")
+        gpu_type = arguments.get("gpu_type") or "auto"
         enable_flex_start = arguments.get("enable_flex_start", True)
         use_templates = arguments.get("use_templates", True)
         use_cueq_triangle_kernels = arguments.get(
