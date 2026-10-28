@@ -68,7 +68,9 @@ def _auto_detect_gpus(config):
         ordered_support = detect_supported_gpus(config.project_id, config.region)
 
         if ordered_support:
-            # BOLTZ2 supports A100, A100_80GB, and L4
+            # Retain L4 alongside A100 tiers both for explicit gpu_type="L4"
+            # overrides and so L4-only projects overwrite CoreConfig's default
+            # GPU list and fail fast on auto/>=40GB requests in _get_hardware_config.
             boltz2_supported = [g for g in ordered_support if g in ("A100", "A100_80GB", "L4")]
             if boltz2_supported:
                 config.set_supported_gpus(boltz2_supported)

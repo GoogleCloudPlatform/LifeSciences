@@ -83,7 +83,7 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         job_name = arguments.get("job_name", f"boltz2_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
         num_model_seeds = arguments.get("num_model_seeds", 1)
         num_diffusion_samples = arguments.get("num_diffusion_samples", 5)
-        gpu_type = arguments.get("gpu_type", "auto")
+        gpu_type = arguments.get("gpu_type") or "auto"
         enable_flex_start = arguments.get("enable_flex_start", True)
 
         import random

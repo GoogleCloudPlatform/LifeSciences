@@ -30,7 +30,7 @@ Built with **Google ADK** using **native Skills** — all skills run directly wi
 
 ## Features
 
-- **4-Model Plugin Architecture**: AF2 (`L4`/`A100`), AF3 (`H100_80GB` with auto-fallback to `A100_80GB`/`A100`/`L4` and GCE reservation auto-detection), OF3 (`A100`), and Boltz-2 (`A100`)
+- **4-Model Plugin Architecture**: AF2 (`L4`/`A100`), AF3 (`H100_80GB` with auto-fallback to `A100_80GB`/`A100`/`L4` and GCE reservation auto-detection), OF3 (`A100`), and Boltz-2 (`A100`, explicit `L4`)
 - **4-Stage AF3 KFP Pipeline**: Every AF3 prediction runs as an observable 4-stage KFP `PipelineJob` (*1. Provision & Queue AF3 Endpoint $\rightarrow$ 2. Run AF3 Inference (H100) $\rightarrow$ 3. Report AF3 Endpoint Available $\rightarrow$ 4. Process AF3 Results & Expert Analysis*) so the H100 replica is freed immediately after inference while log harvesting, plotting, and Gemini 4 Argon analysis run on CPU
 - **Up to 36 Native Tools across 10 Skill Packages**: Dynamically loaded based on configured models
 - **Multimodal Expert Analysis**: `gemini-4-argon` inspects per-residue pLDDT and PAE plots alongside chain-pair ipTM/PAE matrices to generate an 8-section structural biology report
@@ -92,14 +92,14 @@ foldrun-agent/
 │   │   ├── of3/                    # OpenFold3 plugin
 │   │   │   ├── config.py           # OF3Config (A100/A100_80GB only, no relax)
 │   │   │   ├── base.py             # OF3Tool base class
-│   │   │   ├── startup.py          # Singleton config + GPU detection (filter L4)
+│   │   │   ├── startup.py          # Singleton config + GPU detection (retains L4 for fail-fast)
 │   │   │   ├── pipeline/           # KFP: ConfigureSeeds → MSA(protein+RNA) → ParallelFor[Predict]
 │   │   │   ├── tools/              # 4 tools: submit, analyze, get_results, open_viewer
 │   │   │   └── utils/              # Input converter (FASTA → OF3 JSON)
 │   │   └── boltz2/                 # Boltz-2 plugin
-│   │       ├── config.py           # BOLTZ2Config (A100/A100_80GB, unified cache path)
+│   │       ├── config.py           # BOLTZ2Config (A100/A100_80GB auto, explicit L4, unified cache path)
 │   │       ├── base.py             # BOLTZ2Tool base class
-│   │       ├── startup.py          # Singleton config + GPU detection (A100+ only)
+│   │       ├── startup.py          # Singleton config + GPU detection (A100/A100_80GB + explicit L4)
 │   │       ├── pipeline/           # KFP: ConfigureSeeds → MSA(protein) → ParallelFor[Predict]
 │   │       ├── tools/              # 4 tools: submit, analyze, get_results, open_viewer
 │   │       └── utils/              # Input converter (FASTA → Boltz-2 YAML v1)
@@ -225,7 +225,7 @@ Tool count depends on which models are configured:
 | **AlphaFold 3** | L4 (24 GB, `--msa-free` only) | **H100 80GB (`a3-highgpu-1g`)** | `a3-highgpu-1g` provides 3 TB local NVMe SSD for the 630 GB MSA bundle (~3–6m per standard target); auto-falls back to `A100_80GB` / `A100` / `L4` |
 | **AlphaFold 2** | L4 (24 GB) | A100 (40 GB) | A100 auto-selected for faster DWS provisioning; A100_80GB for >1,500 residues |
 | **OpenFold 3** | A100 (40 GB) | A100_80GB | No L4 support; diffusion-based |
-| **Boltz-2** | A100 (40 GB) | A100_80GB | No L4 support; diffusion-based |
+| **Boltz-2** | L4 (24 GB, explicit `gpu_type="L4"`, ≤1,000 tokens) | A100 (40 GB) / A100_80GB | `auto` selects A100 (≤2,000 tokens) or A100_80GB (>2,000 tokens) |
 
 ## Running Tests
 

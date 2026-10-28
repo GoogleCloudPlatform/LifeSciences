@@ -214,6 +214,17 @@ DURATION_ANCHORS = {
             (2000, 25, 15, 0),
             (3000, 30, 22, 0),
         ],
+        # Explicit L4 override (g2-standard-12, 24 GB GDDR6; runs --no_kernels
+        # --write_full_pde without fused cuEquivariance kernels, scaling ~2x slower
+        # than A100; inputs >1000 tokens carry high OOM risk on 24 GB VRAM).
+        "L4": [
+            (100, 10, 3.0, 0),
+            (300, 13, 5.5, 0),
+            (600, 15, 11.0, 0),
+            (1000, 18, 18.0, 0),
+            (1500, 20, 27.0, 0),
+            (2000, 25, 40.0, 0),
+        ],
     },
 }
 
@@ -259,9 +270,9 @@ def _interpolate_durations(
     """
     anchors = DURATION_ANCHORS.get(job_type, {}).get(gpu_type)
     if not anchors:
-        # Fall back to first available GPU for this job type
+        # Prefer A100 before falling back to first available GPU for this job type
         available = DURATION_ANCHORS.get(job_type, {})
-        gpu_type = next(iter(available), "A100")
+        gpu_type = "A100" if "A100" in available else next(iter(available), "A100")
         anchors = available.get(gpu_type, [(300, 35, 15, 5)])
 
     # Clamp below first anchor
@@ -287,12 +298,22 @@ def _interpolate_durations(
     return anchors[-1][1], anchors[-1][2], anchors[-1][3]
 
 
+def _normalize_gpu_type(gpu_type: str | None) -> str:
+    """Normalize GPU type strings (e.g. 'l4', 'a100-80gb', 'auto')."""
+    normalized = (gpu_type or "auto").strip()
+    if not normalized or normalized.lower() == "auto":
+        return "auto"
+    return normalized.upper().replace("-", "_")
+
+
 def _auto_select_gpu(job_type: str, sequence_length: int) -> str:
     """Auto-select GPU based on job type and sequence length.
 
     Mirrors the logic in FoldRun's submission tools.
     """
-    if job_type in ["of3", "boltz2"]:
+    if job_type == "of3":
+        return "A100" if sequence_length <= 2200 else "A100_80GB"
+    elif job_type == "boltz2":
         return "A100" if sequence_length <= 2000 else "A100_80GB"
     elif job_type == "af2_multimer":
         return "A100" if sequence_length < 1000 else "A100_80GB"
@@ -315,6 +336,8 @@ def _machine_for_gpu(gpu_type: str) -> str:
     """Return the machine type paired with a GPU."""
     if gpu_type == "L4":
         return "g2-standard-12"
+    if gpu_type == "A100_80GB":
+        return "a2-ultragpu-1g"
     return "a2-highgpu-1g"
 
 
@@ -579,8 +602,13 @@ def estimate_single_job(
     """
     prices = get_prices(region)
 
+    gpu_type = _normalize_gpu_type(gpu_type)
     if gpu_type == "auto":
         gpu_type = _auto_select_gpu(job_type, sequence_length)
+    elif job_type == "of3" and gpu_type == "L4":
+        # Mirror OF3Tool._get_hardware_config: OF3 requires >=40GB VRAM and
+        # upgrades explicit L4 requests to A100 / A100_80GB by token count.
+        gpu_type = _auto_select_gpu("of3", sequence_length)
 
     # Determine total number of predict (and relax) tasks
     if job_type == "af2_monomer":
@@ -620,7 +648,7 @@ def estimate_single_job(
         "gpu_type": gpu_type,
         "sequence_length": sequence_length,
         "num_predict_tasks": num_predictions,
-        "num_diffusion_samples": num_diffusion_samples if job_type == "of3" else None,
+        "num_diffusion_samples": num_diffusion_samples if job_type in ("of3", "boltz2") else None,
         "region": region,
         "total_duration_minutes": total_minutes,
         "on_demand": {
@@ -888,7 +916,7 @@ def get_actual_costs(
                 "model_type": labels.get("model_type", "unknown"),
                 "job_type": labels.get("job_type", "unknown"),
                 "seq_name": labels.get("seq_name", "unknown"),
-                "seq_len": labels.get("seq_len", "unknown"),
+                "seq_len": labels.get("seq_len") or labels.get("num_tokens", "unknown"),
                 "gpu_type": labels.get("gpu_type", "unknown"),
                 "tasks": [],
             }
@@ -969,9 +997,13 @@ def get_actual_costs(
                 jt = "af2_monomer" if pipeline["job_type"] == "monomer" else "af2_multimer"
             elif model == "openfold3":
                 jt = "of3"
+            elif model == "boltz2":
+                jt = "boltz2"
 
             if jt:
-                est = estimate_single_job(jt, "auto", seq_len)
+                raw_gpu = pipeline["gpu_type"]
+                est_gpu = raw_gpu if raw_gpu and raw_gpu != "unknown" else "auto"
+                est = estimate_single_job(jt, est_gpu, seq_len)
                 est_spot = est["dws_flex_start"]["estimated_total"]
                 est_od = est["on_demand"]["estimated_total"]
                 estimate_comparison = {

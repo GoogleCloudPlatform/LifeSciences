@@ -111,13 +111,51 @@ class TestOF3HardwareConfig:
         assert config["predict_count"] == 4
 
     def test_explicit_l4_upgrades_to_a100(self):
-        """OpenFold3 requires >=40GB VRAM and upgrades explicit L4 requests to A100."""
+        """OpenFold3 requires >=40GB VRAM and upgrades explicit L4 requests to A100 for <=2200 tokens."""
         from foldrun_app.models.of3.base import OF3Tool
 
         tool = OF3Tool({"name": "test", "description": "test"})
-        config = tool._get_hardware_config("L4")
+        config = tool._get_hardware_config("L4", num_tokens=500)
         assert config["predict_accel"] == "NVIDIA_TESLA_A100"
         assert config["predict_machine"] == "a2-highgpu-1g"
+
+    def test_explicit_l4_large_tokens_upgrades_to_a100_80gb(self):
+        """Explicit L4 with >2200 tokens delegates to _recommend_gpu and upgrades to A100_80GB."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        tool = OF3Tool({"name": "test", "description": "test"})
+        config = tool._get_hardware_config("l4", num_tokens=2500)
+        assert config["predict_accel"] == "NVIDIA_A100_80GB"
+        assert config["predict_machine"] == "a2-ultragpu-1g"
+
+    @pytest.mark.parametrize(
+        "raw_gpu,num_tokens,expected_accel,expected_machine",
+        [
+            ("l4", 500, "NVIDIA_TESLA_A100", "a2-highgpu-1g"),
+            ("a100", 500, "NVIDIA_TESLA_A100", "a2-highgpu-1g"),
+            ("a100-80gb", 500, "NVIDIA_A100_80GB", "a2-ultragpu-1g"),
+            (" AUTO ", 2500, "NVIDIA_A100_80GB", "a2-ultragpu-1g"),
+            ("", 500, "NVIDIA_TESLA_A100", "a2-highgpu-1g"),
+        ],
+    )
+    def test_gpu_type_case_and_hyphen_normalization(
+        self, raw_gpu, num_tokens, expected_accel, expected_machine
+    ):
+        """OF3 _get_hardware_config normalizes lowercase, whitespace, empty strings, and hyphenated labels."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        tool = OF3Tool({"name": "test", "description": "test"})
+        config = tool._get_hardware_config(raw_gpu, num_tokens=num_tokens)
+        assert config["predict_accel"] == expected_accel
+        assert config["predict_machine"] == expected_machine
+
+    def test_explicit_unsupported_gpu_raises(self):
+        """Unsupported GPU types like V100 raise ValueError instead of silently defaulting."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        tool = OF3Tool({"name": "test", "description": "test"})
+        with pytest.raises(ValueError):
+            tool._get_hardware_config("V100")
 
     def test_only_l4_environment_raises(self):
         """When environment only supports L4, OF3 must raise ValueError rather than running on 24GB VRAM."""

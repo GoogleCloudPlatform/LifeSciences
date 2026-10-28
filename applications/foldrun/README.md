@@ -65,7 +65,7 @@ If you are using a Shared VPC (network belongs to a host project), the following
 - **AF2 minimum**: **1x NVIDIA A100 40GB** (L4 no longer auto-selected — slow DWS provisioning)
 - **AF2 large proteins (>1500 residues)**: **1x NVIDIA A100 80GB**
 - **OF3 minimum**: **1x NVIDIA A100 40GB** (no L4 support)
-- **Boltz-2 minimum**: **1x NVIDIA A100 40GB** (no L4 support — diffusion model requires ≥40 GB VRAM)
+- **Boltz-2**: Default **1x NVIDIA A100 40GB** (`auto`; **1x NVIDIA A100 80GB** for >2,000 tokens); explicit **1x NVIDIA L4 (`g2-standard-12`, 24 GB VRAM)** supported via `gpu_type="L4"` for smaller targets (≤1,000 tokens)
 - Check your quota: [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu)
 - If you need to request quota increases, do it first — approvals can take hours
 
