@@ -58,7 +58,7 @@ usage() {
     echo "                         App ID for Gemini Enterprise registration."
     echo ""
     echo "Environment variables:"
-    echo "  DOWNLOAD_MODE      Database download mode: reduced (default) or full"
+    echo "  DOWNLOAD_MODE      Database download mode: reduced (default), full, or core (weights only)"
     echo "  ENABLE_AF3         Provision AlphaFold 3 Model Garden Endpoint in Terraform: true or false (default)"
     echo "  AF3_ENDPOINT_LOCATION  Region for AF3 Dedicated Endpoint (default: REGION, e.g. us-central1)"
     echo "  AF3_CAPACITY_POOL  Capacity pool for AF3 Endpoint: DWS (default), ANY_RESERVATION, NO_RESERVATION, or SPOT"
@@ -572,8 +572,8 @@ if $run_data; then
         echo "     - Use this for: fast setup, disaster recovery, team onboarding"
         echo ""
         echo "  3) Skip — set up databases later"
-        echo "     - The agent will deploy but predictions will fail until databases"
-        echo "       are available. Run 'scripts/setup_data.py' manually later."
+        echo "     - The agent will deploy and can run in single-sequence fallback (core) mode"
+        echo "       once model weights are present, or run 'scripts/setup_data.py' later."
         echo ""
         read -p "  Choose [1/2/3]: " db_choice
 

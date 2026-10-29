@@ -844,6 +844,23 @@ class TestOF3MSAPipelineCacheBehavior:
         assert out_core_artifact.metadata["msa_chains"] == 1
         assert out_core_artifact.metadata["template_chains"] == 0
 
+        # 1b. Repeat core-mode run for the same sequence hits cache cleanly without touching tmp
+        out_core_hit_path = tmp_path / "out_core_hit.json"
+        out_core_hit_artifact = self._make_artifact(
+            path=str(out_core_hit_path), uri=str(out_core_hit_path)
+        )
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_core_hit_artifact,
+            use_templates=True,
+        )
+        assert invoked_cmds == []
+        core_hit_result = json.loads(out_core_hit_path.read_text())
+        core_hit_chain = core_hit_result["queries"]["core_q"]["chains"][0]
+        assert core_hit_chain["main_msa_file_paths"] == [sto_path]
+        assert list((nfs_mount / "of3_msas_tmp").iterdir()) == []
+
         # 2. Full databases later installed on NFS -> upgrades uniref90_hits.sto and adds mgnify_hits.sto
         for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
             (nfs_mount / db_name).write_text(f">dummy\n{seq}\n")
@@ -864,6 +881,9 @@ class TestOF3MSAPipelineCacheBehavior:
         with open(full_chain["main_msa_file_paths"][0]) as f:
             assert "homolog_full" in f.read()
         assert os.path.isfile(full_chain["template_alignment_file_path"])
+        # Ensure no leftover .tmp files in seq_cache_dir after atomic os.replace
+        cache_files = os.listdir(os.path.dirname(sto_path))
+        assert not any(name.endswith(".tmp") for name in cache_files)
 
     def test_preserves_custom_msa_and_template_paths(self, tmp_path, monkeypatch):
         """Pre-populated main_msa_file_paths and template_alignment_file_path skip HMMER."""

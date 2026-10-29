@@ -125,7 +125,9 @@ def msa_pipeline_of3(
             cache_hit = False
             if os.path.exists(seq_cache_dir):
                 if seq_type == "protein":
-                    required_files = ["uniref90_hits.sto", "mgnify_hits.sto"]
+                    required_files = ["uniref90_hits.sto"]
+                    if os.path.exists(uniref90_path) and os.path.exists(mgnify_path):
+                        required_files.append("mgnify_hits.sto")
                     if use_templates and os.path.exists(pdb_seqres_path):
                         required_files.append("pdb_seqres.sto")
                 elif seq_type == "rna":
@@ -361,7 +363,9 @@ def msa_pipeline_of3(
                         not os.path.exists(dst_file)
                         or (upgrade_core_fallback and fname == "uniref90_hits.sto")
                     ):
-                        shutil.copy2(src_file, dst_file)
+                        tmp_dst = f"{dst_file}.{run_id}.tmp"
+                        shutil.copy2(src_file, tmp_dst)
+                        os.replace(tmp_dst, dst_file)
                 shutil.rmtree(seq_dir)
 
             # Point to the cache directory

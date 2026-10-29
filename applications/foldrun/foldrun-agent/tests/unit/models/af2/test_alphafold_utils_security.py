@@ -177,16 +177,23 @@ class TestAlphaFoldUtilsPathTraversalSecurity:
             return {"chain_feat": True}
 
         orig_exists = os.path.exists
+        orig_isdir = os.path.isdir
 
         def _mock_exists(path_str):
             if str(path_str).startswith("/db"):
                 return True
             return orig_exists(path_str)
 
+        def _mock_isdir(path_str):
+            if str(path_str) == "/db/mmcif":
+                return True
+            return orig_isdir(path_str)
+
         with (
             patch.object(mod, "_check_gpu_available", return_value=False),
             patch.object(mod, "_run_mmseqs2_single_chain", side_effect=_fake_single_chain),
             patch.object(mod.os.path, "exists", side_effect=_mock_exists),
+            patch.object(mod.os.path, "isdir", side_effect=_mock_isdir),
         ):
             feature_dict, _ = mod.run_mmseqs2_data_pipeline(
                 fasta_path=str(fasta_path),
@@ -204,6 +211,7 @@ class TestAlphaFoldUtilsPathTraversalSecurity:
                 max_template_date="2026-01-01",
                 msa_output_path=str(msa_output_dir),
                 features_output_path=str(features_output_path),
+                small_bfd_database_path="/db/small_bfd.fasta",
             )
 
         assert feature_dict == {"padded": True}
@@ -278,8 +286,9 @@ class TestAlphaFoldUtilsCoreModeFallback:
             assert res == {"fallback": True}
             mock_fb.assert_called_once()
 
-        # Creating a pdb70_* prefix file satisfies glob(f"{pdb70_database_path}_*")
+        # Creating a pdb70_* prefix file and small_bfd satisfies _has_af2_raw_databases
         (tmp_path / "pdb70_hhm.ffindex").write_text("0\t10\n")
+        (tmp_path / "bfd-first_non_consensus_sequences.fasta").write_text(">bfd1\nACDEFGHIKL\n")
         mod.parsers.parse_fasta.return_value = (["ACDEFGHIKL"], ["mono"])
         with (
             patch.object(mod, "_run_single_sequence_fallback") as mock_no_fb,

@@ -28,7 +28,14 @@ from unittest import mock
 
 import numpy as np
 
-COMPONENT_FILE = Path(__file__).resolve().parents[1] / "src" / "components" / "alphafold_utils.py"
+COMPONENT_FILE = (
+    Path(__file__).resolve().parents[5]
+    / "src"
+    / "alphafold-components"
+    / "src"
+    / "components"
+    / "alphafold_utils.py"
+)
 
 
 class _LockedConfigDict(dict):
@@ -382,7 +389,8 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
             )
             self.assertEqual(mono_feats["template_aatype"].shape, (0, 12, 22))
             self.assertTrue(os.path.exists(mono_pkl))
-            self.assertEqual(len(mono_meta), 1)
+            self.assertEqual(mono_meta.get("single_sequence_fallback"), 1)
+            self.assertEqual(len(mono_meta), 2)
 
             # 2. Homodimer with duplicate FASTA headers (>subunit twice)
             homo_fasta = os.path.join(tmp, "homodimer.fasta")
@@ -400,7 +408,8 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
             self.assertEqual(homo_feats["chain_ids"], ["A", "B"])
             self.assertEqual(homo_feats["aatype"].shape[0], 20)
             self.assertEqual(homo_feats["msa"].shape, (512, 20))
-            self.assertEqual(len(homo_meta), 2)
+            self.assertEqual(homo_meta.get("single_sequence_fallback"), 1)
+            self.assertEqual(len(homo_meta), 3)
 
             # 3. Heterodimer fallback (requires *_all_seq pairing features)
             hetero_fasta = os.path.join(tmp, "heterodimer.fasta")
@@ -417,7 +426,47 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
             self.assertEqual(hetero_feats["chain_ids"], ["A", "B"])
             self.assertEqual(hetero_feats["aatype"].shape[0], 22)
             self.assertEqual(hetero_feats["msa"].shape, (512, 22))
-            self.assertEqual(len(hetero_meta), 2)
+            self.assertEqual(hetero_meta.get("single_sequence_fallback"), 1)
+            self.assertEqual(len(hetero_meta), 3)
+
+            # 4. Empty FASTA headers and duplicate sequence IDs in _write_a3m_as_sto
+            empty_hdr_fasta = os.path.join(tmp, "empty_hdr.fasta")
+            Path(empty_hdr_fasta).write_text(">\nACDEFGHIKL\n")
+            empty_hdr_msas = os.path.join(tmp, "empty_hdr_msas")
+            empty_hdr_pkl = os.path.join(tmp, "empty_hdr.pkl")
+            empty_feats, _ = self.af_utils._run_single_sequence_fallback(
+                fasta_path=empty_hdr_fasta,
+                run_multimer_system=False,
+                msa_output_path=empty_hdr_msas,
+                features_output_path=empty_hdr_pkl,
+            )
+            self.assertEqual(empty_feats["aatype"].shape[0], 10)
+
+            dup_sto = os.path.join(tmp, "dup.sto")
+            self.af_utils._write_a3m_as_sto(">\nACDEFG\n>dup\nACDEFG\n>dup\nacMNPQ\n", dup_sto)
+            parsed_dup = self._fake_modules["alphafold.data.parsers"].parse_stockholm(
+                Path(dup_sto).read_text()
+            )
+            self.assertEqual(parsed_dup.descriptions, ["seq_0", "dup", "dup_1"])
+            self.assertEqual(parsed_dup.sequences, ["ACDEFG", "ACDEFG", "MNPQ"])
+
+            # 5. Monomer chain count validation in _run_single_sequence_fallback
+            with self.assertRaises(ValueError):
+                self.af_utils._run_single_sequence_fallback(
+                    fasta_path=hetero_fasta,
+                    run_multimer_system=False,
+                    msa_output_path=os.path.join(tmp, "bad_mono_msas"),
+                    features_output_path=os.path.join(tmp, "bad_mono.pkl"),
+                )
+            empty_file = os.path.join(tmp, "empty.fasta")
+            Path(empty_file).write_text("")
+            with self.assertRaises(ValueError):
+                self.af_utils._run_single_sequence_fallback(
+                    fasta_path=empty_file,
+                    run_multimer_system=False,
+                    msa_output_path=os.path.join(tmp, "empty_msas"),
+                    features_output_path=os.path.join(tmp, "empty.pkl"),
+                )
 
     def test_mmseqs2_multimer_pipeline_preserves_duplicate_descriptions_and_pairs_heteromer(
         self,
@@ -425,7 +474,9 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             uniref_db = os.path.join(tmp, "uniref90.fasta")
             seqres_db = os.path.join(tmp, "pdb_seqres.txt")
-            for p in (uniref_db, seqres_db):
+            small_bfd_db = os.path.join(tmp, "bfd-first_non_consensus_sequences.fasta")
+            uniprot_db = os.path.join(tmp, "uniprot.fasta")
+            for p in (uniref_db, seqres_db, small_bfd_db, uniprot_db):
                 Path(p).write_text(">dummy\nACDE\n")
 
             fasta_path = os.path.join(tmp, "complex.fasta")
@@ -443,6 +494,11 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
             fake_hmm_instance = mock.MagicMock()
             fake_hmm_instance.query.return_value = "# STOCKHOLM 1.0\nhit1 ACDEFGHIKL\n//\n"
             fake_hmm_instance.get_template_hits.return_value = []
+
+            fake_jh_instance = mock.MagicMock()
+            fake_jh_instance.query.return_value = [
+                {"sto": "# STOCKHOLM 1.0\nhit1 ACDEFGHIKL\n//\n"}
+            ]
 
             fake_featurizer_instance = mock.MagicMock()
             # Simulate 0-hit 1D arrays from HmmsearchHitFeaturizer
@@ -466,6 +522,11 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
                     return_value=fake_hmm_instance,
                 ),
                 mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                    return_value=fake_jh_instance,
+                ),
+                mock.patch.object(
                     self._fake_modules["alphafold.data.templates"],
                     "HmmsearchHitFeaturizer",
                     return_value=fake_featurizer_instance,
@@ -479,7 +540,7 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
                     small_bfd_mmseqs_path=os.path.join(tmp, "small_bfd_db"),
                     uniref90_database_path=uniref_db,
                     mgnify_database_path=uniref_db,
-                    uniprot_database_path="",  # Exercise fallback to uniref90.sto
+                    uniprot_database_path=uniprot_db,
                     pdb70_database_path="",
                     obsolete_pdbs_path=os.path.join(tmp, "obsolete.dat"),
                     seqres_database_path=seqres_db,
@@ -487,6 +548,7 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
                     max_template_date="2025-01-01",
                     msa_output_path=msa_out,
                     features_output_path=feat_pkl,
+                    small_bfd_database_path=small_bfd_db,
                 )
 
             self.assertEqual(feats["chain_ids"], ["A", "B"])
@@ -741,7 +803,8 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
                 )
                 spy_fallback.assert_called_once()
                 self.assertEqual(feats["template_aatype"].shape, (0, 12, 22))
-                self.assertEqual(len(meta), 1)
+                self.assertEqual(meta.get("single_sequence_fallback"), 1)
+                self.assertEqual(len(meta), 2)
 
             # 2. Monomer with pdb70_a3m.ffdata present (prefix exists via glob, though pdb70 itself is not a file)
             Path(f"{pdb70_prefix}_a3m.ffdata").write_text("index")
@@ -785,6 +848,76 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
                 fake_dp_instance.process.assert_called_once()
                 self.assertIn("aatype", feats_full)
                 self.assertEqual(meta_full["msa_full/uniref90_hits.sto"], 1)
+                self.assertNotIn("single_sequence_fallback", meta_full)
+
+            # 3. Mixed per-model modes on shared NFS: uniref90, mgnify, seqres, uniprot, mmcif
+            # exist (e.g. from OF3 full mode), but small_bfd is missing -> must fall back!
+            self.assertFalse(
+                self.af_utils._has_af2_raw_databases(
+                    run_multimer_system=True,
+                    use_small_bfd=True,
+                    uniref90_database_path=uniref90_path,
+                    mgnify_database_path=uniref90_path,
+                    bfd_database_path="",
+                    small_bfd_database_path=os.path.join(tmp, "missing_small_bfd.fasta"),
+                    uniref30_database_path="",
+                    uniprot_database_path=uniref90_path,
+                    pdb70_database_path=pdb70_prefix,
+                    seqres_database_path=uniref90_path,
+                    mmcif_path=tmp,
+                )
+            )
+            # 4. Partial Cloud Batch downloads: uniref90 + seqres + small_bfd exist, but uniprot is missing
+            self.assertFalse(
+                self.af_utils._has_af2_raw_databases(
+                    run_multimer_system=True,
+                    use_small_bfd=True,
+                    uniref90_database_path=uniref90_path,
+                    mgnify_database_path=uniref90_path,
+                    bfd_database_path="",
+                    small_bfd_database_path=uniref90_path,
+                    uniref30_database_path="",
+                    uniprot_database_path=os.path.join(tmp, "missing_uniprot.fasta"),
+                    pdb70_database_path=pdb70_prefix,
+                    seqres_database_path=uniref90_path,
+                    mmcif_path=tmp,
+                )
+            )
+            # 5. Full BFD mode (use_small_bfd=False) requires bfd_* and uniref30_* prefix files
+            bfd_prefix = os.path.join(tmp, "bfd_prefix")
+            uniref30_prefix = os.path.join(tmp, "uniref30_prefix")
+            self.assertFalse(
+                self.af_utils._has_af2_raw_databases(
+                    run_multimer_system=False,
+                    use_small_bfd=False,
+                    uniref90_database_path=uniref90_path,
+                    mgnify_database_path=uniref90_path,
+                    bfd_database_path=bfd_prefix,
+                    small_bfd_database_path="",
+                    uniref30_database_path=uniref30_prefix,
+                    uniprot_database_path="",
+                    pdb70_database_path=pdb70_prefix,
+                    seqres_database_path="",
+                    mmcif_path=tmp,
+                )
+            )
+            Path(f"{bfd_prefix}_a3m.ffdata").write_text("bfd")
+            Path(f"{uniref30_prefix}_a3m.ffdata").write_text("u30")
+            self.assertTrue(
+                self.af_utils._has_af2_raw_databases(
+                    run_multimer_system=False,
+                    use_small_bfd=False,
+                    uniref90_database_path=uniref90_path,
+                    mgnify_database_path=uniref90_path,
+                    bfd_database_path=bfd_prefix,
+                    small_bfd_database_path="",
+                    uniref30_database_path=uniref30_prefix,
+                    uniprot_database_path="",
+                    pdb70_database_path=pdb70_prefix,
+                    seqres_database_path="",
+                    mmcif_path=tmp,
+                )
+            )
 
 
 if __name__ == "__main__":

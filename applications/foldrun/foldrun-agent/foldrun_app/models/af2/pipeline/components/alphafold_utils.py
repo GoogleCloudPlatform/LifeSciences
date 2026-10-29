@@ -14,19 +14,17 @@
 
 """Utility functions that encapsulate AlphaFold inference components.
 
-This is the AUTHORITATIVE copy that gets baked into the Docker container image
-(via Dockerfile: ADD src/components/alphafold_utils.py). It runs inside Agent Platform
-Pipeline tasks at execution time.
+Two byte-identical copies of this module are maintained in the repository:
+  1. src/alphafold-components/src/components/alphafold_utils.py
+     Baked into the Docker container image (via Dockerfile:
+     ADD src/components/alphafold_utils.py) and executed inside Agent Platform
+     Pipeline tasks at runtime.
+  2. foldrun-agent/foldrun_app/models/af2/pipeline/components/alphafold_utils.py
+     Reference copy used for IDE support, type checking, and unit testing in
+     the agent codebase.
 
-A duplicate copy exists at:
-  foldrun-agent/foldrun_app/models/af2/pipeline/components/alphafold_utils.py
-
-That copy is a non-executing reference used only for IDE support and type checking
-in the agent codebase. It is never imported at runtime.
-
-TODO: Eliminate the duplicate by having the agent-side code reference this file
-directly (e.g. via symlink or shared package). Maintaining two copies leads to
-drift — fixes applied to one copy may be missed in the other.
+Both copies must remain byte-for-byte identical (enforced by
+test_alphafold_utils_copies_remain_identical).
 """
 
 import glob
@@ -128,6 +126,7 @@ def _write_a3m_as_sto(a3m_str: str, sto_path: str):
     lines = a3m_str.strip().split("\n")
     names = []
     seqs = []
+    seen_names: dict[str, int] = {}
     current_name = None
     current_seq = []
     for line in lines:
@@ -135,7 +134,11 @@ def _write_a3m_as_sto(a3m_str: str, sto_path: str):
             if current_name is not None:
                 names.append(current_name)
                 seqs.append("".join(current_seq))
-            current_name = line[1:].split()[0]
+            tokens = line[1:].split()
+            base_name = tokens[0] if tokens else f"seq_{len(names)}"
+            count = seen_names.get(base_name, 0)
+            seen_names[base_name] = count + 1
+            current_name = base_name if count == 0 else f"{base_name}_{count}"
             current_seq = []
         else:
             # Remove lowercase insertions for Stockholm format
@@ -248,6 +251,10 @@ def _run_single_sequence_fallback(
     with open(fasta_path) as f:
         fasta_str = f.read()
     sequences, sequence_descs = parsers.parse_fasta(fasta_str)
+    if not sequences:
+        raise ValueError(f"No input sequences found in {fasta_path}.")
+    if not run_multimer_system and len(sequences) != 1:
+        raise ValueError(f"Expected 1 sequence for monomer in {fasta_path}, got {len(sequences)}.")
 
     if not run_multimer_system:
         seq, seq_desc, num_res = sequences[0], sequence_descs[0], len(sequences[0])
@@ -267,7 +274,8 @@ def _run_single_sequence_fallback(
         with open(features_output_path, "wb") as f:
             pickle.dump(feature_dict, f, protocol=4)
         return feature_dict, {
-            os.path.join(os.path.basename(msa_output_path), "uniref90_hits.sto"): 1
+            os.path.join(os.path.basename(msa_output_path), "uniref90_hits.sto"): 1,
+            "single_sequence_fallback": 1,
         }
 
     # Multimer system fallback
@@ -325,8 +333,40 @@ def _run_single_sequence_fallback(
             if os.path.isfile(filepath):
                 key = os.path.join(folder.split(os.sep)[-1], file)
                 msas_metadata[key] = 1
+    msas_metadata["single_sequence_fallback"] = 1
 
     return feature_dict, msas_metadata
+
+
+def _has_af2_raw_databases(
+    *,
+    run_multimer_system: bool,
+    use_small_bfd: bool,
+    uniref90_database_path: str,
+    mgnify_database_path: str,
+    bfd_database_path: str,
+    small_bfd_database_path: str,
+    uniref30_database_path: str,
+    uniprot_database_path: str,
+    pdb70_database_path: str,
+    seqres_database_path: str,
+    mmcif_path: str,
+) -> bool:
+    """Return True if all AF2 reference databases required by the preset exist."""
+    if not (
+        os.path.exists(uniref90_database_path)
+        and os.path.exists(mgnify_database_path)
+        and os.path.isdir(mmcif_path)
+    ):
+        return False
+    if use_small_bfd:
+        if not os.path.exists(small_bfd_database_path):
+            return False
+    elif not (glob.glob(f"{bfd_database_path}_*") and glob.glob(f"{uniref30_database_path}_*")):
+        return False
+    if run_multimer_system:
+        return os.path.exists(seqres_database_path) and os.path.exists(uniprot_database_path)
+    return bool(glob.glob(f"{pdb70_database_path}_*"))
 
 
 def run_data_pipeline(
@@ -348,10 +388,18 @@ def run_data_pipeline(
     use_small_bfd: bool,
 ) -> tuple[dict, dict[str, int]]:
     """Runs AlphaFold data pipeline."""
-    if (
-        not os.path.exists(uniref90_database_path)
-        or (run_multimer_system and not os.path.exists(seqres_database_path))
-        or (not run_multimer_system and not glob.glob(f"{pdb70_database_path}_*"))
+    if not _has_af2_raw_databases(
+        run_multimer_system=run_multimer_system,
+        use_small_bfd=use_small_bfd,
+        uniref90_database_path=uniref90_database_path,
+        mgnify_database_path=mgnify_database_path,
+        bfd_database_path=bfd_database_path,
+        small_bfd_database_path=small_bfd_database_path,
+        uniref30_database_path=uniref30_database_path,
+        uniprot_database_path=uniprot_database_path,
+        pdb70_database_path=pdb70_database_path,
+        seqres_database_path=seqres_database_path,
+        mmcif_path=mmcif_path,
     ):
         return _run_single_sequence_fallback(
             fasta_path=fasta_path,
@@ -935,6 +983,7 @@ def run_mmseqs2_data_pipeline(
     max_template_date: str,
     msa_output_path: str,
     features_output_path: str,
+    small_bfd_database_path: str = "",
 ) -> tuple[dict, dict[str, int]]:
     """MSA generation using MMseqs2-GPU, then standard AF2 feature generation.
 
@@ -944,10 +993,26 @@ def run_mmseqs2_data_pipeline(
 
     Only valid when use_small_bfd=True (all databases are FASTA format).
     """
-    if (
-        (not os.path.exists(uniref90_database_path) and not glob.glob(f"{uniref90_mmseqs_path}*"))
-        or (run_multimer_system and not os.path.exists(seqres_database_path))
-        or (not run_multimer_system and not glob.glob(f"{pdb70_database_path}_*"))
+    effective_small_bfd_path = small_bfd_database_path or (
+        os.path.join(
+            os.path.dirname(small_bfd_mmseqs_path),
+            "bfd-first_non_consensus_sequences.fasta",
+        )
+        if small_bfd_mmseqs_path
+        else ""
+    )
+    if not _has_af2_raw_databases(
+        run_multimer_system=run_multimer_system,
+        use_small_bfd=True,
+        uniref90_database_path=uniref90_database_path,
+        mgnify_database_path=mgnify_database_path,
+        bfd_database_path="",
+        small_bfd_database_path=effective_small_bfd_path,
+        uniref30_database_path="",
+        uniprot_database_path=uniprot_database_path,
+        pdb70_database_path=pdb70_database_path,
+        seqres_database_path=seqres_database_path,
+        mmcif_path=mmcif_path,
     ):
         return _run_single_sequence_fallback(
             fasta_path=fasta_path,

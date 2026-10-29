@@ -128,14 +128,27 @@ def msa_pipeline_boltz2(
             seq_id = seq_id[0]  # handle [A, B] identical chains
 
         existing_msa = prot_data.get("msa")
-        if existing_msa and (
-            str(existing_msa).strip().lower() == "empty" or os.path.exists(str(existing_msa))
-        ):
-            logging.info(
-                f"Preserving pre-populated MSA for chain {seq_id}: {existing_msa} (skipping jackhmmer)"
+        if existing_msa is not None and str(existing_msa).strip() != "":
+            normalized_msa = str(existing_msa).strip()
+            if normalized_msa.lower() == "empty":
+                prot_data["msa"] = "empty"
+                logging.info(f"Preserving single-sequence MSA (empty) for chain {seq_id}")
+                num_msa_sequences += 1
+                continue
+            real_mount = os.path.realpath(mount_path)
+            real_msa = os.path.realpath(normalized_msa)
+            if os.path.commonpath([real_mount, real_msa]) == real_mount and os.path.isfile(
+                real_msa
+            ):
+                logging.info(
+                    f"Preserving pre-populated MSA for chain {seq_id}: {real_msa} (skipping jackhmmer)"
+                )
+                num_msa_sequences += 1
+                continue
+            logging.warning(
+                f"Ignoring invalid or missing pre-populated MSA path for chain {seq_id}: {existing_msa!r}"
             )
-            num_msa_sequences += 1
-            continue
+            prot_data.pop("msa", None)
 
         sequence = prot_data.get("sequence", "")
         if not sequence:
@@ -152,6 +165,14 @@ def msa_pipeline_boltz2(
             num_msa_sequences += 1
             continue
 
+        if not (os.path.exists(uniref90_path) and os.path.exists(mgnify_path)):
+            logging.warning(
+                f"Reference sequence databases not found on NFS ({uniref90_path}, {mgnify_path}); "
+                f"falling back to single-sequence mode (msa: empty) for chain {seq_id} (core mode)."
+            )
+            prot_data["msa"] = "empty"
+            continue
+
         logging.info(f"Cache miss for chain {seq_id} (protein_{seq_hash}). Generating MSA.")
         seq_dir = os.path.join(nfs_msa_tmp_base, f"protein_{seq_hash}_{run_id}")
         os.makedirs(seq_dir, exist_ok=True)
@@ -160,15 +181,6 @@ def msa_pipeline_boltz2(
         tmp_fasta = os.path.join(seq_dir, "query.fasta")
         with open(tmp_fasta, "w") as f:
             f.write(f">protein_{seq_hash}\n{sequence}\n")
-
-        if not (os.path.exists(uniref90_path) and os.path.exists(mgnify_path)):
-            logging.warning(
-                f"Reference sequence databases not found on NFS ({uniref90_path}, {mgnify_path}); "
-                f"falling back to single-sequence mode (msa: empty) for chain {seq_id} (core mode)."
-            )
-            prot_data["msa"] = "empty"
-            shutil.rmtree(seq_dir, ignore_errors=True)
-            continue
 
         combined_a3m = os.path.join(seq_dir, "combined.a3m")
         # Jackhmmer against uniref90

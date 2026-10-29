@@ -125,6 +125,7 @@ def data_pipeline(
             max_template_date=max_template_date,
             msa_output_path=msas.path,
             features_output_path=features.path,
+            small_bfd_database_path=small_bfd_database_path,
         )
     else:
         # Standard JackHMMER/HHblits pipeline (CPU)
@@ -147,6 +148,8 @@ def data_pipeline(
             features_output_path=features.path,
         )
 
+    is_fallback = bool(msas_metadata.pop("single_sequence_fallback", 0))
+    features.metadata["single_sequence_fallback"] = is_fallback
     features.metadata["category"] = "features"
     features.metadata["msa_method"] = msa_method
     num_alignments = features_dict["num_alignments"]
@@ -163,25 +166,30 @@ def data_pipeline(
         )
     msas.metadata = msas_metadata
 
-    # --- Cache promotion (atomic rename) ---
-    run_id = str(uuid.uuid4())[:12]
-    tmp_dir = os.path.join(nfs_tmp_base, f"{cache_key}_{run_id}")
-    os.makedirs(tmp_dir, exist_ok=True)
-    shutil.copy(features.path, os.path.join(tmp_dir, "features.pkl"))
-    with open(os.path.join(tmp_dir, "metadata.json"), "w") as _f:
-        json.dump(
-            {
-                "features_metadata": dict(features.metadata),
-                "msas_metadata": msas.metadata,
-            },
-            _f,
+    if not is_fallback:
+        # --- Cache promotion (atomic rename) ---
+        run_id = str(uuid.uuid4())[:12]
+        tmp_dir = os.path.join(nfs_tmp_base, f"{cache_key}_{run_id}")
+        os.makedirs(tmp_dir, exist_ok=True)
+        shutil.copy(features.path, os.path.join(tmp_dir, "features.pkl"))
+        with open(os.path.join(tmp_dir, "metadata.json"), "w") as _f:
+            json.dump(
+                {
+                    "features_metadata": dict(features.metadata),
+                    "msas_metadata": msas.metadata,
+                },
+                _f,
+            )
+        try:
+            os.rename(tmp_dir, seq_cache_dir)
+            logging.info(f"Cached AF2 features for {cache_key}")
+        except (FileExistsError, OSError):
+            logging.info(f"Cache already populated for {cache_key} by concurrent run.")
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    else:
+        logging.info(
+            f"Skipping AF2 feature cache promotion for {cache_key} (single-sequence fallback)."
         )
-    try:
-        os.rename(tmp_dir, seq_cache_dir)
-        logging.info(f"Cached AF2 features for {cache_key}")
-    except (FileExistsError, OSError):
-        logging.info(f"Cache already populated for {cache_key} by concurrent run.")
-        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     t1 = time.time()
     logging.info(f"Data pipeline completed. Elapsed time: {t1 - t0:.1f}s")

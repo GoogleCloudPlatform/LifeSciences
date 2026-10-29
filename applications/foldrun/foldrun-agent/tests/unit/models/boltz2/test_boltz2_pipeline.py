@@ -253,7 +253,7 @@ class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
     def test_preserves_custom_a3m_and_explicit_empty_msa_without_running_jackhmmer(
         self, tmp_path, monkeypatch
     ):
-        """User-supplied existing .a3m paths and msa: empty are preserved without running jackhmmer."""
+        """User-supplied existing .a3m paths (inside mount_path) and msa: empty are preserved without running jackhmmer."""
         import subprocess
 
         import yaml
@@ -262,8 +262,10 @@ class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
 
         nfs_mount = tmp_path / "nfs"
         nfs_mount.mkdir()
-        custom_a3m = tmp_path / "custom_alignment.a3m"
+        custom_a3m = nfs_mount / "custom_alignment.a3m"
         custom_a3m.write_text(">A\nACDEFGHIKL\n>homolog_1\nACDEFGHIKM\n")
+        outside_a3m = tmp_path / "outside.a3m"
+        outside_a3m.write_text(">C\nACDEFGHIKL\n")
 
         ref_db = self._make_artifact(
             path=str(nfs_mount),
@@ -291,7 +293,14 @@ class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
                             "protein": {
                                 "id": "B",
                                 "sequence": "MNPQRSTVWY",
-                                "msa": "empty",
+                                "msa": " EMPTY ",
+                            }
+                        },
+                        {
+                            "protein": {
+                                "id": "C",
+                                "sequence": "ACDEFGHIKL",
+                                "msa": str(outside_a3m),
                             }
                         },
                     ],
@@ -310,8 +319,12 @@ class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
             updated_query_json=out_artifact,
         )
 
-        assert invoked == [], "jackhmmer must not run when chains already specify valid msa"
+        assert invoked == [], (
+            "jackhmmer must not run when chains specify valid msa or fall back in core mode"
+        )
         updated = yaml.safe_load(out_yaml.read_text())
         assert updated["sequences"][0]["protein"]["msa"] == str(custom_a3m)
         assert updated["sequences"][1]["protein"]["msa"] == "empty"
+        # Chain C had an MSA path outside mount_path -> ignored and fell back to core mode ("empty")
+        assert updated["sequences"][2]["protein"]["msa"] == "empty"
         assert out_artifact.metadata["msa_sequences"] == 2

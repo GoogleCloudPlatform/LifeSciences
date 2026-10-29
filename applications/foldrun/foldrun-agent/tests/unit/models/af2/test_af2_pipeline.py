@@ -278,3 +278,82 @@ class TestDataPipelineNumAlignments:
         result = self._run_data_pipeline_with_num_alignments(tmp_path, 256)
         assert result == 256
         assert isinstance(result, int)
+
+    def test_single_sequence_fallback_skips_af2_features_cache_promotion(self, tmp_path):
+        """Fallback runs set single_sequence_fallback=True and skip af2_features_cache promotion."""
+        import sys
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import patch
+
+        pipeline_dir = os.path.normpath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "..",
+                "..",
+                "foldrun_app",
+                "models",
+                "af2",
+                "pipeline",
+            )
+        )
+        fake_alphafold_utils = ModuleType("alphafold_utils")
+
+        def _fake_fallback_pipeline(**kwargs):
+            with open(kwargs["features_output_path"], "wb") as f:
+                f.write(b"fallback_features")
+            return (
+                {"num_alignments": 1},
+                {"msas/uniref90_hits.sto": 1, "single_sequence_fallback": 1},
+            )
+
+        fake_alphafold_utils.run_data_pipeline = _fake_fallback_pipeline
+        fake_alphafold_utils.run_mmseqs2_data_pipeline = _fake_fallback_pipeline
+
+        seq_file = tmp_path / "seq_fb.fasta"
+        seq_file.write_text(">chainA\nACDEFG\n>chainB\nACDEFG\n")
+        nfs_dir = tmp_path / "nfs_fb"
+        nfs_dir.mkdir()
+        msas_dir = tmp_path / "msas_fb"
+        features_file = tmp_path / "features_fb.pkl"
+
+        sequence = SimpleNamespace(path=str(seq_file))
+        ref_databases = SimpleNamespace(
+            uri=str(nfs_dir),
+            metadata={
+                "uniref90": "uniref90",
+                "mgnify": "mgnify",
+                "uniref30": "uniref30",
+                "bfd": "bfd",
+                "small_bfd": "small_bfd",
+                "uniprot": "uniprot",
+                "pdb70": "pdb70",
+                "pdb_obsolete": "pdb_obsolete",
+                "pdb_seqres": "pdb_seqres",
+                "pdb_mmcif": "pdb_mmcif",
+            },
+        )
+        msas = SimpleNamespace(path=str(msas_dir), metadata={})
+        features = SimpleNamespace(path=str(features_file), metadata={})
+
+        with patch.dict(sys.modules, {"alphafold_utils": fake_alphafold_utils}):
+            if pipeline_dir not in sys.path:
+                sys.path.insert(0, pipeline_dir)
+            from foldrun_app.models.af2.pipeline.components.data_pipeline import data_pipeline
+
+            data_pipeline.python_func(
+                sequence=sequence,
+                ref_databases=ref_databases,
+                run_multimer_system=True,
+                use_small_bfd=True,
+                max_template_date="2022-01-01",
+                msa_method="jackhmmer",
+                msas=msas,
+                features=features,
+            )
+
+        assert features.metadata["single_sequence_fallback"] is True
+        assert "single_sequence_fallback" not in msas.metadata
+        assert msas.metadata == {"msas/uniref90_hits.sto": 1}
+        assert list((nfs_dir / "af2_features_cache").iterdir()) == []
