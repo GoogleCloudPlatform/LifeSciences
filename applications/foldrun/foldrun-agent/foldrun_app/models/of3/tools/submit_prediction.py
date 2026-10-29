@@ -17,20 +17,28 @@
 import json
 import logging
 import os
+import shutil
 import tempfile
 from datetime import datetime
 from typing import Any
 
 from google.cloud import aiplatform as vertex_ai  # noqa: F401
 
+from foldrun_app.core.kfp_tools import GLOBAL_COMPILE_LOCK
+
 from ..base import OF3Tool
 from ..utils.input_converter import count_tokens, fasta_to_of3_json, is_of3_json, validate_of3_json
 
 logger = logging.getLogger(__name__)
 
+_COMPILE_LOCK = GLOBAL_COMPILE_LOCK
+_COMPILE_ENV_LOCK = GLOBAL_COMPILE_LOCK
+
 
 class OF3SubmitPredictionTool(OF3Tool):
     """Tool for submitting OpenFold3 structure predictions."""
+
+    _compile_env_lock = GLOBAL_COMPILE_LOCK
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Submit OF3 prediction job.
@@ -91,6 +99,13 @@ class OF3SubmitPredictionTool(OF3Tool):
             "use_cueq_triangle_kernels", self.config.use_cueq_triangle_kernels
         )
         enable_caching = arguments.get("enable_caching", True)
+        extra_cli_args = arguments.get("extra_cli_args") or []
+        custom_runner_yaml_overrides = arguments.get("custom_runner_yaml_overrides") or {}
+        custom_job_id = arguments.get("custom_job_id")
+        pipeline_root_override = arguments.get("pipeline_root")
+        extra_labels = arguments.get("extra_labels") or {}
+        allow_local_files = arguments.get("allow_local_files", True)
+        dws_max_wait_hours = arguments.get("dws_max_wait_hours")
 
         import random
 
@@ -100,15 +115,28 @@ class OF3SubmitPredictionTool(OF3Tool):
 
         # Determine input type and load content
         is_gcs = isinstance(input_data, str) and input_data.startswith("gs://")
-        is_file = (
-            os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
+        looks_like_file = (
+            isinstance(input_data, str)
+            and not is_gcs
+            and "\n" not in input_data
+            and not input_data.lstrip().startswith(("{", ">"))
+            and (os.path.exists(input_data) or input_data.startswith(("/", "./", "../", "~")))
         )
 
         if is_gcs:
             bucket_name, blob_path = self._validate_gcs_uri(input_data)
+            if not allow_local_files and bucket_name != self.config.bucket_name:
+                raise ValueError(
+                    f"Unauthorized GCS bucket '{bucket_name}'; expected '{self.config.bucket_name}'."
+                )
             bucket = self.storage_client.bucket(bucket_name)
             content = bucket.blob(blob_path).download_as_text()
-        elif is_file and isinstance(input_data, str):
+        elif looks_like_file and isinstance(input_data, str):
+            if not allow_local_files:
+                raise ValueError(
+                    "Local file path inputs are not allowed on remote gateway requests. "
+                    "Stage inputs to GCS first."
+                )
             real_path = self.resolve_local_input_path(input_data, allow_temp_dir=False)
             with open(real_path, encoding="utf-8") as f:
                 content = f.read()
@@ -132,18 +160,18 @@ class OF3SubmitPredictionTool(OF3Tool):
         # Count tokens for GPU auto-selection
         num_tokens = count_tokens(query_json)
 
-        # Write query JSON to temp file
-        temp_json = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False, prefix=f"of3_{job_name}_"
-        )
-        json.dump(query_json, temp_json, indent=2)
-        temp_json.close()
+        safe_job_name = self.sanitize_job_name(job_name, "job")
+        tmp_dir = tempfile.mkdtemp(prefix="foldrun_of3_")
+        temp_json_path = os.path.join(tmp_dir, f"of3_{safe_job_name}.json")
+        with open(temp_json_path, "w", encoding="utf-8") as temp_json_f:
+            json.dump(query_json, temp_json_f, indent=2)
+        pipeline_path = os.path.join(tmp_dir, f"of3_pipeline_{safe_job_name}.json")
 
-        pipeline_path = os.path.join(tempfile.gettempdir(), f"of3_pipeline_{job_name}.json")
         try:
             # Upload to GCS
-            gcs_query_path = f"gs://{self.config.bucket_name}/of3_queries/{job_name}.json"
-            self._upload_to_gcs(temp_json.name, gcs_query_path)
+            query_key = custom_job_id or safe_job_name
+            gcs_query_path = f"gs://{self.config.bucket_name}/of3_queries/{query_key}.json"
+            self._upload_to_gcs(temp_json_path, gcs_query_path)
 
             filestore_ip, filestore_network = self._ensure_filestore_config()
 
@@ -152,6 +180,8 @@ class OF3SubmitPredictionTool(OF3Tool):
                 gpu_type,
                 num_tokens=num_tokens,
             )
+            if dws_max_wait_hours is not None:
+                hardware_config["dws_max_wait_hours"] = int(dws_max_wait_hours)
 
             resolved_gpu = hardware_config["predict_accel"]
 
@@ -168,6 +198,7 @@ class OF3SubmitPredictionTool(OF3Tool):
             labels = {
                 "model_type": "openfold3",
                 "job_type": "monomer" if _num_chains <= 1 else "complex",
+                "seq_name": self._clean_label(query_name),
                 "query_name": self._clean_label(query_name),
                 "num_tokens": str(num_tokens),
                 "num_chains": str(_num_chains),
@@ -179,28 +210,43 @@ class OF3SubmitPredictionTool(OF3Tool):
                 "submitted_by": "foldrun-agent",
                 "use_cueq": str(use_cueq_triangle_kernels).lower(),
             }
+            for k, v in extra_labels.items():
+                labels[str(k)] = self._clean_label(str(v))
 
             # Submit pipeline job
-            pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            pipeline_root = (
+                pipeline_root_override
+                or f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
 
-            job_kwargs = {
+            parameter_values: dict[str, Any] = {
+                "query_json_path": gcs_query_path,
+                "project": self.config.project_id,
+                "region": self.config.region,
+                "nfs_params_path": f"{self.config.nfs_mount_point}/{self.config.params_path}",
+                "num_model_seeds": num_model_seeds,
+                "num_diffusion_samples": num_diffusion_samples,
+                "use_templates": use_templates,
+                "base_seed": base_seed,
+                "use_cueq_triangle_kernels": use_cueq_triangle_kernels,
+            }
+            if extra_cli_args:
+                parameter_values["extra_cli_args"] = [str(a) for a in extra_cli_args]
+            if custom_runner_yaml_overrides:
+                parameter_values["custom_runner_yaml_overrides"] = dict(
+                    custom_runner_yaml_overrides
+                )
+
+            job_kwargs: dict[str, Any] = {
                 "display_name": job_name,
                 "template_path": pipeline_path,
                 "pipeline_root": pipeline_root,
-                "parameter_values": {
-                    "query_json_path": gcs_query_path,
-                    "project": self.config.project_id,
-                    "region": self.config.region,
-                    "nfs_params_path": f"{self.config.nfs_mount_point}/{self.config.params_path}",
-                    "num_model_seeds": num_model_seeds,
-                    "num_diffusion_samples": num_diffusion_samples,
-                    "use_templates": use_templates,
-                    "base_seed": base_seed,
-                    "use_cueq_triangle_kernels": use_cueq_triangle_kernels,
-                },
+                "parameter_values": parameter_values,
                 "enable_caching": enable_caching,
                 "labels": labels,
             }
+            if custom_job_id:
+                job_kwargs["job_id"] = custom_job_id
 
             from ..utils.pipeline_utils import load_vertex_pipeline
 
@@ -212,16 +258,13 @@ class OF3SubmitPredictionTool(OF3Tool):
                 filestore_network=filestore_network,
                 job_kwargs=job_kwargs,
                 service_account=self.config.pipelines_sa_email,
-                extra_temp_paths=[temp_json.name],
+                extra_temp_paths=[temp_json_path],
             )
-        except Exception:
-            for path in (pipeline_path, temp_json.name):
-                if path and os.path.exists(path):
-                    os.remove(path)
-            raise
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
         # Chain info from queries dict
-        mol_types = {}
+        mol_types: dict[str, int] = {}
         num_chains = 0
         for _qname, qdata in query_json.get("queries", {}).items():
             for chain in qdata.get("chains", []):

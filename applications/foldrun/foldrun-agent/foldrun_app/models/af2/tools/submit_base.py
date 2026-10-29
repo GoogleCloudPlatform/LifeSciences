@@ -20,6 +20,8 @@ import tempfile
 from datetime import datetime
 from typing import Any, ClassVar
 
+from foldrun_app.core.kfp_tools import GLOBAL_COMPILE_LOCK
+
 from ..base import AF2Tool
 from ..utils.fasta_utils import (
     _validate_sequences,
@@ -30,6 +32,8 @@ from ..utils.fasta_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+_COMPILE_ENV_LOCK = GLOBAL_COMPILE_LOCK
 
 
 class AF2SubmitBaseTool(AF2Tool):
@@ -53,6 +57,20 @@ class AF2SubmitBaseTool(AF2Tool):
         )
         enable_flex_start = arguments.get("enable_flex_start", True)
         msa_method = arguments.get("msa_method", "auto")
+        if self.is_multimer:
+            model_preset = "multimer"
+        else:
+            model_preset = arguments.get("model_preset", "monomer")
+            if model_preset not in ("monomer", "monomer_casp14", "monomer_ptm"):
+                raise ValueError(
+                    f"Unsupported monomer model_preset '{model_preset}'. Expected one of: monomer, monomer_casp14, monomer_ptm."
+                )
+
+        custom_job_id = arguments.get("custom_job_id")
+        pipeline_root_override = arguments.get("pipeline_root")
+        extra_labels = arguments.get("extra_labels") or {}
+        allow_local_files = arguments.get("allow_local_files", True)
+        dws_max_wait_hours = arguments.get("dws_max_wait_hours")
 
         if msa_method == "mmseqs2":
             if not use_small_bfd:
@@ -80,10 +98,19 @@ class AF2SubmitBaseTool(AF2Tool):
         fasta_path = ""
         if is_gcs:
             bucket_name, blob_path = self._validate_gcs_uri(sequence)
+            if not allow_local_files and bucket_name != self.config.bucket_name:
+                raise ValueError(
+                    f"Unauthorized GCS bucket '{bucket_name}'; expected '{self.config.bucket_name}'."
+                )
             bucket = self.storage_client.bucket(bucket_name)
             sequence = bucket.blob(blob_path).download_as_text()
 
         if looks_like_local_path and isinstance(sequence, str):
+            if not allow_local_files:
+                raise ValueError(
+                    "Local sequence file paths are not allowed on remote gateway requests. "
+                    "Stage inputs to GCS first."
+                )
             fasta_path = self.resolve_local_input_path(sequence, allow_temp_dir=True)
             is_fasta_file = True
             is_monomer, sequences = validate_fasta_file(fasta_path)
@@ -118,7 +145,8 @@ class AF2SubmitBaseTool(AF2Tool):
             pipeline_path = pipeline_tmp.name
 
         try:
-            gcs_sequence_path = f"gs://{self.config.bucket_name}/fasta/{job_name}.fasta"
+            fasta_key = custom_job_id or job_name
+            gcs_sequence_path = f"gs://{self.config.bucket_name}/fasta/{fasta_key}.fasta"
             self._upload_to_gcs(fasta_path, gcs_sequence_path)
 
             filestore_ip, filestore_network = self._ensure_filestore_config()
@@ -131,6 +159,8 @@ class AF2SubmitBaseTool(AF2Tool):
                 seq_length=seq_length,
                 is_multimer=self.is_multimer,
             )
+            if dws_max_wait_hours is not None:
+                hardware_config["dws_max_wait_hours"] = int(dws_max_wait_hours)
 
             resolved_gpu = hardware_config["predict_accel"]
             resolved_msa = hardware_config["msa_method"]
@@ -138,6 +168,7 @@ class AF2SubmitBaseTool(AF2Tool):
             labels = {
                 "model_type": "alphafold2",
                 "job_type": self.job_type,
+                "seq_name": self._clean_label(seq_name),
                 "query_name": self._clean_label(seq_name),
                 "num_tokens": str(seq_length),
                 "num_chains": str(num_chains if self.is_multimer else 1),
@@ -147,9 +178,16 @@ class AF2SubmitBaseTool(AF2Tool):
                 "msa_method": resolved_msa,
                 "submitted_by": "foldrun-agent",
             }
+            for k, v in extra_labels.items():
+                labels[str(k)] = self._clean_label(str(v))
 
-            pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            model_params_gcs_location = f"gs://{self.config.databases_bucket_name}/alphafold2"
+            pipeline_root = (
+                pipeline_root_override
+                or f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
+            model_params_gcs_location = (
+                os.environ.get("MODEL_PARAMS_GCS_LOCATION") if self.is_multimer else None
+            ) or f"gs://{self.config.databases_bucket_name}/alphafold2"
 
             job_kwargs = {
                 "display_name": job_name,
@@ -158,7 +196,7 @@ class AF2SubmitBaseTool(AF2Tool):
                 "parameter_values": {
                     "sequence_path": gcs_sequence_path,
                     "max_template_date": max_template_date,
-                    "model_preset": self.job_type,
+                    "model_preset": model_preset,
                     "model_params_gcs_location": model_params_gcs_location,
                     "project": self.config.project_id,
                     "region": self.config.region,
@@ -169,6 +207,8 @@ class AF2SubmitBaseTool(AF2Tool):
                 "enable_caching": True,
                 "labels": labels,
             }
+            if custom_job_id:
+                job_kwargs["job_id"] = custom_job_id
 
             from ..utils.pipeline_utils import load_vertex_pipeline as default_loader
 

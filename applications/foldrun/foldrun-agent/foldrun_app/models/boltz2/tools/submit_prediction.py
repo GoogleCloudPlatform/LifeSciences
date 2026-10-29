@@ -23,6 +23,8 @@ from typing import Any
 import yaml
 from google.cloud import aiplatform as vertex_ai  # noqa: F401
 
+from foldrun_app.core.kfp_tools import GLOBAL_COMPILE_LOCK
+
 from ..base import BOLTZ2Tool
 from ..utils.input_converter import (
     count_tokens,
@@ -33,9 +35,14 @@ from ..utils.input_converter import (
 
 logger = logging.getLogger(__name__)
 
+_COMPILE_LOCK = GLOBAL_COMPILE_LOCK
+_COMPILE_ENV_LOCK = GLOBAL_COMPILE_LOCK
+
 
 class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
     """Tool for submitting Boltz2 structure predictions."""
+
+    _compile_env_lock = GLOBAL_COMPILE_LOCK
 
     def _validate_local_file_path(self, file_path: str) -> str:
         """Validate that a local file path resides within an explicitly authorized directory."""
@@ -63,6 +70,13 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         num_diffusion_samples = arguments.get("num_diffusion_samples", 5)
         gpu_type = arguments.get("gpu_type") or "auto"
         enable_flex_start = arguments.get("enable_flex_start", True)
+        extra_cli_args = arguments.get("extra_cli_args") or []
+        custom_job_id = arguments.get("custom_job_id")
+        pipeline_root_override = arguments.get("pipeline_root")
+        extra_labels = arguments.get("extra_labels") or {}
+        query_name_override = arguments.get("query_name")
+        allow_local_files = arguments.get("allow_local_files", True)
+        dws_max_wait_hours = arguments.get("dws_max_wait_hours")
 
         import random
 
@@ -72,15 +86,31 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
 
         # Determine input type and load content
         is_gcs = isinstance(input_data, str) and input_data.startswith("gs://")
-        is_file = (
-            os.path.isfile(input_data) if isinstance(input_data, str) and not is_gcs else False
+        looks_like_file = (
+            isinstance(input_data, str)
+            and not is_gcs
+            and "\n" not in input_data
+            and not input_data.lstrip().startswith(("version:", ">"))
+            and (
+                os.path.isfile(input_data)
+                or (not allow_local_files and input_data.startswith(("/", "./", "../", "~")))
+            )
         )
 
         if is_gcs:
             bucket_name, blob_path = self._validate_gcs_uri(input_data)
+            if not allow_local_files and bucket_name != self.config.bucket_name:
+                raise ValueError(
+                    f"Unauthorized GCS bucket '{bucket_name}'; expected '{self.config.bucket_name}'."
+                )
             bucket = self.storage_client.bucket(bucket_name)
             content = bucket.blob(blob_path).download_as_text()
-        elif is_file and isinstance(input_data, str):
+        elif looks_like_file and isinstance(input_data, str):
+            if not allow_local_files:
+                raise ValueError(
+                    "Local file path inputs are not allowed on remote gateway requests. "
+                    "Stage inputs to GCS first."
+                )
             validated_path = self._validate_local_file_path(input_data)
             with open(validated_path, encoding="utf-8") as f:
                 content = f.read()
@@ -105,17 +135,23 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         # Count tokens for GPU auto-selection
         num_tokens = count_tokens(query_yaml)
 
+        safe_job_name = self.sanitize_job_name(job_name, "job")
         # Write query YAML to temp file
         temp_yaml = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False, prefix=f"boltz2_{job_name}_"
+            mode="w", suffix=".yaml", delete=False, prefix=f"boltz2_{safe_job_name}_"
         )
         temp_yaml.write(query_yaml if isinstance(query_yaml, str) else str(query_yaml))
         temp_yaml.close()
 
-        pipeline_path = os.path.join(tempfile.gettempdir(), f"boltz2_pipeline_{job_name}.yaml")
+        with tempfile.NamedTemporaryFile(
+            mode="w", prefix=f"boltz2_pipeline_{safe_job_name}_", suffix=".yaml", delete=False
+        ) as pipeline_tmp:
+            pipeline_path = pipeline_tmp.name
+
         try:
             # Upload to GCS
-            gcs_query_path = f"gs://{self.config.bucket_name}/boltz2_queries/{job_name}.yaml"
+            query_key = custom_job_id or safe_job_name
+            gcs_query_path = f"gs://{self.config.bucket_name}/boltz2_queries/{query_key}.yaml"
             self._upload_to_gcs(temp_yaml.name, gcs_query_path)
 
             filestore_ip, filestore_network = self._ensure_filestore_config()
@@ -125,6 +161,8 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
                 gpu_type,
                 num_tokens=num_tokens,
             )
+            if dws_max_wait_hours is not None:
+                hardware_config["dws_max_wait_hours"] = int(dws_max_wait_hours)
 
             resolved_gpu = hardware_config["predict_accel"]
 
@@ -142,10 +180,11 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
                 if _seqs
                 else 1
             )
-            query_name = job_name
+            query_name = query_name_override or job_name
             labels = {
                 "model_type": "boltz2",
                 "job_type": "monomer" if _num_chains <= 1 else "complex",
+                "seq_name": self._clean_label(query_name),
                 "query_name": self._clean_label(query_name),
                 "num_tokens": str(num_tokens),
                 "num_chains": str(_num_chains),
@@ -156,26 +195,37 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
                 "msa_method": "jackhmmer",
                 "submitted_by": "foldrun-agent",
             }
+            for k, v in extra_labels.items():
+                labels[str(k)] = self._clean_label(str(v))
 
             # Submit pipeline job
-            pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            pipeline_root = (
+                pipeline_root_override
+                or f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
+
+            parameter_values: dict[str, Any] = {
+                "query_json_path": gcs_query_path,
+                "project": self.config.project_id,
+                "region": self.config.region,
+                "nfs_cache_path": f"{self.config.nfs_mount_point}/{self.config.cache_path}",
+                "num_model_seeds": num_model_seeds,
+                "num_diffusion_samples": num_diffusion_samples,
+                "base_seed": base_seed,
+            }
+            if extra_cli_args:
+                parameter_values["extra_cli_args"] = [str(a) for a in extra_cli_args]
 
             job_kwargs = {
                 "display_name": job_name,
                 "template_path": pipeline_path,
                 "pipeline_root": pipeline_root,
-                "parameter_values": {
-                    "query_json_path": gcs_query_path,
-                    "project": self.config.project_id,
-                    "region": self.config.region,
-                    "nfs_cache_path": f"{self.config.nfs_mount_point}/{self.config.cache_path}",
-                    "num_model_seeds": num_model_seeds,
-                    "num_diffusion_samples": num_diffusion_samples,
-                    "base_seed": base_seed,
-                },
+                "parameter_values": parameter_values,
                 "enable_caching": True,
                 "labels": labels,
             }
+            if custom_job_id:
+                job_kwargs["job_id"] = custom_job_id
 
             from ..utils.pipeline_utils import load_vertex_pipeline
 
@@ -195,23 +245,29 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
                     os.remove(path)
             raise
 
-        # Chain info from yaml dict
+        # Chain info from yaml dict (accounting for homo-oligomer id lists)
         mol_types = {}
         num_chains = 0
         parsed_yaml = yaml.safe_load(query_yaml)
         for seq in parsed_yaml.get("sequences", []):
+            if not seq or not isinstance(seq, dict):
+                continue
+            entry_key = next(iter(seq.keys()))
+            entry_val = seq.get(entry_key) or {}
+            ids = entry_val.get("id", "A") if isinstance(entry_val, dict) else "A"
+            chain_count = max(1, len(ids)) if isinstance(ids, list) else 1
             if "protein" in seq:
                 mt = "protein"
             elif "rna" in seq:
                 mt = "rna"
             elif "dna" in seq:
                 mt = "dna"
-            elif "smiles" in seq:
+            elif "smiles" in seq or "ligand" in seq or "ccd" in seq:
                 mt = "ligand"
             else:
                 mt = "other"
-            mol_types[mt] = mol_types.get(mt, 0) + 1
-            num_chains += 1
+            mol_types[mt] = mol_types.get(mt, 0) + chain_count
+            num_chains += chain_count
 
         return {
             "job_id": pipeline_job.resource_name,

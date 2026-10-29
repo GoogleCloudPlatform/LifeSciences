@@ -465,8 +465,10 @@ dependencies = [
     { name = "opentelemetry-resourcedetector-gcp" },
     { name = "protobuf" },
     { name = "python-dotenv" },
+    { name = "python-multipart" },
     { name = "requests" },
     { name = "rich" },
+    { name = "tqdm" },
     { name = "zstandard" },
 ]
 
@@ -521,9 +523,11 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "requests" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'lint'", specifier = ">=0.4.6,<1.0.0" },
+    { name = "tqdm", specifier = ">=4.66.0" },
     { name = "ty", marker = "extra == 'lint'", specifier = ">=0.0.1a0" },
     { name = "zstandard", specifier = ">=0.23.0" },
 ]
