@@ -102,3 +102,36 @@ def test_cloudbuild_agent_steps_use_python_313_uv_image():
     for step_id in ("deploy-agent-runtime", "register-agent"):
         assert step_id in steps_by_id, f"Missing expected Cloud Build step '{step_id}'"
         assert steps_by_id[step_id]["name"] == "ghcr.io/astral-sh/uv:python3.13-bookworm-slim"
+
+
+def test_cloudbuild_includes_generative_binder_components():
+    """Verify cloudbuild.yaml builds BoltzGen, RFD4-Proteina, and BindCraft components and wires them into deploy-agent-runtime."""
+    config = yaml.safe_load(CLOUDBUILD_YAML_PATH.read_text(encoding="utf-8"))
+    steps_by_id = {step.get("id"): step for step in config.get("steps", [])}
+
+    for step_id in (
+        "build-push-boltzgen-components",
+        "build-push-rfd4-proteina-components",
+        "build-push-bindcraft-components",
+    ):
+        assert step_id in steps_by_id, f"Missing Cloud Build step '{step_id}'"
+
+    deploy_agent = steps_by_id["deploy-agent-runtime"]
+    wait_for = deploy_agent.get("waitFor", [])
+    assert "build-push-boltzgen-components" in wait_for
+    assert "build-push-rfd4-proteina-components" in wait_for
+    assert "build-push-bindcraft-components" in wait_for
+
+    deploy_script = deploy_agent["args"][1]
+    assert "BOLTZGEN_COMPONENTS_IMAGE=" in deploy_script
+    assert "RFD4_PROTEINA_COMPONENTS_IMAGE=" in deploy_script
+    assert "BINDCRAFT_COMPONENTS_IMAGE=" in deploy_script
+
+    substitutions = config.get("substitutions", {})
+    for sub in (
+        "_BOLTZGEN_VERSION",
+        "_RFD4_VERSION",
+        "_COLABDESIGN_VERSION",
+        "_FREEBINDCRAFT_VERSION",
+    ):
+        assert sub in substitutions, f"Missing substitution '{sub}'"

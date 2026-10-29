@@ -420,7 +420,7 @@ def build_analysis_task_config(
             ).model_dump()
             for i, p in enumerate(raw_predictions)
         ]
-    elif model_type == "openfold3":
+    elif model_type in ("openfold3", "boltzgen", "rfd4_proteina", "rfd4-proteina", "bindcraft"):
         predictions_cfg = [
             OF3PredictionTask(
                 index=i,

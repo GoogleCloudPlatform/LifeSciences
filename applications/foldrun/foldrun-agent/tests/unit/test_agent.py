@@ -365,6 +365,7 @@ class TestCreateAgent:
             skill_registry.register(custom_skill)
             try:
                 agent = agent_mod.create_alphafold_agent()
+                assert isinstance(agent.instruction, str)
                 assert "## Dynamic Test Skill Section" in agent.instruction
             finally:
                 skill_registry._skills.pop("dynamic_test_skill", None)
@@ -407,3 +408,18 @@ class TestCreateAgent:
                 assert "from datetime import UTC" in joined_args, (
                     f"Executor {exec_name} uses UTC without function-local import"
                 )
+
+    def test_agent_has_generative_binder_tools_when_configured(self, mock_env_vars, monkeypatch):
+        """Agent exposes all 29 FunctionTools when generative binder images are configured."""
+        monkeypatch.setenv("BOLTZGEN_COMPONENTS_IMAGE", "test-boltzgen:latest")
+        monkeypatch.setenv("RFD4_PROTEINA_COMPONENTS_IMAGE", "test-rfd4:latest")
+        monkeypatch.setenv("BINDCRAFT_COMPONENTS_IMAGE", "test-bindcraft:latest")
+        with (
+            _mock_startup(),
+            patch("google.cloud.aiplatform.init"),
+            patch("google.cloud.storage.Client"),
+        ):
+            from foldrun_app.agent import create_alphafold_agent
+
+            agent = create_alphafold_agent()
+            assert len(agent.tools) == 29

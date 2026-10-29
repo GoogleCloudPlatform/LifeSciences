@@ -44,8 +44,9 @@ def get_tool(tool_name: str) -> BaseTool:
         _initialized = True
     if tool_name not in _agents:
         raise KeyError(
-            f"Tool '{tool_name}' is not initialized. If this is an AF3, OF3, or Boltz-2 tool, "
-            f"verify that the corresponding environment variables (e.g. AF3_ENDPOINT) are set."
+            f"Tool '{tool_name}' is not initialized. If this is an AF3, OF3, Boltz-2, BoltzGen, "
+            f"RFD4-Proteina, or BindCraft tool, verify that the corresponding environment "
+            f"variables (e.g. AF3_ENDPOINT, BOLTZGEN_COMPONENTS_IMAGE) are set."
         )
     return _agents[tool_name]
 
