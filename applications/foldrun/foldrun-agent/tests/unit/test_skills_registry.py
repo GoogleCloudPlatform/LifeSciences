@@ -301,6 +301,7 @@ class TestSkillRegistry:
         toolset = skill_registry.get_skill_toolset()
         assert isinstance(toolset, SkillToolset)
         assert toolset._discovery_mode == SkillDiscoveryMode.EAGER
+        assert isinstance(toolset.tool_filter, list)
         assert "load_skill" in toolset.tool_filter
         assert "load_skill_resource" in toolset.tool_filter
         assert "run_skill_script" not in toolset.tool_filter

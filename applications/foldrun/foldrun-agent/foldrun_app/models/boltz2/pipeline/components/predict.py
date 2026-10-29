@@ -35,6 +35,7 @@ def predict_boltz2(
     nfs_cache_path: str,
     predicted_structure: Output[Artifact],
     confidence_json: Output[Artifact],
+    extra_cli_args: list = [],
 ):
     """Runs BOLTZ2 structure prediction for a single seed.
 
@@ -53,6 +54,7 @@ def predict_boltz2(
     # Output paths
     output_dir = os.path.dirname(predicted_structure.path)
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(nfs_cache_path, exist_ok=True)
 
     predicted_structure.uri = f"{predicted_structure.uri}.cif"
     confidence_json.uri = f"{confidence_json.uri}.json"
@@ -79,6 +81,11 @@ def predict_boltz2(
         # driver than Agent Platform A100 nodes currently support
         "--write_full_pde",  # write pde_{stem}_model_N.npz for PDE heatmap plots
     ]
+    if extra_cli_args:
+        for arg in extra_cli_args:
+            arg_str = str(arg)
+            if arg_str not in cmd:
+                cmd.append(arg_str)
 
     logging.info(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)

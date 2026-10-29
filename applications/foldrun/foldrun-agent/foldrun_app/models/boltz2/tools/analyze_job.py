@@ -54,25 +54,42 @@ class BOLTZ2JobAnalysisTool(KFPAnalyzeJobTool, BOLTZ2Tool):
         if not samples:
             return {"status": "no_predictions", "message": "No BOLTZ2 samples found for this job"}
 
+        # Resolve query YAML URI now, while we have the pipeline job in hand.
+        # Prefer runtime_config.parameter_values['query_json_path'] (authoritative GCS URI
+        # even when query_name != job_name or label sanitization truncated characters),
+        # falling back to labels['query_name'] only when parameter_values lacks it.
         query_yaml_uri = None
         try:
-            labels = dict(job.labels) if hasattr(job, "labels") and job.labels else {}
-            if labels.get("query_name"):
-                pipeline_root = job.runtime_config.gcs_output_directory
-                bucket, _ = self._validate_gcs_uri(pipeline_root)
-                candidate_query_uri = resolve_boltz2_query_yaml_uri(
-                    bucket_name=bucket,
-                    labels=labels,
-                    strict_label_validation=True,
-                )
-                if candidate_query_uri:
-                    self._validate_gcs_uri(candidate_query_uri)
-                    query_yaml_uri = candidate_query_uri
-                    logger.info(f"Resolved query YAML URI from label: {query_yaml_uri}")
+            params = (
+                dict(job.runtime_config.parameter_values)
+                if hasattr(job, "runtime_config")
+                and job.runtime_config
+                and getattr(job.runtime_config, "parameter_values", None)
+                else {}
+            )
+            param_query_uri = params.get("query_json_path")
+            if isinstance(param_query_uri, str) and param_query_uri.startswith("gs://"):
+                self._validate_gcs_uri(param_query_uri)
+                query_yaml_uri = param_query_uri
+                logger.info(f"Resolved query YAML URI from runtime_config: {query_yaml_uri}")
             else:
-                logger.warning(
-                    "No 'query_name' label found on pipeline job — query YAML will not be embedded in analysis"
-                )
+                labels = dict(job.labels) if hasattr(job, "labels") and job.labels else {}
+                if labels.get("query_name"):
+                    pipeline_root = job.runtime_config.gcs_output_directory
+                    bucket, _ = self._validate_gcs_uri(pipeline_root)
+                    candidate_query_uri = resolve_boltz2_query_yaml_uri(
+                        bucket_name=bucket,
+                        labels=labels,
+                        strict_label_validation=True,
+                    )
+                    if candidate_query_uri:
+                        self._validate_gcs_uri(candidate_query_uri)
+                        query_yaml_uri = candidate_query_uri
+                        logger.info(f"Resolved query YAML URI from label: {query_yaml_uri}")
+                else:
+                    logger.warning(
+                        "No 'query_json_path' parameter or 'query_name' label found on pipeline job — query YAML will not be embedded in analysis"
+                    )
         except ValueError:
             raise
         except Exception as e:
