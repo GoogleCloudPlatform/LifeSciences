@@ -12,6 +12,7 @@
 - **Multimodal Gemini 3.1 Pro Expert Analysis**: Generates structural metrics (`pLDDT`, `PAE`, `pTM`, `ipTM`, `ranking_score`) and multimodal AI biological interpretation from 3D coordinates and plots
 - **Interactive Visualization & Signed Artifact Bundles**: Web-based 3D structure viewer (3Dmol.js) with confidence coloring, PAE/ipTM heatmaps, and 1-click V4 signed ZIP archive downloads (`artifacts_bundle.zip`)
 - **Smart Database Management**: YAML-driven downloads via Cloud Batch with GCS-based gap detection — shared databases downloaded once across models
+- **Direct Cloud Run HTTP Gateway & Native CLI / Notebook Shim (`foldrun-shim`)**: Stateless IAM-protected Cloud Run HTTP Gateway (`foldrun-gateway`, `enable_gateway = true` by default) and thin-permission client SDK (`sdk/foldrun-shim`) exposing unmodified native CLIs (`run_alphafold.py`, `run_alphafold3`, `boltz`, `run_openfold`, plus generative binder CLIs when installed) and 7 zero-GPU Jupyter notebooks requiring only `roles/run.invoker`
 
 ## Supported Models
 
@@ -249,10 +250,12 @@ Available `--build-target` values:
 | `af2` | alphafold-components container + agent |
 | `boltz2` | boltz2-components container + agent |
 | `viewer` | foldrun-viewer Cloud Run service + agent |
+| `gateway` | foldrun-gateway Cloud Run service + foldrun-shim SDK wheel & notebooks |
+| `sdk` | foldrun-shim wheel + 7 Jupyter notebooks uploaded to `gs://<bucket>/sdk/` |
 | `agent` | Agent Runtime only (no container rebuilds) |
 | `analysis` | foldrun-analysis-job Cloud Run Job only |
 
-The agent is automatically redeployed whenever any non-analysis target is included.
+The agent is automatically redeployed whenever `all`, `agent`, `viewer`, `af2`, `of3`, or `boltz2` is included (`gateway`, `sdk`, and `analysis` skip Agent Runtime redeployment).
 
 **Pinned model versions** — override without editing any files:
 ```bash
@@ -461,6 +464,31 @@ Then invoke directly:
 gemini -a foldrun "Predict the structure of ubiquitin with AlphaFold 3"
 ```
 
+---
+
+#### 4d. Option 3 — Direct Cloud Run HTTP Gateway & `foldrun-shim` CLI / Notebooks (`sdk/foldrun-shim`)
+
+For automated bioinformatics pipelines, CPU-only workstations, Colab Enterprise, or Vertex AI Workbench, **FoldRun Gateway (`foldrun-gateway`)** and **`foldrun-shim`** let you run unmodified upstream CLI invocations and Jupyter Notebooks directly against FoldRun's cloud GPUs using only `roles/run.invoker` (no direct GCS or Vertex AI IAM permissions required on client machines). See [`docs/designs/direct_cloud_run_gateway.md`](docs/designs/direct_cloud_run_gateway.md) and [`sdk/foldrun-shim/README.md`](sdk/foldrun-shim/README.md) for full details.
+
+```bash
+# Install from the FoldRun GCS SDK bucket (or locally via `pip install -e sdk/foldrun-shim`)
+gcloud storage cp gs://YOUR_PROJECT_ID-foldrun-data/sdk/latest_build /tmp/
+WHL=$(cat /tmp/latest_build)
+gcloud storage cp "gs://YOUR_PROJECT_ID-foldrun-data/sdk/${WHL}" /tmp/
+gcloud storage cp -r gs://YOUR_PROJECT_ID-foldrun-data/sdk/notebooks ./notebooks
+pip install "/tmp/${WHL}"
+
+export FOLDRUN_GATEWAY_URL="https://foldrun-gateway-<hash>-uc.a.run.app"
+
+# Run native model CLIs (executes remotely on Vertex AI GPUs & downloads results locally)
+boltz predict affinity.yaml --out_dir ./out --diffusion_samples 5 --use_potentials
+run_openfold predict --query_json query.json --output_dir ./out
+run_alphafold3 --json_path=fold_input.json --output_dir=./out
+python run_alphafold.py --fasta_paths=target.fasta --output_dir=./out --model_preset=monomer
+```
+
+Pre-configured zero-GPU Jupyter notebooks covering **AlphaFold 2**, **AlphaFold 3**, **Boltz-2**, **OpenFold 3**, **BoltzGen**, **RFD4-Proteina**, and **BindCraft** are included under [`sdk/foldrun-shim/notebooks/`](sdk/foldrun-shim/notebooks/).
+
 ### Step 5: Wait for Databases
 
 Database downloads run as Cloud Batch jobs in the background. Structure predictions will fail until the required databases are available on NFS.
@@ -489,6 +517,8 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | Cloud Run Job | `foldrun-analysis-job` | Parallel prediction analysis (AF2 + OF3 + Boltz-2) |
 | Service Account | `foldrun-agent-sa` | Agent's GCP identity |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
+| Cloud Run Service | `foldrun-gateway` | Stateless IAM-authenticated HTTP Gateway for `foldrun-shim` CLI & Notebooks (`enable_gateway = true`) |
+| Service Account | `foldrun-gateway-sa` | HTTP Gateway's GCP identity |
 
 ### Local Development
 
@@ -583,6 +613,12 @@ foldrun/
 │   │   │   ├── batch.py        # Cloud Batch job submission
 │   │   │   ├── download.py     # YAML-driven database downloader
 │   │   │   └── model_registry.py
+│   │   ├── gateway/            # Direct Cloud Run HTTP Gateway (FastAPI)
+│   │   │   ├── app.py          # Standalone gateway ASGI entrypoint
+│   │   │   ├── router.py       # /v1/{model}/jobs, /v1/jobs/{id}, /v1/jobs/{id}/outputs
+│   │   │   ├── flag_allowlist.py # Per-model CLI flag validation & partitioning
+│   │   │   ├── staging.py      # Tar asset validation, GCS staging & SHA-256 digest
+│   │   │   └── output_packager.py # Streaming native archive & V4 Signed URLs
 │   │   ├── models/
 │   │   │   ├── af2/            # AlphaFold2 plugin
 │   │   │   │   ├── config.py   # AF2Config (image, viewer URL, parallelism)
@@ -624,6 +660,8 @@ foldrun/
 │   ├── foldrun-viewer/          # Cloud Run web app (AF2 + AF3 + OF3 + Boltz-2 3D viewer)
 │   └── foldrun-analysis-job/    # Cloud Run Job (Unified prediction analysis)
 ├── terraform/                   # Infrastructure as code
+├── sdk/
+│   └── foldrun-shim/            # Thin-permission CLI & Notebook SDK + 7 model notebooks
 ├── cloudbuild.yaml              # CI/CD pipeline
 ├── deploy-all.sh                # One-command deployment
 └── check-status.sh              # Deployment health check

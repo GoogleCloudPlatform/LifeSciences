@@ -18,11 +18,13 @@ import logging
 import os
 import re
 import tempfile
-import threading
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
+
+from foldrun_app.gateway._compat import GLOBAL_COMPILE_LOCK
 
 from ..base import AF2Tool
 from ..utils.fasta_utils import (
@@ -32,7 +34,7 @@ from ..utils.fasta_utils import (
 )
 
 logger = logging.getLogger(__name__)
-_COMPILE_ENV_LOCK = threading.Lock()
+_COMPILE_ENV_LOCK = GLOBAL_COMPILE_LOCK
 
 
 class AF2SubmitMonomerTool(AF2Tool):
@@ -75,6 +77,16 @@ class AF2SubmitMonomerTool(AF2Tool):
         relax_gpu_type = arguments.get("relax_gpu_type")  # Optional override for relax phase
         enable_flex_start = arguments.get("enable_flex_start", True)
         msa_method = arguments.get("msa_method", "auto")  # 'auto', 'jackhmmer', or 'mmseqs2'
+        model_preset = arguments.get("model_preset", "monomer")
+        if model_preset not in ("monomer", "monomer_casp14", "monomer_ptm"):
+            raise ValueError(
+                f"Unsupported monomer model_preset '{model_preset}'. Expected one of: monomer, monomer_casp14, monomer_ptm."
+            )
+        custom_job_id = arguments.get("custom_job_id")
+        pipeline_root_override = arguments.get("pipeline_root")
+        extra_labels = arguments.get("extra_labels") or {}
+        allow_local_files = arguments.get("allow_local_files", True)
+        dws_max_wait_hours = arguments.get("dws_max_wait_hours")
         arguments.get("vertex_repo_path")  # No longer needed, kept for backwards compatibility
 
         # Validate: explicit mmseqs2 requires use_small_bfd=True and pre-built indexes
@@ -97,11 +109,20 @@ class AF2SubmitMonomerTool(AF2Tool):
 
         if is_gcs:
             bucket_name, blob_path = self._validate_gcs_uri(sequence)
+            if not allow_local_files and bucket_name != self.config.bucket_name:
+                raise ValueError(
+                    f"Unauthorized GCS bucket '{bucket_name}'; expected '{self.config.bucket_name}'."
+                )
             bucket = self.storage_client.bucket(bucket_name)
             sequence = bucket.blob(blob_path).download_as_text()
         elif isinstance(sequence, str) and (
             os.path.exists(sequence) or sequence.startswith(("/", "./", "../", "~"))
         ):
+            if not allow_local_files:
+                raise ValueError(
+                    "Local sequence file paths are not allowed on remote gateway requests. "
+                    "Stage inputs to GCS first."
+                )
             allowed_dir = os.path.realpath(tempfile.gettempdir())
             real_path = os.path.realpath(sequence)
             if os.path.commonpath([real_path, allowed_dir]) != allowed_dir or not os.path.isfile(
@@ -130,14 +151,18 @@ class AF2SubmitMonomerTool(AF2Tool):
         seq_name = sequences[0]["description"].split()[0] if sequences else job_name
         seq_length = get_sequence_length(sequences)
 
+        safe_job_name = (
+            re.sub(r"[^A-Za-z0-9_.-]+", "_", (job_name or "").strip()).strip("._-")[:96] or "job"
+        )
         with tempfile.NamedTemporaryFile(
-            mode="w", prefix=f"af2_pipeline_{job_name}_", suffix=".json", delete=False
+            mode="w", prefix=f"af2_pipeline_{safe_job_name}_", suffix=".json", delete=False
         ) as pipeline_tmp:
             pipeline_path = pipeline_tmp.name
 
         try:
-            # Upload validated FASTA to GCS
-            gcs_sequence_path = f"gs://{self.config.bucket_name}/fasta/{job_name}.fasta"
+            # Upload validated FASTA to GCS (keyed by custom_job_id when set to avoid collisions)
+            fasta_key = custom_job_id or safe_job_name
+            gcs_sequence_path = f"gs://{self.config.bucket_name}/fasta/{fasta_key}.fasta"
             self._upload_to_gcs(fasta_path, gcs_sequence_path)
 
             # Get Filestore info if not already configured
@@ -156,6 +181,8 @@ class AF2SubmitMonomerTool(AF2Tool):
                 seq_length=seq_length,
                 is_multimer=False,
             )
+            if dws_max_wait_hours is not None:
+                hardware_config["dws_max_wait_hours"] = int(dws_max_wait_hours)
 
             # Resolve actual values for labels and response (in case 'auto' was used)
             resolved_gpu = hardware_config["predict_accel"]
@@ -166,26 +193,26 @@ class AF2SubmitMonomerTool(AF2Tool):
                 "NVIDIA_A100_80GB": "a100-80gb",
             }
 
-            with _COMPILE_ENV_LOCK:
-                # Pass filestore info to environment setup
-                self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
+            with self._compile_env_lock:
+                env_ctx = self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
+                with env_ctx if env_ctx is not None else nullcontext():
+                    # Import the vendored pipeline
+                    from ..utils.pipeline_utils import load_vertex_pipeline
 
-                # Import the vendored pipeline
-                from ..utils.pipeline_utils import load_vertex_pipeline
+                    pipeline = load_vertex_pipeline(
+                        enable_flex_start=enable_flex_start, msa_method=resolved_msa
+                    )
 
-                pipeline = load_vertex_pipeline(
-                    enable_flex_start=enable_flex_start, msa_method=resolved_msa
-                )
+                    # Compile pipeline
+                    from kfp import compiler
 
-                # Compile pipeline
-                from kfp import compiler
-
-                compiler.Compiler().compile(pipeline_func=pipeline, package_path=pipeline_path)
+                    compiler.Compiler().compile(pipeline_func=pipeline, package_path=pipeline_path)
 
             # Prepare labels (use resolved values, not 'auto')
             labels = {
                 "model_type": "alphafold2",
                 "job_type": "monomer",
+                "seq_name": self._clean_label(seq_name),
                 "query_name": self._clean_label(seq_name),
                 "num_tokens": str(seq_length),
                 "num_chains": "1",
@@ -193,9 +220,14 @@ class AF2SubmitMonomerTool(AF2Tool):
                 "msa_method": resolved_msa,
                 "submitted_by": "foldrun-agent",
             }
+            for k, v in extra_labels.items():
+                labels[str(k)] = self._clean_label(str(v))
 
             # Submit pipeline job
-            pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            pipeline_root = (
+                pipeline_root_override
+                or f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
             model_params_gcs_location = f"gs://{self.config.databases_bucket_name}/alphafold2"
 
             # Prepare scheduling strategy
@@ -206,7 +238,7 @@ class AF2SubmitMonomerTool(AF2Tool):
                 "parameter_values": {
                     "sequence_path": gcs_sequence_path,
                     "max_template_date": max_template_date,
-                    "model_preset": "monomer",
+                    "model_preset": model_preset,
                     "model_params_gcs_location": model_params_gcs_location,
                     "project": self.config.project_id,
                     "region": self.config.region,
@@ -217,6 +249,8 @@ class AF2SubmitMonomerTool(AF2Tool):
                 "enable_caching": True,  # Enable caching to reuse previous run results
                 "labels": labels,
             }
+            if custom_job_id:
+                job_kwargs["job_id"] = custom_job_id
 
             # Submit pipeline job (DWS scheduling already baked into compiled pipeline if enabled)
             pipeline_job = vertex_ai.PipelineJob(**job_kwargs)

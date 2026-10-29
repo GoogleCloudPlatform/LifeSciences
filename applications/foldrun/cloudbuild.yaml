@@ -16,6 +16,8 @@
 # Supported values (comma-separated):
 #   all            - build and deploy everything (default)
 #   viewer         - foldrun-viewer Cloud Run service
+#   gateway        - foldrun-gateway Cloud Run service + foldrun-shim SDK wheel
+#   sdk            - build foldrun-shim wheel + upload wheel & notebooks to gs://${_BUCKET_NAME}/sdk/
 #   af2            - alphafold-components container
 #   of3            - openfold3-components container
 #   boltz2         - boltz2-components container
@@ -27,6 +29,8 @@
 # Examples:
 #   _BUILD_TARGET=of3            # rebuild OF3 container + redeploy agent
 #   _BUILD_TARGET=agent          # redeploy agent only, no container rebuilds
+#   _BUILD_TARGET=gateway        # rebuild and redeploy foldrun-gateway + foldrun-shim SDK
+#   _BUILD_TARGET=sdk            # rebuild and upload foldrun-shim wheel + notebooks to GCS
 #   _BUILD_TARGET=of3,viewer     # rebuild OF3 + viewer + redeploy agent
 #   _BUILD_TARGET=analysis       # rebuild only the foldrun-analysis-job Cloud Run Job
 
@@ -83,6 +87,192 @@ steps:
           echo "Skipping viewer deploy (BUILD_TARGET=$$BUILD_TARGET)"
         fi
     waitFor: ['build-push-viewer']
+
+  # ============================================================================
+  # 1b. FoldRun Direct HTTP Gateway (Cloud Run Service)
+  # ============================================================================
+  - id: 'build-push-gateway'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'ENABLE_GATEWAY=${_ENABLE_GATEWAY}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        if [[ "$${ENABLE_GATEWAY:-true}" != "true" ]]; then
+          echo "Skipping gateway build (ENABLE_GATEWAY=$$ENABLE_GATEWAY)"
+          exit 0
+        fi
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",gateway,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-gateway:latest" || true
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-gateway:latest" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-gateway:latest" \
+            foldrun-agent/
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-gateway:latest"
+        else
+          echo "Skipping gateway build (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['-']
+
+  - id: 'deploy-gateway'
+    name: 'gcr.io/google.com/cloudsdktool/google-cloud-cli:stable'
+    entrypoint: bash
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'ENABLE_GATEWAY=${_ENABLE_GATEWAY}'
+      - 'REGION=${_REGION}'
+      - 'ZONE=${_ZONE}'
+      - 'MODEL_ENDPOINT_LOCATION=${_MODEL_ENDPOINT_LOCATION}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'BUCKET_NAME=${_BUCKET_NAME}'
+      - 'DATABASES_BUCKET=${_DATABASES_BUCKET}'
+      - 'FILESTORE_ID=${_FILESTORE_ID}'
+      - 'FILESTORE_LOCATION=${_FILESTORE_LOCATION}'
+      - 'FOLDRUN_VIEWER_URL=${_FOLDRUN_VIEWER_URL}'
+      - 'PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}'
+      - 'GATEWAY_SA_EMAIL=${_GATEWAY_SA_EMAIL}'
+      - 'AGENT_SA_EMAIL=${_AGENT_SA_EMAIL}'
+      - 'NETWORK_ID=${_NETWORK_ID}'
+      - 'SUBNET_ID=${_SUBNET_ID}'
+      - 'NETWORK_PROJECT_NUMBER=${_NETWORK_PROJECT_NUMBER}'
+      - 'AF3_ENDPOINT=${_AF3_ENDPOINT}'
+      - 'AF3_MODEL_ID=${_AF3_MODEL_ID}'
+      - 'AF3_ENDPOINT_LOCATION=${_AF3_ENDPOINT_LOCATION}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        if [[ "$${ENABLE_GATEWAY:-true}" != "true" ]]; then
+          echo "Skipping gateway deploy (ENABLE_GATEWAY=$$ENABLE_GATEWAY)"
+          exit 0
+        fi
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",gateway,"* ]]; then
+          _eff_zone="$${ZONE:-$${REGION}-a}"
+          _AF3_LOC="$${AF3_ENDPOINT_LOCATION:-$$REGION}"
+          if [[ "$${_AF3_LOC,,}" == "global" ]] || [[ -z "$$_AF3_LOC" ]]; then
+            _AF3_LOC="$$REGION"
+          fi
+          _gw_sa="$${GATEWAY_SA_EMAIL:-$$AGENT_SA_EMAIL}"
+
+          GW_ENV_VARS="GOOGLE_CLOUD_PROJECT=$$PROJECT_ID,GCP_PROJECT_ID=$$PROJECT_ID,GCP_REGION=$$REGION,GCP_ZONE=$$_eff_zone,GOOGLE_CLOUD_LOCATION=$$MODEL_ENDPOINT_LOCATION,GOOGLE_GENAI_USE_ENTERPRISE=1,DWS_MAX_WAIT_HOURS=1,GEMINI_MODEL=gemini-3.8-flash,GEMINI_ANALYSIS_MODEL=gemini-3.1-pro-preview,AF3_ENDPOINT=$${AF3_ENDPOINT:-auto},AF3_MODEL_ID=$${AF3_MODEL_ID:-auto},AF3_ENDPOINT_LOCATION=$$_AF3_LOC,GCS_BUCKET_NAME=$$BUCKET_NAME,GCS_DATABASES_BUCKET=$$DATABASES_BUCKET,FILESTORE_ID=$$FILESTORE_ID,ALPHAFOLD_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest,OPENFOLD3_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest,BOLTZ2_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest,FOLDRUN_VIEWER_URL=$$FOLDRUN_VIEWER_URL,ANALYSIS_JOB_NAME=foldrun-analysis-job,PIPELINES_SA_EMAIL=$$PIPELINES_SA_EMAIL"
+          [[ -n "$$FILESTORE_LOCATION" ]] && GW_ENV_VARS="$$GW_ENV_VARS,FILESTORE_LOCATION=$$FILESTORE_LOCATION"
+          [[ -n "$$NETWORK_ID" ]] && GW_ENV_VARS="$$GW_ENV_VARS,NETWORK=$$NETWORK_ID"
+          [[ -n "$$SUBNET_ID" ]] && GW_ENV_VARS="$$GW_ENV_VARS,SUBNET_ID=$$SUBNET_ID"
+          [[ -n "$$NETWORK_PROJECT_NUMBER" ]] && GW_ENV_VARS="$$GW_ENV_VARS,NETWORK_PROJECT_NUMBER=$$NETWORK_PROJECT_NUMBER"
+
+          SA_ARGS=()
+          [[ -n "$$_gw_sa" ]] && SA_ARGS=(--service-account "$$_gw_sa")
+
+          gcloud run deploy foldrun-gateway \
+            --project "$$PROJECT_ID" \
+            --image "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-gateway:latest" \
+            --region "$$REGION" \
+            --command "/code/.venv/bin/uvicorn" \
+            --args "foldrun_app.gateway.app:app,--host,0.0.0.0,--port,8080" \
+            "$${SA_ARGS[@]}" \
+            --update-env-vars "$$GW_ENV_VARS"
+        else
+          echo "Skipping gateway deploy (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['build-push-gateway']
+
+  # ============================================================================
+  # 1c. FoldRun Native CLI & Notebook Shim (`sdk/foldrun-shim` -> GCS Bucket)
+  # ============================================================================
+  - id: 'determine-sdk-version'
+    name: 'gcr.io/google.com/cloudsdktool/google-cloud-cli:stable'
+    entrypoint: 'bash'
+    env:
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'BUCKET_NAME=${_BUCKET_NAME}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",gateway,"* ]] || [[ "$$_t" == *",sdk,"* ]]; then
+          TODAY=$$(date -u +%Y%m%d)
+          EXISTING_LATEST=""
+          if gcloud storage cp "gs://$$BUCKET_NAME/sdk/latest_build" /workspace/existing_latest_build 2>/dev/null; then
+            EXISTING_LATEST=$$(cat /workspace/existing_latest_build | tr -d '[:space:]')
+          fi
+          echo "Existing latest_build in GCS: '$$EXISTING_LATEST'"
+
+          # Check if existing latest build matches today's date: foldrun_shim-<base_ver>.<date>.<inc>-py3-none-any.whl
+          INC=1
+          if [[ -n "$$EXISTING_LATEST" ]] && [[ "$$EXISTING_LATEST" =~ \.($$TODAY)\.([0-9]+)-py3-none-any\.whl ]]; then
+            PREV_INC="$${BASH_REMATCH[2]}"
+            INC=$$((PREV_INC + 1))
+          fi
+
+          NEW_VERSION="0.1.0.$${TODAY}.$${INC}"
+          echo "$$NEW_VERSION" > /workspace/sdk_version.txt
+          echo "Determined SDK version: $$NEW_VERSION"
+
+          # Update pyproject.toml with the new dynamic version
+          sed -i -E "s/^version = \".*\"/version = \"$${NEW_VERSION}\"/" sdk/foldrun-shim/pyproject.toml
+          grep -n "^version = " sdk/foldrun-shim/pyproject.toml
+        else
+          echo "Skipping SDK version determination (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['-']
+
+  - id: 'build-sdk-wheel'
+    name: 'ghcr.io/astral-sh/uv:python3.13-bookworm-slim'
+    entrypoint: 'bash'
+    env:
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",gateway,"* ]] || [[ "$$_t" == *",sdk,"* ]]; then
+          mkdir -p /workspace/sdk_dist
+          uv build --wheel sdk/foldrun-shim --out-dir /workspace/sdk_dist
+          ls -la /workspace/sdk_dist/
+          WHL_FILENAME=$$(basename $$(ls -1 /workspace/sdk_dist/foldrun_shim-*.whl | head -n 1))
+          echo "$$WHL_FILENAME" > /workspace/sdk_dist/latest_build
+          echo "Generated latest_build content: $$WHL_FILENAME"
+        else
+          echo "Skipping foldrun-shim wheel build (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['determine-sdk-version']
+
+  - id: 'upload-sdk-gcs'
+    name: 'gcr.io/google.com/cloudsdktool/google-cloud-cli:stable'
+    entrypoint: 'bash'
+    env:
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'BUCKET_NAME=${_BUCKET_NAME}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",gateway,"* ]] || [[ "$$_t" == *",sdk,"* ]]; then
+          gcloud storage cp /workspace/sdk_dist/*.whl "gs://$$BUCKET_NAME/sdk/"
+          gcloud storage cp /workspace/sdk_dist/latest_build "gs://$$BUCKET_NAME/sdk/latest_build"
+          gcloud storage cp /workspace/sdk_dist/latest_build "gs://$$BUCKET_NAME/sdk/notebooks/latest_build"
+          WHL_PATH=$$(ls -1 /workspace/sdk_dist/foldrun_shim-*.whl | head -n 1)
+          gcloud storage cp "$$WHL_PATH" "gs://$$BUCKET_NAME/sdk/foldrun_shim-0.1.0-py3-none-any.whl"
+          gcloud storage cp -r sdk/foldrun-shim/notebooks "gs://$$BUCKET_NAME/sdk/"
+          gcloud storage cp sdk/foldrun-shim/README.md "gs://$$BUCKET_NAME/sdk/README.md"
+          echo "Uploaded foldrun-shim wheel, latest_build ($$(cat /workspace/sdk_dist/latest_build)), and notebooks to gs://$$BUCKET_NAME/sdk/"
+        else
+          echo "Skipping foldrun-shim GCS upload (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['build-sdk-wheel']
 
   # ============================================================================
   # 2. Unified Analysis Job (Cloud Run Job)
@@ -366,6 +556,7 @@ substitutions:
   _REGION: us-central1
   _ZONE: ""
   _NETWORK_ID: ""
+  _SUBNET_ID: ""
   _NETWORK_PROJECT_NUMBER: ""
   _AR_REPO: foldrun-repo
   _BUCKET_NAME: required_bucket_name
@@ -373,7 +564,9 @@ substitutions:
   _FILESTORE_ID: foldrun-nfs
   _FILESTORE_LOCATION: ""
   _AGENT_SA_EMAIL: required_sa_email
+  _GATEWAY_SA_EMAIL: ""
   _PIPELINES_SA_EMAIL: required_pipelines_sa_email
+  _ENABLE_GATEWAY: "true"
   _AF2_VERSION: "42719e135a62438aa651d2bc1d143626083c3703"
   _OF3_VERSION: "0.5-pixi@sha256:8764f7320ff12c52e9b9ec6bb0047f71df0ab197d401d04a78a51f48e9913335"
   _BOLTZ_VERSION: "2.2.1"
@@ -388,4 +581,3 @@ substitutions:
 timeout: 3600s
 options:
   logging: CLOUD_LOGGING_ONLY
-

@@ -35,7 +35,10 @@ class CoreConfig:
         if env_path:
             load_dotenv(env_path)
         else:
-            load_dotenv()
+            try:
+                load_dotenv()
+            except PermissionError:
+                logger.debug("Skipping unreadable .env file in parent directory")
 
         self._validate()
 

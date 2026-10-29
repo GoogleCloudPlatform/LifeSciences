@@ -56,16 +56,42 @@ class AF2GetJobDetailsTool(AF2Tool):
         labels = dict(job.labels) if job.labels else {}
         params = dict(job.runtime_config.parameter_values) if job.runtime_config else {}
 
-        # Get the original input path from parameters
-        # AF2 jobs use 'sequence_path' (FASTA), OF3 jobs use 'query_json_path' (JSON)
+        # Get the original input path from parameters across all 7 supported models:
+        # AF2: sequence_path (FASTA)
+        # OF3 / AF3 / Boltz-2: query_json_path (JSON or YAML)
+        # BoltzGen: query_yaml_path (YAML)
+        # RFD4-Proteina: spec_json_path (JSON)
+        # BindCraft: settings_json_path (JSON)
         sequence_path = params.get("sequence_path")
         query_json_path = params.get("query_json_path")
-        input_path = sequence_path or query_json_path
+        query_yaml_path = params.get("query_yaml_path")
+        spec_json_path = params.get("spec_json_path")
+        settings_json_path = params.get("settings_json_path")
+        input_path = (
+            sequence_path
+            or query_json_path
+            or query_yaml_path
+            or spec_json_path
+            or settings_json_path
+        )
 
         if not input_path:
-            raise ValueError(f"Could not find sequence_path or query_json_path in job {job_id}")
+            raise ValueError(
+                f"Could not find input parameter (sequence_path, query_json_path, query_yaml_path, spec_json_path, or settings_json_path) in job {job_id}"
+            )
 
-        is_of3 = labels.get("model_type") == "openfold3" or query_json_path is not None
+        model_type = labels.get("model_type", "alphafold2")
+        if sequence_path is not None and model_type == "alphafold2":
+            input_format = "fasta"
+        elif (
+            query_yaml_path is not None
+            or str(input_path).endswith((".yaml", ".yml"))
+            or model_type in ("boltz2", "boltzgen")
+        ):
+            input_format = "yaml"
+        else:
+            input_format = "json"
+        is_structured_input = input_format in ("json", "yaml")
 
         # Step 2: Download the input content from GCS
         fasta_header = None
@@ -75,28 +101,44 @@ class AF2GetJobDetailsTool(AF2Tool):
             # Parse GCS path: gs://bucket_name/path/to/file
             path_parts = input_path[5:].split("/", 1)  # Remove 'gs://' and split
             bucket_name = path_parts[0]
-            blob_path = path_parts[1]
+            blob_path = path_parts[1] if len(path_parts) > 1 else ""
 
-            try:
-                # Download input from GCS
-                storage_client = storage.Client(project=self.config.project_id)
-                bucket = storage_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
-                fasta_content = blob.download_as_text()
-
-                if is_of3:
-                    # OF3 input is JSON
-                    fasta_header = "OF3 query JSON"
-                    fasta_sequence = fasta_content  # Store raw JSON as the "sequence"
-                else:
-                    # AF2 input is FASTA
-                    lines = fasta_content.strip().split("\n")
-                    if lines and lines[0].startswith(">"):
-                        fasta_header = lines[0][1:].strip()  # Remove '>'
-                        fasta_sequence = "".join(line.strip() for line in lines[1:])
-            except Exception as e:
-                fasta_header = f"Error retrieving input: {e!s}"
+            allowed_buckets = {
+                b
+                for b in (
+                    self.config.bucket_name,
+                    getattr(self.config, "databases_bucket_name", None),
+                )
+                if b
+            }
+            if allowed_buckets and bucket_name not in allowed_buckets:
+                fasta_header = f"Unauthorized GCS bucket: {bucket_name}"
                 fasta_sequence = None
+            else:
+                try:
+                    # Download input from GCS
+                    storage_client = self.storage_client or storage.Client(
+                        project=self.config.project_id
+                    )
+                    bucket = storage_client.bucket(bucket_name)
+                    blob = bucket.blob(blob_path)
+                    fasta_content = blob.download_as_text()
+
+                    if is_structured_input:
+                        fasta_header = f"{model_type} {input_format.upper()}"
+                        fasta_sequence = fasta_content
+                    else:
+                        # AF2 input is FASTA (possibly multi-chain)
+                        lines = fasta_content.strip().split("\n")
+                        if lines and lines[0].startswith(">"):
+                            fasta_header = lines[0][1:].strip()  # Remove '>'
+                            if sum(1 for ln in lines if ln.startswith(">")) > 1:
+                                fasta_sequence = fasta_content.strip()
+                            else:
+                                fasta_sequence = "".join(line.strip() for line in lines[1:])
+                except Exception as e:
+                    fasta_header = f"Error retrieving input: {e!s}"
+                    fasta_sequence = None
 
         # Extract job timing info
         create_time = job.create_time.isoformat() if job.create_time else None
@@ -176,13 +218,15 @@ class AF2GetJobDetailsTool(AF2Tool):
             "input": {
                 "header": fasta_header,
                 "content": fasta_sequence,
-                "length": labels.get("seq_len") or labels.get("num_tokens", "unknown"),
+                "length": labels.get("seq_len")
+                or labels.get("num_tokens")
+                or labels.get("num_residues", "unknown"),
                 "name": labels.get("seq_name") or labels.get("query_name", "unknown"),
                 "path": input_path,
-                "format": "json" if is_of3 else "fasta",
+                "format": input_format,
             },
             "parameters": {
-                "model_type": labels.get("model_type", "alphafold2"),
+                "model_type": model_type,
                 "gpu_type": labels.get("gpu_type", "unknown"),
                 "max_template_date": params.get("max_template_date", "unknown"),
                 "use_small_bfd": params.get("use_small_bfd", True),
@@ -193,6 +237,7 @@ class AF2GetJobDetailsTool(AF2Tool):
                 ),
                 "num_model_seeds": params.get("num_model_seeds"),
                 "num_diffusion_samples": params.get("num_diffusion_samples"),
+                "num_designs": params.get("num_designs"),
                 "strategy": strategy,
                 "enable_flex_start": enable_flex_start,
                 "max_wait_duration": params.get("max_wait_duration", "unknown"),
@@ -207,10 +252,10 @@ class AF2GetJobDetailsTool(AF2Tool):
                 "input_available": fasta_sequence is not None,
                 "suggested_params": {
                     "input": fasta_sequence
-                    if is_of3
+                    if (is_structured_input or (fasta_sequence and fasta_sequence.startswith(">")))
                     else (f">{fasta_header}\n{fasta_sequence}" if fasta_sequence else None),
                     "job_name": f"{job.display_name}_retry",
-                    "model_type": labels.get("model_type", "alphafold2"),
+                    "model_type": model_type,
                     "gpu_type": labels.get("gpu_type", "").upper().replace("-", "_")
                     if labels.get("gpu_type")
                     else None,

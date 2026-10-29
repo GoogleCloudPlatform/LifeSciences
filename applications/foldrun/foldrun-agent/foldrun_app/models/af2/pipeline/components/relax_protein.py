@@ -57,7 +57,7 @@ def relax(
             max_iterations=max_iterations,
             tolerance=tolerance,
             stiffness=stiffness,
-            exclude_residues=exclude_residues,
+            exclude_residues=exclude_residues or [],
             max_outer_iterations=max_outer_iterations,
             use_gpu=use_gpu,
         )

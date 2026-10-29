@@ -51,6 +51,7 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
         num_model_seeds: int = 5,
         num_diffusion_samples: int = 5,
         base_seed: int = 42,
+        extra_cli_args: list = [],
     ):
         """Boltz2 Inference Pipeline.
 
@@ -140,6 +141,7 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
                 seed_value=seed_config.seed_value,  # type: ignore
                 num_diffusion_samples=num_diffusion_samples,
                 nfs_cache_path=nfs_cache_path,
+                extra_cli_args=extra_cli_args,
             ).set_retry(
                 num_retries=2,
                 backoff_duration="60s",
