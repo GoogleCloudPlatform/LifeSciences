@@ -124,3 +124,57 @@ def open_af3_structure_viewer(
             "open_browser": open_browser,
         }
     )
+
+
+def open_boltzgen_structure_viewer(
+    job_id: str,
+    open_browser: bool = True,
+) -> dict:
+    """Open the FoldRun structure viewer for BoltzGen generative binder designs.
+
+    Args:
+        job_id: BoltzGen pipeline job ID.
+        open_browser: Automatically open in browser (default: True).
+    """
+    return get_tool("boltzgen_open_viewer").run(
+        {
+            "job_id": job_id,
+            "open_browser": open_browser,
+        }
+    )
+
+
+def open_rfd4_proteina_structure_viewer(
+    job_id: str,
+    open_browser: bool = True,
+) -> dict:
+    """Open the FoldRun structure viewer for RFD4-Proteina designs.
+
+    Args:
+        job_id: RFD4-Proteina pipeline job ID.
+        open_browser: Automatically open in browser (default: True).
+    """
+    return get_tool("rfd4_proteina_open_viewer").run(
+        {
+            "job_id": job_id,
+            "open_browser": open_browser,
+        }
+    )
+
+
+def open_bindcraft_structure_viewer(
+    job_id: str,
+    open_browser: bool = True,
+) -> dict:
+    """Open the FoldRun structure viewer for BindCraft designs.
+
+    Args:
+        job_id: BindCraft pipeline job ID.
+        open_browser: Automatically open in browser (default: True).
+    """
+    return get_tool("bindcraft_open_viewer").run(
+        {
+            "job_id": job_id,
+            "open_browser": open_browser,
+        }
+    )

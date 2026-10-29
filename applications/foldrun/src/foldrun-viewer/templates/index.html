@@ -100,6 +100,7 @@
         .quality-high      { background: #d3f0fb; color: #0077A8; }
         .quality-low       { background: #fef7d0; color: #8a6d00; }
         .quality-very-low  { background: #fde8e0; color: #b83200; }
+        .quality-uncomputed { background: #f1f3f4; color: #5f6368; }
         .quality-loading   { color: #aaa; font-size: 0.72rem; }
 
         .load-more-btn {
@@ -182,6 +183,9 @@
         .badge-openfold3   { background: #e6f4ea; color: #1e8e3e; }
         .badge-boltz2      { background: #f3e8fd; color: #7627bb; }
         .badge-alphafold3  { background: #fef7e0; color: #b06000; }
+        .badge-boltzgen    { background: #fef7e0; color: #b06000; }
+        .badge-rfd4_proteina { background: #e8f0fe; color: #185abc; }
+        .badge-bindcraft   { background: #fce8e6; color: #c5221f; }
 
         .state-chip {
             font-size: 0.72rem;
@@ -386,6 +390,9 @@
                     <option value="alphafold3">AlphaFold 3</option>
                     <option value="openfold3">OpenFold3</option>
                     <option value="boltz2">Boltz-2</option>
+                    <option value="boltzgen">BoltzGen</option>
+                    <option value="rfd4_proteina">RFD4-Proteina</option>
+                    <option value="bindcraft">BindCraft</option>
                 </select>
                 <select id="filter-state" onchange="renderJobs()">
                     <option value="">All states</option>
@@ -467,15 +474,45 @@
         const QUALITY_META = {
             very_high_confidence: { label: 'Very High', cls: 'quality-very-high' },
             high_confidence:      { label: 'High',      cls: 'quality-high'      },
-            low_confidence:       { label: 'Low',        cls: 'quality-low'       },
+            medium_confidence:    { label: 'Medium',    cls: 'quality-low'       },
+            low_confidence:       { label: 'Low',       cls: 'quality-low'       },
             very_low_confidence:  { label: 'Very Low',  cls: 'quality-very-low'  },
+            uncomputed:           { label: 'Fast Mode / N/A', cls: 'quality-uncomputed' },
+            unknown:              { label: 'N/A',       cls: 'quality-uncomputed' },
         };
 
+        const MODEL_ALIASES = {
+            'af2': 'alphafold2',
+            'alphafold': 'alphafold2',
+            'alphafold2': 'alphafold2',
+            'af3': 'alphafold3',
+            'alphafold3': 'alphafold3',
+            'of3': 'openfold3',
+            'openfold3': 'openfold3',
+            'boltz': 'boltz2',
+            'boltz-2': 'boltz2',
+            'boltz2': 'boltz2',
+            'boltzgen': 'boltzgen',
+            'rfd4-proteina': 'rfd4_proteina',
+            'rfd4_proteina': 'rfd4_proteina',
+            'rfd4': 'rfd4_proteina',
+            'proteina': 'rfd4_proteina',
+            'bindcraft': 'bindcraft',
+        };
+
+        function normalizeModelType(raw) {
+            const key = String(raw || '').trim().toLowerCase();
+            return MODEL_ALIASES[key] || key || 'alphafold2';
+        }
+
         const MODEL_LABELS = {
-            alphafold2: 'AlphaFold2',
-            alphafold3: 'AlphaFold 3',
-            openfold3:  'OpenFold3',
-            boltz2:     'Boltz-2',
+            alphafold2:    'AlphaFold2',
+            alphafold3:    'AlphaFold 3',
+            openfold3:     'OpenFold3',
+            boltz2:        'Boltz-2',
+            boltzgen:      'BoltzGen',
+            rfd4_proteina: 'RFD4-Proteina',
+            bindcraft:     'BindCraft',
         };
 
         const STATE_META = {
@@ -513,7 +550,7 @@
             const stateFilter = document.getElementById('filter-state').value;
 
             const filtered = allJobs.filter(j =>
-                (!modelFilter || j.model_type === modelFilter) &&
+                (!modelFilter || normalizeModelType(j.model_type) === modelFilter) &&
                 (!stateFilter || j.state === stateFilter)
             );
 
@@ -527,11 +564,11 @@
             const jobsHtml = filtered.map(j => {
                 const rawState = String(j.state || '');
                 const sm = STATE_META[rawState] || { label: rawState.replace('PIPELINE_STATE_',''), cls: 'state-pending' };
-                const rawModelType = String(j.model_type || '');
-                const badge = `badge-${rawModelType}`;
-                const label = MODEL_LABELS[rawModelType] || rawModelType;
+                const normModelType = normalizeModelType(j.model_type);
+                const badge = `badge-${normModelType}`;
+                const label = MODEL_LABELS[normModelType] || normModelType;
                 const safeJobId = escapeHtml(j.job_id);
-                const safeModelType = escapeHtml(rawModelType);
+                const safeModelType = escapeHtml(normModelType);
                 const safeBadge = escapeHtml(badge);
                 const safeLabel = escapeHtml(label);
                 const safeCls = escapeHtml(sm.cls);

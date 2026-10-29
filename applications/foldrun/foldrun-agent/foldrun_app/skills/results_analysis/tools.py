@@ -275,6 +275,137 @@ def get_af3_results(job_id: str) -> dict:
     return get_tool("af3_get_results").run({"job_id": job_id})
 
 
+def analyze_boltzgen_job(
+    job_name: str,
+    analysis_tasks: int = 10,
+    force_reanalysis: bool = False,
+) -> dict:
+    """Trigger parallel analysis of completed BoltzGen generative binder designs via Cloud Run Jobs.
+
+    Args:
+        job_name: Vertex AI Pipeline job name or ID.
+        analysis_tasks: Number of parallel Cloud Run tasks (default: 10).
+        force_reanalysis: Re-run analysis even if cached summary.json exists.
+    """
+    return get_tool("boltzgen_analyze_parallel").run(
+        {
+            "job_id": job_name,
+            "job_name": job_name,
+            "analysis_tasks": analysis_tasks,
+            "overwrite": force_reanalysis,
+            "force_reanalysis": force_reanalysis,
+        }
+    )
+
+
+def get_boltzgen_results(
+    job_name: str,
+    wait_for_completion: bool = False,
+    timeout_seconds: int = 300,
+) -> dict:
+    """Retrieve comprehensive quality analysis and Gemini expert interpretation for a BoltzGen job.
+
+    Args:
+        job_name: Pipeline job name or ID.
+        wait_for_completion: Wait for analysis completion if currently in progress.
+        timeout_seconds: Maximum wait time in seconds (default: 300).
+    """
+    return get_tool("boltzgen_get_analysis_results").run(
+        {
+            "job_id": job_name,
+            "job_name": job_name,
+            "wait": wait_for_completion,
+            "wait_for_completion": wait_for_completion,
+            "timeout": timeout_seconds,
+            "timeout_seconds": timeout_seconds,
+        }
+    )
+
+
+def analyze_rfd4_proteina_job(
+    job_name: str,
+    analysis_tasks: int = 10,
+    force_reanalysis: bool = False,
+) -> dict:
+    """Trigger parallel analysis of completed RFD4-Proteina designs via Cloud Run Jobs.
+
+    Args:
+        job_name: Vertex AI Pipeline job name or ID.
+        analysis_tasks: Number of parallel Cloud Run tasks (default: 10).
+        force_reanalysis: Re-run analysis even if cached summary.json exists.
+    """
+    return get_tool("rfd4_proteina_analyze_job").run(
+        {
+            "job_name": job_name,
+            "analysis_tasks": analysis_tasks,
+            "force_reanalysis": force_reanalysis,
+        }
+    )
+
+
+def get_rfd4_proteina_results(
+    job_name: str,
+    wait_for_completion: bool = False,
+    timeout_seconds: int = 300,
+) -> dict:
+    """Retrieve comprehensive quality analysis and Gemini expert interpretation for an RFD4-Proteina job.
+
+    Args:
+        job_name: Pipeline job name or ID.
+        wait_for_completion: Wait for analysis completion if currently in progress.
+        timeout_seconds: Maximum wait time in seconds (default: 300).
+    """
+    return get_tool("rfd4_proteina_get_analysis_results").run(
+        {
+            "job_name": job_name,
+            "wait_for_completion": wait_for_completion,
+            "timeout_seconds": timeout_seconds,
+        }
+    )
+
+
+def analyze_bindcraft_job(
+    job_name: str,
+    analysis_tasks: int = 10,
+    force_reanalysis: bool = False,
+) -> dict:
+    """Trigger parallel analysis of completed BindCraft designs via Cloud Run Jobs.
+
+    Args:
+        job_name: Vertex AI Pipeline job name or ID.
+        analysis_tasks: Number of parallel Cloud Run tasks (default: 10).
+        force_reanalysis: Re-run analysis even if cached summary.json exists.
+    """
+    return get_tool("bindcraft_analyze_job").run(
+        {
+            "job_name": job_name,
+            "analysis_tasks": analysis_tasks,
+            "force_reanalysis": force_reanalysis,
+        }
+    )
+
+
+def get_bindcraft_results(
+    job_name: str,
+    wait_for_completion: bool = False,
+    timeout_seconds: int = 300,
+) -> dict:
+    """Retrieve comprehensive quality analysis and Gemini expert interpretation for a BindCraft job.
+
+    Args:
+        job_name: Pipeline job name or ID.
+        wait_for_completion: Wait for analysis completion if currently in progress.
+        timeout_seconds: Maximum wait time in seconds (default: 300).
+    """
+    return get_tool("bindcraft_get_analysis_results").run(
+        {
+            "job_name": job_name,
+            "wait_for_completion": wait_for_completion,
+            "timeout_seconds": timeout_seconds,
+        }
+    )
+
+
 def download_job_artifacts(
     job_id: str,
     include_raw: bool = False,
@@ -286,8 +417,8 @@ def download_job_artifacts(
     job's predicted structures (.cif / .pdb), diagnostic plots (.png), Gemini expert
     analysis report (.md), input sequence/query, and summary metrics, as well as
     individual signed download URLs for the top-ranked structure and plots.
-    Supports AlphaFold2, OpenFold3, Boltz-2, and AlphaFold 3 jobs without requiring
-    end-user GCS bucket permissions.
+    Supports AlphaFold2, OpenFold3, Boltz-2, AlphaFold 3, BoltzGen, RFD4-Proteina,
+    and BindCraft jobs without requiring end-user GCS bucket permissions.
 
     Args:
         job_id: Pipeline job ID or AlphaFold 3 job ID (required).

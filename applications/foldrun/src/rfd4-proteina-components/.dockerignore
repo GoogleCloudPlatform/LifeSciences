@@ -1,0 +1,30 @@
+# Git and IDE metadata
+.git
+.gitignore
+.vscode
+.idea
+
+# Local virtualenvs and Python caches
+.venv
+venv
+__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+dist
+build
+
+# Secrets and local environment files
+.env
+.env.*
+*.pem
+*.key
+service-account*.json
+credentials*.json
+
+# Non-runtime files
+README.md
+tests/

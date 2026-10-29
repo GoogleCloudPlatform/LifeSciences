@@ -1,16 +1,16 @@
 <table><tr>
 <td width="160" valign="middle"><a href="https://youtu.be/umTLrEF5L7A"><img src="img/foldrun-sticker.svg" alt="FoldRun" width="150"/></a></td>
-<td valign="middle"><strong>FoldRun</strong> is an AI-powered orchestration platform for biomolecular structure prediction on Google Cloud. It provides a conversational interface that manages the entire lifecycle — from sequence and ligand input to structural validation — using Gemini and Google Agent Runtime. Supports four structure prediction models (<strong>AlphaFold 2</strong>, <strong>AlphaFold 3</strong>, <strong>OpenFold 3</strong>, and <strong>Boltz-2</strong>) via a plugin architecture with shared infrastructure.</td>
+<td valign="middle"><strong>FoldRun</strong> is an AI-powered orchestration platform for biomolecular structure prediction and <em>de novo</em> generative binder design on Google Cloud. It provides a conversational interface that manages the entire lifecycle — from sequence, target structure, and ligand input to structural validation — using Gemini and Google Agent Runtime. Supports four structure prediction models (<strong>AlphaFold 2</strong>, <strong>AlphaFold 3</strong>, <strong>OpenFold 3</strong>, and <strong>Boltz-2</strong>) and three generative binder design models (<strong>BoltzGen</strong>, <strong>RFD4-Proteina</strong>, and <strong>BindCraft</strong>) via a plugin architecture with shared infrastructure.</td>
 </tr></table>
 
 ## Features
 
-- **Conversational AI**: Natural language interface powered by Gemini for submitting, monitoring, and analyzing predictions
-- **Multi-Model Support**: Plugin architecture for **AlphaFold 2**, **AlphaFold 3**, **OpenFold 3**, and **Boltz-2** — shared databases, unified KFP orchestration, and dedicated H100 endpoint management
+- **Conversational AI**: Natural language interface powered by Gemini for submitting, monitoring, and analyzing predictions and binder designs
+- **Multi-Model Support**: Plugin architecture for **AlphaFold 2**, **AlphaFold 3**, **OpenFold 3**, **Boltz-2**, **BoltzGen**, **RFD4-Proteina**, and **BindCraft** — shared databases, unified KFP orchestration, and dedicated H100 endpoint management
 - **4-Stage AF3 KFP Pipeline + Scale-to-Zero**: Orchestrates AlphaFold 3 predictions across 4 observable KFP stages (*Provision & Queue Endpoint $\rightarrow$ Run H100 Inference $\rightarrow$ Report Endpoint Available $\rightarrow$ Process Results & Expert Analysis*) with FIFO GCS replica slot locking; the endpoint scales to zero after 20 minutes idle (`$0.00/hr` when idle)
 - **Automated Execution & Reservation-Aware Hardware**: Provisions infrastructure, detects GCE GPU reservations, and automatically falls back across GPU tiers (`H100_80GB` $\rightarrow$ `A100_80GB` $\rightarrow$ `A100` $\rightarrow$ `L4`)
-- **Multimodal Gemini 3.1 Pro Expert Analysis**: Generates structural metrics (`pLDDT`, `PAE`, `pTM`, `ipTM`, `ranking_score`) and multimodal AI biological interpretation from 3D coordinates and plots
-- **Interactive Visualization & Signed Artifact Bundles**: Web-based 3D structure viewer (3Dmol.js) with confidence coloring, PAE/ipTM heatmaps, and 1-click V4 signed ZIP archive downloads (`artifacts_bundle.zip`)
+- **Multimodal Gemini 3.1 Pro Expert Analysis**: Generates structural metrics (`pLDDT`, `PAE`, `pTM`, `ipTM`, `ranking_score`, `sc_score`, `clash_score`) and multimodal AI biological interpretation from 3D coordinates and plots
+- **Interactive Visualization & Signed Artifact Bundles**: Web-based 3D structure viewer (3Dmol.js) with confidence coloring, PAE/ipTM heatmaps, binder ranking charts, and 1-click V4 signed ZIP archive downloads (`artifacts_bundle.zip`)
 - **Smart Database Management**: YAML-driven downloads via Cloud Batch with GCS-based gap detection — shared databases downloaded once across models
 
 ## Supported Models
@@ -21,10 +21,13 @@
 | [AlphaFold 3](https://github.com/google-deepmind/alphafold3) | Google DeepMind | All-atom proteins, multimers, RNA, DNA (dsDNA), ligands (CCD codes & SMILES), metal ions (`MG`, `ZN`, `CA`, `FE`); Full 630 GB NVMe MSA + PDB templates or fast `--msa-free` screening |
 | [OpenFold 3](https://github.com/aqlaboratory/openfold-3) | AQ Laboratory | Proteins, RNA, DNA, ligands (SMILES/CCD), full RNA MSA via `nhmmer` |
 | [Boltz-2](https://github.com/jwohlwend/boltz) | MIT / jwohlwend | Proteins, RNA, DNA, ligands, covalent modifications, glycans, binding affinity |
+| [BoltzGen](https://github.com/HannesStark/boltzgen) | MIT / boltz-community | Universal *de novo* biomolecular binder design (`protein-anything`, `peptide-anything`, `protein-small_molecule`, `nanobody-anything`, `antibody-anything`) |
+| [RFD4-Proteina](https://huggingface.co/nvidia/RFD4-Proteina) | NVIDIA | Joint sequence-structure flow-matching design (`binder_design`, `motif_scaffolding`, `unconditional_monomer`) |
+| [BindCraft (`FreeBindCraft`)](https://github.com/martinpacesa/BindCraft) | Pacesa / Correia Lab | AF2 backpropagation binder hallucination + SolubleMPNN + PyRosetta-free (`--no-pyrosetta`) OpenMM/FASPR/FreeSASA/sc-rs scoring |
 
 ## Tech Stack
 
-- **Agent**: Google ADK with up to 36 native tools across 10 Skill packages (AF2 + AF3 + OF3 + Boltz-2), deployed to Agent Runtime
+- **Agent**: Google ADK with up to 48 native tools across 10 Skill packages (AF2 + AF3 + OF3 + Boltz-2 + BoltzGen + RFD4-Proteina + BindCraft), deployed to Agent Runtime
 - **A2A**: Native Agent-to-Agent protocol integration for agent interoperability
 - **AI**: Gemini 3.8 Flash (agent orchestration) & Gemini 3.1 Pro (multimodal structural expert analysis)
 - **Compute**: Agent Platform Pipelines (KFP v2), Vertex AI Dedicated Endpoints (`a3-highgpu-1g` H100 80GB), Cloud Run, Cloud Batch
@@ -66,6 +69,7 @@ If you are using a Shared VPC (network belongs to a host project), the following
 - **AF2 large proteins (>1500 residues)**: **1x NVIDIA A100 80GB**
 - **OF3 minimum**: **1x NVIDIA A100 40GB** (no L4 support)
 - **Boltz-2**: Default **1x NVIDIA A100 40GB** (`auto`; **1x NVIDIA A100 80GB** for >2,000 tokens); explicit **1x NVIDIA L4 (`g2-standard-12`, 24 GB VRAM)** supported via `gpu_type="L4"` for smaller targets (≤1,000 tokens)
+- **Generative binder models (BoltzGen, RFD4-Proteina, BindCraft)**: **1x NVIDIA A100 40GB** default (`NVIDIA_A100_80GB` for large targets; `NVIDIA_L4` supported for RFD4-Proteina)
 - Check your quota: [GPU quota page](https://console.cloud.google.com/iam-admin/quotas?filter=gpu)
 - If you need to request quota increases, do it first — approvals can take hours
 
@@ -248,6 +252,9 @@ Available `--build-target` values:
 | `of3` | openfold3-components container + agent |
 | `af2` | alphafold-components container + agent |
 | `boltz2` | boltz2-components container + agent |
+| `boltzgen` | boltzgen-components container + agent |
+| `rfd4_proteina` | rfd4-proteina-components container + agent |
+| `bindcraft` | bindcraft-components container + agent |
 | `viewer` | foldrun-viewer Cloud Run service + agent |
 | `agent` | Agent Runtime only (no container rebuilds) |
 | `analysis` | foldrun-analysis-job Cloud Run Job only |
@@ -264,6 +271,11 @@ AF2_VERSION=abc123def ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-targ
 
 # Upgrade Boltz-2
 BOLTZ_VERSION=2.3.0 ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target boltz2
+
+# Pin BoltzGen, RFD4-Proteina, or BindCraft versions
+BOLTZGEN_VERSION=0.3.2 ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target boltzgen
+RFD4_VERSION=abc123def ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target rfd4_proteina
+FREEBINDCRAFT_VERSION=abc123def ./deploy-all.sh YOUR_PROJECT_ID --steps build --build-target bindcraft
 ```
 
 Default versions are defined in `deploy-all.sh` and match the tested, pinned values in each container's `Dockerfile`.
@@ -308,6 +320,9 @@ The engine ID is printed at the end of `deploy-all.sh` (or `./check-status.sh YO
 - "Fold the Zif268 zinc-finger domain bound to dsDNA `GCGTGGGCG` / `CGCCCACGC` in AlphaFold 3" (AF3 protein + dsDNA duplex)
 - "Predict this RNA aptamer `GGAUACCCUGAUGAGUCCGAAAGGACGAAACAGU` with AlphaFold 3 or OpenFold 3" (RNA monomer with `nhmmer` MSA)
 - "Predict a glycoprotein-ligand complex with covalent modifications" (Boltz-2)
+- "Design 10 *de novo* protein binders against PDB `4Z18` chain A hotspots `A56,A115` with BoltzGen" (`protein-anything` diffusion binder design)
+- "Generate 8 flow-matching binder backbones targeting `4Z18` chain A residues `A56,A115` with RFD4-Proteina" (`binder_design` joint sequence-structure design)
+- "Run PyRosetta-free BindCraft binder hallucination on `4Z18` chain A hotspots `56,115` for 60–90 residue binders" (`FreeBindCraft --no-pyrosetta`)
 - "What's the structure of P69905?" (checks AlphaFold DB first)
 
 ---
@@ -340,6 +355,7 @@ Unlike the standalone `gemini` CLI, **Antigravity (`agy` / `jetski`) does not na
 │   • AlphaFold 3 (4-Stage KFP + Dedicated H100 Endpoint)│
 │   • AlphaFold 2 Monomer/Multimer (Vertex AI Pipelines) │
 │   • OpenFold 3 & Boltz-2 (Vertex AI Pipelines)         │
+│   • BoltzGen, RFD4-Proteina & BindCraft (Binder Design)│
 │   • AlphaFold DB (EMBL-EBI direct lookups)             │
 └────────────────────────────────────────────────────────┘
 ```
@@ -485,8 +501,8 @@ Or check the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).
 | GCS Bucket | `{project}-foldrun-gdbs` | Genomic database backups + AF3 630 GB MSA bundle |
 | Artifact Registry | `foldrun-repo` | Container images |
 | Vertex AI Endpoint | `alphafold3-endpoint` | Managed AlphaFold 3 endpoint (`a3-highgpu-1g` H100 80GB, scales to `$0.00/hr` when idle) |
-| Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + AF3 + OF3 + Boltz-2) |
-| Cloud Run Job | `foldrun-analysis-job` | Parallel prediction analysis (AF2 + OF3 + Boltz-2) |
+| Cloud Run Service | `foldrun-viewer` | 3D structure viewer (AF2 + AF3 + OF3 + Boltz-2 + BoltzGen + RFD4-Proteina + BindCraft) |
+| Cloud Run Job | `foldrun-analysis-job` | Parallel prediction & binder design analysis |
 | Service Account | `foldrun-agent-sa` | Agent's GCP identity |
 | Agent Runtime | `FoldRun Assistant` | Deployed Gemini agent (via Cloud Build) |
 
@@ -520,6 +536,7 @@ uv run adk web foldrun_app
 | AF2 prediction (per job, A100) | ~$8 per job (MSA + 5 seeds predict + relax) |
 | OF3 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
 | Boltz-2 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
+| BoltzGen / RFD4-Proteina / BindCraft binder design (per job, A100) | ~$2–$15 per job (no CPU MSA stage; scales with design count & trajectory length) |
 | Gemini 3.1 Pro API (per expert analysis) | ~$0.01-0.05 per analysis |
 
 The dominant fixed cost is Filestore (~$770/mo). Default databases (`af2`, `of3`, `boltz`) plus in-place decompression scratch and runtime MSA caches fit comfortably within the 2.5 TB provisioned, leaving room for full BFD (~272 GB) and GPU MMseqs2 index databases (~460 GB). `BASIC_SSD` avoids write/read throughput throttling during concurrent database downloads and CPU MSA scans. Prices in this section are `us-central1` list prices from the [Filestore pricing page](https://cloud.google.com/filestore/pricing). AlphaFold 3 mounts its 630 GB MSA bundle directly onto the H100 VM's 3 TB local NVMe SSD at endpoint startup and automatically undeploys back to `$0.00/hr` after 20 minutes of inactivity. Terraform ignores Filestore capacity changes after provisioning, so you can resize via Console or gcloud without drift. To stop fixed storage costs completely, delete the Filestore instance when not in use and restore databases from the GCS backup bucket when needed.
@@ -580,6 +597,7 @@ foldrun/
 │   │   │   ├── config.py       # GCP project, NFS, GCS config
 │   │   │   ├── download_artifacts.py # V4 Signed URL artifact & ZIP bundle generator
 │   │   │   ├── hardware.py     # GPU quota & GCE reservation auto-detection + fallback
+│   │   │   ├── target_resolver.py # PDB/mmCIF/RCSB target & hotspot coordinate resolver
 │   │   │   ├── batch.py        # Cloud Batch job submission
 │   │   │   ├── download.py     # YAML-driven database downloader
 │   │   │   └── model_registry.py
@@ -602,27 +620,38 @@ foldrun/
 │   │   │   │   ├── pipeline/   # KFP: ConfigureSeeds → MSA+templates → ParallelFor[Predict]
 │   │   │   │   ├── tools/      # submit (use_templates=True default), analyze, get_results, open_viewer
 │   │   │   │   └── utils/      # Input converter (FASTA→OF3 JSON), pipeline utils
-│   │   │   └── boltz2/         # Boltz-2 plugin
-│   │   │       ├── config.py   # BOLTZ2Config (image, cache path)
-│   │   │       ├── base.py     # BOLTZ2Tool (GPU tiers: A100/A100_80GB only)
-│   │   │       ├── pipeline/   # KFP: ConfigureSeeds → MSA(protein) → ParallelFor[Predict]
-│   │   │       ├── tools/      # submit, analyze, get_results, open_viewer
-│   │   │       └── utils/      # Input converter (FASTA→Boltz-2 YAML), pipeline utils
+│   │   │   ├── boltz2/         # Boltz-2 plugin
+│   │   │   │   ├── config.py   # BOLTZ2Config (image, cache path)
+│   │   │   │   ├── base.py     # BOLTZ2Tool (GPU tiers: A100/A100_80GB only)
+│   │   │   │   ├── pipeline/   # KFP: ConfigureSeeds → MSA(protein) → ParallelFor[Predict]
+│   │   │   │   ├── tools/      # submit, analyze, get_results, open_viewer
+│   │   │   │   └── utils/      # Input converter (FASTA→Boltz-2 YAML), pipeline utils
+│   │   │   ├── boltzgen/       # BoltzGen generative binder plugin
+│   │   │   │   └── ...         # KFP: ConfigureSeeds → ParallelFor[Predict] + 4 tools
+│   │   │   ├── rfd4_proteina/  # RFD4-Proteina flow-matching design plugin
+│   │   │   │   └── ...         # KFP: ConfigureSeeds → ParallelFor[Predict] + 4 tools
+│   │   │   └── bindcraft/      # BindCraft (FreeBindCraft --no-pyrosetta) plugin
+│   │   │       └── ...         # KFP: ConfigureSeeds → ParallelFor[Predict] + 4 tools
 │   │   └── skills/             # ADK FunctionTool wrappers & SKILL.md packages
-│   │       ├── job_submission/  # submit_af2_*, submit_af3_*, submit_of3_prediction, submit_boltz2_prediction
+│   │       ├── job_submission/  # AF2, AF3, OF3, Boltz-2, BoltzGen, RFD4-Proteina, BindCraft submission
 │   │       ├── job_management/  # status, list, details, delete, GPU quota, AF3 endpoint lifecycle
-│   │       ├── results_analysis/ # AF2 + AF3 + OF3 + Boltz-2 analysis, V4 signed downloads
-│   │       ├── visualization/  # AF2 + AF3 + OF3 + Boltz-2 viewer tools
+│   │       ├── results_analysis/ # All 7 models analysis & V4 signed downloads
+│   │       ├── visualization/  # All 7 models 3D viewer tools
 │   │       └── _tool_registry.py
-│   ├── databases.yaml          # Database manifest (all models)
-│   ├── scripts/setup_data.py   # CLI for database downloads
-│   └── tests/                  # 667+ unit tests
+│   ├── databases.yaml          # Database & model weight manifest (all models)
+│   ├── scripts/setup_data.py   # CLI for database & weight downloads
+│   └── tests/                  # 837+ unit tests
+├── docs/
+│   └── generative-binder-onboarding-learnings.md # Architecture & technical learnings
 ├── src/
 │   ├── alphafold-components/    # AF2 pipeline container
 │   ├── openfold3-components/    # OF3 pipeline container
 │   ├── boltz2-components/       # Boltz-2 pipeline container
-│   ├── foldrun-viewer/          # Cloud Run web app (AF2 + AF3 + OF3 + Boltz-2 3D viewer)
-│   └── foldrun-analysis-job/    # Cloud Run Job (Unified prediction analysis)
+│   ├── boltzgen-components/     # BoltzGen pipeline container
+│   ├── rfd4-proteina-components/ # RFD4-Proteina pipeline container
+│   ├── bindcraft-components/    # BindCraft (FreeBindCraft) pipeline container
+│   ├── foldrun-viewer/          # Cloud Run web app (7-model 3D viewer)
+│   └── foldrun-analysis-job/    # Cloud Run Job (Unified prediction & binder analysis)
 ├── terraform/                   # Infrastructure as code
 ├── cloudbuild.yaml              # CI/CD pipeline
 ├── deploy-all.sh                # One-command deployment
@@ -634,12 +663,12 @@ foldrun/
 ```
                       ┌──────────────────┐
    A2A clients ──→    │  foldrun-agent   │ ← Exposes native A2A endpoints (/api/a2a/foldrun_app)
-                      │  (Agent Runtime)  │   Conversational AI (Gemini + 36 Tools across 4 Models)
+                      │  (Agent Runtime)  │   Conversational AI (Gemini + 48 Tools across 7 Models)
                       └───────┬──────────┘
                               │ Native tool calls
-        ├──→ Agent Platform Pipelines  ← AF2 + AF3 (4-stage KFP) + OF3 + Boltz-2 orchestration
+        ├──→ Agent Platform Pipelines  ← AF2 + AF3 (4-stage KFP) + OF3 + Boltz-2 + BoltzGen + RFD4-Proteina + BindCraft
         ├──→ Vertex AI H100 Endpoint   ← AlphaFold 3 (a3-highgpu-1g + 630 GB NVMe MSA + 20m auto-drain)
-        ├──→ Cloud Batch               ← Genetic database downloads
+        ├──→ Cloud Batch               ← Genetic database & model weight downloads
         ├──→ Cloud Run Jobs            ← Parallel analysis + Gemini 3.1 Pro multimodal expert analysis
         └──→ Cloud Run Service         ← Interactive 3D viewer & V4 signed ZIP bundle downloads
 ```
@@ -658,7 +687,7 @@ but don't meet enterprise requirements for drug discovery pipelines:
 | **IP protection** | No control over sequence retention | Your GCS bucket, your retention policies |
 | **Regulatory** | Not GxP-compatible | Runs in your compliant GCP org with IAM controls |
 | **GPU control** | Shared / queued | Dedicated H100/A100s with reservation detection, auto-fallback & 20m idle auto-drain |
-| **Multi-model** | AF2 only (ColabFold) or AF3 only (AF Server) | **AF2 + AF3 + OF3 + Boltz-2** via unified plugin architecture |
+| **Multi-model** | AF2 only (ColabFold) or AF3 only (AF Server) | **AF2 + AF3 + OF3 + Boltz-2 + BoltzGen + RFD4-Proteina + BindCraft** via unified plugin architecture |
 | **Customization** | Fixed parameters | Full control: GPU tier, Full-MSA vs `--msa-free`, seeds, samples |
 | **Scale** | Rate-limited (daily job quota) | Unlimited batch KFP queueing across warm H100 replicas |
 | **Integration** | Web UI only | Conversational AI agent, A2A API, CI/CD, Gemini 3.1 Pro multimodal analysis |
@@ -694,8 +723,11 @@ uv run python scripts/setup_data.py --models boltz
 # Download AF2 reduced set
 uv run python scripts/setup_data.py --models af2 --mode reduced
 
-# Download everything for all models
-uv run python scripts/setup_data.py --models af2,of3,boltz
+# Download everything for structure prediction and generative binder models
+uv run python scripts/setup_data.py --models af2,of3,boltz,boltzgen,rfd4_proteina,bindcraft
+
+# Download weights for a single generative binder model (auto-triggered on first job if missing)
+uv run python scripts/setup_data.py --model boltzgen
 
 # Re-download a specific database
 uv run python scripts/setup_data.py --db uniref90 --force
@@ -713,7 +745,7 @@ uv run python scripts/setup_data.py --list
   pdb_seqres/            # Shared (AF2, OF3) — also used for OF3 template search
   uniprot/               # Shared (AF2, OF3)
   pdb_mmcif/             # Shared (AF2, OF3) — CIF structures for OF3 template featurization
-  alphafold2/params/     # AF2 only
+  alphafold2/params/     # Shared (AF2, BindCraft)
   small_bfd/             # AF2 only
   pdb70/                 # AF2 only
   of3/params/            # OF3 only (~2GB OpenBind v0 weights: of3-ob-2025-06-30-174k.pt)
@@ -722,6 +754,9 @@ uv run python scripts/setup_data.py --list
   rfam/                  # OF3 only (RNA MSA via nhmmer)
   rnacentral/            # OF3 only (RNA MSA via nhmmer)
   boltz2/cache/          # Boltz-2 only — boltz2_conf.ckpt, boltz2_aff.ckpt, mols/ (CCD)
+  boltzgen/cache/        # BoltzGen only — boltzgen/inference-data + 5 checkpoints
+  rfd4_proteina/cache/   # RFD4-Proteina only — nvidia/RFD4-Proteina model + autoencoder weights
+  bindcraft/mpnn_weights/# BindCraft only — ProteinMPNN + SolubleMPNN weights (shares alphafold2/params/)
 ```
 
 Monitor download progress in the [Cloud Batch console](https://console.cloud.google.com/batch/jobs).

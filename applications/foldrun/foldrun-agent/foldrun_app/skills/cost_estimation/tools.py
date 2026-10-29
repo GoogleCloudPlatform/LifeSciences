@@ -77,6 +77,9 @@ def estimate_monthly_cost(
     af2_multimer_jobs: int = 0,
     of3_jobs: int = 0,
     boltz2_jobs: int = 0,
+    boltzgen_jobs: int = 0,
+    rfd4_proteina_jobs: int = 0,
+    bindcraft_jobs: int = 0,
     avg_sequence_length: int = 300,
     include_infrastructure: bool = True,
     region: str | None = None,
@@ -103,6 +106,9 @@ def estimate_monthly_cost(
         af2_multimer_jobs: Number of AF2 multimer jobs per month.
         of3_jobs: Number of OpenFold3 jobs per month.
         boltz2_jobs: Number of Boltz-2 jobs per month.
+        boltzgen_jobs: Number of BoltzGen binder design jobs per month.
+        rfd4_proteina_jobs: Number of RFD4-Proteina design jobs per month.
+        bindcraft_jobs: Number of BindCraft design jobs per month.
         avg_sequence_length: Average sequence length in residues/tokens. Larger
             proteins cost more due to longer predict and relax runtimes.
         include_infrastructure: Include always-on infrastructure costs (default True).
@@ -118,6 +124,9 @@ def estimate_monthly_cost(
         af2_multimer_jobs=af2_multimer_jobs,
         of3_jobs=of3_jobs,
         boltz2_jobs=boltz2_jobs,
+        boltzgen_jobs=boltzgen_jobs,
+        rfd4_proteina_jobs=rfd4_proteina_jobs,
+        bindcraft_jobs=bindcraft_jobs,
         avg_sequence_length=avg_sequence_length,
         include_infrastructure=include_infrastructure,
         region=region or "us-central1",

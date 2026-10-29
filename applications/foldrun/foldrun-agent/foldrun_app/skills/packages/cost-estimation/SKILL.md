@@ -10,14 +10,14 @@ metadata:
 
 # Cost Estimation
 
-- **Per-job cost**: Use estimate_job_cost to show users the expected cost before submitting a prediction
-  - Supports AF2 monomer, AF2 multimer, and OF3 job types
+- **Per-job cost**: Use estimate_job_cost to show users the expected cost before submitting a prediction or binder design job
+  - Supports `af2_monomer`, `af2_multimer`, `of3`, `boltz2`, `boltzgen`, `rfd4_proteina`, and `bindcraft` job types
   - Returns per-phase breakdown (MSA, predict, relax) with both **on-demand** and **DWS FLEX_START** (spot) pricing side by side
   - GPU auto-selection matches the submission tools (L4 for small proteins, A100 for larger)
   - **IMPORTANT**: Always present both pricing columns so users can compare. FoldRun defaults to FLEX_START.
   - **Proactive use**: When showing the pre-submission confirmation table, include cost estimate
 - **Monthly projection**: Use estimate_monthly_cost for budget planning and TCO analysis
-  - Input monthly job volumes by type (AF2 monomer, multimer, OF3)
+  - Input monthly job volumes by type (AF2 monomer, multimer, OF3, Boltz-2, BoltzGen, RFD4-Proteina, BindCraft)
   - Returns compute + infrastructure + other costs with monthly and annual totals for both pricing modes
   - Infrastructure includes: Filestore, GCS, Artifact Registry, Agent Runtime, Cloud Run, VPC/NAT
   - Use include_infrastructure=False to see compute-only costs

@@ -37,21 +37,22 @@ if os.path.exists(agent_env):
     load_dotenv(agent_env, override=False)
 
 from foldrun_app.skills import skill_registry  # noqa: E402
+from foldrun_app.skills.registry import SkillRegistry  # noqa: E402
 from foldrun_app.v1_instruction import V1_AGENT_INSTRUCTION  # noqa: E402
 
 # Monolithic v1 instructions retained for fallback / rollback path
 AGENT_INSTRUCTION = V1_AGENT_INSTRUCTION
 
 # Modular v2 coordinator instructions for native ADK skills
-FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction and macromolecular modeling assistant.
-You support AlphaFold2 (proteins), AlphaFold 3 (interactive all-atom endpoint with `--msa-free` and Full 630 GB MSA modes), OpenFold3 (complexes, RNA with nhmmer MSA, DNA, ligands), and Boltz-2 (covalent mods, glycans).
+FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction, generative binder design, and macromolecular modeling assistant.
+You support AlphaFold2 (proteins), AlphaFold 3 (interactive all-atom endpoint with `--msa-free` and Full 630 GB MSA modes), OpenFold3 (complexes, RNA with nhmmer MSA, DNA, ligands), Boltz-2 (covalent mods, glycans), BoltzGen (generative binder & nanobody design), RFD4-Proteina (backbone generation + LigandMPNN + Proteina validation), and BindCraft (AF2 backpropagation hallucination + MPNN + OpenMM relaxation).
 
 You operate via modular ADK skills (agentskills.io standard). Use progressive disclosure to perform tasks:
 1. Call `list_skills` to discover available specialized domain skills when needed.
 2. Call `load_skill` to load instructions and activate domain-specific tools for the task at hand:
-   - `job-submission`: Pre-submission confirmation table, hardware rules, and submitting AF2, AF3, OF3, or Boltz-2 jobs.
+   - `job-submission`: Pre-submission confirmation table, hardware rules, and submitting AF2, AF3, OF3, Boltz-2, BoltzGen, RFD4-Proteina, or BindCraft jobs.
    - `job-management`: Checking job status, AF3 endpoint lifecycle & replica scaling, quota inspection, task failure analysis, and safe job deletion.
-   - `results-analysis`: Confidence metric evaluation (pLDDT, PAE, ipTM, ranking scores) and Cloud Run parallel analysis.
+   - `results-analysis`: Confidence metric evaluation (pLDDT, PAE, ipTM, scRMSD, ranking scores) and Cloud Run parallel analysis.
    - `visualization`: Interactive 3D Mol* structure viewer links.
    - `cost-estimation`: Per-job and monthly GCP infrastructure pricing with DWS FLEX_START spot comparisons.
    - `database-queries`: AlphaFold DB structure and annotation lookups.
@@ -105,12 +106,9 @@ def _get_agent_config_context(gemini_model: str) -> str:
         or os.getenv("VERTEX_PROJECT_ID")
         or "Not configured"
     )
-    region = (
-        os.getenv("GCP_REGION")
-        or os.getenv("GOOGLE_CLOUD_LOCATION")
-        or os.getenv("VERTEX_LOCATION")
-        or "us-central1"
-    )
+    raw_cloud_loc = os.getenv("GOOGLE_CLOUD_LOCATION") or ""
+    cloud_loc = raw_cloud_loc if raw_cloud_loc.lower() != "global" else ""
+    region = os.getenv("GCP_REGION") or cloud_loc or os.getenv("VERTEX_LOCATION") or "us-central1"
     gcs_bucket = (
         os.getenv("GCS_BUCKET_NAME") or os.getenv("VERTEX_STAGING_BUCKET") or "Not configured"
     )
@@ -133,7 +131,7 @@ When starting a new conversation (first message from user), show the following:
 
 1. A brief welcome and capabilities overview:
 
-"Welcome to FoldRun! I can help you predict 3D structures of proteins, RNA, DNA, and small molecule complexes using four models:
+"Welcome to FoldRun! I can help you predict 3D structures of proteins, RNA, DNA, and small molecule complexes, as well as design de novo protein binders and nanobodies, using seven models:
 
 **AlphaFold2** — protein-only predictions (monomer or multimer on KFP)
 - Best for: single proteins, protein-protein complexes
@@ -157,10 +155,25 @@ When starting a new conversation (first message from user), show the following:
 - Input: FASTA (auto-converted to YAML) or native Boltz-2 YAML
 - Output: CIF structure + confidence_score/ipTM/pTM confidence scores
 
+**BoltzGen** — generative de novo protein binder, peptide, and nanobody/CDR design (KFP)
+- Best for: fast de novo protein/peptide/nanobody design against target structures, small molecules, or nucleic acids
+- Input: BoltzGen YAML specification + optional target PDB/CIF (4-char PDB code, `gs://` URI, or raw coordinates)
+- Output: Ranked CIF designs + `final_designs_metrics` CSV (ipTM, min_design_to_target_pae, pTM)
+
+**RFD4-Proteina** — RFdiffusion-style backbone generation + LigandMPNN + Proteina validation (KFP)
+- Best for: unconditional monomer design, motif scaffolding, hotspot-guided binder design with scRMSD filtering
+- Input: Target PDB/CIF (for binder/scaffolding), contigs/length, optional hotspot residues
+- Output: Ranked PDB/CIF backbones & sequences + `design_summary.json` (scRMSD, pLDDT, pAE)
+
+**BindCraft** — AF2 backpropagation hallucination + MPNN + OpenMM relaxation (KFP)
+- Best for: high-specificity protein binder design with full interface physics metrics (dG, dSASA, shape complementarity)
+- Input: Target PDB/CIF + target chain(s), binder length range, optional hotspot residues
+- Output: Accepted relaxed PDB complexes + `final_design_stats.csv` (i_pTM, i_pAE, dG, ShapeComplementarity)
+
 **Getting started — try one of these:**
 - 'Predict the structure of ubiquitin with AlphaFold 3 (--msa-free vs full MSA)'
 - 'Fold this protein with ATP' (OF3 or AF3, protein + ligand)
-- 'Predict a glycoprotein complex' (Boltz-2, glycan support)
+- 'Design 50 de novo binders against PDB 7K4N chain B' (BoltzGen, RFD4-Proteina, or BindCraft)
 - 'What's the structure of P69905?' (check AlphaFold DB first)
 
 I handle the full lifecycle: submit → monitor → analyze → visualize."
@@ -171,7 +184,7 @@ I handle the full lifecycle: submit → monitor → analyze → visualize."
 |-----------|-------|
 | Project | {project_id} |
 | Region | {region} |
-| Models | AlphaFold2, AlphaFold 3, OpenFold3, Boltz-2 |
+| Models | AlphaFold2, AlphaFold 3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, BindCraft |
 | AI Model | {gemini_model} |
 
 **When users explicitly ask about configuration:**
@@ -199,13 +212,34 @@ def _initialize_backends():
     except Exception:
         pass
 
+    try:
+        from foldrun_app.models.boltzgen.startup import get_config as get_boltzgen_config
+
+        get_boltzgen_config()
+    except Exception:
+        pass
+
+    try:
+        from foldrun_app.models.rfd4_proteina.startup import get_config as get_rfd4_config
+
+        get_rfd4_config()
+    except Exception:
+        pass
+
+    try:
+        from foldrun_app.models.bindcraft.startup import get_config as get_bindcraft_config
+
+        get_bindcraft_config()
+    except Exception:
+        pass
+
     from foldrun_app.skills._tool_registry import ensure_initialized
 
     ensure_initialized()
 
 
 def create_alphafold_agent(model: str | None = None) -> LlmAgent:
-    """Create and configure the baseline v1 FoldRun agent (AF2 + OF3 + Boltz-2) with static tools.
+    """Create and configure the baseline v1 FoldRun agent with static tools.
 
     Retained as the rollback/fallback path and for backward compatibility.
     """
@@ -215,6 +249,7 @@ def create_alphafold_agent(model: str | None = None) -> LlmAgent:
     allowed_models = [
         "gemini-3.8-flash",
         "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
         "gemini-4-argon",
         "gemini-3.1-pro-preview",
     ]
@@ -227,7 +262,7 @@ def create_alphafold_agent(model: str | None = None) -> LlmAgent:
 
     config_context = _get_agent_config_context(gemini_model)
     full_instruction = AGENT_INSTRUCTION + "\n\n" + config_context
-    tools = skill_registry.compile_tools()
+    tools = SkillRegistry().compile_tools()
 
     agent = LlmAgent(
         model=gemini_model,
@@ -252,6 +287,7 @@ def create_foldrun_agent(model: str | None = None) -> LlmAgent:
     allowed_models = [
         "gemini-3.8-flash",
         "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
         "gemini-4-argon",
         "gemini-3.1-pro-preview",
     ]
@@ -265,7 +301,7 @@ def create_foldrun_agent(model: str | None = None) -> LlmAgent:
     config_context = _get_agent_config_context(gemini_model)
     full_instruction = FOLDRUN_V2_INSTRUCTION.strip() + "\n\n" + config_context
 
-    skill_toolset = skill_registry.get_skill_toolset()
+    skill_toolset = SkillRegistry().get_skill_toolset()
 
     agent = LlmAgent(
         model=gemini_model,

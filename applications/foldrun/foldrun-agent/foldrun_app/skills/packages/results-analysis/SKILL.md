@@ -1,6 +1,6 @@
 ---
 name: results-analysis
-description: Quality assessment, confidence scoring (pLDDT, PAE, ipTM), and parallel evaluation of predicted protein structures
+description: Quality assessment, confidence scoring (pLDDT, PAE, ipTM, scRMSD), and parallel evaluation of predicted structures and generative binder designs
 metadata:
   adk_additional_tools:
     - download_job_artifacts
@@ -10,6 +10,12 @@ metadata:
     - of3_get_analysis_results
     - boltz2_analyze_job_parallel
     - boltz2_get_analysis_results
+    - analyze_boltzgen_job
+    - get_boltzgen_results
+    - analyze_rfd4_proteina_job
+    - get_rfd4_proteina_results
+    - analyze_bindcraft_job
+    - get_bindcraft_results
     - get_af3_results
 ---
 
@@ -45,6 +51,9 @@ When the last job in an active AF3 queue finishes:
 - **OF3 results**: Use of3_get_analysis_results to retrieve OF3 analysis results
 - **Boltz-2 analysis**: Use boltz2_analyze_job_parallel to analyze Boltz-2 predictions
 - **Boltz-2 results**: Use boltz2_get_analysis_results to retrieve Boltz-2 analysis results
+- **BoltzGen analysis & results**: Use `analyze_boltzgen_job` to launch Cloud Run analysis of BoltzGen binder designs and `get_boltzgen_results` to retrieve ranked designs (`iptm`, `min_design_to_target_pae`, `ptm`), plots, and Gemini expert interpretation
+- **RFD4-Proteina analysis & results**: Use `analyze_rfd4_proteina_job` to launch Cloud Run analysis of RFD4-Proteina designs and `get_rfd4_proteina_results` to retrieve `scRMSD`, `pLDDT`, `pAE`, plots, and Gemini expert interpretation
+- **BindCraft analysis & results**: Use `analyze_bindcraft_job` to launch Cloud Run analysis of BindCraft designs and `get_bindcraft_results` to retrieve accepted designs (`i_pTM`, `i_pAE`, `dG`, `dSASA`, `ShapeComplementarity`), plots, and Gemini expert interpretation
 - **Job analysis**: Use analyze_job for comprehensive analysis of any job (failed, successful, or running)
   - Use detail_level='summary' for quick overview without log fetching (default, recommended for initial checks)
   - Use detail_level='detailed' for deep troubleshooting with Cloud Logging error logs (fetches top 5 ERROR logs per failed task)

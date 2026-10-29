@@ -82,6 +82,9 @@ When inspecting an endpoint deployment via `check_af3_endpoint`, interpret the s
       * **predict** tasks: A100 40GB or A100 80GB (computationally intensive)
       * **relax** tasks: A100 40GB (matches predict tier by default)
       * **data-pipeline** tasks: CPU only (no GPU, sequence alignment)
+    - Generative binder design jobs (**BoltzGen**, **RFD4-Proteina**, **BindCraft**) use a 2-stage pipeline without a CPU MSA step:
+      * **configure-seeds** task: CPU only (seed and trajectory configuration)
+      * **predict** tasks: A100 40GB or A100 80GB (`L4` optional for RFD4-Proteina)
     - Each task has its own: machine_type, accelerator_type, accelerator_count, strategy, max_wait_duration
     - When analyzing failed jobs, check which SPECIFIC task failed and what GPU it was using
     - Example: If relax task fails with "max wait duration reached", check the GPU type — older jobs may still reference L4

@@ -1,6 +1,6 @@
 ---
 name: job-submission
-description: Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2
+description: Submission of biomolecular predictions and generative binder designs via AlphaFold2, AlphaFold3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, and BindCraft
 metadata:
   adk_additional_tools:
     - submit_af2_monomer_prediction
@@ -8,13 +8,16 @@ metadata:
     - submit_af2_batch_predictions
     - submit_of3_prediction
     - submit_boltz2_prediction
+    - submit_boltzgen_design
+    - submit_rfd4_proteina_design
+    - submit_bindcraft_design
     - submit_af3_endpoint_prediction
     - submit_af3_batch_predictions
 ---
 
 # Job Submission — Model Selection
 
-Four models are available. Choose based on the input:
+Seven models are available. Choose based on the input:
 
 | Model | Tool | Use When |
 |-------|------|----------|
@@ -25,6 +28,9 @@ Four models are available. Choose based on the input:
 | **AlphaFold3** | `submit_af3_batch_predictions` | Multiple AF3 jobs at once — submits each target as an async KFP `PipelineJob` (`alphafold3-inference-pipeline-...`) queued across the warm H100 replica(s) |
 | **OpenFold3** | `submit_of3_prediction` | Protein + RNA, DNA, or ligands; preferred for RNA (has full RNA MSA via nhmmer) |
 | **Boltz-2** | `submit_boltz2_prediction` | Covalent modifications, glycans, or when user explicitly requests it; can do RNA/DNA/ligands but **no RNA MSA** |
+| **BoltzGen** | `submit_boltzgen_design` | Generative de novo protein binder, peptide, or nanobody/antibody CDR design against protein, nucleic acid, or small-molecule targets |
+| **RFD4-Proteina** | `submit_rfd4_proteina_design` | RFdiffusion-style backbone generation (`binder_design`, `motif_scaffolding`, `unconditional_monomer`) + LigandMPNN + optional Proteina scRMSD validation |
+| **BindCraft** | `submit_bindcraft_design` | High-specificity protein binder design via AF2 backpropagation hallucination + SolubleMPNN + OpenMM relaxation with full interface physics metrics |
 
 **Decision rule**:
 - Protein-only → AlphaFold2 (monomer or multimer) or AlphaFold 3 (if requested or comparing)
@@ -32,7 +38,8 @@ Four models are available. Choose based on the input:
 - Multiple AF3 jobs (2+ targets) → **AlphaFold 3 Batch** (`submit_af3_batch_predictions` — always prefer batch over calling `submit_af3_endpoint_prediction` in a loop)
 - Contains RNA, DNA, or ligands with OpenFold3 pipeline → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy)
 - Contains covalent modifications or glycans → **Boltz-2** (only model that supports these)
-- User explicitly requests Boltz-2 or AlphaFold 3 → use requested model
+- Generative de novo binder / peptide / nanobody design → **BoltzGen** (`submit_boltzgen_design`, all-atom targets & CDR protocols), **RFD4-Proteina** (`submit_rfd4_proteina_design`, fast backbone diffusion + LigandMPNN + scRMSD), or **BindCraft** (`submit_bindcraft_design`, AF2 hallucination + OpenMM interface physics)
+- User explicitly requests Boltz-2, AlphaFold 3, BoltzGen, RFD4-Proteina, or BindCraft → use requested model
 - RNA + covalent mod/glycan → Boltz-2 (no choice), but note RNA accuracy may be lower without MSA
 
 Boltz-2 natively uses YAML input. `submit_boltz2_prediction` will automatically convert FASTA to Boltz-2 YAML.
@@ -43,7 +50,7 @@ When a user submits their FIRST prediction in a session, include this note in th
 Do NOT repeat this notice on subsequent submissions in the same session.
 
 **CRITICAL: Pre-Submission Confirmation Required for Vertex AI Pipelines**
-NEVER submit a Vertex AI Pipeline job (`submit_af2_*`, `submit_of3_*`, `submit_boltz2_*`) without first showing the user a detailed hardware breakdown and getting explicit confirmation.
+NEVER submit a Vertex AI Pipeline job (`submit_af2_*`, `submit_of3_*`, `submit_boltz2_*`, `submit_boltzgen_*`, `submit_rfd4_proteina_*`, `submit_bindcraft_*`) without first showing the user a detailed hardware breakdown and getting explicit confirmation.
 Before calling any pipeline submit function, ALWAYS present the following table and ask for confirmation:
 
 | Pipeline Phase | Machine Type | GPU | Count | Strategy |
@@ -400,3 +407,13 @@ Upon submitting a batch of N jobs:
 - **Best Practice Recommendation**: After a fresh infrastructure deploy, advise the user to wait until `check_af3_endpoint` shows `READY` before submitting a large 25-seed pipeline job.
 
 Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`.
+
+## Generative Binder Design (BoltzGen, RFD4-Proteina, BindCraft)
+
+All three generative binder models run as **single-phase GPU KFP `PipelineJob`s** (`num_model_seeds` parallel seed tasks + lightweight CPU aggregation/scoring) with **no separate MSA search phase and no separate AMBER relaxation phase**:
+
+- **`target_structure` Resolution**: Accepts a 4-character RCSB PDB ID (e.g., `'7K4N'`, auto-downloaded to GCS), a `gs://` URI, or raw `.pdb`/`.cif` coordinates.
+- **Hardware Auto-Selection**:
+  - **BoltzGen** (`submit_boltzgen_design`) & **BindCraft** (`submit_bindcraft_design`): `A100` (`a2-highgpu-1g`) for `<=800` total residues/tokens, `A100_80GB` (`a2-ultragpu-1g`) for `>800`. No L4 support.
+  - **RFD4-Proteina** (`submit_rfd4_proteina_design`): `A100` (`a2-highgpu-1g`) for `<=1000` residues, `A100_80GB` (`a2-ultragpu-1g`) for `>1000` (`L4` optional override for small scaffolds).
+- **Pre-Submission Confirmation**: Present target structure & chain(s), hotspot `binding_residues`, `binder_length_range` (default `'80..140'`), `num_model_seeds` × `num_designs_per_seed`, resolved GPU (`a2-highgpu-1g` / `a2-ultragpu-1g`), and `DWS FLEX_START` strategy, and wait for explicit user confirmation before calling `submit_boltzgen_design`, `submit_rfd4_proteina_design`, or `submit_bindcraft_design`.

@@ -14,6 +14,22 @@
 
 """Visualization skill - 3D structure viewer."""
 
-from .tools import open_boltz2_structure_viewer, open_of3_structure_viewer, open_structure_viewer
+from .tools import (
+    open_af3_structure_viewer,
+    open_bindcraft_structure_viewer,
+    open_boltz2_structure_viewer,
+    open_boltzgen_structure_viewer,
+    open_of3_structure_viewer,
+    open_rfd4_proteina_structure_viewer,
+    open_structure_viewer,
+)
 
-__all__ = ["open_boltz2_structure_viewer", "open_of3_structure_viewer", "open_structure_viewer"]
+__all__ = [
+    "open_af3_structure_viewer",
+    "open_bindcraft_structure_viewer",
+    "open_boltz2_structure_viewer",
+    "open_boltzgen_structure_viewer",
+    "open_of3_structure_viewer",
+    "open_rfd4_proteina_structure_viewer",
+    "open_structure_viewer",
+]

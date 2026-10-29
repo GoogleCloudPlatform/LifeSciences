@@ -856,6 +856,12 @@ def trigger_analysis():
             raw_predictions = _discover_of3_predictions(gcs_output_dir)
         elif model_type == "boltz2":
             raw_predictions = _discover_boltz2_predictions(gcs_output_dir)
+        elif model_type == "boltzgen":
+            raw_predictions = _discover_boltzgen_predictions(gcs_output_dir)
+        elif model_type in ("rfd4_proteina", "rfd4-proteina"):
+            raw_predictions = _discover_rfd4_proteina_predictions(gcs_output_dir)
+        elif model_type == "bindcraft":
+            raw_predictions = _discover_bindcraft_predictions(gcs_output_dir)
         else:
             raw_predictions = _discover_af2_predictions(gcs_output_dir)
 
@@ -896,6 +902,17 @@ def trigger_analysis():
                     "confidences_uri": p["confidences_uri"],
                     "aggregated_uri": p["aggregated_uri"],
                     "sample_name": p["sample_name"],
+                    "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
+                }
+                for i, p in enumerate(raw_predictions)
+            ]
+        elif model_type in ("boltzgen", "rfd4_proteina", "rfd4-proteina", "bindcraft"):
+            predictions_cfg = [
+                {
+                    "index": i,
+                    "sample_name": p["sample_name"],
+                    "cif_uri": p["cif_uri"],
+                    "aggregated_uri": p["aggregated_uri"],
                     "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
                 }
                 for i, p in enumerate(raw_predictions)
@@ -1433,16 +1450,21 @@ def download_file():
             "pae_plot",
             "pde_plot",
             "iptm_matrix_plot",
+            "ranking_comparison",
+            "plddt_distribution",
         ):
-            plot_uri = (selected_pred.get("plots") or {}).get(artifact_type)
+            plot_uri = (selected_pred.get("plots") or {}).get(artifact_type) or (
+                summary.get("plots") or {}
+            ).get(artifact_type)
             if not plot_uri:
                 return jsonify(
                     {"error": f"Plot '{artifact_type}' not found for rank {pred_rank}"}
                 ), 404
             filename = (
                 f"{effective_job_id}_rank_{pred_rank:02d}_{artifact_type}.png"
-                if artifact_type != "iptm_matrix_plot"
-                else f"{effective_job_id}_iptm_matrix.png"
+                if artifact_type
+                not in ("iptm_matrix_plot", "ranking_comparison", "plddt_distribution")
+                else f"{effective_job_id}_{artifact_type}.png"
             )
             return _serve_gcs_download(
                 gcs_uri=plot_uri,
@@ -1467,6 +1489,267 @@ def download_file():
 def health():
     """Health check endpoint for Cloud Run"""
     return jsonify({"status": "healthy", "service": "foldrun-viewer"}), 200
+
+
+_BINDER_MODEL_ALIASES = {
+    "boltzgen": "boltzgen",
+    "rfd4-proteina": "rfd4_proteina",
+    "rfd4_proteina": "rfd4_proteina",
+    "rfd4": "rfd4_proteina",
+    "proteina": "rfd4_proteina",
+    "bindcraft": "bindcraft",
+}
+
+
+def _discover_binder_predictions(pipeline_root: str) -> list:
+    """Scan GCS for generative binder design confidence_design_*.json files under pipeline_root."""
+    bucket_name, prefix = parse_gcs_uri(pipeline_root)
+    if not prefix.endswith("/"):
+        prefix += "/"
+    bucket = storage_client.bucket(bucket_name)
+    predictions = []
+    seen = set()
+    for blob in bucket.list_blobs(prefix=prefix):
+        name = blob.name
+        if not name.endswith(".json") or (
+            "/predictions/" not in name and "confidence_design" not in name
+        ):
+            continue
+        parts_list = name.split("/")
+        filename = parts_list[-1]
+        if "confidence_design_" in filename and name not in seen:
+            seen.add(name)
+            cif_filename = filename.replace("confidence_", "", 1).replace(
+                ".json", ".cif"
+            )
+            cif_name = "/".join([*parts_list[:-1], cif_filename])
+            sample_name = filename.replace("confidence_", "", 1).replace(".json", "")
+            predictions.append(
+                {
+                    "sample_name": sample_name,
+                    "cif_uri": f"gs://{bucket_name}/{cif_name}",
+                    "aggregated_uri": f"gs://{bucket_name}/{name}",
+                }
+            )
+    return predictions
+
+
+def _discover_bindcraft_predictions(pipeline_root: str) -> list:
+    """Discover BindCraft design outputs (confidence_design_*.json or Accepted/*.cif|*.pdb)."""
+    predictions = _discover_binder_predictions(pipeline_root)
+    if predictions:
+        return predictions
+
+    bucket_name, prefix = parse_gcs_uri(pipeline_root)
+    if not prefix.endswith("/"):
+        prefix += "/"
+    bucket = storage_client.bucket(bucket_name)
+    all_blobs = list(bucket.list_blobs(prefix=prefix))
+    stats_csv = next(
+        (
+            b.name
+            for b in all_blobs
+            if b.name.endswith("/final_design_stats.csv")
+            or b.name.endswith("final_design_stats.csv")
+        ),
+        "",
+    )
+    for blob in sorted(all_blobs, key=lambda x: x.name):
+        name = blob.name
+        if "/Accepted/" in name and (name.endswith(".cif") or name.endswith(".pdb")):
+            sample_name = name.split("/")[-1].rsplit(".", 1)[0]
+            predictions.append(
+                {
+                    "sample_name": sample_name,
+                    "cif_uri": f"gs://{bucket_name}/{name}",
+                    "aggregated_uri": (
+                        f"gs://{bucket_name}/{stats_csv}" if stats_csv else ""
+                    ),
+                }
+            )
+    return predictions
+
+
+_discover_boltzgen_predictions = _discover_binder_predictions
+_discover_rfd4_proteina_predictions = _discover_binder_predictions
+
+if "_MODEL_TYPE_ALIASES" in globals():
+    globals()["_MODEL_TYPE_ALIASES"].update(_BINDER_MODEL_ALIASES)
+    _SUPPORTED_MODEL_TYPES = frozenset(globals()["_MODEL_TYPE_ALIASES"].values())
+    _base_infer_model_type = globals()["_infer_model_type_from_display_name"]
+
+    def _infer_model_type_from_display_name(display_name: str) -> str:
+        lower = (display_name or "").lower()
+        if "boltzgen" in lower:
+            return "boltzgen"
+        if "rfd4" in lower or "proteina" in lower:
+            return "rfd4_proteina"
+        if "bindcraft" in lower:
+            return "bindcraft"
+        return _base_infer_model_type(display_name)
+else:
+    _MODEL_TYPE_ALIASES = {
+        "af2": "alphafold2",
+        "alphafold2": "alphafold2",
+        "af3": "alphafold3",
+        "alphafold3": "alphafold3",
+        "of3": "openfold3",
+        "openfold3": "openfold3",
+        "boltz": "boltz2",
+        "boltz-2": "boltz2",
+        "boltz2": "boltz2",
+        **_BINDER_MODEL_ALIASES,
+    }
+    _SUPPORTED_MODEL_TYPES = frozenset(_MODEL_TYPE_ALIASES.values())
+
+    def _normalize_model_type(raw_model_type: str | None) -> str:
+        if not raw_model_type or not isinstance(raw_model_type, str):
+            return ""
+        cleaned = raw_model_type.strip().lower()
+        return _MODEL_TYPE_ALIASES.get(cleaned, cleaned)
+
+    def _infer_model_type_from_display_name(display_name: str) -> str:
+        lower = (display_name or "").lower()
+        if "af3" in lower or "alphafold3" in lower or "alphafold-3" in lower:
+            return "alphafold3"
+        if "of3" in lower or "openfold3" in lower or "openfold" in lower:
+            return "openfold3"
+        if "boltzgen" in lower:
+            return "boltzgen"
+        if "boltz" in lower:
+            return "boltz2"
+        if "rfd4" in lower or "proteina" in lower:
+            return "rfd4_proteina"
+        if "bindcraft" in lower:
+            return "bindcraft"
+        return "alphafold2"
+
+    _orig_trigger_analysis = trigger_analysis
+
+    def _trigger_analysis_compat():
+        data = request.get_json(silent=True) or {}
+        raw_mt = data.get("model_type")
+        norm_mt = _normalize_model_type(raw_mt) if raw_mt else ""
+        if norm_mt in ("boltzgen", "rfd4_proteina", "bindcraft") or raw_mt is None:
+            job_id = data.get("job_id")
+            if not job_id or not JOB_ID_PATTERN.fullmatch(str(job_id)):
+                return _orig_trigger_analysis()
+            try:
+                safe_job_id = urllib.parse.quote(str(job_id), safe="")
+                authed = _get_authed_session()
+                pj_url = (
+                    f"https://{REGION}-aiplatform.googleapis.com/v1"
+                    f"/projects/{PROJECT_ID}/locations/{REGION}/pipelineJobs/{safe_job_id}"
+                )
+                pj_resp = authed.get(pj_url, timeout=15)
+                pj_resp.raise_for_status()
+                pj = pj_resp.json()
+                gcs_output_dir = (
+                    pj.get("runtimeConfig", {})
+                    .get("gcsOutputDirectory", "")
+                    .rstrip("/")
+                    + "/"
+                )
+                if not gcs_output_dir or gcs_output_dir == "/":
+                    return jsonify(
+                        {"error": "Could not determine gcs_output_directory for job"}
+                    ), 400
+                resolved_mt = norm_mt or _normalize_model_type(
+                    pj.get("labels", {}).get("model_type")
+                    or _infer_model_type_from_display_name(pj.get("displayName", ""))
+                    or "alphafold2"
+                )
+                if resolved_mt not in ("boltzgen", "rfd4_proteina", "bindcraft"):
+                    return _orig_trigger_analysis()
+                analysis_path = f"{gcs_output_dir}analysis/"
+                if resolved_mt == "boltzgen":
+                    raw_predictions = _discover_boltzgen_predictions(gcs_output_dir)
+                elif resolved_mt == "rfd4_proteina":
+                    raw_predictions = _discover_rfd4_proteina_predictions(
+                        gcs_output_dir
+                    )
+                else:
+                    raw_predictions = _discover_bindcraft_predictions(gcs_output_dir)
+                if not raw_predictions:
+                    return jsonify(
+                        {"error": "No prediction outputs found for this job"}
+                    ), 404
+                predictions_cfg = [
+                    {
+                        "index": i,
+                        "sample_name": p["sample_name"],
+                        "cif_uri": p["cif_uri"],
+                        "aggregated_uri": p["aggregated_uri"],
+                        "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
+                    }
+                    for i, p in enumerate(raw_predictions)
+                ]
+                task_config_uri = f"{analysis_path}task_config.json"
+                task_config = {
+                    "model_type": resolved_mt,
+                    "job_id": job_id,
+                    "analysis_path": analysis_path,
+                    "task_config_uri": task_config_uri,
+                    "predictions": predictions_cfg,
+                }
+                tc_bucket_name, tc_blob_path = parse_gcs_uri(task_config_uri)
+                storage_client.bucket(tc_bucket_name).blob(
+                    tc_blob_path
+                ).upload_from_string(
+                    json.dumps(task_config, indent=2), content_type="application/json"
+                )
+                cr_job_name = os.environ.get(
+                    "ANALYSIS_JOB_NAME", "foldrun-analysis-job"
+                )
+                task_count = max(1, min(len(raw_predictions), 25))
+                cr_job_path = (
+                    f"projects/{PROJECT_ID}/locations/{REGION}/jobs/{cr_job_name}"
+                )
+                cr_url = f"https://{REGION}-run.googleapis.com/v2/{cr_job_path}:run"
+                cr_body = {
+                    "overrides": {
+                        "taskCount": task_count,
+                        "timeout": "600s",
+                        "containerOverrides": [
+                            {
+                                "env": [
+                                    {"name": "JOB_ID", "value": str(job_id)},
+                                    {
+                                        "name": "TASK_CONFIG_URI",
+                                        "value": task_config_uri,
+                                    },
+                                    {"name": "ANALYSIS_PATH", "value": analysis_path},
+                                    {"name": "MODEL_TYPE", "value": resolved_mt},
+                                    {"name": "GCS_BUCKET", "value": tc_bucket_name},
+                                    {
+                                        "name": "GOOGLE_CLOUD_PROJECT",
+                                        "value": PROJECT_ID,
+                                    },
+                                    {"name": "PIPELINE_JOB_LOCATION", "value": REGION},
+                                ]
+                            }
+                        ],
+                    }
+                }
+                cr_resp = authed.post(cr_url, json=cr_body, timeout=30)
+                cr_resp.raise_for_status()
+                return jsonify(
+                    {
+                        "status": "started",
+                        "job_id": job_id,
+                        "model_type": resolved_mt,
+                        "total_predictions": len(raw_predictions),
+                        "task_count": task_count,
+                        "analysis_path": analysis_path,
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Error triggering analysis for {job_id}: {e}")
+                return jsonify({"error": str(e)}), 500
+        return _orig_trigger_analysis()
+
+    trigger_analysis = _trigger_analysis_compat
+    app.view_functions["trigger_analysis"] = _trigger_analysis_compat
 
 
 if __name__ == "__main__":
