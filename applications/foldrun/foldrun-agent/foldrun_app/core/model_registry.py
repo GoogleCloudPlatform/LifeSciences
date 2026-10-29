@@ -29,6 +29,9 @@ _BUILTIN_MODEL_PACKAGES: tuple[str, ...] = (
     "foldrun_app.models.of3",
     "foldrun_app.models.boltz2",
     "foldrun_app.models.af3",
+    "foldrun_app.models.boltzgen",
+    "foldrun_app.models.rfd4_proteina",
+    "foldrun_app.models.bindcraft",
 )
 
 

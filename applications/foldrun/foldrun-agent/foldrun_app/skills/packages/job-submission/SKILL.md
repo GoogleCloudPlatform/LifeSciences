@@ -1,6 +1,6 @@
 ---
 name: job-submission
-description: Submits protein, RNA, DNA, ligand, and multimer structure prediction jobs using AlphaFold2, AlphaFold3, OpenFold3, or Boltz-2. Use when the user provides a FASTA sequence, JSON/YAML query, SMILES/CCD ligand, or asks to fold, predict, or batch-submit biomolecular structures.
+description: Submits protein, RNA, DNA, ligand, multimer structure prediction, and generative binder design jobs using AlphaFold2, AlphaFold3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, or BindCraft. Use when the user provides a FASTA sequence, JSON/YAML query, SMILES/CCD ligand, target PDB/CIF, or asks to fold, predict, design binders, or batch-submit biomolecular structures.
 metadata:
   adk_additional_tools:
     - submit_af2_monomer_prediction
@@ -8,6 +8,9 @@ metadata:
     - submit_af2_batch_predictions
     - submit_of3_prediction
     - submit_boltz2_prediction
+    - submit_boltzgen_design
+    - submit_rfd4_proteina_design
+    - submit_bindcraft_design
     - submit_af3_endpoint_prediction
     - submit_af3_batch_predictions
 ---
@@ -25,11 +28,15 @@ metadata:
 | **AlphaFold3** | `submit_af3_batch_predictions` | 2+ AF3 targets queued across warm H100 replica(s) (always prefer over calling `submit_af3_endpoint_prediction` in a loop) |
 | **OpenFold3** | `submit_of3_prediction` | Multi-molecule complexes (protein + RNA, DNA, or ligands); **preferred for RNA** (runs nhmmer RNA MSA against Rfam + RNAcentral) |
 | **Boltz-2** | `submit_boltz2_prediction` | Covalent modifications, glycans, **binding affinity prediction** (`IC50` / binder probability), or when explicitly requested (no external RNA MSA) |
+| **BoltzGen** | `submit_boltzgen_design` | Generative de novo protein binder, peptide, or nanobody/CDR design against protein, nucleic acid, or small-molecule targets |
+| **RFD4-Proteina** | `submit_rfd4_proteina_design` | RFdiffusion-style backbone generation (`binder_design`, `motif_scaffolding`, `unconditional_monomer`) + LigandMPNN + Proteina `scRMSD` validation |
+| **BindCraft** | `submit_bindcraft_design` | High-specificity protein binder design via AF2 backpropagation hallucination + SolubleMPNN + OpenMM relaxation with full interface physics metrics |
 
 **Decision rules**:
 - Protein-only → **AlphaFold2** (monomer/multimer) or **AlphaFold 3** (if requested or comparing).
 - Contains RNA, DNA, or ligands → **OpenFold3** (preferred for RNA accuracy) or **AlphaFold 3** (if H100 endpoint is enabled/requested).
-- Contains covalent modifications, glycans, or requires ligand binding affinity (`properties: [{affinity: ...}]`) → **Boltz-2**.
+- Contains covalent modifications, glycans, or requires ligand binding affinity (`properties: [affinity]`) → **Boltz-2**.
+- Generative de novo binder / peptide / nanobody design → **BoltzGen** (`submit_boltzgen_design`), **RFD4-Proteina** (`submit_rfd4_proteina_design`), or **BindCraft** (`submit_bindcraft_design`).
 - Multiple jobs (2+ targets) → Use `submit_af2_batch_predictions` (AF2) or `submit_af3_batch_predictions` (AF3).
 
 ## Default Hardware, Provisioning & Input Summary
@@ -40,12 +47,15 @@ metadata:
 | **OpenFold3** | `c2-standard-16` CPU (`jackhmmer` + `nhmmer` RNA MSA + PDB templates) | `<=2200` tokens: `A100` 40 GB (`a2-highgpu-1g`); `>2200` tokens: `A100_80GB` 80 GB (`a2-ultragpu-1g`) | None | `1 × 5 = 5` (or `5 × 5 = 25` AF3 protocol) | `DWS FLEX_START` |
 | **Boltz-2** | `c2-standard-16` CPU (`jackhmmer` protein MSA) | `<=2000` tokens: `A100` 40 GB (`a2-highgpu-1g`); `>2000` tokens: `A100_80GB` 80 GB (or `L4` for `<=1000` tokens) | None | `1 × 5 = 5` (or `5 × 5 = 25`) | `DWS FLEX_START` |
 | **AlphaFold 3** | H100 local NVMe SSD (`msa_free=False` Full 630 GB MSA default, or `msa_free=True`) | `H100` 80 GB (`a3-highgpu-1g` Dedicated Endpoint) | None | Monomer/`msa_free`: `1 × 5 = 5`; Full-MSA complex: `5 × 5 = 25` | `DWS FLEX_START` |
+| **BoltzGen / BindCraft** | `e2-standard-4` CPU (`configure-seeds`, no MSA step) | `<=800` tokens/residues: `A100` 40 GB (`a2-highgpu-1g`); `>800`: `A100_80GB` 80 GB (`a2-ultragpu-1g`) | None (OpenMM in-loop for BindCraft) | `num_model_seeds × num_designs_per_seed` | `DWS FLEX_START` |
+| **RFD4-Proteina** | `e2-standard-4` CPU (`configure-seeds`, no MSA step) | `<=1000` residues: `A100` 40 GB (`a2-highgpu-1g`) or `L4`; `>1000`: `A100_80GB` 80 GB (`a2-ultragpu-1g`) | None | `num_model_seeds × num_designs_per_seed` | `DWS FLEX_START` |
 
 - **Boltz-2 Binding Affinity (`submit_boltz2_prediction`)**: Use Boltz-2 YAML (`version: 1`) with `sequences:` (`protein` chain `A`, `ligand` chain `B` via `ccd: ATP` or `smiles: '...'`) and `properties: [{affinity: {binder: B}}]`. Outputs `affinity_pred_value` (`log10(IC50 uM)`) and `affinity_probability_binary` (`0–1` active binder probability).
+- **Generative Binder Design (`submit_boltzgen_design`, `submit_rfd4_proteina_design`, `submit_bindcraft_design`)**: Accepts a 4-character RCSB PDB ID (e.g., `'7K4N'`), `gs://` URI, or raw `.pdb`/`.cif` coordinates for `target_structure`, plus `target_chains`, optional hotspot `binding_residues`, and `binder_length_range` (default `'80..140'`).
 
 ## Pre-Submission Confirmation Required (Plan → Validate → Confirm → Submit)
 
-**CRITICAL GUARDRAIL**: NEVER call `submit_af2_*`, `submit_of3_*`, `submit_boltz2_*`, or `submit_af3_*` without first presenting the hardware breakdown table and receiving explicit user approval (e.g., `"yes"`, `"submit"`, `"go ahead"`).
+**CRITICAL GUARDRAIL**: NEVER call `submit_af2_*`, `submit_of3_*`, `submit_boltz2_*`, `submit_boltzgen_*`, `submit_rfd4_proteina_*`, `submit_bindcraft_*`, or `submit_af3_*` without first presenting the hardware breakdown table and receiving explicit user approval (e.g., `"yes"`, `"submit"`, `"go ahead"`).
 
 **FAST CONFIRMATION RULE**: Use the **Default Hardware, Provisioning & Input Summary** table above to render the pre-submission confirmation table immediately—do **NOT** call `load_skill_resource` on Turn 1 just to build a standard confirmation table. Only call `load_skill_resource` when the user asks for advanced schema syntax (covalent modifications, glycans, dsDNA reverse complements, H100 runtime benchmarks) or when constructing complex multi-chain JSON/YAML payloads after confirmation:
 - **AlphaFold2**: `references/af2-submission.md`
@@ -58,9 +68,9 @@ Always show the **resolved** GPU (not `'auto'`), MSA method, scheduling strategy
 
 | Pipeline Phase | Machine Type | GPU | Count | Strategy |
 |----------------|-------------|-----|-------|----------|
-| Data / MSA Pipeline | c2-standard-16 | None (CPU, Jackhmmer) | - | DWS FLEX_START / STANDARD |
+| Data / MSA Pipeline | c2-standard-16 (or e2-standard-4 configure-seeds) | None (CPU) | - | DWS FLEX_START / STANDARD |
 | Predict | a2-highgpu-1g (or g2-standard-12 / a3-highgpu-1g) | L4 / A100 40GB / A100 80GB / H100 80GB | 1 | DWS FLEX_START |
-| Relax (AF2 only; None for OF3/Boltz-2/AF3) | a2-highgpu-1g (or g2-standard-12) | L4 / A100 40GB | 1 | DWS FLEX_START |
+| Relax (AF2 only; None for OF3/Boltz-2/AF3/Generative) | a2-highgpu-1g (or g2-standard-12) | L4 / A100 40GB | 1 | DWS FLEX_START |
 
 ### Data Handling Notice (First Submission Only)
 On the user's **first** prediction submission in a session, include this notice in the confirmation prompt (do not repeat on subsequent submissions):

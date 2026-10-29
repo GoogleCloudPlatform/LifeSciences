@@ -14,8 +14,9 @@
 
 """FoldRun Agent - Main agent logic.
 
-Multi-model protein structure prediction agent supporting AlphaFold2,
-AlphaFold 3, OpenFold3, and Boltz-2. Deployed to Agent Runtime or run locally via ADK.
+Multi-model protein structure prediction and generative binder design agent supporting
+AlphaFold2, AlphaFold 3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, and BindCraft.
+Deployed to Agent Runtime or run locally via ADK.
 """
 
 import logging
@@ -32,11 +33,14 @@ from foldrun_common import ALLOWED_GEMINI_AGENT_MODELS, DEFAULT_GEMINI_AGENT_MOD
 logger = logging.getLogger(__name__)
 
 # Modular v2 coordinator instructions for native ADK skills (used with SkillDiscoveryMode.EAGER)
-FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction and macromolecular modeling assistant supporting four models:
+FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction, generative binder design, and macromolecular modeling assistant supporting seven models:
 - **AlphaFold2** (`submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_af2_batch_predictions`): Specialized for protein-only monomers and multimers (check AlphaFold DB first by UniProt ID before running GPU jobs).
 - **AlphaFold 3** (`submit_af3_endpoint_prediction`, `submit_af3_batch_predictions`): Dedicated H100 80 GB all-atom endpoint supporting Full 630 GB MSA + PDB templates (`msa_free=False`, default) and fast zero-MSA mode (`msa_free=True`) for proteins, RNA, DNA, ligands, and ions.
 - **OpenFold3** (`submit_of3_prediction`): Multi-molecule complexes (proteins, RNA, DNA, CCD/SMILES ligands); **preferred for RNA** because its MSA pipeline runs automated `nhmmer` RNA alignment against Rfam + RNAcentral.
 - **Boltz-2** (`submit_boltz2_prediction`): Biomolecular complexes, covalent modifications, glycans, and **ligand binding affinity prediction** (`properties: [{affinity: {binder: <chain_id>}}]`), outputting `affinity_pred_value` (`log10(IC50 uM)`, more negative = stronger binding) and `affinity_probability_binary` (`0–1` active binder probability).
+- **BoltzGen** (`submit_boltzgen_design`): Generative de novo protein binder, peptide, and nanobody/CDR design against protein, nucleic acid, or small-molecule targets.
+- **RFD4-Proteina** (`submit_rfd4_proteina_design`): RFdiffusion-style backbone generation (`binder_design`, `motif_scaffolding`, `unconditional_monomer`) + LigandMPNN + Proteina `scRMSD` validation.
+- **BindCraft** (`submit_bindcraft_design`): AF2 backpropagation hallucination + SolubleMPNN + OpenMM relaxation with full interface physics metrics (`i_pTM`, `i_pAE`, `dG`, `dSASA`, `ShapeComplementarity`).
 
 ## Confidence Metrics & Post-Job Analysis Summary
 - **pLDDT (`0–100`)**: Per-residue/atom local confidence (`>90` very high / reliable sidechains; `70–90` confident backbone; `50–70` flexible loops; `<50` intrinsically disordered regions).
@@ -124,12 +128,9 @@ def _get_agent_config_context(gemini_model: str) -> str:
         or os.getenv("VERTEX_PROJECT_ID")
         or "Not configured"
     )
-    region = (
-        os.getenv("GCP_REGION")
-        or os.getenv("GOOGLE_CLOUD_LOCATION")
-        or os.getenv("VERTEX_LOCATION")
-        or "us-central1"
-    )
+    raw_cloud_loc = os.getenv("GOOGLE_CLOUD_LOCATION") or ""
+    cloud_loc = raw_cloud_loc if raw_cloud_loc.lower() != "global" else ""
+    region = os.getenv("GCP_REGION") or cloud_loc or os.getenv("VERTEX_LOCATION") or "us-central1"
     gcs_bucket = (
         os.getenv("GCS_BUCKET_NAME") or os.getenv("VERTEX_STAGING_BUCKET") or "Not configured"
     )
@@ -140,7 +141,7 @@ def _get_agent_config_context(gemini_model: str) -> str:
 - Analysis Viewer: {viewer_base_url} | AI Model: {gemini_model}
 
 **Initial Greeting (First User Message Only)**:
-Welcome the user to FoldRun, summarize the four supported models—**AlphaFold2** (protein-only monomers/multimers), **AlphaFold 3** (all-atom H100 endpoint with `--msa-free` and Full 630 GB MSA), **OpenFold3** (multi-molecule complexes, ligands, and RNA with nhmmer MSA), and **Boltz-2** (covalent modifications, glycans, and ligand binding affinity)—show a compact environment table (`Project`, `Region`, `Models`, `AI Model`), and offer Getting started example prompts (e.g., *"Predict the structure of ubiquitin with AlphaFold 3"*, *"Fold this protein with ATP ligand"*, *"What's the structure of P69905?"*). When asked about configuration, include the GCS bucket and viewer URL.
+Welcome the user to FoldRun, summarize the seven supported models—**AlphaFold2** (protein-only monomers/multimers), **AlphaFold 3** (all-atom H100 endpoint with `--msa-free` and Full 630 GB MSA), **OpenFold3** (multi-molecule complexes, ligands, and RNA with nhmmer MSA), **Boltz-2** (covalent modifications, glycans, and ligand binding affinity), **BoltzGen** (generative de novo protein/peptide/nanobody design), **RFD4-Proteina** (backbone diffusion + LigandMPNN + scRMSD validation), and **BindCraft** (AF2 hallucination + OpenMM interface physics)—show a compact environment table (`Project`, `Region`, `Models`, `AI Model`), and offer Getting started example prompts (e.g., *"Predict the structure of ubiquitin with AlphaFold 3"*, *"Fold this protein with ATP ligand"*, *"Design 50 de novo binders against PDB 7K4N chain B"*, *"What's the structure of P69905?"*). When asked about configuration, include the GCS bucket and viewer URL.
 """
 
 
@@ -149,6 +150,7 @@ def _initialize_backends():
     from foldrun_app.skills._tool_registry import ensure_initialized
 
     ensure_initialized()
+    skill_registry._register_defaults()
 
 
 def _resolve_validated_gemini_model(model: str | None) -> str:

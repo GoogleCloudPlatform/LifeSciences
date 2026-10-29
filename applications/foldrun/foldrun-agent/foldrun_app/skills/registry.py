@@ -48,8 +48,11 @@ from foldrun_app.skills.job_submission.tools import (
     submit_af2_multimer_prediction,
     submit_af3_batch_predictions,
     submit_af3_endpoint_prediction,
+    submit_bindcraft_design,
     submit_boltz2_prediction,
+    submit_boltzgen_design,
     submit_of3_prediction,
+    submit_rfd4_proteina_design,
 )
 from foldrun_app.skills.results_analysis.tools import (
     analyze_job,
@@ -67,7 +70,7 @@ from foldrun_app.skills.visualization.tools import (
     open_structure_viewer,
 )
 
-CORE_HEADER = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2.
+CORE_HEADER = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, AlphaFold3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, and BindCraft.
 
 Your role is to help researchers and scientists with:
 1. Submitting protein structure predictions (monomers and multimers)
@@ -143,13 +146,20 @@ class SkillRegistry:
         """Register the baseline FoldRun domain skills with environment-conditional tools."""
         of3_model = get_model("of3")
         boltz2_model = get_model("boltz2")
+        boltzgen_model = get_model("boltzgen")
+        rfd4_model = get_model("rfd4_proteina")
+        bindcraft_model = get_model("bindcraft")
         af3_model = get_model("af3")
         has_of3 = bool(of3_model and of3_model.is_enabled())
         has_boltz2 = bool(boltz2_model and boltz2_model.is_enabled())
+        has_boltzgen = bool(boltzgen_model and boltzgen_model.is_enabled())
+        has_rfd4 = bool(rfd4_model and rfd4_model.is_enabled())
+        has_bindcraft = bool(bindcraft_model and bindcraft_model.is_enabled())
         has_af3 = bool(af3_model and af3_model.is_enabled())
 
         # Load instruction bodies and descriptions strictly from packages/*/SKILL.md (single source of truth)
-        self._adk_skills = {s.name.replace("-", "_"): s for s in self.load_adk_skills()}
+        if not self._adk_skills:
+            self._adk_skills = {s.name.replace("-", "_"): s for s in self.load_adk_skills()}
 
         def _get_skill_meta(name: str) -> tuple[str, str]:
             skill_obj = self._adk_skills.get(name)
@@ -185,6 +195,12 @@ class SkillRegistry:
             submission_tools.append(submit_of3_prediction)
         if has_boltz2:
             submission_tools.append(submit_boltz2_prediction)
+        if has_boltzgen:
+            submission_tools.append(submit_boltzgen_design)
+        if has_rfd4:
+            submission_tools.append(submit_rfd4_proteina_design)
+        if has_bindcraft:
+            submission_tools.append(submit_bindcraft_design)
         if has_af3:
             submission_tools.extend([submit_af3_endpoint_prediction, submit_af3_batch_predictions])
 
