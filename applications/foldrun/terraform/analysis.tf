@@ -30,6 +30,12 @@ resource "google_storage_bucket_iam_member" "foldrun_analysis_bucket_access" {
   member = "serviceAccount:${google_service_account.foldrun_analysis.email}"
 }
 
+resource "google_storage_bucket_iam_member" "foldrun_analysis_bucket_metadata" {
+  bucket = google_storage_bucket.foldrun_bucket.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.foldrun_analysis.email}"
+}
+
 resource "google_project_iam_member" "foldrun_analysis_aiplatform_user" {
   project = var.project_id
   role    = "roles/aiplatform.user"

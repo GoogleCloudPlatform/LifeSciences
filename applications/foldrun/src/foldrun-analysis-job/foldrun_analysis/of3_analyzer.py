@@ -29,6 +29,7 @@ from google.genai import types
 matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
 
 from .shared_utils import (
+    _sanitize_data,
     build_and_upload_run_archive,
     calculate_per_chain_plddt,
     calculate_plddt_stats,
@@ -66,6 +67,17 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
             f"{best.get('gpde', 0):.4f}" if best.get("gpde") is not None else "N/A"
         )
 
+        rs_str = (
+            f"{best['ranking_score']:.4f}"
+            if best.get("ranking_score") is not None
+            else "N/A"
+        )
+        ptm_str = f"{best['ptm']:.4f}" if best.get("ptm") is not None else "N/A"
+        iptm_str = f"{best['iptm']:.4f}" if best.get("iptm") is not None else "N/A"
+        plddt_str = (
+            f"{best['plddt_mean']:.2f}" if best.get("plddt_mean") is not None else "N/A"
+        )
+
         prompt = f"""You are an expert structural biologist reviewing OpenFold3 prediction results.
 
 **OpenFold3 Reference (use to interpret results):**
@@ -93,10 +105,10 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
 **Chain Composition:**
 {chain_desc}
 **Quality Metrics (Best Sample):**
-- Ranking Score: {best["ranking_score"]:.4f}
-- pTM: {best["ptm"]:.4f}
-- ipTM: {best["iptm"]:.4f}
-- Mean pLDDT: {best["plddt_mean"]:.2f}
+- Ranking Score: {rs_str}
+- pTM: {ptm_str}
+- ipTM: {iptm_str}
+- Mean pLDDT: {plddt_str}
 - GPDE: {gpde_str}
 - Has Clash: {"Yes" if best.get("has_clash") else "No"}
 - Disorder: {"Yes" if best.get("disorder") else "No"}
@@ -105,12 +117,14 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
         if best.get("chain_ptm"):
             prompt += "\n**Per-Chain pTM:**\n"
             for chain, score in best["chain_ptm"].items():
-                prompt += f"- Chain {chain}: {score:.4f}\n"
+                score_s = f"{score:.4f}" if score is not None else "N/A"
+                prompt += f"- Chain {chain}: {score_s}\n"
 
         if best.get("chain_pair_iptm"):
             prompt += "\n**Chain-Pair ipTM (interface quality):**\n"
             for pair, score in best["chain_pair_iptm"].items():
-                prompt += f"- {pair}: {score:.4f}\n"
+                score_s = f"{score:.4f}" if score is not None else "N/A"
+                prompt += f"- {pair}: {score_s}\n"
 
         if best.get("per_chain_plddt"):
             prompt += "\n**Per-Chain pLDDT (protein vs ligand breakdown):**\n"
@@ -118,10 +132,15 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
                 mol_type = stats.get("molecule_type", "unknown")
                 comps = ", ".join(stats.get("comp_ids", [])[:3])
                 comp_str = f" ({comps})" if mol_type == "ligand" else ""
+                mean_s = (
+                    f"{stats['mean']:.1f}" if stats.get("mean") is not None else "N/A"
+                )
+                min_s = f"{stats['min']:.1f}" if stats.get("min") is not None else "N/A"
+                max_s = f"{stats['max']:.1f}" if stats.get("max") is not None else "N/A"
                 prompt += (
                     f"- Chain {cid} ({mol_type}{comp_str}): "
-                    f"mean pLDDT={stats['mean']:.1f}, "
-                    f"range=[{stats['min']:.1f}, {stats['max']:.1f}], "
+                    f"mean pLDDT={mean_s}, "
+                    f"range=[{min_s}, {max_s}], "
                     f"{stats['atom_count']} atoms\n"
                 )
 
@@ -137,15 +156,29 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
 
         all_preds = summary_data.get("all_predictions_summary", [])
         if len(all_preds) > 1:
-            all_scores = [p["ranking_score"] for p in all_preds]
-            prompt += f"\n**Sample Diversity (all {len(all_preds)} samples):**\n"
-            prompt += f"- Ranking score range: {min(all_scores):.4f} - {max(all_scores):.4f} (spread: {max(all_scores) - min(all_scores):.4f})\n"
-            prompt += f"- Mean ranking score: {sum(all_scores) / len(all_scores):.4f}\n"
+            all_scores = [
+                p["ranking_score"]
+                for p in all_preds
+                if p.get("ranking_score") is not None
+            ]
+            if all_scores:
+                prompt += f"\n**Sample Diversity (all {len(all_preds)} samples):**\n"
+                prompt += f"- Ranking score range: {min(all_scores):.4f} - {max(all_scores):.4f} (spread: {max(all_scores) - min(all_scores):.4f})\n"
+                prompt += (
+                    f"- Mean ranking score: {sum(all_scores) / len(all_scores):.4f}\n"
+                )
 
         prompt += "\n**Top 3 Samples Comparison:**\n"
         for i, pred in enumerate(top_preds, 1):
             clash_str = " [CLASH]" if pred.get("has_clash") else ""
-            prompt += f"{i}. {pred['sample_name']}: ranking_score {pred['ranking_score']:.4f}, pTM {pred['ptm']:.4f}, ipTM {pred['iptm']:.4f}{clash_str}\n"
+            p_rs = (
+                f"{pred['ranking_score']:.4f}"
+                if pred.get("ranking_score") is not None
+                else "N/A"
+            )
+            p_ptm = f"{pred['ptm']:.4f}" if pred.get("ptm") is not None else "N/A"
+            p_iptm = f"{pred['iptm']:.4f}" if pred.get("iptm") is not None else "N/A"
+            prompt += f"{i}. {pred['sample_name']}: ranking_score {p_rs}, pTM {p_ptm}, ipTM {p_iptm}{clash_str}\n"
 
         if summary["protein_info"].get("fasta_sequence"):
             fasta_seq = summary["protein_info"]["fasta_sequence"]
@@ -275,14 +308,24 @@ def consolidate_results(
 
     job_metadata = get_job_metadata(job_id)
 
-    all_analyses.sort(key=lambda x: x.get("ranking_score", 0), reverse=True)
+    all_analyses.sort(
+        key=lambda x: (
+            x.get("ranking_score") is not None,
+            x["ranking_score"] if x.get("ranking_score") is not None else -1e9,
+        ),
+        reverse=True,
+    )
 
     for i, analysis in enumerate(all_analyses):
         analysis["rank"] = i + 1
 
     best = all_analyses[0]
-    ranking_scores = [a["ranking_score"] for a in all_analyses]
-    plddt_means = [a["plddt_mean"] for a in all_analyses]
+    ranking_scores = [
+        a["ranking_score"] for a in all_analyses if a.get("ranking_score") is not None
+    ]
+    plddt_means = [
+        a["plddt_mean"] for a in all_analyses if a.get("plddt_mean") is not None
+    ]
 
     fasta_sequence = None
     fasta_header = None
@@ -362,16 +405,20 @@ def consolidate_results(
             "total_predictions": len(all_analyses),
             "analyzed_successfully": len(all_analyses),
             "ranking_score_stats": {
-                "mean": sum(ranking_scores) / len(ranking_scores),
-                "min": min(ranking_scores),
-                "max": max(ranking_scores),
-                "range": max(ranking_scores) - min(ranking_scores),
+                "mean": sum(ranking_scores) / len(ranking_scores)
+                if ranking_scores
+                else None,
+                "min": min(ranking_scores) if ranking_scores else None,
+                "max": max(ranking_scores) if ranking_scores else None,
+                "range": max(ranking_scores) - min(ranking_scores)
+                if ranking_scores
+                else None,
             },
             "plddt_stats": {
-                "mean": sum(plddt_means) / len(plddt_means),
-                "min": min(plddt_means),
-                "max": max(plddt_means),
-                "range": max(plddt_means) - min(plddt_means),
+                "mean": sum(plddt_means) / len(plddt_means) if plddt_means else None,
+                "min": min(plddt_means) if plddt_means else None,
+                "max": max(plddt_means) if plddt_means else None,
+                "range": max(plddt_means) - min(plddt_means) if plddt_means else None,
             },
         },
     }
@@ -418,9 +465,10 @@ def consolidate_results(
 
     summary_uri = f"{analysis_path}summary.json"
     local_summary = "/tmp/summary.json"
+    summary_data = _sanitize_data(summary_data)
 
     with open(local_summary, "w") as f:
-        json.dump(summary_data, f, indent=2)
+        json.dump(summary_data, f, indent=2, allow_nan=False)
 
     upload_to_gcs(local_summary, summary_uri)
     os.remove(local_summary)
@@ -437,157 +485,161 @@ def run_task(
 ):
     """Execute OpenFold3 predictions analysis task."""
     predictions = task_config.get("predictions", [])
-    if task_index >= len(predictions):
+    total_predictions = len(predictions)
+    if task_index >= total_predictions:
         logger.error(f"Task index {task_index} out of range")
         sys.exit(1)
 
-    pred = predictions[task_index]
     job_id = task_config.get("job_id")
-
-    sample_name = pred["sample_name"]
-    cif_uri = pred["cif_uri"]
-    confidences_uri = pred["confidences_uri"]
-    aggregated_uri = pred["aggregated_uri"]
-    output_uri = pred["output_uri"]
-
-    logger.info(f"Starting OF3 analysis for sample: {sample_name}")
+    stride = max(1, task_count)
+    assigned_indices = list(range(task_index, total_predictions, stride))
 
     try:
-        aggregated = download_json_from_gcs(aggregated_uri)
-        confidences = download_json_from_gcs(confidences_uri)
-        chain_info = []
-        try:
-            cif_text = download_text_from_gcs(cif_uri)
-            chain_info, _ = parse_cif_chains(cif_text, extract_plddt=False)
-        except Exception as e:
-            logger.warning(f"Could not parse CIF: {e}")
+        for pred_idx in assigned_indices:
+            pred = predictions[pred_idx]
+            sample_name = pred["sample_name"]
+            cif_uri = pred["cif_uri"]
+            confidences_uri = pred["confidences_uri"]
+            aggregated_uri = pred["aggregated_uri"]
+            output_uri = pred["output_uri"]
 
-        ptm = aggregated.get("ptm", 0.0)
-        iptm = aggregated.get("iptm", 0.0)
-        sample_ranking_score = aggregated.get(
-            "sample_ranking_score", aggregated.get("ranking_score", 0.0)
-        )
+            logger.info(
+                f"Starting OF3 analysis for sample: {sample_name} (index {pred_idx})"
+            )
 
-        _is_monomer = len(chain_info) <= 1
-        if _is_monomer:
-            ranking_score = ptm if ptm > 0.0 else sample_ranking_score
-        else:
-            ranking_score = sample_ranking_score
+            aggregated = download_json_from_gcs(aggregated_uri)
+            confidences = download_json_from_gcs(confidences_uri)
+            chain_info = []
+            try:
+                cif_text = download_text_from_gcs(cif_uri)
+                chain_info, _ = parse_cif_chains(cif_text, extract_plddt=False)
+            except Exception as e:
+                logger.warning(f"Could not parse CIF: {e}")
 
-        avg_plddt = aggregated.get("avg_plddt", 0.0)
-        gpde = aggregated.get("gpde", None)
-        has_clash = aggregated.get("has_clash", 0)
-        disorder = aggregated.get("disorder", 0)
-        chain_ptm = aggregated.get("chain_ptm", {})
-        chain_pair_iptm = aggregated.get("chain_pair_iptm", {})
+            ptm = aggregated.get("ptm")
+            iptm = aggregated.get("iptm")
+            sample_ranking_score = (
+                aggregated.get("sample_ranking_score")
+                if aggregated.get("sample_ranking_score") is not None
+                else aggregated.get("ranking_score")
+            )
 
-        plddt_scores = confidences.get("plddt", [])
-        pde_matrix = confidences.get("pde", None)
+            _is_monomer = len(chain_info) <= 1
+            if _is_monomer:
+                ranking_score = (
+                    ptm if (ptm is not None and ptm > 0.0) else sample_ranking_score
+                )
+            else:
+                ranking_score = sample_ranking_score
 
-        if plddt_scores:
+            avg_plddt = aggregated.get("avg_plddt")
+            gpde = aggregated.get("gpde", None)
+            has_clash = aggregated.get("has_clash", 0)
+            disorder = aggregated.get("disorder", 0)
+            chain_ptm = aggregated.get("chain_ptm", {})
+            chain_pair_iptm = aggregated.get("chain_pair_iptm", {})
+
+            plddt_scores = confidences.get("plddt", [])
+            pde_matrix = confidences.get("pde", None)
+
             plddt_stats = calculate_plddt_stats(plddt_scores)
-        else:
-            plddt_stats = {
-                "mean": avg_plddt,
-                "median": avg_plddt,
-                "min": 0.0,
-                "max": 100.0,
-                "std": 0.0,
-                "per_residue": [],
-                "distribution": {},
+            if plddt_stats["mean"] is None and avg_plddt is not None:
+                plddt_stats["mean"] = avg_plddt
+                plddt_stats["median"] = avg_plddt
+
+            per_chain_plddt = {}
+            if plddt_scores and chain_info:
+                per_chain_plddt = calculate_per_chain_plddt(plddt_scores, chain_info)
+
+            quality = get_quality_assessment(plddt_stats["mean"])
+
+            # Generate plots
+            plot_files = {}
+            output_base = output_uri.rsplit("/", 1)[0]
+
+            if plddt_scores:
+                plddt_plot_path = f"/tmp/plddt_plot_{pred_idx}.png"
+                plot_plddt_distribution(
+                    plddt_scores, sample_name, plddt_plot_path, chain_info
+                )
+                plddt_plot_uri = f"{output_base}/plddt_plot_{pred_idx}.png"
+                upload_to_gcs(plddt_plot_path, plddt_plot_uri)
+                plot_files["plddt_plot"] = plddt_plot_uri
+                os.remove(plddt_plot_path)
+
+            if pde_matrix:
+                pde_plot_path = f"/tmp/pde_plot_{pred_idx}.png"
+                plot_error_matrix(
+                    pde_matrix,
+                    sample_name,
+                    "Predicted Distance Error (Å)",
+                    pde_plot_path,
+                    chain_info,
+                )
+                pde_plot_uri = f"{output_base}/pde_plot_{pred_idx}.png"
+                upload_to_gcs(pde_plot_path, pde_plot_uri)
+                plot_files["pde_plot"] = pde_plot_uri
+                os.remove(pde_plot_path)
+
+            if chain_pair_iptm and len(chain_info) > 1:
+                iptm_plot_path = f"/tmp/iptm_matrix_{pred_idx}.png"
+                plot_iptm_matrix(
+                    chain_pair_iptm,
+                    sample_name,
+                    iptm_plot_path,
+                    chain_ptm,
+                    chain_info,
+                )
+                if os.path.exists(iptm_plot_path):
+                    iptm_plot_uri = f"{output_base}/iptm_matrix_{pred_idx}.png"
+                    upload_to_gcs(iptm_plot_path, iptm_plot_uri)
+                    plot_files["iptm_matrix_plot"] = iptm_plot_uri
+                    os.remove(iptm_plot_path)
+
+            analysis = {
+                "prediction_index": pred_idx,
+                "sample_name": sample_name,
+                "rank": pred_idx + 1,
+                "ranking_score": ranking_score,
+                "ptm": ptm,
+                "iptm": iptm,
+                "avg_plddt": avg_plddt,
+                "gpde": gpde,
+                "has_clash": has_clash,
+                "disorder": disorder,
+                "chain_ptm": chain_ptm,
+                "chain_pair_iptm": chain_pair_iptm,
+                "per_chain_plddt": per_chain_plddt,
+                "chain_info": chain_info,
+                "plddt_mean": plddt_stats["mean"],
+                "plddt_median": plddt_stats["median"],
+                "plddt_min": plddt_stats["min"],
+                "plddt_max": plddt_stats["max"],
+                "plddt_std": plddt_stats["std"],
+                "plddt_distribution": plddt_stats["distribution"],
+                "plddt_scores": plddt_stats["per_residue"],
+                "quality_assessment": quality,
+                "has_pde": pde_matrix is not None,
+                "cif_uri": cif_uri,
+                "aggregated_uri": aggregated_uri,
+                "confidences_uri": confidences_uri,
+                "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
+                "plots": plot_files,
             }
 
-        per_chain_plddt = {}
-        if plddt_scores and chain_info:
-            per_chain_plddt = calculate_per_chain_plddt(plddt_scores, chain_info)
+            local_json = f"/tmp/analysis_{pred_idx}.json"
+            analysis = _sanitize_data(analysis)
+            with open(local_json, "w") as f:
+                json.dump(analysis, f, indent=2, allow_nan=False)
 
-        quality = get_quality_assessment(plddt_stats["mean"])
-
-        # Generate plots
-        plot_files = {}
-        output_base = output_uri.rsplit("/", 1)[0]
-
-        if plddt_scores:
-            plddt_plot_path = f"/tmp/plddt_plot_{task_index}.png"
-            plot_plddt_distribution(
-                plddt_scores, sample_name, plddt_plot_path, chain_info
-            )
-            plddt_plot_uri = f"{output_base}/plddt_plot_{task_index}.png"
-            upload_to_gcs(plddt_plot_path, plddt_plot_uri)
-            plot_files["plddt_plot"] = plddt_plot_uri
-            os.remove(plddt_plot_path)
-
-        if pde_matrix:
-            pde_plot_path = f"/tmp/pde_plot_{task_index}.png"
-            plot_error_matrix(
-                pde_matrix,
-                sample_name,
-                "Predicted Distance Error (Å)",
-                pde_plot_path,
-                chain_info,
-            )
-            pde_plot_uri = f"{output_base}/pde_plot_{task_index}.png"
-            upload_to_gcs(pde_plot_path, pde_plot_uri)
-            plot_files["pde_plot"] = pde_plot_uri
-            os.remove(pde_plot_path)
-
-        if chain_pair_iptm and len(chain_info) > 1:
-            iptm_plot_path = f"/tmp/iptm_matrix_{task_index}.png"
-            plot_iptm_matrix(
-                chain_pair_iptm,
-                sample_name,
-                iptm_plot_path,
-                chain_ptm,
-                chain_info,
-            )
-            if os.path.exists(iptm_plot_path):
-                iptm_plot_uri = f"{output_base}/iptm_matrix_{task_index}.png"
-                upload_to_gcs(iptm_plot_path, iptm_plot_uri)
-                plot_files["iptm_matrix_plot"] = iptm_plot_uri
-                os.remove(iptm_plot_path)
-
-        analysis = {
-            "prediction_index": task_index,
-            "sample_name": sample_name,
-            "rank": task_index + 1,
-            "ranking_score": ranking_score,
-            "ptm": ptm,
-            "iptm": iptm,
-            "avg_plddt": avg_plddt,
-            "gpde": gpde,
-            "has_clash": has_clash,
-            "disorder": disorder,
-            "chain_ptm": chain_ptm,
-            "chain_pair_iptm": chain_pair_iptm,
-            "per_chain_plddt": per_chain_plddt,
-            "chain_info": chain_info,
-            "plddt_mean": plddt_stats["mean"],
-            "plddt_median": plddt_stats["median"],
-            "plddt_min": plddt_stats["min"],
-            "plddt_max": plddt_stats["max"],
-            "plddt_std": plddt_stats["std"],
-            "plddt_distribution": plddt_stats["distribution"],
-            "plddt_scores": plddt_stats["per_residue"],
-            "quality_assessment": quality,
-            "has_pde": pde_matrix is not None,
-            "cif_uri": cif_uri,
-            "aggregated_uri": aggregated_uri,
-            "confidences_uri": confidences_uri,
-            "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
-            "plots": plot_files,
-        }
-
-        local_json = f"/tmp/analysis_{task_index}.json"
-        with open(local_json, "w") as f:
-            json.dump(analysis, f, indent=2)
-
-        upload_to_gcs(local_json, output_uri)
-        os.remove(local_json)
+            upload_to_gcs(local_json, output_uri)
+            os.remove(local_json)
 
         # Consolidation check
-        if task_index == task_count - 1:
-            wait_for_sibling_tasks(bucket_name, analysis_path, task_count)
-            consolidate_results(job_id, analysis_path, bucket_name, task_count)
+        consolidator_task_index = min(stride, total_predictions) - 1
+        if task_index == consolidator_task_index:
+            wait_for_sibling_tasks(bucket_name, analysis_path, total_predictions)
+            consolidate_results(job_id, analysis_path, bucket_name, total_predictions)
 
     except Exception as e:
         logger.error(f"Error running OF3 analysis task: {e}", exc_info=True)

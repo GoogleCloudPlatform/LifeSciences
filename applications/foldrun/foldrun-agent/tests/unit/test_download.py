@@ -434,7 +434,7 @@ class TestDownloadSecurity:
             expected_quoted = shlex.quote(normalized_gcs)
             assert expected_quoted in script
 
-            # Check the rsync command line specifically
+            # Check the gcloud storage cp command line specifically
             rsync_lines = [
                 line for line in script.splitlines() if line.startswith("gcloud storage rsync")
             ]
@@ -707,6 +707,57 @@ class TestDownloadSecurity:
             text=True,
         )
         assert override_val == "/mnt/scratch/uniref90/"
+
+    def test_submit_download_sanitizes_model_underscores_in_batch_job_id(self):
+        """Cloud Batch job_id replaces underscores in model and db_name with hyphens."""
+        import re
+        from unittest.mock import patch
+
+        from foldrun_app.core.download import submit_download
+
+        db_config = {
+            "models": ["custom_model_v2"],
+            "display_name": "Custom Params",
+            "nfs_path": "custom/params",
+            "source": "https://example.com/params.tar",
+        }
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "ok",
+                "job_name": "ok",
+                "console_url": "http://test",
+            }
+            submit_download(
+                db_name="custom_params_db",
+                db_config=db_config,
+                project_id="proj",
+                region="us-central1",
+                zone="us-central1-a",
+                filestore_ip="10.0.0.1",
+                filestore_network="default",
+                nfs_share="share",
+                nfs_mount="/mnt/nfs/foldrun",
+                gcs_bucket="my-bucket",
+            )
+            job_id = mock_submit.call_args[1]["job_id"]
+            assert "_" not in job_id
+            assert job_id.startswith("custom-model-v2-dl-custom-params-db-")
+            assert re.fullmatch(r"^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$", job_id)
+
+    def test_load_manifest_falls_back_to_bundled_path(self, tmp_path, monkeypatch):
+        """load_manifest falls back to BUNDLED_DATABASES_YAML when DATABASES_YAML is absent."""
+        import foldrun_app.core.download as dl_mod
+
+        missing_parent = tmp_path / "missing_parent" / "databases.yaml"
+        bundled_yaml = tmp_path / "bundled" / "databases.yaml"
+        bundled_yaml.parent.mkdir(parents=True)
+        bundled_yaml.write_text("databases:\n  test_db:\n    nfs_path: test\nmodes: {}\n")
+
+        monkeypatch.setattr(dl_mod, "DATABASES_YAML", missing_parent)
+        monkeypatch.setattr(dl_mod, "BUNDLED_DATABASES_YAML", bundled_yaml)
+
+        loaded = dl_mod.load_manifest()
+        assert "test_db" in loaded["databases"]
 
 
 # ------------------------------------------------------------------ #

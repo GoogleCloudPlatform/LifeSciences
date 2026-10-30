@@ -416,11 +416,18 @@ class AF3SubmitPredictionTool(AF3Tool):
                 or input_data.startswith("../")
                 or os.path.exists(input_data)
             ):
-                allowed_dirs = [
-                    Path(os.environ.get("FOLDRUN_WORKSPACE_DIR", os.getcwd())).resolve(),
+                workspace_dir = Path(os.environ.get("FOLDRUN_WORKSPACE_DIR", os.getcwd())).resolve()
+                allowed_dirs = [workspace_dir]
+                for tmp_candidate in (
+                    Path(tempfile.gettempdir()).resolve(),
                     Path("/tmp").resolve(),
                     Path("/private/tmp").resolve(),
-                ]
+                ):
+                    if (
+                        workspace_dir != tmp_candidate
+                        and tmp_candidate not in workspace_dir.parents
+                    ):
+                        allowed_dirs.append(tmp_candidate)
                 target_path = Path(input_data).resolve()
                 is_allowed = any(
                     target_path == allowed_dir or allowed_dir in target_path.parents

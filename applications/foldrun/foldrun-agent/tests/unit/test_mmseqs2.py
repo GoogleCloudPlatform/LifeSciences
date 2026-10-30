@@ -977,9 +977,18 @@ class TestPipelineLoadingMMseqs2:
 
     def test_load_pipeline_passes_msa_method(self, mock_env_vars):
         """load_vertex_pipeline passes msa_method to pipeline factory."""
-        pip_mod = self._get_pipeline_module()
+        import importlib
 
-        with patch.object(pip_mod, "create_alphafold_inference_pipeline") as mock_create:
+        pip_mod = self._get_pipeline_module()
+        orig_reload = importlib.reload
+
+        with (
+            patch.object(pip_mod, "create_alphafold_inference_pipeline") as mock_create,
+            patch(
+                "foldrun_app.core.pipeline_utils.importlib.reload",
+                side_effect=lambda mod: mod if mod is pip_mod else orig_reload(mod),
+            ),
+        ):
             mock_create.return_value = MagicMock()
 
             from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
@@ -990,9 +999,18 @@ class TestPipelineLoadingMMseqs2:
 
     def test_load_pipeline_default_jackhmmer(self, mock_env_vars):
         """load_vertex_pipeline defaults to jackhmmer."""
-        pip_mod = self._get_pipeline_module()
+        import importlib
 
-        with patch.object(pip_mod, "create_alphafold_inference_pipeline") as mock_create:
+        pip_mod = self._get_pipeline_module()
+        orig_reload = importlib.reload
+
+        with (
+            patch.object(pip_mod, "create_alphafold_inference_pipeline") as mock_create,
+            patch(
+                "foldrun_app.core.pipeline_utils.importlib.reload",
+                side_effect=lambda mod: mod if mod is pip_mod else orig_reload(mod),
+            ),
+        ):
             mock_create.return_value = MagicMock()
 
             from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
@@ -1003,9 +1021,18 @@ class TestPipelineLoadingMMseqs2:
 
     def test_load_pipeline_flex_start_with_mmseqs2(self, mock_env_vars):
         """load_vertex_pipeline combines FLEX_START with mmseqs2."""
-        pip_mod = self._get_pipeline_module()
+        import importlib
 
-        with patch.object(pip_mod, "create_alphafold_inference_pipeline") as mock_create:
+        pip_mod = self._get_pipeline_module()
+        orig_reload = importlib.reload
+
+        with (
+            patch.object(pip_mod, "create_alphafold_inference_pipeline") as mock_create,
+            patch(
+                "foldrun_app.core.pipeline_utils.importlib.reload",
+                side_effect=lambda mod: mod if mod is pip_mod else orig_reload(mod),
+            ),
+        ):
             mock_create.return_value = MagicMock()
 
             from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline

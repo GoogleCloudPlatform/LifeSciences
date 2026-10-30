@@ -55,6 +55,24 @@ resource "google_storage_bucket_iam_member" "pipelines_foldrun_bucket" {
   member = "serviceAccount:${google_service_account.pipelines.email}"
 }
 
+resource "google_storage_bucket_iam_member" "pipelines_foldrun_bucket_metadata" {
+  bucket = google_storage_bucket.foldrun_bucket.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.pipelines.email}"
+}
+
+resource "google_storage_bucket_iam_member" "pipelines_databases_bucket" {
+  bucket = google_storage_bucket.databases_bucket.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.pipelines.email}"
+}
+
+resource "google_storage_bucket_iam_member" "pipelines_databases_bucket_metadata" {
+  bucket = google_storage_bucket.databases_bucket.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.pipelines.email}"
+}
+
 # Allow the AI Platform service agents used by Dedicated Endpoints (such as AlphaFold 3)
 # to write multi-sample prediction artifacts directly to output_dir in the FoldRun data bucket.
 resource "google_storage_bucket_iam_member" "aiplatform_service_agents_foldrun_bucket" {

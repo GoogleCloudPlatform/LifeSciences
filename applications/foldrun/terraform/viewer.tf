@@ -33,11 +33,17 @@ resource "google_storage_bucket_iam_member" "foldrun_viewer_bucket_access" {
   member = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
-# Allow the viewer to write task_config.json and analysis_metadata.json to GCS
+resource "google_storage_bucket_iam_member" "foldrun_viewer_bucket_metadata" {
+  bucket = google_storage_bucket.foldrun_bucket.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.foldrun_viewer.email}"
+}
+
+# Allow the viewer to write and overwrite task_config.json and analysis_metadata.json to GCS
 # when triggering analysis from the UI
 resource "google_storage_bucket_iam_member" "foldrun_viewer_bucket_write" {
   bucket = google_storage_bucket.foldrun_bucket.name
-  role   = "roles/storage.objectCreator"
+  role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.foldrun_viewer.email}"
 }
 
@@ -135,14 +141,30 @@ resource "google_cloud_run_v2_service_iam_member" "foldrun_viewer_iap_invoker" {
   depends_on = [time_sleep.service_agent_creation_sleep]
 }
 
-# Grant domain users access through IAP
+# Grant domain users access through IAP (skip empty, consumer @gmail.com, or service-account pseudo-domains)
 resource "google_iap_web_cloud_run_service_iam_member" "member" {
-  count                  = var.enable_viewer_iap ? 1 : 0
+  count = (
+    var.enable_viewer_iap
+    && var.iap_access_domain != ""
+    && var.iap_access_domain != "gmail.com"
+    && var.iap_access_domain != "googlemail.com"
+    && !endswith(var.iap_access_domain, ".gserviceaccount.com")
+  ) ? 1 : 0
   project                = google_cloud_run_v2_service.foldrun_viewer.project
   location               = google_cloud_run_v2_service.foldrun_viewer.location
   cloud_run_service_name = google_cloud_run_v2_service.foldrun_viewer.name
   role                   = "roles/iap.httpsResourceAccessor"
   member                 = "domain:${var.iap_access_domain}"
+}
+
+# Grant explicit principals access through IAP (e.g., user:alice@gmail.com)
+resource "google_iap_web_cloud_run_service_iam_member" "members" {
+  for_each               = var.enable_viewer_iap ? toset(var.iap_access_members) : toset([])
+  project                = google_cloud_run_v2_service.foldrun_viewer.project
+  location               = google_cloud_run_v2_service.foldrun_viewer.location
+  cloud_run_service_name = google_cloud_run_v2_service.foldrun_viewer.name
+  role                   = "roles/iap.httpsResourceAccessor"
+  member                 = each.value
 }
 
 # Grant the agent SA permission to invoke the viewer programmatically

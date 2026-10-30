@@ -146,12 +146,14 @@ class TestCompileEnvRaceConditionRemediation:
         orig_setup2 = tool2._setup_compile_env
 
         def _slow_setup1(*args, **kwargs):
-            orig_setup1(*args, **kwargs)
+            ctx = orig_setup1(*args, **kwargs)
             time.sleep(0.08)
+            return ctx
 
         def _slow_setup2(*args, **kwargs):
-            orig_setup2(*args, **kwargs)
+            ctx = orig_setup2(*args, **kwargs)
             time.sleep(0.08)
+            return ctx
 
         tool1._setup_compile_env = _slow_setup1
         tool2._setup_compile_env = _slow_setup2

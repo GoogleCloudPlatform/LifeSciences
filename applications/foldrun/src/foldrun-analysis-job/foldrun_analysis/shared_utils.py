@@ -14,19 +14,36 @@
 
 """Shared GCS, mathematical, and assessment utilities for FoldRun prediction analysis."""
 
+import io
 import json
 import logging
+import math
+import os
+import tempfile
 import time
+from typing import Any
 
-import matplotlib
 import numpy as np
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
+try:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except ImportError:  # pragma: no cover - optional in lightweight unit test envs
+    matplotlib = None  # type: ignore[assignment]
+    plt = None  # type: ignore[assignment]
+
+try:
+    import seaborn as sns
+except ImportError:  # pragma: no cover - optional in lightweight unit test envs
+    sns = None  # type: ignore[assignment]
+
 from google.cloud import storage
 
 logger = logging.getLogger(__name__)
+
+MAX_ZST_DECOMPRESSED_BYTES = 512 * 1024 * 1024  # 512 MB cap against zip bombs
 
 PLDDT_BANDS = [
     (0, 50, "very_low_confidence"),
@@ -36,14 +53,91 @@ PLDDT_BANDS = [
 ]
 
 
-def download_from_gcs(gcs_uri: str, local_path: str) -> None:
-    """Download file from GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
+def _sanitize_data(obj: Any) -> Any:
+    """Recursively sanitize NaN and Inf floats into None (JSON null).
 
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
+    Never fabricates placeholder confidence scores (such as 80.0 or 82.0).
+    """
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, np.floating):
+        val = float(obj)
+        if math.isnan(val) or math.isinf(val):
+            return None
+        return val
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.ndarray):
+        return _sanitize_data(obj.tolist())
+    if isinstance(obj, dict):
+        return {k: _sanitize_data(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_data(x) for x in obj]
+    return obj
+
+
+_sanitize_json_floats = _sanitize_data
+
+
+def validate_gcs_uri_in_bucket(
+    uri: str, expected_bucket: str | None = None
+) -> tuple[str, str]:
+    """Validate a GCS URI and enforce optional bucket confinement.
+
+    Rejects non-gs:// schemes, null bytes, empty bucket/object paths,
+    path traversal segments ('..'), and cross-bucket URIs when
+    expected_bucket is provided.
+
+    Returns:
+        (bucket_name, blob_path)
+    """
+    if not uri or not isinstance(uri, str) or "\x00" in uri:
+        raise ValueError(f"Invalid GCS URI: {uri!r}")
+    if not uri.startswith("gs://"):
+        raise ValueError(f"URI must start with 'gs://', got: {uri!r}")
+    remainder = uri.removeprefix("gs://")
+    bucket, _, blob_path = remainder.partition("/")
+    if not bucket or not blob_path:
+        raise ValueError(f"Malformed GCS URI (missing bucket or object): {uri!r}")
+    if blob_path.startswith("/") or ".." in blob_path.split("/"):
+        raise ValueError(f"Path traversal detected in GCS URI: {uri!r}")
+    if expected_bucket and bucket != expected_bucket:
+        raise ValueError(
+            f"Unauthorized GCS bucket '{bucket}' in URI {uri!r}; expected '{expected_bucket}'"
+        )
+    return bucket, blob_path
+
+
+def decompress_zst_bytes(
+    raw_bytes: bytes, max_bytes: int = MAX_ZST_DECOMPRESSED_BYTES
+) -> bytes:
+    """Decompress zstandard-compressed bytes with a strict size limit."""
+    import zstandard as zstd
+
+    dctx = zstd.ZstdDecompressor()
+    chunks: list[bytes] = []
+    total = 0
+    with dctx.stream_reader(io.BytesIO(raw_bytes)) as reader:
+        while True:
+            chunk = reader.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(
+                    f"Decompressed .zst payload exceeds safety limit of {max_bytes} bytes"
+                )
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def download_from_gcs(
+    gcs_uri: str, local_path: str, expected_bucket: str | None = None
+) -> None:
+    """Download file from GCS."""
+    bucket_name, blob_name = validate_gcs_uri_in_bucket(gcs_uri, expected_bucket)
 
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
@@ -55,57 +149,58 @@ def download_from_gcs(gcs_uri: str, local_path: str) -> None:
     logger.info(f"Downloaded {gcs_uri} ({size_mb:.2f} MB)")
 
 
-def upload_to_gcs(local_path: str, gcs_uri: str) -> None:
+def upload_to_gcs(
+    local_path: str,
+    gcs_uri: str,
+    content_type: str | None = None,
+    expected_bucket: str | None = None,
+) -> None:
     """Upload file to GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
+    bucket_name, blob_name = validate_gcs_uri_in_bucket(gcs_uri, expected_bucket)
 
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
-    blob.upload_from_filename(local_path)
+    if content_type:
+        blob.upload_from_filename(local_path, content_type=content_type)
+    else:
+        blob.upload_from_filename(local_path)
     logger.info(f"Uploaded {local_path} to {gcs_uri}")
 
 
-def download_json_from_gcs(gcs_uri: str) -> dict:
-    """Download and parse JSON file from GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
+def download_json_from_gcs(
+    gcs_uri: str, expected_bucket: str | None = None
+) -> dict[str, Any]:
+    """Download and parse JSON file from GCS (handling .json and .json.zst)."""
+    bucket_name, blob_name = validate_gcs_uri_in_bucket(gcs_uri, expected_bucket)
 
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
-    content = blob.download_as_text()
-    return json.loads(content)
+    if gcs_uri.endswith(".zst"):
+        raw_bytes = blob.download_as_bytes()
+        content = decompress_zst_bytes(raw_bytes).decode("utf-8")
+    else:
+        content = blob.download_as_text()
+    parsed = json.loads(content, parse_constant=lambda _: None)
+    return _sanitize_data(parsed)
 
 
-def download_text_from_gcs(gcs_uri: str) -> str:
-    """Download text file from GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-    parts = gcs_uri[5:].split("/", 1)
+def download_text_from_gcs(gcs_uri: str, expected_bucket: str | None = None) -> str:
+    """Download text file from GCS (handling plain text and .zst)."""
+    bucket_name, blob_name = validate_gcs_uri_in_bucket(gcs_uri, expected_bucket)
     storage_client = storage.Client()
-    bucket = storage_client.bucket(parts[0])
-    blob = bucket.blob(parts[1] if len(parts) > 1 else "")
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    if gcs_uri.endswith(".zst"):
+        raw_bytes = blob.download_as_bytes()
+        return decompress_zst_bytes(raw_bytes).decode("utf-8")
     return blob.download_as_text()
 
 
-def download_image_from_gcs(gcs_uri: str) -> bytes:
+def download_image_from_gcs(gcs_uri: str, expected_bucket: str | None = None) -> bytes:
     """Download image bytes from GCS."""
-    if not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
+    bucket_name, blob_name = validate_gcs_uri_in_bucket(gcs_uri, expected_bucket)
 
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
@@ -113,17 +208,54 @@ def download_image_from_gcs(gcs_uri: str) -> bytes:
     return blob.download_as_bytes()
 
 
-def calculate_plddt_stats(plddt_scores: list) -> dict:
-    """Calculate pLDDT statistics from per-residue array."""
-    scores = np.array(plddt_scores)
+def calculate_plddt_stats(plddt_scores: list | np.ndarray | None) -> dict[str, Any]:
+    """Calculate pLDDT statistics from per-residue or per-atom array.
 
-    stats = {
-        "mean": float(np.mean(scores)),
+    Filters out None, NaN, and Inf values. When no valid scores exist, returns
+    None statistics and confidence_category='uncomputed' rather than fabricating
+    placeholder confidence values.
+    """
+    empty_result: dict[str, Any] = {
+        "mean": None,
+        "median": None,
+        "min": None,
+        "max": None,
+        "std": None,
+        "confidence_category": "uncomputed",
+        "per_residue": [],
+        "distribution": {label: 0 for _, _, label in PLDDT_BANDS},
+    }
+    if plddt_scores is None:
+        return empty_result
+
+    valid_vals: list[float] = []
+    for item in plddt_scores:
+        if item is None:
+            continue
+        try:
+            fval = float(item)
+        except (TypeError, ValueError):
+            continue
+        if not (math.isnan(fval) or math.isinf(fval)):
+            valid_vals.append(fval)
+
+    if not valid_vals:
+        return empty_result
+
+    scores = np.array(valid_vals, dtype=float)
+    if 0.0 < np.max(scores) <= 1.0:
+        scores = scores * 100.0
+    score_list = scores.tolist()
+
+    mean_val = float(np.mean(scores))
+    stats: dict[str, Any] = {
+        "mean": mean_val,
         "median": float(np.median(scores)),
         "min": float(np.min(scores)),
         "max": float(np.max(scores)),
         "std": float(np.std(scores)),
-        "per_residue": plddt_scores,
+        "confidence_category": get_quality_assessment(mean_val),
+        "per_residue": score_list,
     }
 
     # Distribution by confidence band
@@ -136,24 +268,34 @@ def calculate_plddt_stats(plddt_scores: list) -> dict:
     return stats
 
 
-def get_quality_assessment(plddt_mean: float) -> str:
+def get_quality_assessment(plddt_mean: float | None) -> str:
     """Get quality assessment based on mean pLDDT."""
-    if plddt_mean >= 90:
+    if plddt_mean is None:
+        return "uncomputed"
+    try:
+        val = float(plddt_mean)
+    except (TypeError, ValueError):
+        return "uncomputed"
+    if math.isnan(val) or math.isinf(val):
+        return "uncomputed"
+    if 0.0 < val <= 1.0:
+        val = val * 100.0
+    if val >= 90:
         return "very_high_confidence"
-    elif plddt_mean >= 70:
+    elif val >= 70:
         return "high_confidence"
-    elif plddt_mean >= 50:
+    elif val >= 50:
         return "low_confidence"
     else:
         return "very_low_confidence"
 
 
-def _detect_atom_site_columns(cif_text: str) -> dict:
+def _detect_atom_site_columns(cif_text: str) -> dict[str, int]:
     """Parse the _atom_site loop header to build a column-name -> index map.
 
     Returns e.g. {'group_PDB': 0, 'id': 1, ..., 'B_iso_or_equiv': 14, ...}
     """
-    col_names = []
+    col_names: list[str] = []
     in_atom_site_loop = False
 
     for line in cif_text.split("\n"):
@@ -176,47 +318,130 @@ def _detect_atom_site_columns(cif_text: str) -> dict:
     return {name: idx for idx, name in enumerate(col_names)}
 
 
+def _is_fixed_width_pdb_line(line: str) -> bool:
+    """Determine if an ATOM/HETATM line uses fixed-width PDB column formatting.
+
+    Fixed-width PDB records use columns 1-6 ('ATOM  ' or 'HETATM'), integer serial
+    in columns 7-11, residue name in 18-20, chain in 22, resSeq in 23-26, and three
+    8.3 orthogonal coordinates in columns 31-54, without mmCIF '.' or '?' tokens.
+    """
+    if len(line) < 54:
+        return False
+    if line[:6] not in ("ATOM  ", "HETATM"):
+        return False
+    if not line[6:11].strip().isdigit():
+        return False
+    parts = line.split()
+    if "." in parts or "?" in parts:
+        return False
+    if not line[17:20].strip() or not line[22:26].strip().lstrip("-").isdigit():
+        return False
+    try:
+        float(line[30:38])
+        float(line[38:46])
+        float(line[46:54])
+    except ValueError:
+        return False
+    return True
+
+
+def _infer_headerless_cif_columns(
+    parts: list[str],
+) -> tuple[int, int, int, int | None]:
+    """Infer (chain_col, comp_col, seq_col, bfactor_col) for headerless mmCIF lines."""
+    if len(parts) >= 10 and parts[4] in (".", "?"):
+        bfactor_col = 14 if len(parts) > 14 else None
+        if len(parts) >= 19 and parts[9] in (".", "?") and parts[15] in (".", "?", "0"):
+            return 18, 17, 16, bfactor_col
+        return 6, 5, 8, bfactor_col
+
+    # OpenFold3 compact 12-column headerless layout:
+    # ATOM 1 N N MET A 1 1.0 2.0 1 MET A
+    return 11, 10, 9, None
+
+
 def parse_cif_chains(
     cif_text: str, extract_plddt: bool = False
-) -> tuple[list[dict], list[float]]:
-    """Parse CIF atom_site records to extract per-chain info and optionally per-atom pLDDT.
+) -> tuple[list[dict[str, Any]], list[float]]:
+    """Parse CIF or PDB atom_site records to extract per-chain info and optionally per-atom pLDDT.
 
-    Supports dynamic index lookup based on loop headers, with a fallback to
-    standard OpenFold3 hardcoded indices when loop headers are absent.
+    Supports dynamic index lookup based on mmCIF loop headers, standard PDB fixed-width
+    records, standard headerless PDBx/mmCIF records, and OpenFold3 compact CIF records.
     """
     col_map = _detect_atom_site_columns(cif_text)
+    has_cif_markers = bool(col_map) or "loop_" in cif_text
 
-    # Fallback to OF3 hardcoded indices if header is missing
+    first_atom_line: str | None = None
+    for raw_line in cif_text.split("\n"):
+        if raw_line.startswith("ATOM") or raw_line.startswith("HETATM"):
+            first_atom_line = raw_line
+            break
+
+    is_pdb = (
+        not has_cif_markers
+        and first_atom_line is not None
+        and _is_fixed_width_pdb_line(first_atom_line)
+    )
+
     if col_map:
-        chain_col = col_map.get("auth_asym_id", 11)
-        comp_col = col_map.get("auth_comp_id", 10)
-        seq_col = col_map.get("auth_seq_id", 9)
-        bfactor_col = col_map.get("B_iso_or_equiv")
+        chain_col = col_map.get("auth_asym_id", col_map.get("label_asym_id", 11))
+        comp_col = col_map.get("auth_comp_id", col_map.get("label_comp_id", 10))
+        seq_col = col_map.get("auth_seq_id", col_map.get("label_seq_id", 9))
+        bfactor_col: int | None = col_map.get("B_iso_or_equiv")
+    elif not is_pdb and first_atom_line is not None:
+        chain_col, comp_col, seq_col, bfactor_col = _infer_headerless_cif_columns(
+            first_atom_line.split()
+        )
     else:
         chain_col = 11
         comp_col = 10
         seq_col = 9
         bfactor_col = None
 
-    chains = {}  # chain_id -> {atoms, residues set, comp_ids set}
-    chain_order = []
-    plddt_scores = []
+    chains: dict[str, dict[str, Any]] = {}
+    chain_order: list[str] = []
+    raw_plddt_scores: list[float | None] = []
 
     for line in cif_text.split("\n"):
         if not (line.startswith("ATOM") or line.startswith("HETATM")):
             continue
-        parts = line.split()
-        if len(parts) <= max(chain_col, comp_col, seq_col):
-            continue
-        chain_id = parts[chain_col]
-        comp_id = parts[comp_col]
-        seq_id = parts[seq_col]
+        if is_pdb:
+            if len(line) < 26:
+                continue
+            comp_id = line[17:20].strip()
+            chain_id = line[21:22].strip() or "A"
+            seq_id = line[22:26].strip()
+            if extract_plddt and len(line) >= 66:
+                token = line[60:66].strip()
+                try:
+                    val = float(token)
+                    if math.isnan(val) or math.isinf(val):
+                        raw_plddt_scores.append(None)
+                    else:
+                        raw_plddt_scores.append(val)
+                except ValueError:
+                    raw_plddt_scores.append(None)
+        else:
+            parts = line.split()
+            if len(parts) <= max(chain_col, comp_col, seq_col):
+                continue
+            chain_id = parts[chain_col]
+            comp_id = parts[comp_col]
+            seq_id = parts[seq_col]
 
-        if extract_plddt and bfactor_col is not None and bfactor_col < len(parts):
-            try:
-                plddt_scores.append(float(parts[bfactor_col]))
-            except ValueError:
-                plddt_scores.append(0.0)
+            if extract_plddt and bfactor_col is not None and bfactor_col < len(parts):
+                token = parts[bfactor_col]
+                if token in (".", "?"):
+                    raw_plddt_scores.append(None)
+                else:
+                    try:
+                        val = float(token)
+                        if math.isnan(val) or math.isinf(val):
+                            raw_plddt_scores.append(None)
+                        else:
+                            raw_plddt_scores.append(val)
+                    except ValueError:
+                        raw_plddt_scores.append(None)
 
         if chain_id not in chains:
             chains[chain_id] = {"atoms": 0, "residues": set(), "comp_ids": set()}
@@ -225,35 +450,50 @@ def parse_cif_chains(
         chains[chain_id]["residues"].add(seq_id)
         chains[chain_id]["comp_ids"].add(comp_id)
 
-    result = []
+    valid_only = [s for s in raw_plddt_scores if s is not None]
+    if not valid_only:
+        plddt_scores: list[Any] = []
+    else:
+        scale = 100.0 if 0.0 < max(valid_only) <= 1.0 else 1.0
+        if len(valid_only) == len(raw_plddt_scores):
+            plddt_scores = [
+                round(s * scale, 2) if scale != 1.0 else s for s in valid_only
+            ]
+        else:
+            plddt_scores = [
+                (round(s * scale, 2) if scale != 1.0 else s) if s is not None else None
+                for s in raw_plddt_scores
+            ]
+
+    standard_aa = {
+        "ALA",
+        "ARG",
+        "ASN",
+        "ASP",
+        "CYS",
+        "GLN",
+        "GLU",
+        "GLY",
+        "HIS",
+        "ILE",
+        "LEU",
+        "LYS",
+        "MET",
+        "PHE",
+        "PRO",
+        "SER",
+        "THR",
+        "TRP",
+        "TYR",
+        "VAL",
+    }
+    rna_bases = {"A", "C", "G", "U"}
+    dna_bases = {"DA", "DC", "DG", "DT"}
+
+    result: list[dict[str, Any]] = []
     for cid in chain_order:
         info = chains[cid]
         comp_ids = info["comp_ids"]
-        standard_aa = {
-            "ALA",
-            "ARG",
-            "ASN",
-            "ASP",
-            "CYS",
-            "GLN",
-            "GLU",
-            "GLY",
-            "HIS",
-            "ILE",
-            "LEU",
-            "LYS",
-            "MET",
-            "PHE",
-            "PRO",
-            "SER",
-            "THR",
-            "TRP",
-            "TYR",
-            "VAL",
-        }
-        rna_bases = {"A", "C", "G", "U"}
-        dna_bases = {"DA", "DC", "DG", "DT"}
-
         if comp_ids & standard_aa:
             mol_type = "protein"
         elif comp_ids & rna_bases:
@@ -281,13 +521,28 @@ def plot_plddt_distribution(
     title_name: str,
     output_path: str,
     chain_info: list[dict] | None = None,
+    expected_bucket: str | None = None,
 ) -> None:
     """Generate unified pLDDT distribution plot (supporting chain coloring & boundaries)."""
-    scores = np.array(plddt_scores)
+    if plt is None:
+        logger.warning("matplotlib not available; skipping pLDDT plot generation")
+        return
+
+    if not plddt_scores:
+        return
+
+    scores = np.array(
+        [np.nan if x is None else float(x) for x in plddt_scores], dtype=float
+    )
+    finite_mask = ~np.isnan(scores) & ~np.isinf(scores)
+    if not np.any(finite_mask):
+        return
+    if 0.0 < np.nanmax(scores[finite_mask]) <= 1.0:
+        scores = scores * 100.0
+
     fig, ax = plt.subplots(figsize=(12, 4))
     residues = np.arange(1, len(scores) + 1)
 
-    # If chain info available, color each chain differently
     if chain_info and len(chain_info) > 1:
         chain_colors = [
             "#1f77b4",
@@ -317,7 +572,6 @@ def plot_plddt_distribution(
                 label=label,
             )
 
-            # Draw chain boundary line
             if i < len(chain_info) - 1:
                 boundary = offset + n
                 ax.axvline(
@@ -327,13 +581,11 @@ def plot_plddt_distribution(
     else:
         ax.plot(residues, scores, linewidth=1.5, color="#1f77b4")
 
-    # Confidence band backgrounds
     ax.axhspan(90, 100, alpha=0.08, color="green")
     ax.axhspan(70, 90, alpha=0.08, color="yellow")
     ax.axhspan(50, 70, alpha=0.08, color="orange")
     ax.axhspan(0, 50, alpha=0.08, color="red")
 
-    # X-label varies if we have atom-level (chain_info) vs residue-level (AF2)
     x_label = "Atom Position" if chain_info else "Residue Position"
     ax.set_xlabel(x_label, fontsize=10)
     ax.set_ylabel("pLDDT Score", fontsize=10)
@@ -350,63 +602,75 @@ def plot_plddt_distribution(
         ax.legend(loc="lower right", fontsize=7)
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+    if output_path.startswith("gs://"):
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+            local_tmp = tf.name
+        try:
+            plt.savefig(local_tmp, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            upload_to_gcs(
+                local_tmp,
+                output_path,
+                content_type="image/png",
+                expected_bucket=expected_bucket,
+            )
+        finally:
+            if os.path.exists(local_tmp):
+                os.unlink(local_tmp)
+    else:
+        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
     logger.info(f"Generated pLDDT plot: {output_path}")
 
 
 def plot_error_matrix(
-    matrix: list,
+    matrix: list | np.ndarray,
     sample_name: str,
     label: str,
     output_path: str,
     chain_info: list[dict] | None = None,
     max_value: float | None = None,
+    expected_bucket: str | None = None,
 ) -> None:
     """Generate error matrix (PDE/PAE) heatmap with optional chain gridlines."""
-    data = np.array(matrix)
-    fig, ax = plt.subplots(figsize=(8, 7))
+    if plt is None:
+        logger.warning(
+            "matplotlib not available; skipping error matrix plot generation"
+        )
+        return
 
+    data = np.array(matrix, dtype=float)
+    if data.ndim != 2 or data.size == 0 or np.all(np.isnan(data)):
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 7))
     cmap = plt.cm.Greens_r
-    vmax = max_value if max_value is not None else np.max(data)
+    vmax = max_value if max_value is not None else float(np.nanmax(data))
     im = ax.imshow(data, vmin=0, vmax=vmax, cmap=cmap)
 
-    # Draw chain boundary lines on heatmap if multi-chain
     if chain_info and len(chain_info) > 1:
         offset = 0
         for i, ci in enumerate(chain_info):
             n = ci["residue_count"]
             if i < len(chain_info) - 1:
-                boundary = offset + n - 0.5  # center on boundary
+                boundary = offset + n - 0.5
                 ax.axhline(
                     y=boundary, color="white", linestyle="-", linewidth=1.5, alpha=0.8
                 )
                 ax.axvline(
                     x=boundary, color="white", linestyle="-", linewidth=1.5, alpha=0.8
                 )
-                mid = offset + n / 2
-                ax.text(
-                    -2,
-                    mid,
-                    f"{ci['chain_id']}",
-                    ha="right",
-                    va="center",
-                    fontsize=9,
-                    fontweight="bold",
-                    color="#333",
-                )
-            else:
-                mid = offset + n / 2
-                ax.text(
-                    -2,
-                    mid,
-                    f"{ci['chain_id']}",
-                    ha="right",
-                    va="center",
-                    fontsize=9,
-                    fontweight="bold",
-                    color="#333",
-                )
+            mid = offset + n / 2
+            ax.text(
+                -2,
+                mid,
+                f"{ci['chain_id']}",
+                ha="right",
+                va="center",
+                fontsize=9,
+                fontweight="bold",
+                color="#333",
+            )
             offset += n
 
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -421,8 +685,24 @@ def plot_error_matrix(
     )
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+    if output_path.startswith("gs://"):
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+            local_tmp = tf.name
+        try:
+            plt.savefig(local_tmp, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            upload_to_gcs(
+                local_tmp,
+                output_path,
+                content_type="image/png",
+                expected_bucket=expected_bucket,
+            )
+        finally:
+            if os.path.exists(local_tmp):
+                os.unlink(local_tmp)
+    else:
+        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
     logger.info(f"Generated error matrix plot: {output_path}")
 
 
@@ -432,39 +712,53 @@ def plot_iptm_matrix(
     output_path: str,
     chain_ptm: dict | None = None,
     chain_info: list | None = None,
+    expected_bucket: str | None = None,
 ) -> None:
     """Generate chain x chain ipTM heatmap with per-chain pTM on diagonal."""
+    if plt is None or sns is None:
+        logger.warning("matplotlib/seaborn not available; skipping ipTM matrix plot")
+        return
+
     chains = set()
-    pairs = {}
-    for key, value in chain_pair_iptm.items():
-        key_clean = key.strip("()").replace(" ", "")
+    pairs: dict[tuple[str, str], float] = {}
+    for key, value in (chain_pair_iptm or {}).items():
+        if value is None:
+            continue
+        key_clean = str(key).strip("()").replace(" ", "")
         parts = key_clean.split(",")
         if len(parts) == 2:
             c1, c2 = parts
-            chains.add(c1)
-            chains.add(c2)
-            pairs[(c1, c2)] = value
+            try:
+                fval = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not (math.isnan(fval) or math.isinf(fval)):
+                chains.add(c1)
+                chains.add(c2)
+                pairs[(c1, c2)] = fval
 
     if chain_ptm:
-        chains.update(chain_ptm.keys())
+        for k, v in chain_ptm.items():
+            if v is not None:
+                chains.add(str(k))
 
-    chains = sorted(chains)
-    n = len(chains)
+    sorted_chains = sorted(chains)
+    n = len(sorted_chains)
     if n < 2:
         logger.info("Skipping ipTM matrix — fewer than 2 chains")
         return
 
     matrix = np.zeros((n, n))
-    for i, c1 in enumerate(chains):
-        for j, c2 in enumerate(chains):
-            if i == j and chain_ptm and c1 in chain_ptm:
-                matrix[i, j] = chain_ptm[c1]
+    for i, c1 in enumerate(sorted_chains):
+        for j, c2 in enumerate(sorted_chains):
+            if i == j and chain_ptm and chain_ptm.get(c1) is not None:
+                matrix[i, j] = float(chain_ptm[c1])
             else:
                 matrix[i, j] = pairs.get((c1, c2), pairs.get((c2, c1), 0.0))
 
     chain_labels = []
     ci_map = {c["chain_id"]: c for c in (chain_info or [])}
-    for c in chains:
+    for c in sorted_chains:
         ci = ci_map.get(c)
         if ci:
             mol = ci["molecule_type"]
@@ -505,69 +799,127 @@ def plot_iptm_matrix(
     ax.tick_params(axis="y", rotation=0)
 
     plt.tight_layout(pad=1.5)
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
+    if output_path.startswith("gs://"):
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+            local_tmp = tf.name
+        try:
+            plt.savefig(local_tmp, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            upload_to_gcs(
+                local_tmp,
+                output_path,
+                content_type="image/png",
+                expected_bucket=expected_bucket,
+            )
+        finally:
+            if os.path.exists(local_tmp):
+                os.unlink(local_tmp)
+    else:
+        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
     logger.info(f"Generated ipTM matrix plot: {output_path}")
+
+
+def is_prediction_analysis_blob(blob_name: str) -> bool:
+    """Return True if blob_name is a per-prediction analysis JSON artifact."""
+    filename = blob_name.rsplit("/", 1)[-1]
+    if not filename.endswith(".json"):
+        return False
+    if filename in ("summary.json", "task_config.json", "analysis_metadata.json"):
+        return False
+    return filename.startswith("analysis_") or filename.endswith("_analysis.json")
 
 
 def wait_for_sibling_tasks(
     bucket_name: str,
     prefix: str,
     task_count: int,
-    max_wait: int = 120,
+    max_wait: int = 300,
     interval: int = 2,
 ) -> bool:
-    """Wait for all other parallel task analysis files to be written to GCS."""
+    """Wait for all expected per-prediction analysis files to be written to GCS."""
+    expected_count = int(task_count)
+    if expected_count <= 0:
+        return True
+
     waited = 0
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
 
-    # Ensure prefix doesn't start with / but ends with /
-    prefix_clean = prefix.replace(f"gs://{bucket_name}/", "")
-    if prefix_clean.startswith("/"):
-        prefix_clean = prefix_clean[1:]
+    prefix_clean = prefix.removeprefix(f"gs://{bucket_name}/").lstrip("/")
+    completed_files: list[str] = []
 
     while waited < max_wait:
         blobs = bucket.list_blobs(prefix=prefix_clean)
-        completed_files = [
-            b.name
-            for b in blobs
-            if "prediction_" in b.name and b.name.endswith("_analysis.json")
-        ]
+        completed_files = [b.name for b in blobs if is_prediction_analysis_blob(b.name)]
 
-        if len(completed_files) >= task_count:
+        if len(completed_files) >= expected_count:
             logger.info(
-                f"All {task_count} sibling task analysis files found successfully"
+                f"All {expected_count} sibling task analysis files found successfully"
             )
             return True
 
         logger.info(
-            f"Waiting for sibling tasks... ({len(completed_files)}/{task_count} files found)"
+            f"Waiting for sibling tasks... ({len(completed_files)}/{expected_count} files found)"
         )
         time.sleep(interval)
         waited += interval
 
     logger.warning(
-        f"Timeout waiting for sibling tasks. Proceeding consolidation with {len(completed_files)}/{task_count} files."
+        f"Timeout waiting for sibling tasks. Proceeding consolidation with {len(completed_files)}/{expected_count} files."
     )
     return False
 
 
-def calculate_per_chain_plddt(plddt_scores: list, chain_info: list[dict]) -> dict:
-    """Calculate per-chain pLDDT statistics."""
-    scores = np.array(plddt_scores)
-    result = {}
+def calculate_per_chain_plddt(
+    plddt_scores: list, chain_info: list[dict]
+) -> dict[str, dict[str, Any]]:
+    """Calculate per-chain pLDDT statistics without fabricating placeholder values."""
+    if not plddt_scores or not chain_info:
+        return {}
+
+    raw_vals: list[float | None] = []
+    for x in plddt_scores:
+        if x is None:
+            raw_vals.append(None)
+            continue
+        try:
+            fx = float(x)
+            raw_vals.append(None if (math.isnan(fx) or math.isinf(fx)) else fx)
+        except (TypeError, ValueError):
+            raw_vals.append(None)
+
+    valid_all = [v for v in raw_vals if v is not None]
+    scale = 100.0 if (valid_all and 0.0 < max(valid_all) <= 1.0) else 1.0
+    if scale != 1.0:
+        raw_vals = [v * scale if v is not None else None for v in raw_vals]
+
+    result: dict[str, dict[str, Any]] = {}
     offset = 0
 
     for ci in chain_info:
-        n = ci["atom_count"]
-        chain_scores = scores[offset : offset + n]
-        if len(chain_scores) > 0:
+        if not isinstance(ci, dict):
+            continue
+        n = ci.get("atom_count", 0)
+        slice_vals = [v for v in raw_vals[offset : offset + n] if v is not None]
+        if slice_vals:
+            arr = np.array(slice_vals, dtype=float)
             result[ci["chain_id"]] = {
-                "mean": float(np.mean(chain_scores)),
-                "min": float(np.min(chain_scores)),
-                "max": float(np.max(chain_scores)),
-                "std": float(np.std(chain_scores)),
+                "mean": float(np.mean(arr)),
+                "min": float(np.min(arr)),
+                "max": float(np.max(arr)),
+                "std": float(np.std(arr)),
+                "atom_count": n,
+                "residue_count": ci["residue_count"],
+                "molecule_type": ci["molecule_type"],
+                "comp_ids": ci["comp_ids"],
+            }
+        else:
+            result[ci["chain_id"]] = {
+                "mean": None,
+                "min": None,
+                "max": None,
+                "std": None,
                 "atom_count": n,
                 "residue_count": ci["residue_count"],
                 "molecule_type": ci["molecule_type"],
@@ -927,7 +1279,9 @@ def build_and_upload_run_archive(
             if affinity:
                 zf.writestr(
                     "metrics/affinity.json",
-                    json.dumps(affinity, indent=2).encode("utf-8"),
+                    json.dumps(
+                        _sanitize_data(affinity), indent=2, allow_nan=False
+                    ).encode("utf-8"),
                 )
                 included_files.append("metrics/affinity.json")
 
@@ -937,11 +1291,11 @@ def build_and_upload_run_archive(
                 included_files.append(arc_path)
 
             # 5. Consolidated summary.json
-            summary_copy = dict(summary_data)
+            summary_copy = _sanitize_data(dict(summary_data))
             summary_copy["artifacts_bundle_uri"] = bundle_uri
             zf.writestr(
                 "metrics/summary.json",
-                json.dumps(summary_copy, indent=2).encode("utf-8"),
+                json.dumps(summary_copy, indent=2, allow_nan=False).encode("utf-8"),
             )
             included_files.append("metrics/summary.json")
 

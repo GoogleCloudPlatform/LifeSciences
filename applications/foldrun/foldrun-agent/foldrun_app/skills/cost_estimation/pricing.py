@@ -48,9 +48,12 @@ DEFAULT_PRICES = {
     "g2_ram_gib": 0.002927,
     "a2_core": 0.031611,
     "a2_ram_gib": 0.004237,
+    "a3_core": 0.031611,
+    "a3_ram_gib": 0.004237,
     "nvidia_l4": 0.560040,
     "nvidia_a100": 2.933908,
-    "nvidia_a100_80gb": 1.846198,
+    "nvidia_a100_80gb": 3.930000,
+    "nvidia_h100": 9.354000,
     # --- Spot / preemptible (per hour) ---
     "c2_core_spot": 0.011080,
     "c2_ram_gib_spot": 0.001478,
@@ -58,9 +61,12 @@ DEFAULT_PRICES = {
     "g2_ram_gib_spot": 0.001171,
     "a2_core_spot": 0.015810,
     "a2_ram_gib_spot": 0.002118,
+    "a3_core_spot": 0.015810,
+    "a3_ram_gib_spot": 0.002118,
     "nvidia_l4_spot": 0.223100,
     "nvidia_a100_spot": 1.434100,
     "nvidia_a100_80gb_spot": 1.964000,
+    "nvidia_h100_spot": 3.273900,
     # --- Storage (per GiB-month, us-central1 list prices) ---
     # Filestore Basic SSD (default tier, 2.5 TiB minimum)
     "filestore_basic_ssd_gib_mo": 0.300000,
@@ -114,12 +120,20 @@ MACHINE_SPECS = {
         "gpu_key": None,
         "gpu_count": 0,
     },
+    "a3-highgpu-1g": {
+        "core_key": "a3",
+        "vcpus": 26,
+        "ram_gib": 234,
+        "gpu_key": None,
+        "gpu_count": 0,
+    },
 }
 
 GPU_PRICE_KEYS = {
     "L4": "nvidia_l4",
     "A100": "nvidia_a100",
     "A100_80GB": "nvidia_a100_80gb",
+    "H100": "nvidia_h100",
 }
 
 # Map Agent Platform accelerator type enum to our price key prefix
@@ -127,6 +141,7 @@ VERTEX_GPU_TO_PRICE_KEY = {
     "NVIDIA_L4": "nvidia_l4",
     "NVIDIA_TESLA_A100": "nvidia_a100",
     "NVIDIA_A100_80GB": "nvidia_a100_80gb",
+    "NVIDIA_H100_80GB": "nvidia_h100",
 }
 
 # ---------------------------------------------------------------------------
@@ -243,15 +258,36 @@ DURATION_ANCHORS = {
             (2000, 25, 40.0, 0),
         ],
     },
+    "af3": {
+        # AlphaFold 3 KFP pipeline (H100 / A100_80GB)
+        "H100": [
+            (100, 12, 0.8, 0),
+            (300, 15, 1.5, 0),
+            (600, 18, 3.0, 0),
+            (1000, 22, 5.0, 0),
+            (2000, 28, 10.0, 0),
+            (3000, 35, 16.0, 0),
+        ],
+        "A100_80GB": [
+            (100, 12, 1.2, 0),
+            (300, 15, 2.2, 0),
+            (600, 18, 4.5, 0),
+            (1000, 22, 7.5, 0),
+            (2000, 28, 15.0, 0),
+            (3000, 35, 24.0, 0),
+        ],
+    },
 }
 
 # Number of predict tasks per job type
 # AF2 monomer:  5 models x 1 seed = 5 tasks
 # AF2 multimer: 5 models x num_predictions_per_model (default 5) = 25 tasks
-# OF3:          num_seeds tasks (each runs num_diffusion_samples serially)
+# AF3: 1 seed default on Vertex AI Dedicated Endpoint (runs num_diffusion_samples serially)
+# OF3/Boltz-2: num_seeds tasks (default 5, each runs num_diffusion_samples serially)
 DEFAULT_PREDICT_TASKS = {
     "af2_monomer": 5,
     "af2_multimer": 25,
+    "af3": 1,
     "of3": 5,
     "boltz2": 5,
 }
@@ -328,6 +364,8 @@ def _auto_select_gpu(job_type: str, sequence_length: int) -> str:
 
     Mirrors the logic in FoldRun's submission tools.
     """
+    if job_type == "af3":
+        return "H100"
     if job_type == "of3":
         return "A100" if sequence_length <= 2200 else "A100_80GB"
     elif job_type == "boltz2":
@@ -343,6 +381,7 @@ def _auto_select_gpu(job_type: str, sequence_length: int) -> str:
 def _relax_gpu(predict_gpu: str) -> str:
     """Determine relax GPU. Matches predict tier — no downgrade to L4."""
     return {
+        "H100": "A100",
         "A100_80GB": "A100",
         "A100": "A100",
         "L4": "L4",  # only when user explicitly requested L4
@@ -355,6 +394,8 @@ def _machine_for_gpu(gpu_type: str) -> str:
         return "g2-standard-12"
     if gpu_type == "A100_80GB":
         return "a2-ultragpu-1g"
+    if gpu_type == "H100":
+        return "a3-highgpu-1g"
     return "a2-highgpu-1g"
 
 
@@ -483,8 +524,14 @@ def _match_sku(desc: str) -> str | None:
         return f"a2_core{suffix}"
     elif "a2 instance ram" in desc:
         return f"a2_ram_gib{suffix}"
+    elif "a3 instance core" in desc:
+        return f"a3_core{suffix}"
+    elif "a3 instance ram" in desc:
+        return f"a3_ram_gib{suffix}"
     elif "nvidia l4 gpu" in desc:
         return f"nvidia_l4{suffix}"
+    elif "nvidia h100 80gb gpu" in desc:
+        return f"nvidia_h100{suffix}"
     elif "nvidia tesla a100 80gb gpu" in desc:
         return f"nvidia_a100_80gb{suffix}"
     elif "nvidia tesla a100 gpu" in desc:
@@ -550,7 +597,33 @@ def _estimate_phases(
 
     phases = []
 
-    # Phase 1: MSA / Data Pipeline (always CPU)
+    if job_type == "af3":
+        # AF3 executes both MSA/template search and diffusion inference inside a
+        # single endpoint.predict() call on the Vertex AI Dedicated Endpoint
+        # (a3-highgpu-1g / H100), which is billed at on-demand rates (DWS FLEX_START
+        # does not apply to Model Garden Dedicated Endpoints).
+        predict_machine = _machine_for_gpu(gpu_type)
+        predict_rate = _hourly_rate(predict_machine, gpu_type, 1, False, prices)
+        diffusion_min = predict_per_task_min * num_diffusion_samples * num_predictions
+        predict_total_min = msa_min + diffusion_min
+        predict_cost = (predict_total_min / 60) * predict_rate
+        phases.append(
+            {
+                "phase": "Predict",
+                "machine_type": predict_machine,
+                "gpu": f"{gpu_type} x 1",
+                "duration_minutes": round(predict_total_min, 1),
+                "detail": (
+                    f"Dedicated Endpoint: {round(msa_min, 1)}m MSA + "
+                    f"{num_predictions} seed(s) x {num_diffusion_samples} samples ({round(diffusion_min, 1)}m)"
+                ),
+                "hourly_rate": round(predict_rate, 4),
+                "cost": round(predict_cost, 2),
+            }
+        )
+        return phases
+
+    # Phase 1: MSA / Data Pipeline (CPU for AF2, OF3, Boltz-2)
     msa_machine = "c2-standard-16"
     msa_rate = _hourly_rate(msa_machine, None, 0, spot, prices)
     msa_cost = (msa_min / 60) * msa_rate
@@ -619,7 +692,7 @@ def estimate_single_job(
     job_type: str,
     gpu_type: str = "auto",
     sequence_length: int = 300,
-    num_predictions_per_model: int = 5,
+    num_predictions_per_model: int | None = None,
     num_diffusion_samples: int = 5,
     region: str = "us-central1",
 ) -> dict:
@@ -659,9 +732,16 @@ def estimate_single_job(
     if job_type == "af2_monomer":
         num_predictions = 5  # always 5 models x 1 seed
     elif job_type == "af2_multimer":
-        num_predictions = 5 * num_predictions_per_model  # 5 models x N seeds
+        eff_per_model = num_predictions_per_model if num_predictions_per_model is not None else 5
+        num_predictions = 5 * eff_per_model  # 5 models x N seeds
+    elif job_type == "af3":
+        num_predictions = (
+            num_predictions_per_model
+            if num_predictions_per_model is not None
+            else DEFAULT_PREDICT_TASKS["af3"]
+        )
     else:  # of3 or boltz2
-        num_predictions = num_predictions_per_model  # num_seeds
+        num_predictions = num_predictions_per_model if num_predictions_per_model is not None else 5
 
     # Build phases for both pricing modes
     spot_phases = _estimate_phases(
@@ -693,7 +773,9 @@ def estimate_single_job(
         "gpu_type": gpu_type,
         "sequence_length": sequence_length,
         "num_predict_tasks": num_predictions,
-        "num_diffusion_samples": num_diffusion_samples if job_type in ("of3", "boltz2") else None,
+        "num_diffusion_samples": (
+            num_diffusion_samples if job_type in ("of3", "boltz2", "af3") else None
+        ),
         "region": region,
         "total_duration_minutes": total_minutes,
         "on_demand": {
@@ -705,7 +787,7 @@ def estimate_single_job(
             "estimated_total": spot_total,
         },
         "flex_start_savings_pct": savings_pct,
-        "default_mode": "dws_flex_start",
+        "default_mode": "on_demand" if job_type == "af3" else "dws_flex_start",
         "disclaimer": DISCLAIMER,
     }
 
@@ -817,6 +899,7 @@ def estimate_filestore_monthly_cost(
 def estimate_monthly(
     af2_monomer_jobs: int = 0,
     af2_multimer_jobs: int = 0,
+    af3_jobs: int = 0,
     of3_jobs: int = 0,
     boltz2_jobs: int = 0,
     avg_sequence_length: int = 300,
@@ -831,11 +914,12 @@ def estimate_monthly(
     Uses default prediction counts:
     - AF2 monomer: 5 models x 1 seed = 5 predictions per job
     - AF2 multimer: 5 models x 5 seeds = 25 predictions per job
-    - OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures per job
+    - AF3/OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures per job
 
     Args:
         af2_monomer_jobs: Monthly AF2 monomer job count
         af2_multimer_jobs: Monthly AF2 multimer job count
+        af3_jobs: Monthly AF3 job count
         of3_jobs: Monthly OF3 job count
         boltz2_jobs: Monthly Boltz-2 job count
         avg_sequence_length: Average sequence length for cost estimation
@@ -852,6 +936,7 @@ def estimate_monthly(
     job_configs = [
         ("af2_monomer", af2_monomer_jobs, avg_sequence_length),
         ("af2_multimer", af2_multimer_jobs, avg_sequence_length),
+        ("af3", af3_jobs, avg_sequence_length),
         ("of3", of3_jobs, avg_sequence_length),
         ("boltz2", boltz2_jobs, avg_sequence_length),
     ]
@@ -941,7 +1026,17 @@ def estimate_monthly(
             "monthly_total": round(other_total, 2),
         },
         "flex_start_savings_pct": savings_pct,
-        "default_mode": "dws_flex_start",
+        "default_mode": (
+            "on_demand"
+            if (
+                af3_jobs > 0
+                and af2_monomer_jobs == 0
+                and af2_multimer_jobs == 0
+                and of3_jobs == 0
+                and boltz2_jobs == 0
+            )
+            else "dws_flex_start"
+        ),
         "disclaimer": DISCLAIMER,
     }
 
@@ -1133,9 +1228,11 @@ def get_actual_costs(
             jt = None
             if model == "alphafold2":
                 jt = "af2_monomer" if pipeline["job_type"] == "monomer" else "af2_multimer"
-            elif model == "openfold3":
+            elif model in ("alphafold3", "af3"):
+                jt = "af3"
+            elif model in ("openfold3", "of3"):
                 jt = "of3"
-            elif model == "boltz2":
+            elif model in ("boltz2", "boltz"):
                 jt = "boltz2"
 
             if jt:

@@ -21,13 +21,22 @@ WORKDIR /code
 
 COPY ./pyproject.toml ./README.md ./uv.lock* ./
 
+COPY ./databases.yaml /code/databases.yaml
 COPY ./foldrun_app ./foldrun_app
 
-RUN uv sync --frozen
+RUN uv sync --frozen --no-dev && \
+    useradd --create-home --shell /usr/sbin/nologin foldrun && \
+    chown -R foldrun:foldrun /code
 
+ARG COMMIT_SHA=unknown
+ENV COMMIT_SHA=${COMMIT_SHA}
 ARG AGENT_VERSION=0.0.0
 ENV AGENT_VERSION=${AGENT_VERSION}
+ENV PYTHONUNBUFFERED=1 \
+    PATH="/code/.venv/bin:$PATH"
+
+USER foldrun
 
 EXPOSE 8080
 
-CMD ["uv", "run", "uvicorn", "foldrun_app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "foldrun_app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]

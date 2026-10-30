@@ -31,7 +31,7 @@ RUN pip3 install --no-cache-dir --require-hashes -r requirements-pip.txt
 
 # Install dependencies from locked requirements with hashes
 COPY requirements.lock .
-RUN pip3 install --no-cache-dir --require-hashes --no-deps --extra-index-url https://download.pytorch.org/whl/cu121 -r requirements.lock
+RUN pip3 install --no-cache-dir --ignore-installed --require-hashes --no-deps --extra-index-url https://download.pytorch.org/whl/cu121 -r requirements.lock
 
 # No GCS libraries needed — all I/O via NFS mounts and KFP artifacts,
 # consistent with the AF2 container.
