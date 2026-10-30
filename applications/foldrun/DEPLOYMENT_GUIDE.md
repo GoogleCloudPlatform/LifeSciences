@@ -152,8 +152,9 @@ databases needed for structure prediction:
 GCS_SOURCE_BUCKET=source-project-foldrun-gdbs ./deploy-all.sh YOUR_PROJECT_ID
 ```
 
-Downloads run as Cloud Batch jobs in the background. The agent deploys immediately
-but predictions will fail until databases are available on NFS.
+Downloads run as Cloud Batch jobs in the background. The agent deploys immediately;
+until full genetic databases finish downloading on NFS, AF2, OF3, and Boltz-2
+automatically fall back to single-sequence (`core`) mode once model weights are available.
 
 ### Running Individual Steps
 
@@ -163,6 +164,7 @@ but predictions will fail until databases are available on NFS.
 ./deploy-all.sh YOUR_PROJECT_ID --steps data      # Only database downloads
 ./deploy-all.sh YOUR_PROJECT_ID --steps data --db uniref90  # Single database
 ./deploy-all.sh YOUR_PROJECT_ID --steps data --force        # Re-download existing
+DOWNLOAD_MODE=core ./deploy-all.sh YOUR_PROJECT_ID          # Core weights/CCD only (single-sequence mode)
 DOWNLOAD_MODE=full ./deploy-all.sh YOUR_PROJECT_ID          # Full BFD (~272GB extra)
 ```
 

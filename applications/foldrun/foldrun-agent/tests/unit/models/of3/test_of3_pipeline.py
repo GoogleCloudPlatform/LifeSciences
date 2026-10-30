@@ -764,6 +764,215 @@ class TestOF3MSAPipelineCacheBehavior:
         chain = res["queries"]["rna_q"]["chains"][0]
         assert "main_msa_file_paths" not in chain
 
+    def test_core_mode_missing_databases_writes_single_sequence_sto_and_upgrades_later(
+        self, tmp_path, monkeypatch
+    ):
+        """When uniref90/mgnify are absent on NFS (core mode), OF3 writes a single-sequence Stockholm MSA
+        and cleanly upgrades the cache entry if full databases are subsequently installed.
+        """
+        import hashlib
+        import json
+        import subprocess
+
+        msa_func = self._get_msa_func()
+
+        nfs_mount = tmp_path / "nfs"
+        nfs_mount.mkdir()
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90.fasta",
+                "mgnify": "mgnify.fasta",
+                "pdb_seqres": "pdb_seqres.fasta",
+            },
+        )
+
+        seq = "ACDEFGHIKLMNPQ"
+        seq_hash = hashlib.sha256(seq.encode()).hexdigest()
+        query_input = tmp_path / "query_core.json"
+        query_input.write_text(
+            json.dumps(
+                {
+                    "queries": {
+                        "core_q": {
+                            "chains": [
+                                {
+                                    "molecule_type": "protein",
+                                    "chain_ids": ["A"],
+                                    "sequence": seq,
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+        )
+        query_artifact = self._make_artifact(path=str(query_input), uri=str(query_input))
+        out_core_path = tmp_path / "out_core.json"
+        out_core_artifact = self._make_artifact(path=str(out_core_path), uri=str(out_core_path))
+
+        invoked_cmds = []
+
+        def _fake_run(cmd, check=True):
+            invoked_cmds.append(cmd)
+            out_idx = cmd.index("-A") + 1
+            with open(cmd[out_idx], "w") as f:
+                f.write(f"# STOCKHOLM 1.0\nprotein_{seq_hash} {seq}\nhomolog_full {seq}\n//\n")
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        # 1. Core mode: no uniref90, mgnify, or pdb_seqres on NFS
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_core_artifact,
+            use_templates=True,
+        )
+
+        assert invoked_cmds == [], "jackhmmer must not run in core mode when DBs are missing"
+        core_result = json.loads(out_core_path.read_text())
+        core_chain = core_result["queries"]["core_q"]["chains"][0]
+        assert len(core_chain["main_msa_file_paths"]) == 1
+        sto_path = core_chain["main_msa_file_paths"][0]
+        assert sto_path.endswith("uniref90_hits.sto")
+        assert os.path.isfile(sto_path)
+        with open(sto_path) as f:
+            sto_text = f.read()
+        assert sto_text == f"# STOCKHOLM 1.0\nprotein_{seq_hash} {seq}\n//\n"
+        assert "template_alignment_file_path" not in core_chain
+        assert out_core_artifact.metadata["msa_chains"] == 1
+        assert out_core_artifact.metadata["template_chains"] == 0
+
+        # 1b. Repeat core-mode run for the same sequence hits cache cleanly without touching tmp
+        out_core_hit_path = tmp_path / "out_core_hit.json"
+        out_core_hit_artifact = self._make_artifact(
+            path=str(out_core_hit_path), uri=str(out_core_hit_path)
+        )
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_core_hit_artifact,
+            use_templates=True,
+        )
+        assert invoked_cmds == []
+        core_hit_result = json.loads(out_core_hit_path.read_text())
+        core_hit_chain = core_hit_result["queries"]["core_q"]["chains"][0]
+        assert core_hit_chain["main_msa_file_paths"] == [sto_path]
+        assert list((nfs_mount / "of3_msas_tmp").iterdir()) == []
+
+        # 2. Full databases later installed on NFS -> upgrades uniref90_hits.sto and adds mgnify_hits.sto
+        for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
+            (nfs_mount / db_name).write_text(f">dummy\n{seq}\n")
+
+        out_full_path = tmp_path / "out_full.json"
+        out_full_artifact = self._make_artifact(path=str(out_full_path), uri=str(out_full_path))
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_full_artifact,
+            use_templates=True,
+        )
+
+        assert len(invoked_cmds) == 3
+        full_result = json.loads(out_full_path.read_text())
+        full_chain = full_result["queries"]["core_q"]["chains"][0]
+        assert len(full_chain["main_msa_file_paths"]) == 2
+        with open(full_chain["main_msa_file_paths"][0]) as f:
+            assert "homolog_full" in f.read()
+        assert os.path.isfile(full_chain["template_alignment_file_path"])
+        # Ensure no leftover .tmp files in seq_cache_dir after atomic os.replace
+        cache_files = os.listdir(os.path.dirname(sto_path))
+        assert not any(name.endswith(".tmp") for name in cache_files)
+
+    def test_preserves_custom_msa_and_template_paths(self, tmp_path, monkeypatch):
+        """Pre-populated main_msa_file_paths and template_alignment_file_path skip HMMER."""
+        import json
+        import subprocess
+
+        msa_func = self._get_msa_func()
+
+        nfs_mount = tmp_path / "nfs"
+        nfs_mount.mkdir()
+        for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
+            (nfs_mount / db_name).write_text(">dummy\nACDEFGHIK\n")
+
+        custom_msa = tmp_path / "custom_uniref90_hits.sto"
+        custom_msa.write_text("# STOCKHOLM 1.0\ncustom ACDEFGHIK\n//\n")
+        custom_tpl = tmp_path / "custom_templates.sto"
+        custom_tpl.write_text("# STOCKHOLM 1.0\ntpl ACDEFGHIK\n//\n")
+
+        ref_db = self._make_artifact(
+            path=str(nfs_mount),
+            uri=str(nfs_mount),
+            metadata={
+                "uniref90": "uniref90.fasta",
+                "mgnify": "mgnify.fasta",
+                "pdb_seqres": "pdb_seqres.fasta",
+            },
+        )
+
+        query_input = tmp_path / "query_custom.json"
+        query_input.write_text(
+            json.dumps(
+                {
+                    "queries": {
+                        "custom_q": {
+                            "chains": [
+                                {
+                                    "molecule_type": "protein",
+                                    "chain_ids": ["A"],
+                                    "sequence": "ACDEFGHIK",
+                                    "main_msa_file_paths": [str(custom_msa)],
+                                    "template_alignment_file_path": str(custom_tpl),
+                                },
+                                {
+                                    "molecule_type": "protein",
+                                    "chain_ids": ["B"],
+                                    "sequence": "MNPQRSTVW",
+                                    "main_msa_file_paths": [str(custom_msa)],
+                                },
+                            ]
+                        }
+                    }
+                }
+            )
+        )
+        query_artifact = self._make_artifact(path=str(query_input), uri=str(query_input))
+        out_path = tmp_path / "out_custom.json"
+        out_artifact = self._make_artifact(path=str(out_path), uri=str(out_path))
+
+        invoked_cmds = []
+
+        def _fake_run(cmd, check=True):
+            invoked_cmds.append(cmd)
+            out_idx = cmd.index("-A") + 1
+            with open(cmd[out_idx], "w") as f:
+                f.write("# STOCKHOLM 1.0\n//\n")
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        msa_func(
+            query_json=query_artifact,
+            ref_databases=ref_db,
+            updated_query_json=out_artifact,
+            use_templates=True,
+        )
+
+        # Chain A had both custom MSA and custom template -> 0 jackhmmer calls.
+        # Chain B had custom MSA only with use_templates=True -> only 1 jackhmmer call (for pdb_seqres).
+        assert len(invoked_cmds) == 1
+        assert invoked_cmds[0][-1] == str(nfs_mount / "pdb_seqres.fasta")
+
+        result = json.loads(out_path.read_text())
+        chain_a, chain_b = result["queries"]["custom_q"]["chains"]
+        assert chain_a["main_msa_file_paths"] == [str(custom_msa)]
+        assert chain_a["template_alignment_file_path"] == str(custom_tpl)
+        assert chain_b["main_msa_file_paths"] == [str(custom_msa)]
+        assert chain_b["template_alignment_file_path"].endswith("pdb_seqres.sto")
+        assert out_artifact.metadata["msa_chains"] == 2
+        assert out_artifact.metadata["template_chains"] == 2
+
 
 class TestOF3SubmitPredictionToolCuEq:
     """Verify OF3SubmitPredictionTool handling of cuEquivariance triangle kernels."""
