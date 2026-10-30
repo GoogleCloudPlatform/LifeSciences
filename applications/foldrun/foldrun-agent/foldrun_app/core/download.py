@@ -235,11 +235,11 @@ def submit_download(
     # Determine data source: GCS restore or internet download
     if source_bucket:
         source_gcs_path = f"gs://{source_bucket}/{nfs_path}/"
-        safe_source_gcs_glob = shlex.quote(f"{source_gcs_path}*")
+        safe_source_gcs_path = shlex.quote(source_gcs_path)
         safe_dest_path_slash = shlex.quote(f"{dest_path}/")
         download_script = (
             f"echo {shlex.quote(f'=== Restoring from GCS: {source_gcs_path} ===')}\n"
-            f"gcloud storage cp --recursive {safe_source_gcs_glob} {safe_dest_path_slash} 2>&1\n"
+            f"gcloud storage rsync --recursive {safe_source_gcs_path} {safe_dest_path_slash} 2>&1\n"
         )
         data_source = f"gcs:{source_bucket}"
     else:
@@ -262,7 +262,7 @@ def submit_download(
             f"else\n"
             f"  SYNC_SOURCE={safe_dest_path_slash}\n"
             f"fi\n"
-            f'gcloud storage cp --recursive "${{SYNC_SOURCE%/}}"/* {safe_gcs_path} 2>&1\n'
+            f'gcloud storage rsync --recursive "$SYNC_SOURCE" {safe_gcs_path} 2>&1\n'
         )
 
     full_script = (

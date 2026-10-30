@@ -14,15 +14,17 @@
 
 """Tool for submitting monomer AlphaFold2 predictions."""
 
+import contextlib
 import logging
 import os
 import re
 import tempfile
-import threading
 from datetime import datetime
 from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
+
+from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
 
 from ..base import AF2Tool
 from ..utils.fasta_utils import (
@@ -32,7 +34,6 @@ from ..utils.fasta_utils import (
 )
 
 logger = logging.getLogger(__name__)
-_COMPILE_ENV_LOCK = threading.Lock()
 
 
 class AF2SubmitMonomerTool(AF2Tool):
@@ -166,10 +167,11 @@ class AF2SubmitMonomerTool(AF2Tool):
                 "NVIDIA_A100_80GB": "a100-80gb",
             }
 
-            with _COMPILE_ENV_LOCK:
-                # Pass filestore info to environment setup
+            with (
+                GLOBAL_COMPILE_LOCK,
                 self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
-
+                or contextlib.nullcontext(),
+            ):
                 # Import the vendored pipeline
                 from ..utils.pipeline_utils import load_vertex_pipeline
 

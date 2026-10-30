@@ -14,6 +14,7 @@
 
 """Tool for submitting multimer AlphaFold2 predictions."""
 
+import contextlib
 import logging
 import os
 import tempfile
@@ -21,6 +22,8 @@ from datetime import datetime
 from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
+
+from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
 
 from ..base import AF2Tool
 from ..utils.fasta_utils import (
@@ -157,21 +160,23 @@ class AF2SubmitMultimerTool(AF2Tool):
             "NVIDIA_A100_80GB": "a100-80gb",
         }
 
-        # Pass filestore info to environment setup
-        self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
-
-        # Import the vendored pipeline
-        from ..utils.pipeline_utils import load_vertex_pipeline
-
-        pipeline = load_vertex_pipeline(
-            enable_flex_start=enable_flex_start, msa_method=resolved_msa
-        )
-
-        # Compile pipeline
         pipeline_path = os.path.join(tempfile.gettempdir(), f"af2_pipeline_{job_name}.json")
-        from kfp import compiler
+        with (
+            GLOBAL_COMPILE_LOCK,
+            self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
+            or contextlib.nullcontext(),
+        ):
+            # Import the vendored pipeline
+            from ..utils.pipeline_utils import load_vertex_pipeline
 
-        compiler.Compiler().compile(pipeline_func=pipeline, package_path=pipeline_path)
+            pipeline = load_vertex_pipeline(
+                enable_flex_start=enable_flex_start, msa_method=resolved_msa
+            )
+
+            # Compile pipeline
+            from kfp import compiler
+
+            compiler.Compiler().compile(pipeline_func=pipeline, package_path=pipeline_path)
 
         # Prepare labels (use resolved values, not 'auto')
         labels = {
@@ -187,6 +192,10 @@ class AF2SubmitMultimerTool(AF2Tool):
 
         # Submit pipeline job
         pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        model_params_gcs_location = (
+            os.environ.get("MODEL_PARAMS_GCS_LOCATION")
+            or f"gs://{self.config.databases_bucket_name}/alphafold2"
+        )
 
         # Prepare scheduling strategy
         job_kwargs = {
@@ -197,7 +206,7 @@ class AF2SubmitMultimerTool(AF2Tool):
                 "sequence_path": gcs_sequence_path,
                 "max_template_date": max_template_date,
                 "model_preset": "multimer",
-                "model_params_gcs_location": os.environ.get("MODEL_PARAMS_GCS_LOCATION"),
+                "model_params_gcs_location": model_params_gcs_location,
                 "project": self.config.project_id,
                 "region": self.config.region,
                 "use_small_bfd": use_small_bfd,

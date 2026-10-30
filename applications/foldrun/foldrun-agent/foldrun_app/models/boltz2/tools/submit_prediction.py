@@ -14,6 +14,7 @@
 
 """Tool for submitting Boltz2 structure predictions."""
 
+import contextlib
 import logging
 import os
 import tempfile
@@ -22,6 +23,8 @@ from typing import Any
 
 import yaml
 from google.cloud import aiplatform as vertex_ai
+
+from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
 
 from ..base import BOLTZ2Tool
 from ..utils.input_converter import (
@@ -158,21 +161,23 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             "NVIDIA_A100_80GB": "a100-80gb",
         }
 
-        # Setup environment for pipeline compilation
-        self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
-
-        # Load and compile pipeline
-        from ..utils.pipeline_utils import load_vertex_pipeline
-
-        pipeline = load_vertex_pipeline(enable_flex_start=enable_flex_start)
-
         pipeline_path = os.path.join(tempfile.gettempdir(), f"boltz2_pipeline_{job_name}.yaml")
-        from kfp import compiler
+        with (
+            GLOBAL_COMPILE_LOCK,
+            self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
+            or contextlib.nullcontext(),
+        ):
+            # Load and compile pipeline
+            from ..utils.pipeline_utils import load_vertex_pipeline
 
-        compiler.Compiler().compile(
-            pipeline_func=pipeline,
-            package_path=pipeline_path,
-        )
+            pipeline = load_vertex_pipeline(enable_flex_start=enable_flex_start)
+
+            from kfp import compiler
+
+            compiler.Compiler().compile(
+                pipeline_func=pipeline,
+                package_path=pipeline_path,
+            )
         # Prepare labels — parse chain count from YAML for job_type
         import yaml as _yaml
 

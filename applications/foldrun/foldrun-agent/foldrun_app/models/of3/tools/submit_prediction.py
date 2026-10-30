@@ -14,22 +14,22 @@
 
 """Tool for submitting OpenFold3 structure predictions."""
 
+import contextlib
 import json
 import logging
 import os
 import tempfile
-import threading
 from datetime import datetime
 from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
 
+from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
+
 from ..base import OF3Tool
 from ..utils.input_converter import count_tokens, fasta_to_of3_json, is_of3_json, validate_of3_json
 
 logger = logging.getLogger(__name__)
-
-_COMPILE_LOCK = threading.Lock()
 
 
 class OF3SubmitPredictionTool(OF3Tool):
@@ -179,16 +179,17 @@ class OF3SubmitPredictionTool(OF3Tool):
             "NVIDIA_A100_80GB": "a100-80gb",
         }
 
-        with _COMPILE_LOCK:
-            # Setup environment for pipeline compilation
+        pipeline_path = os.path.join(tempfile.gettempdir(), f"of3_pipeline_{job_name}.json")
+        with (
+            GLOBAL_COMPILE_LOCK,
             self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
-
+            or contextlib.nullcontext(),
+        ):
             # Load and compile pipeline
             from ..utils.pipeline_utils import load_vertex_pipeline
 
             pipeline = load_vertex_pipeline(enable_flex_start=enable_flex_start)
 
-            pipeline_path = os.path.join(tempfile.gettempdir(), f"of3_pipeline_{job_name}.json")
             from kfp import compiler
 
             compiler.Compiler().compile(

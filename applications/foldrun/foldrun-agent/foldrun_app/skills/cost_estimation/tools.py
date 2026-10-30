@@ -25,7 +25,7 @@ def estimate_job_cost(
     job_type: str,
     gpu_type: str = "auto",
     sequence_length: int = 300,
-    num_predictions_per_model: int = 5,
+    num_predictions_per_model: int | None = None,
     num_diffusion_samples: int = 5,
     region: str | None = None,
 ) -> dict:

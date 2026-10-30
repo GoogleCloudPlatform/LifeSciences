@@ -185,7 +185,7 @@ def _decompress_zst_bytes(
     return b"".join(chunks)
 
 
-def _sanitize_structure_bfactors(content: str) -> str:
+def _sanitize_structure_bfactors(content: str, fmt: str | None = None) -> str:
     """Replace non-finite B-factor tokens in ATOM/HETATM records with 0.00 for 3Dmol.js.
 
     Never fabricates high-confidence pLDDT values (such as 80.0/82.0) and avoids
@@ -198,32 +198,33 @@ def _sanitize_structure_bfactors(content: str) -> str:
 
     for line in content.splitlines(keepends=True):
         stripped = line.strip()
-        if stripped == "loop_":
-            in_atom_site_loop = False
-            atom_site_cols = []
-            b_col_idx = None
-            out_lines.append(line)
-            continue
-
-        if stripped.startswith("_atom_site."):
-            in_atom_site_loop = True
-            atom_site_cols.append(stripped)
-            if stripped == "_atom_site.B_iso_or_equiv":
-                b_col_idx = len(atom_site_cols) - 1
-            out_lines.append(line)
-            continue
-
-        if (
-            in_atom_site_loop
-            and stripped
-            and not stripped.startswith(("ATOM ", "HETATM ", "ATOM\t", "HETATM\t"))
-        ):
-            if stripped.startswith(("_", "#")):
+        if fmt != "pdb":
+            if stripped == "loop_":
                 in_atom_site_loop = False
                 atom_site_cols = []
                 b_col_idx = None
-            out_lines.append(line)
-            continue
+                out_lines.append(line)
+                continue
+
+            if stripped.startswith("_atom_site."):
+                in_atom_site_loop = True
+                atom_site_cols.append(stripped)
+                if stripped == "_atom_site.B_iso_or_equiv":
+                    b_col_idx = len(atom_site_cols) - 1
+                out_lines.append(line)
+                continue
+
+            if (
+                in_atom_site_loop
+                and stripped
+                and not stripped.startswith(("ATOM ", "HETATM ", "ATOM\t", "HETATM\t"))
+            ):
+                if stripped.startswith(("_", "#")):
+                    in_atom_site_loop = False
+                    atom_site_cols = []
+                    b_col_idx = None
+                out_lines.append(line)
+                continue
 
         if stripped.startswith(("ATOM ", "HETATM ", "ATOM\t", "HETATM\t")):
             line_ending = (
@@ -234,7 +235,7 @@ def _sanitize_structure_bfactors(content: str) -> str:
             body = line[: len(line) - len(line_ending)] if line_ending else line
 
             # Headered mmCIF _atom_site loop with known B_iso_or_equiv column
-            if in_atom_site_loop and b_col_idx is not None:
+            if fmt != "pdb" and in_atom_site_loop and b_col_idx is not None:
                 tokens = body.split()
                 if b_col_idx < len(tokens) and _NONFINITE_TOKEN_RE.match(
                     tokens[b_col_idx]
@@ -245,15 +246,25 @@ def _sanitize_structure_bfactors(content: str) -> str:
                 out_lines.append(line)
                 continue
 
-            # Fixed-width PDB ATOM/HETATM record (columns 61-66 are tempFactor)
             tokens = body.split()
-            if len(body) >= 66 and len(tokens) <= 13 and "." not in tokens[4:6]:
-                bfac_slice = body[60:66].strip()
-                if bfac_slice and _NONFINITE_TOKEN_RE.match(bfac_slice):
-                    out_lines.append(
-                        body[:60] + f"{0.0:6.2f}" + body[66:] + line_ending
-                    )
-                    continue
+            is_pdb_line = fmt == "pdb" or (
+                fmt is None
+                and not in_atom_site_loop
+                and body[:6] in ("ATOM  ", "HETATM")
+                and "." not in tokens[4:6]
+                and "?" not in tokens[4:6]
+            )
+            # Fixed-width PDB ATOM/HETATM record (columns 61-66 are tempFactor)
+            if is_pdb_line:
+                if len(body) >= 66:
+                    bfac_slice = body[60:66].strip()
+                    if bfac_slice and _NONFINITE_TOKEN_RE.match(bfac_slice):
+                        out_lines.append(
+                            body[:60] + f"{0.0:6.2f}" + body[66:] + line_ending
+                        )
+                        continue
+                out_lines.append(line)
+                continue
 
             # Headerless mmCIF record: B-factor is always at token index >= 10 (after x, y, z, occupancy)
             changed = False
@@ -304,7 +315,7 @@ def load_gcs_file(uri, as_json=False, allowed_extensions=None):
 def get_pdb_content(pdb_uri):
     """Get PDB file content from GCS"""
     content = load_gcs_file(pdb_uri, allowed_extensions=(".pdb", ".pdb.zst"))
-    return _sanitize_structure_bfactors(content)
+    return _sanitize_structure_bfactors(content, fmt="pdb")
 
 
 def _resolve_summary_and_uri(job_id=None, summary_uri=None):
@@ -685,7 +696,7 @@ def get_cif():
 
     try:
         content = load_gcs_file(cif_uri, allowed_extensions=(".cif", ".cif.zst"))
-        content = _sanitize_structure_bfactors(content)
+        content = _sanitize_structure_bfactors(content, fmt="cif")
         return content, 200, {"Content-Type": "text/plain"}
     except ValueError as e:
         logger.warning(f"Invalid CIF URI: {e}")

@@ -16,6 +16,7 @@
 
 import re
 
+from google.api_core import exceptions as google_exceptions
 from google.cloud import aiplatform_v1 as vertex_ai
 
 _JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -75,12 +76,13 @@ def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.Pip
     try:
         request = vertex_ai.GetPipelineJobRequest(name=full_name)
         return client.get_pipeline_job(request=request)
-    except Exception as orig_exc:
+    except (google_exceptions.NotFound, google_exceptions.InvalidArgument) as orig_exc:
         parent = f"projects/{project_id}/locations/{region}"
         try:
             list_req = vertex_ai.ListPipelineJobsRequest(
                 parent=parent,
                 filter=f'display_name="{raw_id}"',
+                order_by="create_time desc",
                 page_size=10,
             )
             matches = list(client.list_pipeline_jobs(request=list_req))
