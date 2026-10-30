@@ -296,5 +296,7 @@ def count_tokens(query_json: dict) -> int:
     total = 0
     for _query_name, query_data in query_json.get("queries", {}).items():
         for chain in query_data.get("chains", []):
-            total += len(chain.get("sequence", ""))
+            chain_ids = chain.get("chain_ids", ["A"])
+            mult = max(1, len(chain_ids)) if isinstance(chain_ids, list) else 1
+            total += len(chain.get("sequence", "")) * mult
     return total

@@ -152,6 +152,9 @@ deployment_metadata.json
 
 # Environments
 .env
+.env.*
+!.env.example
+!.env.test
 .envrc
 .venv
 env/
@@ -159,6 +162,15 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# FoldRun Shim & Notebook runtime state / build outputs
+.foldrun_job.json
+sdk/foldrun-shim/**/.env*
+!sdk/foldrun-shim/**/.env.example
+sdk/foldrun-shim/dist/
+latest_build
+*/latest_build
+sdk/foldrun-shim/**/latest_build
 
 # Spyder project settings
 .spyderproject

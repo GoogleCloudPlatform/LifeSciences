@@ -254,7 +254,9 @@ def count_tokens(yaml_data: str) -> int:
             for mol_type in ("protein", "rna", "dna"):
                 if mol_type in entry:
                     seq = entry[mol_type].get("sequence", "")
-                    total += len(str(seq))
+                    ids = entry[mol_type].get("id", "A")
+                    mult = max(1, len(ids)) if isinstance(ids, list) else 1
+                    total += len(str(seq)) * mult
         return total
     except Exception:
         # Fallback: scan lines for 'sequence:' fields

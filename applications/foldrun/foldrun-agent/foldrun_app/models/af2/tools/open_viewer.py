@@ -25,6 +25,9 @@ from ..base import AF2Tool
 logger = logging.getLogger(__name__)
 
 _JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+_VERTEX_RESOURCE_PATTERN = re.compile(
+    r"^projects/[a-zA-Z0-9_-]+/locations/[a-zA-Z0-9_-]+/pipelineJobs/([a-zA-Z0-9_-]+)$"
+)
 
 
 class AF2OpenViewerTool(AF2Tool):
@@ -65,6 +68,11 @@ class AF2OpenViewerTool(AF2Tool):
         job_id = arguments.get("job_id")
         if not job_id:
             raise ValueError("job_id is required")
+
+        if isinstance(job_id, str):
+            m = _VERTEX_RESOURCE_PATTERN.match(job_id)
+            if m:
+                job_id = m.group(1)
 
         if not isinstance(job_id, str) or not _JOB_ID_PATTERN.match(job_id):
             raise ValueError(f"Invalid job_id '{job_id}': must match ^[a-zA-Z0-9_-]+$")

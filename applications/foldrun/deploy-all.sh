@@ -38,6 +38,9 @@ usage() {
   echo "                         (google/alphafold3@v3_0_4) and set 3,600s inference timeout."
   echo "  --af3-capacity-pool P  Target capacity pool for the AF3 endpoint: DWS (default),"
   echo "                         ANY_RESERVATION, NO_RESERVATION, or SPOT."
+  echo "  --enable-gateway       Deploy the Cloud Run HTTP Gateway and foldrun-shim SDK (default: true)."
+  echo "                         Also supports --build-target gateway and --build-target sdk."
+  echo "  --disable-gateway      Skip provisioning and deploying the Cloud Run HTTP Gateway."
     echo "  --build-target TARGET  With --steps build: which components to rebuild (default: all)."
     echo "                           all            - rebuild everything (default)"
     echo "                           of3            - openfold3-components + agent"
@@ -86,6 +89,10 @@ usage() {
     echo "  AGENT_SA_EMAIL     Agent service account email"
     echo "  BUILD_SA_EMAIL     Cloud Build service account email"
     echo "  PIPELINES_SA_EMAIL Agent Platform Pipelines service account email"
+    echo "  ENABLE_GATEWAY     Deploy Cloud Run HTTP Gateway: true (default) or false"
+    echo "  GATEWAY_INGRESS    Cloud Run ingress for foldrun-gateway (default: INGRESS_TRAFFIC_ALL)"
+    echo "  FOLDRUN_GATEWAY_URL Custom Gateway URL (defaults to Terraform output if available)"
+    echo "  GATEWAY_SA_EMAIL   Gateway service account email"
     echo ""
     echo "Examples:"
     echo "  $0                                      # Full deploy (infra + build + data)"
@@ -101,6 +108,8 @@ usage() {
     echo "  $0 --steps infra,build                              # Terraform + Cloud Build (no data)"
     echo "  $0 --steps build --build-target of3                 # Rebuild only OF3 container + agent"
     echo "  $0 --steps build --build-target agent               # Redeploy agent only (fast)"
+    echo "  $0 --steps build --build-target gateway             # Rebuild & deploy foldrun-gateway + SDK"
+    echo "  $0 --steps build --build-target sdk                 # Rebuild & upload foldrun-shim wheel + notebooks to GCS"
     echo "  $0 --steps build --build-target of3,viewer          # Rebuild OF3 + viewer + agent"
     echo "  $0 --steps build --build-target analysis            # Rebuild only the analysis job"
     echo "  DOWNLOAD_MODE=full $0                               # Full deploy with all databases"
@@ -130,6 +139,14 @@ while [[ $# -gt 0 ]]; do
             export AF3_CAPACITY_POOL="$2"
             shift 2
             ;;
+        --enable-gateway)
+            export ENABLE_GATEWAY="true"
+            shift
+            ;;
+        --disable-gateway)
+            export ENABLE_GATEWAY="false"
+            shift
+            ;;
         --build-target)
             BUILD_TARGET="$2"
             shift 2
@@ -151,6 +168,9 @@ while [[ $# -gt 0 ]]; do
             rm -rf foldrun-agent/.venv
             rm -rf foldrun-agent/*.egg-info
             rm -rf foldrun-agent/__pycache__
+            rm -rf sdk/foldrun-shim/.venv
+            rm -rf sdk/foldrun-shim/*.egg-info
+            rm -rf sdk/foldrun-shim/dist
             find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
             find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
             find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
@@ -200,6 +220,8 @@ fi
 REGION=${POSITIONAL_ARGS[1]:-"us-central1"}
 ZONE=${ZONE:-"${REGION}-a"}
 ENABLE_AF3=${ENABLE_AF3:-"false"}
+ENABLE_GATEWAY=${ENABLE_GATEWAY:-"true"}
+GATEWAY_INGRESS=${GATEWAY_INGRESS:-"INGRESS_TRAFFIC_ALL"}
 AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION:-""}
 if [[ "${AF3_ENDPOINT_LOCATION,,}" == "global" ]]; then
     AF3_ENDPOINT_LOCATION=""
@@ -269,6 +291,7 @@ echo "==========================================================================
 echo "Project:       $PROJECT_ID"
 echo "Region:        $REGION (Zone: $ZONE)"
 echo "AF3 Endpoint:  $ENABLE_AF3 (Location: ${AF3_ENDPOINT_LOCATION:-$REGION}, Pool: ${AF3_CAPACITY_POOL:-$([[ "$AF3_USE_DWS" == "true" ]] && echo "DWS" || echo "$AF3_RESERVATION_AFFINITY_TYPE")})"
+echo "HTTP Gateway:  $ENABLE_GATEWAY (Ingress: $GATEWAY_INGRESS)"
 echo "Viewer IAP:    $ENABLE_VIEWER_IAP"
 echo "IAP Domain:    $IAP_ACCESS_DOMAIN"
 echo "Download Mode: $DOWNLOAD_MODE"
@@ -299,6 +322,7 @@ extract_terraform_outputs() {
     export FILESTORE_ID="${FILESTORE_ID:-foldrun-nfs}"
     export FILESTORE_LOCATION="${FILESTORE_LOCATION:-}"
     export AGENT_SA_EMAIL="${AGENT_SA_EMAIL:-foldrun-agent-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
+    export GATEWAY_SA_EMAIL="${GATEWAY_SA_EMAIL:-foldrun-gateway-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export BUILD_SA_EMAIL="${BUILD_SA_EMAIL:-foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export PIPELINES_SA_EMAIL="${PIPELINES_SA_EMAIL:-pipelines-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
     export DATABASES_BUCKET="${DATABASES_BUCKET:-${PROJECT_ID}-foldrun-gdbs}"
@@ -308,6 +332,7 @@ extract_terraform_outputs() {
     export MODEL_ENDPOINT_LOCATION="${MODEL_ENDPOINT_LOCATION:-global}"
     export AF3_ENDPOINT_LOCATION="${AF3_ENDPOINT_LOCATION:-}"
     export TF_VIEWER_URL="${TF_VIEWER_URL:-}"
+    export TF_GATEWAY_URL="${TF_GATEWAY_URL:-}"
     export GEMINI_ENTERPRISE_APP_ID="${GEMINI_ENTERPRISE_APP_ID:-}"
 
     # If terraform is available, cross-check naming-convention defaults against
@@ -339,6 +364,7 @@ EOF
             v=$(_tf filestore_id);           if [[ -n "$v" ]]; then echo "FILESTORE_ID=$v"; fi
             v=$(_tf filestore_location);     if [[ -n "$v" ]]; then echo "FILESTORE_LOCATION=$v"; fi
             v=$(_tf agent_sa_email);         if [[ -n "$v" ]]; then echo "AGENT_SA_EMAIL=$v"; fi
+            v=$(_tf gateway_sa_email);       if [[ -n "$v" ]]; then echo "GATEWAY_SA_EMAIL=$v"; fi
             v=$(_tf build_sa_email);         if [[ -n "$v" ]]; then echo "BUILD_SA_EMAIL=$v"; fi
             v=$(_tf pipelines_sa_email);     if [[ -n "$v" ]]; then echo "PIPELINES_SA_EMAIL=$v"; fi
             v=$(_tf databases_bucket_name);  if [[ -n "$v" ]]; then echo "DATABASES_BUCKET=$v"; fi
@@ -347,6 +373,7 @@ EOF
             v=$(_tf network_project_number); if [[ -n "$v" ]]; then echo "NETWORK_PROJECT_NUMBER=$v"; fi
             v=$(_tf model_endpoint_location); if [[ -n "$v" ]]; then echo "MODEL_ENDPOINT_LOCATION=$v"; fi
             v=$(_tf af3_endpoint_location);  if [[ -n "$v" ]]; then echo "AF3_ENDPOINT_LOCATION=$v"; fi
+            v=$(_tf foldrun_gateway_url);    if [[ -n "$v" ]]; then echo "TF_GATEWAY_URL=$v"; fi
             v=$(_tf foldrun_viewer_url);     if [[ -n "$v" ]]; then echo "TF_VIEWER_URL=$v"; fi
             v=$(_tf agent_runtime_id);       if [[ -n "$v" ]]; then echo "AGENT_RUNTIME_ID=$v"; fi
         ) > "$_tf_env" 2>/dev/null || true
@@ -364,6 +391,10 @@ EOF
     if [[ -z "${FOLDRUN_VIEWER_URL:-}" ]]; then
         export FOLDRUN_VIEWER_URL=$(gcloud run services describe foldrun-viewer --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)" 2>/dev/null || true)
     fi
+    export FOLDRUN_GATEWAY_URL="${FOLDRUN_GATEWAY_URL:-$TF_GATEWAY_URL}"
+    if [[ -z "${FOLDRUN_GATEWAY_URL:-}" ]] && [[ "${ENABLE_GATEWAY}" == "true" ]]; then
+        export FOLDRUN_GATEWAY_URL=$(gcloud run services describe foldrun-gateway --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)" 2>/dev/null || true)
+    fi
     if [[ -z "${AGENT_RUNTIME_ID:-}" ]]; then
         _tok=$(gcloud auth print-access-token 2>/dev/null || true)
         if [[ -n "$_tok" ]]; then
@@ -378,6 +409,7 @@ EOF
     echo "  FILESTORE_LOCATION=${FILESTORE_LOCATION:-<auto: region, then zone>}"
     echo "  DATABASES_BUCKET=$DATABASES_BUCKET"
     echo "  AGENT_SA_EMAIL=$AGENT_SA_EMAIL"
+    echo "  GATEWAY_SA_EMAIL=$GATEWAY_SA_EMAIL"
     echo "  BUILD_SA_EMAIL=$BUILD_SA_EMAIL"
     echo "  PIPELINES_SA_EMAIL=$PIPELINES_SA_EMAIL"
     echo "  SUBNET_ID=$SUBNET_ID"
@@ -386,8 +418,46 @@ EOF
     echo "  MODEL_ENDPOINT_LOCATION=$MODEL_ENDPOINT_LOCATION"
     echo "  AF3_ENDPOINT_LOCATION=$AF3_ENDPOINT_LOCATION"
     echo "  FOLDRUN_VIEWER_URL=$FOLDRUN_VIEWER_URL"
+    echo "  FOLDRUN_GATEWAY_URL=$FOLDRUN_GATEWAY_URL"
     echo "  AGENT_RUNTIME_ID=$AGENT_RUNTIME_ID"
     echo "  GEMINI_ENTERPRISE_APP_ID=$GEMINI_ENTERPRISE_APP_ID"
+}
+
+generate_notebook_dotenv() {
+    local sdk_dir="sdk/foldrun-shim"
+    if [[ ! -d "$sdk_dir" ]]; then
+        return 0
+    fi
+    local env_content
+    env_content=$(cat <<EOF
+# Auto-generated by FoldRun deploy-all.sh ($(date -u +"%Y-%m-%dT%H:%M:%SZ"))
+FOLDRUN_PROJECT_ID=${PROJECT_ID}
+FOLDRUN_REGION=${REGION}
+FOLDRUN_GATEWAY_URL=${FOLDRUN_GATEWAY_URL:-}
+FOLDRUN_VIEWER_URL=${FOLDRUN_VIEWER_URL:-}
+FOLDRUN_GCS_BUCKET=${GCS_BUCKET}
+FOLDRUN_DATABASES_BUCKET=${DATABASES_BUCKET}
+EOF
+)
+    echo "$env_content" > "${sdk_dir}/.env"
+    if [[ -d "${sdk_dir}/notebooks" ]]; then
+        echo "$env_content" > "${sdk_dir}/notebooks/.env"
+        for nb_subdir in "${sdk_dir}"/notebooks/*/; do
+            [[ -d "$nb_subdir" ]] && echo "$env_content" > "${nb_subdir}.env"
+        done
+    fi
+    echo "Generated notebook .env files in ${sdk_dir}/notebooks/"
+
+    if [[ -n "${GCS_BUCKET:-}" ]]; then
+        local tmp_env
+        tmp_env=$(mktemp)
+        echo "$env_content" > "$tmp_env"
+        if gcloud storage cp "$tmp_env" "gs://${GCS_BUCKET}/sdk/.env" --project="$PROJECT_ID" 2>/dev/null && \
+           gcloud storage cp "$tmp_env" "gs://${GCS_BUCKET}/sdk/notebooks/.env" --project="$PROJECT_ID" 2>/dev/null; then
+            echo "Uploaded SDK .env to gs://${GCS_BUCKET}/sdk/.env and gs://${GCS_BUCKET}/sdk/notebooks/.env"
+        fi
+        rm -f "$tmp_env"
+    fi
 }
 
 # ==============================================================================
@@ -435,6 +505,8 @@ EOF
         -var="bucket_name=${BUCKET_NAME}"
         -var="iap_access_domain=${IAP_ACCESS_DOMAIN}"
         -var="enable_viewer_iap=${ENABLE_VIEWER_IAP}"
+        -var="enable_gateway=${ENABLE_GATEWAY}"
+        -var="gateway_ingress=${GATEWAY_INGRESS}"
         -var="enable_af3=${ENABLE_AF3}"
         -var="af3_endpoint_location=${AF3_ENDPOINT_LOCATION}"
         -var="af3_use_dws=${AF3_USE_DWS}"
@@ -671,6 +743,10 @@ print(result)
 fi
 
 echo ""
+if [[ -z "${FOLDRUN_GATEWAY_URL:-}" ]] && [[ "${ENABLE_GATEWAY}" == "true" ]]; then
+    export FOLDRUN_GATEWAY_URL=$(gcloud run services describe foldrun-gateway --region="$REGION" --project="$PROJECT_ID" --format="value(status.url)" 2>/dev/null || true)
+fi
+generate_notebook_dotenv || true
 echo "================================================================================"
 echo "Deployment Complete!"
 echo "================================================================================"

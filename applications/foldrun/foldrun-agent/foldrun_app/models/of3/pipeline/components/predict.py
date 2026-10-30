@@ -52,6 +52,8 @@ def predict_of3(
     use_templates: bool = True,
     nfs_mmcif_dir: str = "",
     use_cueq_triangle_kernels: bool = True,
+    extra_cli_args: list = [],
+    custom_runner_yaml_overrides: dict = {},
 ):
     """Runs OF3 structure prediction for a single seed.
 
@@ -112,6 +114,15 @@ def predict_of3(
     #   from RCSB, keeping prediction VPC-isolated.
     import yaml
 
+    def _deep_merge(base: dict, overrides: dict) -> dict:
+        merged = dict(base)
+        for k, v in overrides.items():
+            if isinstance(v, dict) and isinstance(merged.get(k), dict):
+                merged[k] = _deep_merge(merged[k], v)
+            else:
+                merged[k] = v
+        return merged
+
     runner_config: dict = {
         "msa_computation_settings": {
             "save_openfold_outputs": False,
@@ -119,17 +130,6 @@ def predict_of3(
             "save_mappings": False,
         }
     }
-    if use_templates and nfs_mmcif_dir:
-        runner_config["template_preprocessor_settings"] = {
-            "structure_directory": nfs_mmcif_dir,
-            "fetch_missing_structures": False,
-            "structure_file_format": "cif",
-        }
-    elif use_templates:
-        logging.warning(
-            "use_templates=True but nfs_mmcif_dir not provided; "
-            "OF3 will attempt to download template structures from RCSB"
-        )
     if use_cueq_triangle_kernels:
         runner_config["model_update"] = {
             "presets": ["predict"],
@@ -145,6 +145,21 @@ def predict_of3(
             },
         }
         logging.info("cuEquivariance triangle kernels ENABLED in runner YAML")
+
+    if custom_runner_yaml_overrides and isinstance(custom_runner_yaml_overrides, dict):
+        runner_config = _deep_merge(runner_config, custom_runner_yaml_overrides)
+
+    if use_templates and nfs_mmcif_dir:
+        tpl_settings = dict(runner_config.get("template_preprocessor_settings") or {})
+        tpl_settings["structure_directory"] = nfs_mmcif_dir
+        tpl_settings["fetch_missing_structures"] = False
+        tpl_settings["structure_file_format"] = "cif"
+        runner_config["template_preprocessor_settings"] = tpl_settings
+    elif use_templates:
+        logging.warning(
+            "use_templates=True but nfs_mmcif_dir not provided; "
+            "OF3 will attempt to download template structures from RCSB"
+        )
 
     runner_yaml_path = os.path.join(output_dir, "runner.yaml")
     with open(runner_yaml_path, "w") as f:
@@ -166,6 +181,11 @@ def predict_of3(
         f"--use_templates={use_templates!s}",
         f"--runner_yaml={runner_yaml_path}",
     ]
+    if extra_cli_args:
+        for arg in extra_cli_args:
+            arg_str = str(arg)
+            if arg_str not in cmd:
+                cmd.append(arg_str)
 
     logging.info(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
@@ -183,13 +203,17 @@ def predict_of3(
     _chains = []
     for _q in _qdata.get("queries", {}).values():
         _chains.extend(_q.get("chains", []))
-    _is_monomer = len(_chains) <= 1
+    _num_chains = sum(
+        len(c.get("chain_ids", ["A"])) if isinstance(c.get("chain_ids"), list) else 1
+        for c in _chains
+    )
+    _is_monomer = _num_chains <= 1
 
     if _is_monomer:
         logging.info("Monomer detected — ranking samples by ptm (not sample_ranking_score)")
     else:
         logging.info(
-            f"Complex detected ({len(_chains)} chains) — ranking samples by sample_ranking_score"
+            f"Complex detected ({_num_chains} chains) — ranking samples by sample_ranking_score"
         )
 
     best_cif = None

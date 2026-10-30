@@ -33,4 +33,10 @@ resource "google_project_iam_member" "foldrun_build" {
   member  = "serviceAccount:${google_service_account.foldrun_build.email}"
 }
 
+resource "google_storage_bucket_iam_member" "foldrun_build_bucket_access" {
+  bucket = google_storage_bucket.foldrun_bucket.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.foldrun_build.email}"
+}
+
 

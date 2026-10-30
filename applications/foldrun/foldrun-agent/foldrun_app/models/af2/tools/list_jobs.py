@@ -167,6 +167,23 @@ class AF2ListJobsTool(AF2Tool):
             state_value = state_map.get(state_filter.lower(), state_filter.upper())
 
         # Add label-based convenience filters
+        if arguments.get("model_type"):
+            mt_raw = str(arguments["model_type"]).strip().lower()
+            mt_aliases = {
+                "af2": "alphafold2",
+                "alphafold2": "alphafold2",
+                "af3": "alphafold3",
+                "alphafold3": "alphafold3",
+                "of3": "openfold3",
+                "openfold3": "openfold3",
+                "boltz": "boltz2",
+                "boltz2": "boltz2",
+                "boltzgen": "boltzgen",
+                "rfd4_proteina": "rfd4-proteina",
+                "rfd4-proteina": "rfd4-proteina",
+                "bindcraft": "bindcraft",
+            }
+            label_filter["model_type"] = mt_aliases.get(mt_raw, mt_raw)
         if arguments.get("job_type"):
             label_filter["job_type"] = arguments["job_type"]
         if arguments.get("gpu_type"):
@@ -219,7 +236,13 @@ class AF2ListJobsTool(AF2Tool):
             # Filter by sequence length range
             if min_seq_length or max_seq_length:
                 try:
-                    seq_len = int(labels.get("seq_len", 0))
+                    raw_len = (
+                        labels.get("seq_len")
+                        or labels.get("num_tokens")
+                        or labels.get("num_residues")
+                        or 0
+                    )
+                    seq_len = int(raw_len)
                     if min_seq_length and seq_len < min_seq_length:
                         continue
                     if max_seq_length and seq_len > max_seq_length:
@@ -273,7 +296,21 @@ class AF2ListJobsTool(AF2Tool):
 
             # Add experiment-like grouping info
             if "job_type" in labels:
-                job_info["experiment"] = f"AlphaFold {labels['job_type'].title()}"
+                model_display_map = {
+                    "alphafold2": "AlphaFold",
+                    "alphafold3": "AlphaFold 3",
+                    "openfold3": "OpenFold3",
+                    "boltz2": "Boltz-2",
+                    "boltzgen": "BoltzGen",
+                    "rfd4-proteina": "RFD4-Proteina",
+                    "bindcraft": "BindCraft",
+                }
+                mt_prefix = model_display_map.get(
+                    labels.get("model_type", "alphafold2"), labels.get("model_type", "AlphaFold")
+                )
+                job_info["experiment"] = (
+                    f"{mt_prefix} {labels['job_type'].replace('_', ' ').title()}"
+                )
             if "seq_name" in labels:
                 job_info["sequence_name"] = labels["seq_name"]
             if "gpu_type" in labels:
