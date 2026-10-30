@@ -13,7 +13,7 @@ dependencies = [
     # ADK and AI Platform
     "google-adk[gcp,otel-gcp,bigquery-analytics]>=2.9.2,<3.0.0",
     "opentelemetry-resourcedetector-gcp<=1.12.0a0",
-    "google-cloud-aiplatform[evaluation,agent-engines]>=1.156.0,<2.0.0",
+    "google-cloud-aiplatform[evaluation,agent-engines]>=2.7.0,<2.8.0",
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
     "nest-asyncio>=1.5.0",
@@ -37,7 +37,7 @@ dependencies = [
     "a2a-sdk[http-server]>=1.0,<2",
     "aiohttp>=3.13.4",
     "gcsfs>=2026.10.0",
-    "protobuf>=6.31.1,<7.0.0",
+    "protobuf>=7.36.2,<7.37.0",
 ]
 
 [project.optional-dependencies]
@@ -51,7 +51,7 @@ lint = [
 ]
 eval = [
     "google-adk[eval]>=2.9.2,<3.0.0",
-    "google-cloud-aiplatform[evaluation]>=1.156.0,<2.0.0",
+    "google-cloud-aiplatform[evaluation]>=2.7.0,<2.8.0",
 ]
 
 [project.scripts]
