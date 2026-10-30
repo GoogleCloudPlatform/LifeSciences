@@ -43,6 +43,9 @@ usage() {
     echo "                           of3            - openfold3-components + agent"
     echo "                           af2            - alphafold-components + agent"
     echo "                           boltz2         - boltz2-components + agent"
+    echo "                           boltzgen       - boltzgen-components + agent"
+    echo "                           rfd4_proteina  - rfd4-proteina-components + agent"
+    echo "                           bindcraft      - bindcraft-components + agent"
     echo "                           viewer         - foldrun-viewer + agent"
     echo "                           agent          - agent only (no container rebuilds)"
     echo "                           analysis       - foldrun-analysis-job Cloud Run Job"
@@ -50,8 +53,11 @@ usage() {
     echo "  --db DATABASE          With --steps data or convert: target a single database."
     echo "                   data options: bfd, small_bfd, mgnify, pdb70, pdb_mmcif,"
     echo "                                pdb_seqres, uniref30, uniref90, uniprot,"
-    echo "                                alphafold_params, of3_params, boltz2_params"
+    echo "                                alphafold_params, of3_params, boltz2_cache,"
+    echo "                                boltzgen_cache, rfd4_proteina_cache, bindcraft_mpnn_params"
     echo "                   convert options: uniref90, mgnify, small_bfd"
+    echo "  --models MODELS        With --steps data: comma-separated list of models to download"
+    echo "                         databases/weights for (e.g. boltzgen,rfd4_proteina,bindcraft)."
     echo "  --force        With --steps data: re-download even if databases exist in GCS."
     echo "  --clean        Remove generated build artifacts (.egg-info, .venv, etc.)"
     echo "  --gemini-enterprise-app-id APP_ID"
@@ -69,6 +75,10 @@ usage() {
     echo "  ENABLE_VIEWER_IAP  Enable IAP for the viewer: true (default) or false"
     echo "  OF3_VERSION        OpenFold3 image tag[@digest] (default: 0.5-pixi pinned; requires OpenBind weights)"
     echo "  BOLTZ_VERSION      Boltz-2 pip package version to install (default: 2.2.1)"
+    echo "  BOLTZGEN_VERSION   BoltzGen pip package version to install (default: 0.3.2)"
+    echo "  RFD4_VERSION       RFD4-Proteina git commit to build (default: pinned commit)"
+    echo "  COLABDESIGN_VERSION ColabDesign git commit for BindCraft (default: pinned commit)"
+    echo "  FREEBINDCRAFT_VERSION FreeBindCraft git commit for BindCraft (default: pinned commit)"
     echo "  GEMINI_ENTERPRISE_APP_ID  Gemini Enterprise App ID (optional)"
     echo ""
     echo "  The following override the auto-detected naming conventions for"
@@ -113,6 +123,7 @@ usage() {
 STEPS="all"
 BUILD_TARGET="all"
 DB_NAME=""
+DATA_MODELS=""
 FORCE_DATA=false
 POSITIONAL_ARGS=()
 
@@ -136,6 +147,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --db)
             DB_NAME="$2"
+            shift 2
+            ;;
+        --models)
+            DATA_MODELS="$2"
             shift 2
             ;;
         --force)
@@ -233,6 +248,10 @@ DOWNLOAD_MODE=${DOWNLOAD_MODE:-"reduced"}
 AF2_VERSION=${AF2_VERSION:-"42719e135a62438aa651d2bc1d143626083c3703"}
 OF3_VERSION=${OF3_VERSION:-"0.5-pixi@sha256:8764f7320ff12c52e9b9ec6bb0047f71df0ab197d401d04a78a51f48e9913335"}
 BOLTZ_VERSION=${BOLTZ_VERSION:-"2.2.1"}
+BOLTZGEN_VERSION=${BOLTZGEN_VERSION:-"0.3.2"}
+RFD4_VERSION=${RFD4_VERSION:-"aaccdd2ad0720c180468df5f9cf037a713d403e5"}
+COLABDESIGN_VERSION=${COLABDESIGN_VERSION:-"8fd167defd1b0f98e29f00584ff4f3987e6935dc"}
+FREEBINDCRAFT_VERSION=${FREEBINDCRAFT_VERSION:-"056ff605371ce46174f2cffb7ea44e7337df4ee5"}
 ENABLE_VIEWER_IAP=${ENABLE_VIEWER_IAP:-"true"}
 GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID:-""}
 IAP_ACCESS_DOMAIN=${IAP_ACCESS_DOMAIN:-$(gcloud config get-value account | awk -F '@' '{print $2}')}
@@ -506,7 +525,7 @@ if $run_build; then
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
-        --substitutions="^;^_REGION=${REGION};_ZONE=${ZONE};_BUCKET_NAME=${GCS_BUCKET};_FILESTORE_ID=${FILESTORE_ID};_FILESTORE_LOCATION=${FILESTORE_LOCATION};_AR_REPO=${AR_REPO};_AGENT_SA_EMAIL=${AGENT_SA_EMAIL};_PIPELINES_SA_EMAIL=${PIPELINES_SA_EMAIL};_DATABASES_BUCKET=${DATABASES_BUCKET};_NETWORK_ID=${NETWORK_ID};_NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER};_AF2_VERSION=${AF2_VERSION};_OF3_VERSION=${OF3_VERSION};_BOLTZ_VERSION=${BOLTZ_VERSION};_BUILD_TARGET=${BUILD_TARGET};_MODEL_ENDPOINT_LOCATION=${MODEL_ENDPOINT_LOCATION};_AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION};_FOLDRUN_VIEWER_URL=${FOLDRUN_VIEWER_URL};_AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID};_GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID};_AF3_ENDPOINT=${AF3_ENDPOINT:-auto};_AF3_MODEL_ID=${AF3_MODEL_ID:-auto}" \
+        --substitutions="^;^_REGION=${REGION};_ZONE=${ZONE};_BUCKET_NAME=${GCS_BUCKET};_FILESTORE_ID=${FILESTORE_ID};_FILESTORE_LOCATION=${FILESTORE_LOCATION};_AR_REPO=${AR_REPO};_AGENT_SA_EMAIL=${AGENT_SA_EMAIL};_PIPELINES_SA_EMAIL=${PIPELINES_SA_EMAIL};_DATABASES_BUCKET=${DATABASES_BUCKET};_NETWORK_ID=${NETWORK_ID};_NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER};_AF2_VERSION=${AF2_VERSION};_OF3_VERSION=${OF3_VERSION};_BOLTZ_VERSION=${BOLTZ_VERSION};_BOLTZGEN_VERSION=${BOLTZGEN_VERSION};_RFD4_VERSION=${RFD4_VERSION};_COLABDESIGN_VERSION=${COLABDESIGN_VERSION};_FREEBINDCRAFT_VERSION=${FREEBINDCRAFT_VERSION};_BUILD_TARGET=${BUILD_TARGET};_MODEL_ENDPOINT_LOCATION=${MODEL_ENDPOINT_LOCATION};_AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION};_FOLDRUN_VIEWER_URL=${FOLDRUN_VIEWER_URL};_AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID};_GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID};_AF3_ENDPOINT=${AF3_ENDPOINT:-auto};_AF3_MODEL_ID=${AF3_MODEL_ID:-auto}" \
         --machine-type=e2-highcpu-8 \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi
@@ -529,10 +548,15 @@ if $run_data; then
     export ALPHAFOLD_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/alphafold-components:latest
     export OPENFOLD3_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/openfold3-components:latest
     export BOLTZ2_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/boltz2-components:latest
+    export BOLTZGEN_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/boltzgen-components:latest
+    export RFD4_PROTEINA_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/rfd4-proteina-components:latest
+    export BINDCRAFT_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/bindcraft-components:latest
     export DOWNLOAD_MODE
     DB_ARG=""
     if [[ -n "$DB_NAME" ]]; then
         DB_ARG="--db $DB_NAME"
+    elif [[ -n "$DATA_MODELS" ]]; then
+        DB_ARG="--models $DATA_MODELS"
     fi
     FORCE_ARG=""
     if $FORCE_DATA; then
@@ -540,12 +564,12 @@ if $run_data; then
     fi
 
     # If GCS_SOURCE_BUCKET is already set (e.g., from env), use it directly.
-    # If a specific --db target is given, skip the menu and download from internet.
+    # If a specific --db or --models target is given, skip the menu and download from internet.
     if [[ -n "${GCS_SOURCE_BUCKET:-}" ]]; then
         echo "Restoring databases from GCS: gs://${GCS_SOURCE_BUCKET}/"
         uv run python scripts/setup_data.py $DB_ARG $FORCE_ARG --source-bucket "$GCS_SOURCE_BUCKET"
-    elif [[ -n "$DB_NAME" ]]; then
-        echo "Downloading $DB_NAME from internet..."
+    elif [[ -n "$DB_NAME" ]] || [[ -n "$DATA_MODELS" ]]; then
+        echo "Downloading ${DB_NAME:-$DATA_MODELS} from internet..."
         uv run python scripts/setup_data.py $DB_ARG $FORCE_ARG
     else
         echo ""

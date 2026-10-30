@@ -19,11 +19,15 @@
 #   af2            - alphafold-components container
 #   of3            - openfold3-components container
 #   boltz2         - boltz2-components container
+#   boltzgen       - boltzgen-components container
+#   rfd4_proteina  - rfd4-proteina-components container
+#   bindcraft      - bindcraft-components container
 #   agent          - Agent Runtime only (no container rebuilds)
 #   analysis       - foldrun-analysis-job Cloud Run Job
 #
 # The agent is automatically included whenever viewer, af2, of3, boltz2,
-# or agent is in the target list (anything except analysis-only targets).
+# boltzgen, rfd4_proteina, bindcraft, or agent is in the target list
+# (anything except analysis-only targets).
 # Examples:
 #   _BUILD_TARGET=of3            # rebuild OF3 container + redeploy agent
 #   _BUILD_TARGET=agent          # redeploy agent only, no container rebuilds
@@ -231,6 +235,101 @@ steps:
     waitFor: ['-']
 
   # ============================================================================
+  # 3d. BoltzGen Components (Pipeline Container Image)
+  # ============================================================================
+  - id: 'build-push-boltzgen-components'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'BOLTZGEN_VERSION=${_BOLTZGEN_VERSION}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",boltzgen,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltzgen-components:latest" || true
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --build-arg "BOLTZGEN_VERSION=$$BOLTZGEN_VERSION" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltzgen-components:latest" \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltzgen-components:latest" \
+            src/boltzgen-components/
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltzgen-components:latest"
+        else
+          echo "Skipping boltzgen-components build (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['-']
+
+  # ============================================================================
+  # 3e. RFD4-Proteina Components (Pipeline Container Image)
+  # ============================================================================
+  - id: 'build-push-rfd4-proteina-components'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'RFD4_VERSION=${_RFD4_VERSION}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",rfd4_proteina,"* ]] || [[ "$$_t" == *",rfd4,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/rfd4-proteina-components:latest" || true
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --build-arg "RFD4_VERSION=$$RFD4_VERSION" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/rfd4-proteina-components:latest" \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/rfd4-proteina-components:latest" \
+            src/rfd4-proteina-components/
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/rfd4-proteina-components:latest"
+        else
+          echo "Skipping rfd4-proteina-components build (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['-']
+
+  # ============================================================================
+  # 3f. BindCraft Components (Pipeline Container Image)
+  # ============================================================================
+  - id: 'build-push-bindcraft-components'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+      - 'COLABDESIGN_VERSION=${_COLABDESIGN_VERSION}'
+      - 'FREEBINDCRAFT_VERSION=${_FREEBINDCRAFT_VERSION}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",bindcraft,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/bindcraft-components:latest" || true
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --build-arg "COLABDESIGN_VERSION=$$COLABDESIGN_VERSION" \
+            --build-arg "FREEBINDCRAFT_VERSION=$$FREEBINDCRAFT_VERSION" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/bindcraft-components:latest" \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/bindcraft-components:latest" \
+            src/bindcraft-components/
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/bindcraft-components:latest"
+        else
+          echo "Skipping bindcraft-components build (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['-']
+
+  # ============================================================================
   # 4. FoldRun Agent (Agent Runtime)
   # Runs whenever any component or the agent itself is in the target.
   # Skipped only for analysis-job-only targets.
@@ -269,7 +368,9 @@ steps:
         if [[ "$$BUILD_TARGET" != "all" ]] && [[ "$$BUILD_TARGET" != "agent" ]] && \
            [[ "$$_t" != *",agent,"* ]] && \
            [[ "$$_t" != *",viewer,"* ]] && [[ "$$_t" != *",af2,"* ]] && \
-           [[ "$$_t" != *",of3,"* ]] && [[ "$$_t" != *",boltz2,"* ]]; then
+           [[ "$$_t" != *",of3,"* ]] && [[ "$$_t" != *",boltz2,"* ]] && \
+           [[ "$$_t" != *",boltzgen,"* ]] && [[ "$$_t" != *",rfd4_proteina,"* ]] && \
+           [[ "$$_t" != *",rfd4,"* ]] && [[ "$$_t" != *",bindcraft,"* ]]; then
           _skip_agent=true
         fi
 
@@ -299,6 +400,9 @@ steps:
             "ALPHAFOLD_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest"
             "OPENFOLD3_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest"
             "BOLTZ2_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest"
+            "BOLTZGEN_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltzgen-components:latest"
+            "RFD4_PROTEINA_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/rfd4-proteina-components:latest"
+            "BINDCRAFT_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/bindcraft-components:latest"
             "FOLDRUN_VIEWER_URL=$$FOLDRUN_VIEWER_URL"
             "ANALYSIS_JOB_NAME=foldrun-analysis-job"
             "PIPELINES_SA_EMAIL=$$PIPELINES_SA_EMAIL"
@@ -325,7 +429,14 @@ steps:
         echo ""
         echo "A2A URL: $$A2A_URL"
         echo "A2A Agent Card: $$A2A_URL/.well-known/agent-card.json"
-    waitFor: ['build-push-af2-components', 'build-push-of3-components', 'build-push-boltz2-components']
+    waitFor: [
+      'build-push-af2-components',
+      'build-push-of3-components',
+      'build-push-boltz2-components',
+      'build-push-boltzgen-components',
+      'build-push-rfd4-proteina-components',
+      'build-push-bindcraft-components'
+    ]
 
   # ============================================================================
   # 5. [Optional] Register Agent with Gemini Enterprise
@@ -377,6 +488,10 @@ substitutions:
   _AF2_VERSION: "42719e135a62438aa651d2bc1d143626083c3703"
   _OF3_VERSION: "0.5-pixi@sha256:8764f7320ff12c52e9b9ec6bb0047f71df0ab197d401d04a78a51f48e9913335"
   _BOLTZ_VERSION: "2.2.1"
+  _BOLTZGEN_VERSION: "0.3.2"
+  _RFD4_VERSION: "aaccdd2ad0720c180468df5f9cf037a713d403e5"
+  _COLABDESIGN_VERSION: "8fd167defd1b0f98e29f00584ff4f3987e6935dc"
+  _FREEBINDCRAFT_VERSION: "056ff605371ce46174f2cffb7ea44e7337df4ee5"
   _BUILD_TARGET: "all"
   _MODEL_ENDPOINT_LOCATION: "global"
   _AF3_ENDPOINT_LOCATION: ""

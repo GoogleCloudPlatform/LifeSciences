@@ -32,6 +32,7 @@ dependencies = [
     # Pipeline and bio
     "kfp>=2.10.0",
     "biopython>=1.81",
+    "gemmi>=0.6.5",
     "numpy>=1.24.0",
     "requests",
     "a2a-sdk[http-server]>=1.0,<2",
@@ -76,18 +77,36 @@ packages = [
     "foldrun_app.models.af3",
     "foldrun_app.models.af3.tools",
     "foldrun_app.models.af3.utils",
+    "foldrun_app.models.bindcraft",
+    "foldrun_app.models.bindcraft.tools",
+    "foldrun_app.models.bindcraft.utils",
+    "foldrun_app.models.bindcraft.pipeline",
+    "foldrun_app.models.bindcraft.pipeline.components",
+    "foldrun_app.models.bindcraft.pipeline.pipelines",
     "foldrun_app.models.boltz2",
     "foldrun_app.models.boltz2.tools",
     "foldrun_app.models.boltz2.utils",
     "foldrun_app.models.boltz2.pipeline",
     "foldrun_app.models.boltz2.pipeline.components",
     "foldrun_app.models.boltz2.pipeline.pipelines",
+    "foldrun_app.models.boltzgen",
+    "foldrun_app.models.boltzgen.tools",
+    "foldrun_app.models.boltzgen.utils",
+    "foldrun_app.models.boltzgen.pipeline",
+    "foldrun_app.models.boltzgen.pipeline.components",
+    "foldrun_app.models.boltzgen.pipeline.pipelines",
     "foldrun_app.models.of3",
     "foldrun_app.models.of3.tools",
     "foldrun_app.models.of3.utils",
     "foldrun_app.models.of3.pipeline",
     "foldrun_app.models.of3.pipeline.components",
     "foldrun_app.models.of3.pipeline.pipelines",
+    "foldrun_app.models.rfd4_proteina",
+    "foldrun_app.models.rfd4_proteina.tools",
+    "foldrun_app.models.rfd4_proteina.utils",
+    "foldrun_app.models.rfd4_proteina.pipeline",
+    "foldrun_app.models.rfd4_proteina.pipeline.components",
+    "foldrun_app.models.rfd4_proteina.pipeline.pipelines",
     "foldrun_app.skills",
     "foldrun_app.skills.cost_estimation",
     "foldrun_app.skills.job_submission",
@@ -102,8 +121,11 @@ packages = [
 [tool.setuptools.package-data]
 "foldrun_app.models.af2" = ["data/*.json"]
 "foldrun_app.models.af3" = ["data/*.json"]
+"foldrun_app.models.bindcraft" = ["data/*.json"]
 "foldrun_app.models.boltz2" = ["data/*.json"]
+"foldrun_app.models.boltzgen" = ["data/*.json"]
 "foldrun_app.models.of3" = ["data/*.json"]
+"foldrun_app.models.rfd4_proteina" = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

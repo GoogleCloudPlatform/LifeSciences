@@ -1,0 +1,141 @@
+[
+  {
+    "type": "RFD4ProteinaSubmitDesignTool",
+    "name": "rfd4_proteina_submit_design",
+    "description": "Submit an RFD4-Proteina generative protein or binder design job to Vertex AI Pipelines. Supports unconditional monomer generation, motif scaffolding, and binder co-design against a target structure.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "string",
+          "description": "Input design specification in JSON/YAML format or path to file. If target_structure is provided, input can be omitted or used as override."
+        },
+        "design_mode": {
+          "type": "string",
+          "description": "Design mode: 'binder_design' (default), 'motif_scaffolding', or 'unconditional_monomer'.",
+          "enum": [
+            "binder_design",
+            "motif_scaffolding",
+            "unconditional_monomer"
+          ]
+        },
+        "target_structure": {
+          "type": "string",
+          "description": "Target structure identifier: 4-letter RCSB PDB ID (e.g. '6M1U'), GCS URI (gs://bucket/path.cif or .pdb), or local file path."
+        },
+        "target_chains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Target protein chains to bind against (e.g. ['A'] or ['A', 'B'])."
+        },
+        "binding_residues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Target hotspot/interface residues in 'Chain:ResNum' or 'ResNum' format (e.g. ['A:23', 'A:24'] or ['23', '24'])."
+        },
+        "scaffold_motif": {
+          "type": "string",
+          "description": "Motif specification for motif scaffolding mode, indicating fixed functional residues."
+        },
+        "binder_length_range": {
+          "type": "string",
+          "description": "Length range for designed protein/binder, e.g. '80..140' or '100' (default: '80..140')."
+        },
+        "job_name": {
+          "type": "string",
+          "description": "Custom name for the Vertex AI Pipeline job. If omitted, an auto-generated timestamped name will be used."
+        },
+        "num_model_seeds": {
+          "type": "integer",
+          "description": "Number of independent random seeds to run as parallel GPU tasks (default: 5)."
+        },
+        "num_designs_per_seed": {
+          "type": "integer",
+          "description": "Number of design trajectories to sample per seed task (default: 2)."
+        },
+        "gpu_type": {
+          "type": "string",
+          "description": "GPU accelerator type: 'auto' (default, selects A100 40GB for <=1500 tokens, A100_80GB for >1500 tokens — A100 40GB provisions much faster than L4 under DWS FLEX_START), 'A100' (40GB), 'A100_80GB' (80GB), or 'L4' (explicit override only).",
+          "enum": [
+            "auto",
+            "A100",
+            "A100_80GB",
+            "L4"
+          ]
+        },
+        "num_gpus": {
+          "type": "integer",
+          "description": "Number of GPUs per seed task (default: 1)."
+        },
+        "enable_flex_start": {
+          "type": "boolean",
+          "description": "Enable Dynamic Workload Scheduler (DWS) Flex Start for up to 50% cost savings (default: true)."
+        },
+        "extra_cli_args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional CLI arguments to pass to RFD4-Proteina."
+        }
+      }
+    }
+  },
+  {
+    "type": "RFD4ProteinaJobAnalysisTool",
+    "name": "rfd4_proteina_analyze_job",
+    "description": "Trigger parallel analysis of completed RFD4-Proteina binder designs using Cloud Run Jobs.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_name": {
+          "type": "string",
+          "description": "Pipeline job name or resource name."
+        },
+        "analysis_tasks": {
+          "type": "integer",
+          "description": "Number of parallel Cloud Run tasks to run for analysis (default: 10)."
+        },
+        "force_reanalysis": {
+          "type": "boolean",
+          "description": "Force re-running analysis even if cached results exist (default: false)."
+        }
+      },
+      "required": ["job_name"]
+    }
+  },
+  {
+    "type": "RFD4ProteinaGetAnalysisResultsTool",
+    "name": "rfd4_proteina_get_analysis_results",
+    "description": "Retrieve comprehensive analysis results, quality scores, ranking metrics, and Gemini expert interpretation for an RFD4-Proteina design job.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_name": {
+          "type": "string",
+          "description": "Pipeline job name or resource name."
+        }
+      },
+      "required": ["job_name"]
+    }
+  },
+  {
+    "type": "RFD4ProteinaOpenViewerTool",
+    "name": "rfd4_proteina_open_viewer",
+    "description": "Get Cloud Run 3Dmol.js viewer URL to visually inspect RFD4-Proteina generated binder complexes, pLDDT coloring, and binding interfaces.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_name": {
+          "type": "string",
+          "description": "Pipeline job name or resource name."
+        }
+      },
+      "required": ["job_name"]
+    }
+  }
+]

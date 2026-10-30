@@ -565,7 +565,7 @@
         <div class="header-top">
             <div>
                 <h1><a href="/" style="color: inherit; text-decoration: none;">🧬 FoldRun Structure & Analysis</a></h1>
-                {% if job_id and not (job_id.startswith('alphafold2-') or job_id.startswith('alphafold3-') or job_id.startswith('openfold3-') or job_id.startswith('boltz2-')) %}
+                {% if job_id and not (job_id.startswith('alphafold-') or job_id.startswith('alphafold2-') or job_id.startswith('alphafold3-') or job_id.startswith('openfold3-') or job_id.startswith('boltz2-') or job_id.startswith('boltzgen-') or job_id.startswith('rfd4-') or job_id.startswith('bindcraft-')) %}
                 <p class="subtitle" id="header-subtitle">Job: <a href="https://console.cloud.google.com/logs/query;query=resource.type%3D%22aiplatform.googleapis.com%2FEndpoint%22%20%22{{ job_id }}%22;duration=P30D?project={{ project_id }}" target="_blank" class="job-link" title="View AlphaFold 3 Endpoint logs in Cloud Logging">{{ job_id }} (Endpoint Logs)</a> &middot; <a href="https://console.cloud.google.com/storage/browser/{{ bucket_name }}/af3_predictions/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link" title="View AlphaFold 3 job artifacts in Cloud Storage">GCS Artifacts</a></p>
                 {% elif job_id %}
                 <p class="subtitle" id="header-subtitle">Job: <a href="https://console.cloud.google.com/vertex-ai/pipelines/locations/{{ region }}/runs/{{ job_id }}?project={{ project_id }}" target="_blank" class="job-link">{{ job_id }}</a></p>
@@ -643,6 +643,10 @@
                     <div class="legend-color" style="background: #FF7D45;"></div>
                     <span class="legend-label">Very Low (&lt;50)</span>
                 </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9AA0A6;"></div>
+                    <span class="legend-label">Uncomputed / N/A</span>
+                </div>
             </div>
         </div>
 
@@ -663,7 +667,7 @@
         let predictions = [];
         let currentPredictionIndex = 0;
         let isSpinning = false;
-        let modelType = 'af2';  // 'af2', 'openfold3', or 'boltz2'
+        let modelType = 'alphafold2';
         let isOF3 = false;
         let isBoltz2 = false;
         const initialJobId = {{ (job_id or '') | tojson }};
@@ -671,6 +675,48 @@
         const gcpProject = {{ (project_id or '') | tojson }};
         const gcpRegion = {{ (region or 'us-central1') | tojson }};
         const gcpBucket = {{ (bucket_name or '') | tojson }};
+
+        const MODEL_ALIASES = {
+            'af2': 'alphafold2',
+            'alphafold': 'alphafold2',
+            'alphafold2': 'alphafold2',
+            'af3': 'alphafold3',
+            'alphafold3': 'alphafold3',
+            'of3': 'openfold3',
+            'openfold3': 'openfold3',
+            'boltz': 'boltz2',
+            'boltz-2': 'boltz2',
+            'boltz2': 'boltz2',
+            'boltzgen': 'boltzgen',
+            'rfd4-proteina': 'rfd4_proteina',
+            'rfd4_proteina': 'rfd4_proteina',
+            'rfd4': 'rfd4_proteina',
+            'proteina': 'rfd4_proteina',
+            'bindcraft': 'bindcraft',
+        };
+
+        const MODEL_DISPLAY_LABELS = {
+            alphafold2:    'AlphaFold2',
+            alphafold3:    'AlphaFold 3',
+            openfold3:     'OpenFold3',
+            boltz2:        'Boltz-2',
+            boltzgen:      'BoltzGen',
+            rfd4_proteina: 'RFD4-Proteina',
+            bindcraft:     'BindCraft',
+        };
+
+        function normalizeModelType(raw) {
+            const key = String(raw || '').trim().toLowerCase();
+            return MODEL_ALIASES[key] || key || 'alphafold2';
+        }
+
+        function hasNum(val) {
+            return val !== null && val !== undefined && val !== '' && typeof val !== 'boolean' && Number.isFinite(Number(val));
+        }
+
+        function fmtNum(val, digits, fallback = 'N/A') {
+            return hasNum(val) ? Number(val).toFixed(digits) : fallback;
+        }
 
         function getDownloadBaseQuery() {
             if (initialSummaryUri) {
@@ -718,20 +764,28 @@
                 const response = await fetch(url);
                 analysisData = await response.json();
 
-                // Extract predictions from all_predictions_summary (shows all models, not just top 10)
-                predictions = analysisData.all_predictions_summary || [];
+                // Extract predictions from all_predictions_summary, top_predictions, or all_predictions
+                predictions = analysisData.all_predictions_summary || analysisData.top_predictions || analysisData.all_predictions || (analysisData.best_prediction ? [analysisData.best_prediction] : []);
 
                 if (predictions.length === 0) {
                     throw new Error('No predictions found in analysis');
                 }
 
-                // Detect model type from summary data or presence of cif_uri
-                modelType = analysisData.model_type ||
-                            (predictions[0] && predictions[0].cif_uri ? 'openfold3' : 'af2');
-                isOF3 = modelType !== 'af2' && (predictions[0] && predictions[0].cif_uri);
+                // Detect and normalize model type from summary data or presence of cif_uri
+                modelType = normalizeModelType(
+                    analysisData.model_type ||
+                    analysisData.summary?.protein_info?.model_type ||
+                    (predictions[0] && predictions[0].cif_uri ? 'openfold3' : 'alphafold2')
+                );
+                isOF3 = Boolean(predictions[0] && predictions[0].cif_uri);
                 isBoltz2 = modelType === 'boltz2';
 
-                // Sort predictions by rank (ascending)
+                // Sort predictions by rank (ascending), ensuring rank is populated
+                predictions.forEach((pred, idx) => {
+                    if (pred.rank === undefined) {
+                        pred.rank = idx + 1;
+                    }
+                });
                 predictions.sort((a, b) => a.rank - b.rank);
 
                 // Populate prediction selector
@@ -741,13 +795,15 @@
                     const option = document.createElement('option');
                     option.value = idx;
                     const rankBadge = pred.rank <= 3 ? ` 🏆` : '';
+                    const isFastMode = pred.metrics_mode === 'fast_no_self_consistency' || pred.metrics_computed === false || analysisData.summary?.metrics_mode === 'fast_no_self_consistency';
                     if (isOF3) {
-                        const name = pred.sample_name || `Sample ${pred.rank}`;
-                        const score = pred.ranking_score != null ? pred.ranking_score.toFixed(4) : 'N/A';
+                        const name = pred.sample_name || pred.model_name || `Sample ${pred.rank}`;
+                        const score = fmtNum(pred.ranking_score, 4, isFastMode ? 'Fast mode (~metrics)' : 'N/A');
                         option.textContent = `Rank ${pred.rank}: ${name} (score: ${score})${rankBadge}`;
                     } else {
-                        const plddtVal = pred.plddt_mean != null ? pred.plddt_mean.toFixed(1) : 'N/A';
-                        option.textContent = `Rank ${pred.rank}: ${pred.model_name} (pLDDT: ${plddtVal})${rankBadge}`;
+                        const name = pred.model_name || pred.sample_name || `Model ${pred.rank}`;
+                        const plddtVal = fmtNum(pred.plddt_mean, 1, 'N/A');
+                        option.textContent = `Rank ${pred.rank}: ${name} (pLDDT: ${plddtVal})${rankBadge}`;
                     }
                     selector.appendChild(option);
                 });
@@ -776,12 +832,13 @@
         // Populate job info summary in header
         function populateJobInfo() {
             const subtitleEl = document.getElementById('header-subtitle');
-            const proteinInfo = (analysisData && analysisData.summary && analysisData.summary.protein_info) || {};
-            const jobMetadata = proteinInfo.job_metadata || {};
-            const mt = proteinInfo.model_type || (analysisData && analysisData.model_type) || '';
+            const proteinInfo = (analysisData && analysisData.summary && analysisData.summary.protein_info) || (analysisData && analysisData.protein_info) || {};
+            const jobMetadata = proteinInfo.job_metadata || (analysisData && analysisData.job_metadata) || {};
+            const rawMt = proteinInfo.model_type || (analysisData && analysisData.model_type) || '';
+            const mt = rawMt ? normalizeModelType(rawMt) : '';
 
             if (subtitleEl && analysisData) {
-                if (mt === 'alphafold3' || mt === 'af3') {
+                if (mt === 'alphafold3') {
                     const pipelineJobId = analysisData.pipeline_job_id ||
                         jobMetadata.pipeline_job_id ||
                         (initialJobId && initialJobId.startsWith('alphafold3-') ? initialJobId : '');
@@ -812,15 +869,13 @@
 
             const jobInfoDiv = document.getElementById('job-info-summary');
             if (!jobInfoDiv || !analysisData.summary) return;
-            if (!proteinInfo.job_metadata && !mt) return;
+            if (!proteinInfo.job_metadata && !analysisData.job_metadata && !mt) return;
 
             let html = '';
 
             // Model type badge
             if (mt) {
-                const badge = mt === 'openfold3' ? 'OpenFold3' :
-                              mt === 'boltz2'    ? 'Boltz-2'   :
-                              (mt === 'alphafold3' || mt === 'af3') ? 'AlphaFold 3' : 'AlphaFold2';
+                const badge = MODEL_DISPLAY_LABELS[mt] || rawMt;
                 html += `<div class="job-info-item"><span class="job-info-value">${escapeHtml(badge)}</span></div>`;
             }
 
@@ -838,7 +893,7 @@
             }
 
             // Chain composition (compact)
-            const chainComp = proteinInfo.chain_composition;
+            const chainComp = proteinInfo.chain_composition || proteinInfo.chains;
             if (chainComp && chainComp.length > 0) {
                 const parts = chainComp.map(c => {
                     const chainId = escapeHtml(c.chain_id);
@@ -884,7 +939,8 @@
 
             const dlBtn = document.getElementById('download-structure-btn');
             if (dlBtn) {
-                const extLabel = prediction.cif_uri ? '.cif' : '.pdb';
+                const isCifStruct = prediction.cif_uri && !String(prediction.cif_uri).toLowerCase().endsWith('.pdb');
+                const extLabel = isCifStruct ? '.cif' : '.pdb';
                 const rankLabel = prediction.rank || (currentPredictionIndex + 1);
                 dlBtn.textContent = `⬇ Structure (${extLabel} #${rankLabel})`;
             }
@@ -904,19 +960,23 @@
             }
         }
 
-        // Load structure for a specific prediction (PDB for AF2, CIF for OF3)
+        // Load structure for a specific prediction (PDB for AF2/BindCraft, CIF for OF3/AF3/Boltz-2/BoltzGen/RFD4)
         async function loadStructure(prediction) {
             try {
                 let structureData, format;
 
-                if (prediction.cif_uri) {
-                    // OF3: load CIF
+                if (prediction.cif_uri && String(prediction.cif_uri).toLowerCase().endsWith('.pdb')) {
+                    const response = await fetch(`/api/pdb?uri=${encodeURIComponent(prediction.cif_uri)}`);
+                    structureData = await response.text();
+                    format = 'pdb';
+                } else if (prediction.cif_uri) {
                     const response = await fetch(`/api/cif?uri=${encodeURIComponent(prediction.cif_uri)}`);
                     structureData = await response.text();
                     format = 'cif';
                 } else {
                     // AF2: convert pkl URI to pdb URI
-                    const pdbUri = prediction.uri.replace('/raw_prediction.pkl', '/unrelaxed_protein.pdb');
+                    const srcUri = prediction.pdb_uri || prediction.uri || '';
+                    const pdbUri = srcUri.replace('/raw_prediction.pkl', '/unrelaxed_protein.pdb');
                     const response = await fetch(`/api/pdb?uri=${encodeURIComponent(pdbUri)}`);
                     structureData = await response.text();
                     format = 'pdb';
@@ -949,20 +1009,40 @@
         // Render analysis dashboard for a specific prediction
         function renderAnalysis(prediction) {
             const container = document.getElementById('analysis-content');
-            const isOF3 = prediction.cif_uri !== undefined;
+            const isOF3 = Boolean(prediction.cif_uri);
+            const isFastMode = prediction.metrics_mode === 'fast_no_self_consistency' ||
+                               prediction.metrics_computed === false ||
+                               analysisData.summary?.metrics_mode === 'fast_no_self_consistency';
+            const metricFallback = isFastMode ? 'Fast mode (~metrics)' : 'N/A';
             const baseQuery = getDownloadBaseQuery();
             const rankNum = Number.isInteger(prediction.rank) ? prediction.rank : escapeHtml(prediction.rank || 1);
             let html = '';
 
             // Prediction Summary
             if (isOF3) {
-                const sampleName = escapeHtml(prediction.sample_name || 'N/A');
-                const rankingScore = prediction.ranking_score != null ? escapeHtml(prediction.ranking_score.toFixed(4)) : 'N/A';
-                const ptm = prediction.ptm != null ? escapeHtml(prediction.ptm.toFixed(4)) : 'N/A';
-                const iptm = prediction.iptm != null ? escapeHtml(prediction.iptm.toFixed(4)) : 'N/A';
-                const clash = prediction.has_clash ? 'Yes' : 'No';
-                const qualityAssessment = escapeHtml((prediction.quality_assessment || '').replace(/_/g, ' ').toUpperCase());
-                const modelLabel = isBoltz2 ? 'Boltz-2' : (modelType === 'alphafold3' || modelType === 'af3') ? 'AlphaFold 3' : 'OpenFold3';
+                const sampleName = escapeHtml(prediction.sample_name || prediction.model_name || 'N/A');
+                const rankingScore = escapeHtml(fmtNum(prediction.ranking_score, 4, metricFallback));
+                const ptm = escapeHtml(fmtNum(prediction.ptm, 4, metricFallback));
+                const iptm = escapeHtml(fmtNum(prediction.iptm, 4, metricFallback));
+                const scScore = hasNum(prediction.sc_score)
+                    ? escapeHtml(Number(prediction.sc_score).toFixed(4))
+                    : (isFastMode ? escapeHtml('Fast mode (~metrics)') : null);
+                const clashScore = hasNum(prediction.clash_score) ? escapeHtml(Number(prediction.clash_score).toFixed(4)) : null;
+                const interfaceEnergy = hasNum(prediction.interface_energy) ? escapeHtml(`${Number(prediction.interface_energy).toFixed(2)} kcal/mol`) : null;
+                const contactArea = hasNum(prediction.contact_surface_area) ? escapeHtml(`${Number(prediction.contact_surface_area).toFixed(1)} Å²`) : null;
+                const designedSeq = prediction.designed_sequence ? escapeHtml(prediction.designed_sequence) : null;
+                const clash = clashScore !== null
+                    ? clashScore
+                    : (prediction.has_clash === null || prediction.has_clash === undefined
+                        ? 'N/A'
+                        : (prediction.has_clash ? 'Yes' : 'No'));
+                const clashLabel = clashScore !== null ? 'Clash Score' : 'Clash';
+                const rawQa = typeof prediction.quality_assessment === 'string'
+                    ? prediction.quality_assessment
+                    : (isFastMode ? 'uncomputed' : '');
+                const qualityAssessment = escapeHtml(rawQa ? rawQa.replace(/_/g, ' ').toUpperCase() : 'N/A');
+                const modelLabel = escapeHtml(MODEL_DISPLAY_LABELS[modelType] || modelType || 'OpenFold3');
+                const structBadge = String(prediction.cif_uri || '').toLowerCase().endsWith('.pdb') ? '⬇ PDB' : '⬇ CIF';
 
                 html += `
                     <div class="info-card">
@@ -970,7 +1050,7 @@
                             Prediction Summary
                             <span class="rank-badge rank-${rankNum}">#${rankNum}</span>
                             <span style="font-size: 0.75em; color: #666; margin-left: 8px;">${modelLabel}</span>
-                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=structure&amp;rank=${rankNum}">⬇ CIF</a>
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=structure&amp;rank=${rankNum}">${structBadge}</a>
                         </h3>
                         <div class="info-row">
                             <span class="info-label">Sample</span>
@@ -988,20 +1068,40 @@
                             <span class="info-label">ipTM</span>
                             <span class="info-value">${iptm}</span>
                         </div>
+                        ${scScore !== null ? `
                         <div class="info-row">
-                            <span class="info-label">Clash</span>
+                            <span class="info-label">Self-Consistency (sc_score)</span>
+                            <span class="info-value">${scScore}</span>
+                        </div>` : ''}
+                        ${interfaceEnergy !== null ? `
+                        <div class="info-row">
+                            <span class="info-label">Interface dG</span>
+                            <span class="info-value">${interfaceEnergy}</span>
+                        </div>` : ''}
+                        ${contactArea !== null ? `
+                        <div class="info-row">
+                            <span class="info-label">Interface dSASA</span>
+                            <span class="info-value">${contactArea}</span>
+                        </div>` : ''}
+                        <div class="info-row">
+                            <span class="info-label">${clashLabel}</span>
                             <span class="info-value">${clash}</span>
                         </div>
                         <div class="info-row">
                             <span class="info-label">Quality Assessment</span>
                             <span class="info-value">${qualityAssessment}</span>
                         </div>
+                        ${designedSeq ? `
+                        <div class="info-row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+                            <span class="info-label">Designed Sequence</span>
+                            <code style="word-break: break-all; font-size: 0.8em; background: #f8f9fa; padding: 6px; border-radius: 4px; width: 100%;">${designedSeq}</code>
+                        </div>` : ''}
                     </div>
                 `;
             } else {
                 const modelName = escapeHtml(prediction.model_name || '');
-                const rankingConf = prediction.ranking_confidence != null ? escapeHtml(prediction.ranking_confidence.toFixed(2)) : 'N/A';
-                const qualityAssessment = escapeHtml((prediction.quality_assessment || '').replace(/_/g, ' ').toUpperCase());
+                const rankingConf = escapeHtml(fmtNum(prediction.ranking_confidence, 2, 'N/A'));
+                const qualityAssessment = escapeHtml((typeof prediction.quality_assessment === 'string' ? prediction.quality_assessment : '').replace(/_/g, ' ').toUpperCase() || 'N/A');
 
                 html += `
                     <div class="info-card">
@@ -1027,7 +1127,7 @@
             }
 
             // Quality Metrics
-            const plddtMean = prediction.plddt_mean != null ? escapeHtml(prediction.plddt_mean.toFixed(1)) : 'N/A';
+            const plddtMean = escapeHtml(fmtNum(prediction.plddt_mean, 1, 'N/A'));
             html += `
                 <div class="info-card">
                     <h3>Quality Metrics</h3>
@@ -1038,9 +1138,9 @@
                         </div>`;
 
             if (isOF3) {
-                const rankingScore = prediction.ranking_score != null ? escapeHtml(prediction.ranking_score.toFixed(4)) : 'N/A';
-                const ptm = prediction.ptm != null ? escapeHtml(prediction.ptm.toFixed(4)) : 'N/A';
-                const iptm = prediction.iptm != null ? escapeHtml(prediction.iptm.toFixed(4)) : 'N/A';
+                const rankingScore = escapeHtml(fmtNum(prediction.ranking_score, 4, 'N/A'));
+                const ptm = escapeHtml(fmtNum(prediction.ptm, 4, 'N/A'));
+                const iptm = escapeHtml(fmtNum(prediction.iptm, 4, 'N/A'));
                 html += `
                         <div class="quality-item">
                             <div class="value">${rankingScore}</div>
@@ -1055,9 +1155,9 @@
                             <div class="label">ipTM</div>
                         </div>`;
             } else {
-                const plddtMedian = prediction.plddt_median != null ? escapeHtml(prediction.plddt_median?.toFixed(1)) : 'N/A';
-                const plddtMin = prediction.plddt_min != null ? escapeHtml(prediction.plddt_min?.toFixed(1)) : 'N/A';
-                const plddtMax = prediction.plddt_max != null ? escapeHtml(prediction.plddt_max?.toFixed(1)) : 'N/A';
+                const plddtMedian = escapeHtml(fmtNum(prediction.plddt_median, 1, 'N/A'));
+                const plddtMin = escapeHtml(fmtNum(prediction.plddt_min, 1, 'N/A'));
+                const plddtMax = escapeHtml(fmtNum(prediction.plddt_max, 1, 'N/A'));
                 html += `
                         <div class="quality-item">
                             <div class="value">${plddtMedian}</div>
@@ -1104,7 +1204,7 @@
 
             html += `</div>`;
 
-            // Per-Chain pLDDT Breakdown (OF3 with ligands)
+            // Per-Chain pLDDT Breakdown (OF3 / multi-chain complexes)
             if (isOF3 && prediction.per_chain_plddt && Object.keys(prediction.per_chain_plddt).length > 1) {
                 html += `<div class="info-card"><h3>Per-Chain Confidence</h3>`;
                 html += `<table style="width:100%;border-collapse:collapse;font-size:0.9em;">`;
@@ -1113,9 +1213,9 @@
                     const molType = stats.molecule_type || 'unknown';
                     const comps = (stats.comp_ids || []).slice(0, 3).join(', ');
                     const bgColor = molType === 'ligand' ? '#fff3cd' : (molType === 'protein' ? '#d4edda' : '#d1ecf1');
-                    const meanStr = stats.mean != null ? stats.mean.toFixed(1) : 'N/A';
-                    const minStr = stats.min != null ? stats.min.toFixed(1) : 'N/A';
-                    const maxStr = stats.max != null ? stats.max.toFixed(1) : 'N/A';
+                    const meanStr = fmtNum(stats.mean, 1, 'N/A');
+                    const minStr = fmtNum(stats.min, 1, 'N/A');
+                    const maxStr = fmtNum(stats.max, 1, 'N/A');
                     const atomCount = stats.atom_count !== undefined ? stats.atom_count : 'N/A';
                     html += `<tr style="border-bottom:1px solid #eee;background:${bgColor};">`;
                     html += `<td style="padding:6px;font-weight:bold;">${escapeHtml(cid)}</td>`;
@@ -1130,16 +1230,34 @@
             }
 
             // pLDDT Plot
-            if (prediction.plots && prediction.plots.plddt_plot) {
+            const plddtPlotUri = (prediction.plots && prediction.plots.plddt_plot) ||
+                                 (analysisData.plots && (analysisData.plots.plddt_distribution || analysisData.plots.best_plddt_distribution));
+            const plddtPlotType = (prediction.plots && prediction.plots.plddt_plot) ? 'plddt_plot' : 'plddt_distribution';
+            if (plddtPlotUri) {
                 html += `
                     <div class="info-card">
                         <h3 style="display: flex; align-items: center;">
                             Per-Residue pLDDT Plot
-                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=plddt_plot&amp;rank=${rankNum}">⬇ PNG</a>
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=${plddtPlotType}&amp;rank=${rankNum}">⬇ PNG</a>
                         </h3>
-                        <img src="/api/image?uri=${encodeURIComponent(prediction.plots.plddt_plot)}"
+                        <img src="/api/image?uri=${encodeURIComponent(plddtPlotUri)}"
                              class="plot-image"
                              alt="pLDDT plot">
+                    </div>
+                `;
+            }
+
+            // Ranking Comparison Plot (generative binder models)
+            if (analysisData.plots && analysisData.plots.ranking_comparison) {
+                html += `
+                    <div class="info-card">
+                        <h3 style="display: flex; align-items: center;">
+                            Candidate Ranking Comparison
+                            <a class="card-download-link" href="/api/download/file?${baseQuery}&amp;type=ranking_comparison&amp;rank=${rankNum}">⬇ PNG</a>
+                        </h3>
+                        <img src="/api/image?uri=${encodeURIComponent(analysisData.plots.ranking_comparison)}"
+                             class="plot-image"
+                             alt="Ranking comparison plot">
                     </div>
                 `;
             }
@@ -1189,14 +1307,15 @@
             }
 
             // Expert Analysis (Gemini) - Show on all model pages for convenience
-            if (analysisData.expert_analysis && (analysisData.expert_analysis.status === 'success' || analysisData.expert_analysis.status === 'complete')) {
+            const expertObj = analysisData.expert_analysis || analysisData.gemini_expert_analysis || analysisData.gemini_analysis;
+            if (expertObj && (expertObj.status === 'success' || expertObj.status === 'complete')) {
                 // Use marked.js to convert markdown to HTML, sanitized with DOMPurify
-                const rawMarkdown = analysisData.expert_analysis.analysis || '';
+                const rawMarkdown = expertObj.analysis || expertObj.analysis_text || '';
                 const rawHtml = marked.parse(rawMarkdown);
                 const analysisHtml = DOMPurify.sanitize(rawHtml);
-                const expertModel = escapeHtml(analysisData.expert_analysis.model || '');
-                const generatedDate = analysisData.expert_analysis.generated_at
-                    ? escapeHtml(new Date(analysisData.expert_analysis.generated_at).toLocaleString())
+                const expertModel = escapeHtml(expertObj.model || '');
+                const generatedDate = expertObj.generated_at
+                    ? escapeHtml(new Date(expertObj.generated_at).toLocaleString())
                     : 'N/A';
 
                 html += `
@@ -1221,7 +1340,7 @@
 
             // Affinity results (Boltz-2 only, when affinity was requested)
             const affinity = analysisData.summary?.affinity;
-            if (affinity && affinity.affinity_pred_value !== null && affinity.affinity_pred_value !== undefined) {
+            if (affinity && hasNum(affinity.affinity_pred_value)) {
                 const rawBindingClass = affinity.binding_classification?.replace(/_/g, ' ') || 'N/A';
                 const classColors = {
                     'very strong': '#4CAF50', 'strong': '#8BC34A',
@@ -1229,12 +1348,12 @@
                 };
                 const classColor = classColors[rawBindingClass.toLowerCase()] || '#9E9E9E';
                 const displayBindingClass = escapeHtml(rawBindingClass.charAt(0).toUpperCase() + rawBindingClass.slice(1));
-                const ic50Nm = affinity.ic50_nm !== null && affinity.ic50_nm !== undefined ? escapeHtml(affinity.ic50_nm.toFixed(1)) : 'N/A';
-                const pic50 = affinity.pic50 !== null && affinity.pic50 !== undefined ? escapeHtml(affinity.pic50.toFixed(2)) : 'N/A';
-                const deltaG = affinity.delta_g_kcal_mol !== null && affinity.delta_g_kcal_mol !== undefined ? escapeHtml(affinity.delta_g_kcal_mol.toFixed(2)) : 'N/A';
-                const bindingProb = affinity.affinity_probability_binary !== null && affinity.affinity_probability_binary !== undefined ? escapeHtml(affinity.affinity_probability_binary.toFixed(3)) : 'N/A';
-                const ic50Um = affinity.ic50_um !== null && affinity.ic50_um !== undefined ? escapeHtml(affinity.ic50_um.toFixed(4)) : 'N/A';
-                const rawLog10 = affinity.affinity_pred_value !== null && affinity.affinity_pred_value !== undefined ? escapeHtml(affinity.affinity_pred_value.toFixed(3)) : 'N/A';
+                const ic50Nm = escapeHtml(fmtNum(affinity.ic50_nm, 1, 'N/A'));
+                const pic50 = escapeHtml(fmtNum(affinity.pic50, 2, 'N/A'));
+                const deltaG = escapeHtml(fmtNum(affinity.delta_g_kcal_mol, 2, 'N/A'));
+                const bindingProb = escapeHtml(fmtNum(affinity.affinity_probability_binary, 3, 'N/A'));
+                const ic50Um = escapeHtml(fmtNum(affinity.ic50_um, 4, 'N/A'));
+                const rawLog10 = escapeHtml(fmtNum(affinity.affinity_pred_value, 3, 'N/A'));
 
                 html += `
                     <div class="info-card" style="border-left: 4px solid ${classColor};">
@@ -1279,8 +1398,8 @@
 
             // Job Summary (from overall analysis data)
             if (analysisData.summary) {
-                const totalPreds = escapeHtml(analysisData.summary.statistics?.total_predictions || analysisData.summary.protein_info?.total_predictions || 'N/A');
-                const analyzedSuccess = escapeHtml(analysisData.summary.statistics?.analyzed_successfully || 'N/A');
+                const totalPreds = escapeHtml(analysisData.summary.statistics?.total_predictions || analysisData.summary.protein_info?.total_predictions || analysisData.summary.total_predictions || 'N/A');
+                const analyzedSuccess = escapeHtml(analysisData.summary.statistics?.analyzed_successfully || analysisData.summary.total_predictions || analysisData.summary.protein_info?.total_predictions || 'N/A');
                 const jobId = escapeHtml(analysisData.job_id || '');
 
                 html += `
@@ -1367,15 +1486,13 @@
                 `;
             }
 
-            // Input Query (OF3: JSON copyable; Boltz-2: YAML copyable)
-            if (isOF3 && analysisData.summary && analysisData.summary.protein_info) {
-                const pi = analysisData.summary.protein_info;
-                if (isBoltz2 && pi.input_query_yaml) {
-                    // Boltz-2: YAML format (stored as raw YAML text string)
+            // Input Query (YAML for Boltz-2 / BoltzGen / RFD4-Proteina; JSON for AF3 / OF3 / BindCraft)
+            const pi = (analysisData.summary && analysisData.summary.protein_info) || analysisData.protein_info;
+            if (isOF3 && pi) {
+                if (pi.input_query_yaml) {
                     const yamlRaw = typeof pi.input_query_yaml === 'string'
                         ? pi.input_query_yaml
                         : JSON.stringify(pi.input_query_yaml, null, 2);
-                    // Escape HTML special chars so sequences with < > & display correctly
                     const yamlStr = escapeHtml(yamlRaw);
                     html += `
                         <div class="info-card">
@@ -1387,9 +1504,11 @@
                             <pre id="query-yaml-pre" style="background:#f8f9fa;padding:12px;border-radius:4px;font-size:0.82em;white-space:pre-wrap;word-break:break-word;max-height:400px;overflow-y:auto;border:1px solid #e0e0e0;">${yamlStr}</pre>
                         </div>
                     `;
-                } else if (!isBoltz2 && pi.input_query_json) {
-                    // OF3: JSON format
-                    const jsonStr = JSON.stringify(pi.input_query_json, null, 2);
+                }
+                if (pi.input_query_json) {
+                    const jsonStr = typeof pi.input_query_json === 'string'
+                        ? pi.input_query_json
+                        : JSON.stringify(pi.input_query_json, null, 2);
                     const safeJsonStr = escapeHtml(jsonStr);
                     html += `
                         <div class="info-card">
@@ -1469,11 +1588,21 @@
                 // Confident: 70-90 (light blue), Very High: 90-100 (dark blue)
 
                 const atoms = viewer.selectedAtoms({});
+                const bValues = atoms.map(a => a.b).filter(b => typeof b === 'number' && Number.isFinite(b) && b > 0);
+                const maxB = bValues.length > 0 ? Math.max(...bValues) : 0;
+                const scaleFactor = (maxB > 0 && maxB <= 1.0) ? 100.0 : 1.0;
+                const predMean = predictions[currentPredictionIndex]?.plddt_mean;
+                const fallbackPlddt = hasNum(predMean) ? Number(predMean) : null;
+
                 atoms.forEach(atom => {
-                    const plddt = atom.b || 0; // B-factor contains pLDDT score
+                    const plddt = (typeof atom.b === 'number' && Number.isFinite(atom.b) && atom.b > 0)
+                        ? atom.b * scaleFactor
+                        : fallbackPlddt;
                     let color;
 
-                    if (plddt < 50) {
+                    if (plddt === null) {
+                        color = '#9AA0A6'; // Uncomputed / N/A - neutral gray
+                    } else if (plddt < 50) {
                         color = '#FF7D45'; // Very Low - orange
                     } else if (plddt < 70) {
                         color = '#FFDB13'; // Low - yellow

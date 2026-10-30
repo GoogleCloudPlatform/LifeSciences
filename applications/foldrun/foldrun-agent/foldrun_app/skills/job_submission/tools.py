@@ -15,11 +15,25 @@
 """Job submission tool wrappers for ADK FunctionTool."""
 
 import os
+import re
 import tempfile
 
 from foldrun_app.skills._tool_registry import get_tool
 
 DEFAULT_STAGING_DIR = os.path.realpath(os.path.join(tempfile.gettempdir(), "foldrun_staging"))
+_PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
+
+
+def _validate_optional_target_structure(value: str | None) -> str | None:
+    """Validate optional target_structure (PDB ID, gs:// URI, raw coordinates, or staged file path)."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("target_structure must be a non-empty string when provided")
+    stripped = value.strip()
+    if stripped.startswith("gs://") or _PDB_ID_RE.fullmatch(stripped):
+        return stripped
+    return _validate_input_source(value, "target_structure")
 
 
 def _validate_input_source(value: str, param_name: str = "sequence") -> str:
@@ -340,3 +354,162 @@ def submit_af3_batch_predictions(
             "batch_config": sanitized_batch,
         }
     )
+
+
+def submit_boltzgen_design(
+    input: str | None = None,
+    target_structure: str | None = None,
+    target_chains: list[str] | None = None,
+    binding_residues: list[str] | None = None,
+    binder_length_range: str = "80..140",
+    protocol: str = "protein-anything",
+    ligand_smiles: str | None = None,
+    job_name: str | None = None,
+    num_model_seeds: int = 5,
+    num_designs_per_seed: int = 2,
+    budget_per_seed: int = 2,
+    gpu_type: str = "auto",
+    enable_flex_start: bool = True,
+    extra_cli_args: list | None = None,
+) -> dict:
+    """Submit BoltzGen generative binder design job to Vertex AI Pipelines.
+
+    Args:
+        input: Optional BoltzGen YAML specification string or file path.
+        target_structure: Target structure: RCSB PDB ID (e.g. '6M1U'), GCS URI, or local file.
+        target_chains: Target protein chains to bind against (e.g. ['A']).
+        binding_residues: Target hotspot/interface residues (e.g. ['23', '24'] or ['A:23']).
+        binder_length_range: Length range for designed binder (default '80..140').
+        protocol: BoltzGen protocol (default 'protein-anything').
+        ligand_smiles: Optional ligand SMILES for small molecule co-design.
+        job_name: Custom job name.
+        num_model_seeds: Number of independent seed tasks (default: 5).
+        num_designs_per_seed: Designs generated per seed (default: 2).
+        budget_per_seed: BoltzGen sampling budget per seed (default: 2).
+        gpu_type: 'auto' (recommended), 'A100', or 'A100_80GB'.
+        enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
+        extra_cli_args: Additional CLI flags.
+    """
+    validated_input = _validate_input_source(input, "input") if input is not None else None
+    validated_target = _validate_optional_target_structure(target_structure)
+    args = {
+        "input": validated_input,
+        "target_structure": validated_target,
+        "target_chains": target_chains,
+        "binding_residues": binding_residues,
+        "binder_length_range": binder_length_range,
+        "protocol": protocol,
+        "ligand_smiles": ligand_smiles,
+        "num_model_seeds": num_model_seeds,
+        "num_designs_per_seed": num_designs_per_seed,
+        "budget_per_seed": budget_per_seed,
+        "gpu_type": gpu_type,
+        "enable_flex_start": enable_flex_start,
+        "extra_cli_args": extra_cli_args or [],
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    return get_tool("boltzgen_submit_design").run(args)
+
+
+def submit_rfd4_proteina_design(
+    input: str | None = None,
+    design_mode: str = "binder_design",
+    target_structure: str | None = None,
+    target_chains: list[str] | None = None,
+    binding_residues: list[str] | None = None,
+    scaffold_motif: str | None = None,
+    binder_length_range: str = "80..140",
+    job_name: str | None = None,
+    num_model_seeds: int = 5,
+    num_designs_per_seed: int = 2,
+    gpu_type: str = "auto",
+    enable_flex_start: bool = True,
+    compute_metrics: bool = False,
+    extra_cli_args: list | None = None,
+) -> dict:
+    """Submit RFD4-Proteina generative protein and binder design job to Vertex AI Pipelines.
+
+    Args:
+        input: Optional design specification string or file path.
+        design_mode: 'binder_design' (default), 'motif_scaffolding', or 'unconditional_monomer'.
+        target_structure: Target structure: RCSB PDB ID, GCS URI, or local file.
+        target_chains: Target chains to bind against (e.g. ['A']).
+        binding_residues: Hotspot residues (e.g. ['A:23', 'A:24']).
+        scaffold_motif: Motif specification for motif scaffolding mode.
+        binder_length_range: Length range (default '80..140').
+        job_name: Custom job name.
+        num_model_seeds: Number of independent seed tasks (default: 5).
+        num_designs_per_seed: Designs sampled per seed (default: 2).
+        gpu_type: 'auto', 'A100', 'A100_80GB', or 'L4'.
+        enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
+        compute_metrics: Compute Proteina self-consistency metrics (default: False for fast ~metrics mode).
+        extra_cli_args: Additional CLI flags.
+    """
+    validated_input = _validate_input_source(input, "input") if input is not None else None
+    validated_target = _validate_optional_target_structure(target_structure)
+    args = {
+        "input": validated_input,
+        "design_mode": design_mode,
+        "target_structure": validated_target,
+        "target_chains": target_chains,
+        "binding_residues": binding_residues,
+        "scaffold_motif": scaffold_motif,
+        "binder_length_range": binder_length_range,
+        "num_model_seeds": num_model_seeds,
+        "num_designs_per_seed": num_designs_per_seed,
+        "gpu_type": gpu_type,
+        "enable_flex_start": enable_flex_start,
+        "compute_metrics": compute_metrics,
+        "extra_cli_args": extra_cli_args or [],
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    return get_tool("rfd4_proteina_submit_design").run(args)
+
+
+def submit_bindcraft_design(
+    input: str | None = None,
+    target_structure: str | None = None,
+    target_chains: list[str] | None = None,
+    binding_residues: list[str] | None = None,
+    binder_length_range: str = "80..140",
+    job_name: str | None = None,
+    num_model_seeds: int = 5,
+    num_designs_per_seed: int = 2,
+    gpu_type: str = "auto",
+    enable_flex_start: bool = True,
+    extra_cli_args: list | None = None,
+) -> dict:
+    """Submit BindCraft (ColabDesign + SolubleMPNN) binder design job to Vertex AI Pipelines.
+
+    Args:
+        input: Optional settings specification string or file path.
+        target_structure: Target structure: RCSB PDB ID, GCS URI, or local file.
+        target_chains: Target chains to bind against (e.g. ['A']).
+        binding_residues: Hotspot residues (e.g. ['A:23', 'A:24']).
+        binder_length_range: Length range for designed binder (default '80..140').
+        job_name: Custom job name.
+        num_model_seeds: Number of independent seed tasks (default: 5).
+        num_designs_per_seed: Designs sampled per seed (default: 2).
+        gpu_type: 'auto', 'A100', or 'A100_80GB'.
+        enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
+        extra_cli_args: Additional CLI flags.
+    """
+    validated_input = _validate_input_source(input, "input") if input is not None else None
+    validated_target = _validate_optional_target_structure(target_structure)
+    args = {
+        "input": validated_input,
+        "target_structure": validated_target,
+        "target_chains": target_chains,
+        "binding_residues": binding_residues,
+        "binder_length_range": binder_length_range,
+        "num_model_seeds": num_model_seeds,
+        "num_designs_per_seed": num_designs_per_seed,
+        "gpu_type": gpu_type,
+        "enable_flex_start": enable_flex_start,
+        "extra_cli_args": extra_cli_args or [],
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    return get_tool("bindcraft_submit_design").run(args)

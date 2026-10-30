@@ -324,3 +324,18 @@ class TestCreateAgent:
             instruction = agent.instruction
             assert "Your Current Configuration" in instruction
             assert mock_env_vars["GCP_PROJECT_ID"] in instruction
+
+    def test_agent_has_generative_binder_tools_when_configured(self, mock_env_vars, monkeypatch):
+        """Agent exposes all 43 FunctionTools when generative binder images are configured."""
+        monkeypatch.setenv("BOLTZGEN_COMPONENTS_IMAGE", "test-boltzgen:latest")
+        monkeypatch.setenv("RFD4_PROTEINA_COMPONENTS_IMAGE", "test-rfd4:latest")
+        monkeypatch.setenv("BINDCRAFT_COMPONENTS_IMAGE", "test-bindcraft:latest")
+        with (
+            _mock_startup(),
+            patch("google.cloud.aiplatform.init"),
+            patch("google.cloud.storage.Client"),
+        ):
+            from foldrun_app.agent import create_alphafold_agent
+
+            agent = create_alphafold_agent()
+            assert len(agent.tools) == 43

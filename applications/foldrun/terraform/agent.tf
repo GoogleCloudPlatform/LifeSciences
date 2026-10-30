@@ -59,6 +59,12 @@ resource "google_storage_bucket_iam_member" "foldrun_agent_bucket_access" {
   member = "serviceAccount:${google_service_account.agent_sa.email}"
 }
 
+resource "google_storage_bucket_iam_member" "foldrun_agent_bucket_metadata" {
+  bucket = google_storage_bucket.foldrun_bucket.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.agent_sa.email}"
+}
+
 resource "google_storage_bucket_iam_member" "foldrun_agent_databases_bucket_access" {
   bucket = google_storage_bucket.databases_bucket.name
   role   = "roles/storage.objectViewer"
@@ -69,7 +75,7 @@ resource "google_vertex_ai_reasoning_engine" "agent_runtime" {
   project      = var.project_id
   region       = var.region
   display_name = "FoldRun_Agent"
-  description  = "Expert AI assistant for FoldRun protein structure prediction, job management, and results analysis"
+  description  = "Expert AI assistant for FoldRun biomolecular structure prediction and generative binder design (AlphaFold2, AlphaFold 3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, BindCraft)"
 
   spec {
     # Specify the service account on the engine so it has the right permissions pre-provisioned.
@@ -86,6 +92,7 @@ resource "google_vertex_ai_reasoning_engine" "agent_runtime" {
     google_project_iam_member.agent_roles,
     google_service_account_iam_member.build_sa_actas_agent,
     google_storage_bucket_iam_member.foldrun_agent_bucket_access,
+    google_storage_bucket_iam_member.foldrun_agent_bucket_metadata,
     google_storage_bucket_iam_member.foldrun_agent_databases_bucket_access,
   ]
 }

@@ -1,0 +1,158 @@
+[
+  {
+    "type": "BOLTZGENSubmitDesignTool",
+    "name": "boltzgen_submit_design",
+    "description": "Submit a BoltzGen generative binder design or redesign job to Vertex AI Pipelines. Supports 6 protocols: protein-anything, peptide-anything, protein-small_molecule, nanobody-anything, antibody-anything, and protein-redesign. Accepts raw BoltzGen YAML or structured target inputs (RCSB PDB ID, GCS URI, or local file).",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "string",
+          "description": "Input specification in BoltzGen YAML format, raw query YAML, or path to input file. If target_structure is provided, input can be omitted or used as raw YAML override."
+        },
+        "target_structure": {
+          "type": "string",
+          "description": "Target structure identifier: 4-letter RCSB PDB ID (e.g. '6M1U'), GCS URI (gs://bucket/path.cif or .pdb), or local file path."
+        },
+        "target_chains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Target protein chains to bind against (e.g. ['A'] or ['A', 'B'])."
+        },
+        "binding_residues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Target hotspot/interface residues in 'Chain:ResNum' or 'ResNum' format (e.g. ['A:23', 'A:24', 'A:27'] or ['23', '24'])."
+        },
+        "binder_length_range": {
+          "type": "string",
+          "description": "Length range for designed binder protein/peptide, e.g. '80..140' or '15..30' (default: '80..140')."
+        },
+        "protocol": {
+          "type": "string",
+          "description": "BoltzGen design protocol: 'protein-anything', 'peptide-anything', 'protein-small_molecule', 'nanobody-anything', 'antibody-anything', 'protein-redesign' (default: 'protein-anything').",
+          "enum": [
+            "protein-anything",
+            "peptide-anything",
+            "protein-small_molecule",
+            "nanobody-anything",
+            "antibody-anything",
+            "protein-redesign"
+          ]
+        },
+        "ligand_smiles": {
+          "type": "string",
+          "description": "SMILES string for small molecule ligand target or co-factor (for protein-small_molecule protocol)."
+        },
+        "ligand_ccd": {
+          "type": "string",
+          "description": "3-letter Chemical Component Dictionary (CCD) code for ligand."
+        },
+        "job_name": {
+          "type": "string",
+          "description": "Human-readable job name for tracking (optional)"
+        },
+        "num_model_seeds": {
+          "type": "integer",
+          "description": "Number of model seeds for parallel fan-out (default: 5). Each seed explores distinct diffusion and sequence space."
+        },
+        "num_designs_per_seed": {
+          "type": "integer",
+          "description": "Number of final ranked designs to generate per seed (default: 2)."
+        },
+        "budget_per_seed": {
+          "type": "integer",
+          "description": "Diffusion sampling budget per seed (default: 2)."
+        },
+        "gpu_type": {
+          "type": "string",
+          "description": "GPU type: 'auto' (default, A100 for <=1500 tokens, A100_80GB for >1500), 'A100', or 'A100_80GB'.",
+          "enum": [
+            "auto",
+            "A100",
+            "A100_80GB"
+          ]
+        },
+        "enable_flex_start": {
+          "type": "boolean",
+          "description": "Enable DWS FLEX_START scheduling to queue job when GPUs unavailable (default: true)"
+        }
+      }
+    }
+  },
+  {
+    "type": "BOLTZGENJobAnalysisTool",
+    "name": "boltzgen_analyze_parallel",
+    "description": "Trigger parallel analysis of BoltzGen design results via Cloud Run Jobs. Evaluates self-consistency (sc_score), clash_score, pLDDT, ipTM, and generates Gemini expert analysis.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "BoltzGen pipeline job ID (required)"
+        },
+        "overwrite": {
+          "type": "boolean",
+          "description": "Overwrite existing analysis (default: false)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "BOLTZGENGetAnalysisResultsTool",
+    "name": "boltzgen_get_analysis_results",
+    "description": "Retrieve BoltzGen analysis results from Cloud Run. Returns sc_score, clash_score, ranking_score, ipTM, pLDDT, designed sequences, and Gemini expert analysis.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "BoltzGen pipeline job ID (required)"
+        },
+        "wait": {
+          "type": "boolean",
+          "description": "Poll until analysis completes (default: false)"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Max wait time in seconds (default: 10)"
+        },
+        "poll_interval": {
+          "type": "integer",
+          "description": "Seconds between polls (default: 2)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  },
+  {
+    "type": "BOLTZGENOpenViewerTool",
+    "name": "boltzgen_open_viewer",
+    "description": "Open the FoldRun 3D structure viewer for BoltzGen designed complexes. Shows CIF structure with pLDDT coloring, interface hotspots, ranking metrics, and analysis plots.",
+    "parameter": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "description": "BoltzGen pipeline job ID (required)"
+        },
+        "open_browser": {
+          "type": "boolean",
+          "description": "Open viewer URL directly in browser (default: true)"
+        }
+      },
+      "required": [
+        "job_id"
+      ]
+    }
+  }
+]

@@ -208,10 +208,10 @@ databases:
       cp {dest}/obsolete.dat /mnt/scratch/pdb_mmcif/obsolete.dat
 
   # ===========================================================================
-  # AlphaFold2 only
+  # AlphaFold2 (and shared AF2 params for BindCraft)
   # ===========================================================================
   alphafold_params:
-    models: [af2]
+    models: [af2, bindcraft]
     display_name: AlphaFold2 Parameters
     nfs_path: alphafold2/params
     source: https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar
@@ -305,6 +305,47 @@ databases:
       aws s3 cp --no-sign-request s3://openfold/alignment_databases/rnacentral.fasta.gz {dest}/rnacentral.fasta.gz
       gunzip -f {dest}/rnacentral.fasta.gz
 
+  # ===========================================================================
+  # Generative binder models (BoltzGen, RFD4-Proteina, BindCraft)
+  # ===========================================================================
+  boltzgen_cache:
+    models: [boltzgen]
+    display_name: BoltzGen Model Weights + Inference Data (unified cache)
+    nfs_path: boltzgen/cache
+    machine_type: e2-standard-4
+    script: |
+      echo "Downloading BoltzGen weights and inference-data to {dest}..."
+      apt-get update -qq && apt-get install -y -qq python3-pip
+      /usr/bin/python3 -m pip install --break-system-packages --upgrade --target=/tmp/hf_pkg --quiet huggingface_hub
+      mkdir -p {dest}
+      HF_HUB_DISABLE_XET=1 PYTHONPATH=/tmp/hf_pkg /usr/bin/python3 -c "from huggingface_hub import snapshot_download, hf_hub_download; cache_dir = '{dest}'; snapshot_download(repo_id='boltzgen/inference-data', repo_type='dataset', cache_dir=cache_dir); [hf_hub_download(repo_id='boltzgen/boltzgen-1', filename=c, cache_dir=cache_dir) for c in ['boltzgen1_diverse.ckpt', 'boltzgen1_adherence.ckpt', 'boltzgen1_ifold.ckpt', 'boltz2_conf_final.ckpt', 'boltz2_aff.ckpt']]"
+      rm -rf /tmp/hf_pkg
+
+  rfd4_proteina_cache:
+    models: [rfd4_proteina, rfd4]
+    display_name: RFD4-Proteina Model + Autoencoder Weights
+    nfs_path: rfd4_proteina/cache
+    machine_type: e2-standard-4
+    script: |
+      echo "Downloading RFD4-Proteina weights (~1.7 GB) to {dest}..."
+      apt-get update -qq && apt-get install -y -qq python3-pip
+      /usr/bin/python3 -m pip install --break-system-packages --upgrade --target=/tmp/hf_pkg --quiet huggingface_hub
+      mkdir -p {dest}/hub
+      HF_HUB_DISABLE_XET=1 PYTHONPATH=/tmp/hf_pkg /usr/bin/python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='nvidia/RFD4-Proteina', cache_dir='{dest}/hub')"
+      rm -rf /tmp/hf_pkg
+
+  bindcraft_mpnn_params:
+    models: [bindcraft]
+    display_name: BindCraft SolubleMPNN & ProteinMPNN Weights
+    nfs_path: bindcraft/mpnn_weights
+    machine_type: e2-standard-4
+    script: |
+      apt-get update -qq && apt-get install -y -qq git
+      mkdir -p {dest}
+      git clone --depth 1 https://github.com/sokrypton/ColabDesign.git /tmp/colabdesign
+      cp -r /tmp/colabdesign/colabdesign/mpnn/weights/* {dest}/
+      rm -rf /tmp/colabdesign
+
 # Download modes — which databases to download per model.
 # Use with: python scripts/setup_data.py --models af2 --mode reduced
 # When no mode is specified, all databases for the requested models are downloaded.
@@ -346,6 +387,37 @@ modes:
     core:
       - of3_params
       - of3_ccd
+  boltzgen:
+    full:
+      - boltzgen_cache
+    reduced:
+      - boltzgen_cache
+    core:
+      - boltzgen_cache
+  rfd4_proteina:
+    full:
+      - rfd4_proteina_cache
+    reduced:
+      - rfd4_proteina_cache
+    core:
+      - rfd4_proteina_cache
+  rfd4:
+    full:
+      - rfd4_proteina_cache
+    reduced:
+      - rfd4_proteina_cache
+    core:
+      - rfd4_proteina_cache
+  bindcraft:
+    full:
+      - alphafold_params
+      - bindcraft_mpnn_params
+    reduced:
+      - alphafold_params
+      - bindcraft_mpnn_params
+    core:
+      - alphafold_params
+      - bindcraft_mpnn_params
   boltz:
     full:
       - boltz2_cache

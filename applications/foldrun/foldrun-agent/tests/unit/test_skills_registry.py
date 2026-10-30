@@ -200,6 +200,38 @@ class TestSkillRegistry:
         assert "get_af3_results" in tool_names
         assert "open_af3_structure_viewer" in tool_names
 
+    def test_conditional_generative_binder_tools(self, monkeypatch):
+        """When BoltzGen, RFD4-Proteina, and BindCraft images are set, all 12 tools register."""
+        monkeypatch.setenv("BOLTZGEN_COMPONENTS_IMAGE", "test-boltzgen-image:latest")
+        monkeypatch.setenv("RFD4_PROTEINA_COMPONENTS_IMAGE", "test-rfd4-image:latest")
+        monkeypatch.setenv("BINDCRAFT_COMPONENTS_IMAGE", "test-bindcraft-image:latest")
+
+        gen_registry = SkillRegistry()
+        tools = gen_registry.compile_tools()
+        tool_names = {
+            getattr(t, "name", None)
+            or getattr(getattr(t, "func", None), "__name__", None)
+            or str(t)
+            for t in tools
+        }
+        # 31 baseline (AF2 + OF3 + Boltz-2) + 12 generative binder tools = 43
+        assert len(tools) == 43
+        for expected_name in (
+            "submit_boltzgen_design",
+            "submit_rfd4_proteina_design",
+            "submit_bindcraft_design",
+            "analyze_boltzgen_job",
+            "get_boltzgen_results",
+            "analyze_rfd4_proteina_job",
+            "get_rfd4_proteina_results",
+            "analyze_bindcraft_job",
+            "get_bindcraft_results",
+            "open_boltzgen_structure_viewer",
+            "open_rfd4_proteina_structure_viewer",
+            "open_bindcraft_structure_viewer",
+        ):
+            assert expected_name in tool_names, f"Missing expected tool: {expected_name}"
+
     def test_tool_introspection_safety_custom_class(self):
         """Tool compilation safely inspects tools lacking a func attribute."""
 

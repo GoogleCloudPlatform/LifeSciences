@@ -115,6 +115,53 @@ class TestDatabasesYaml:
                 prefix=f"of3/params/{DEFAULT_OF3_CHECKPOINT}", max_results=1
             )
 
+    def test_boltzgen_databases_present(self, manifest):
+        """BoltzGen model has the expected cache database."""
+        from foldrun_app.core.download import _get_models
+
+        boltzgen_dbs = {
+            name for name, db in manifest["databases"].items() if "boltzgen" in _get_models(db)
+        }
+        expected = {"boltzgen_cache"}
+        assert expected.issubset(boltzgen_dbs), (
+            f"Missing BoltzGen databases: {expected - boltzgen_dbs}"
+        )
+
+    def test_rfd4_proteina_databases_present(self, manifest):
+        """RFD4-Proteina model has the expected cache database."""
+        from foldrun_app.core.download import _get_models
+
+        rfd4_dbs = {
+            name for name, db in manifest["databases"].items() if "rfd4_proteina" in _get_models(db)
+        }
+        expected = {"rfd4_proteina_cache"}
+        assert expected.issubset(rfd4_dbs), (
+            f"Missing RFD4-Proteina databases: {expected - rfd4_dbs}"
+        )
+
+    def test_bindcraft_databases_present(self, manifest):
+        """BindCraft model has the expected databases."""
+        from foldrun_app.core.download import _get_models
+
+        bindcraft_dbs = {
+            name for name, db in manifest["databases"].items() if "bindcraft" in _get_models(db)
+        }
+        expected = {"alphafold_params", "bindcraft_mpnn_params"}
+        assert expected.issubset(bindcraft_dbs), (
+            f"Missing BindCraft databases: {expected - bindcraft_dbs}"
+        )
+
+    def test_binder_model_modes_present(self, manifest):
+        """Generative binder models have full, reduced, and core modes in the manifest."""
+        assert get_databases_for_models(manifest, ["boltzgen"], mode="core") == ["boltzgen_cache"]
+        assert get_databases_for_models(manifest, ["rfd4_proteina"], mode="core") == [
+            "rfd4_proteina_cache"
+        ]
+        assert get_databases_for_models(manifest, ["bindcraft"], mode="core") == [
+            "alphafold_params",
+            "bindcraft_mpnn_params",
+        ]
+
 
 # ------------------------------------------------------------------ #
 # build_script

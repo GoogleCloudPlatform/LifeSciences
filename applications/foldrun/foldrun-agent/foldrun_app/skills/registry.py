@@ -51,20 +51,29 @@ from foldrun_app.skills.job_submission.tools import (
     submit_af2_multimer_prediction,
     submit_af3_batch_predictions,
     submit_af3_endpoint_prediction,
+    submit_bindcraft_design,
     submit_boltz2_prediction,
+    submit_boltzgen_design,
     submit_of3_prediction,
+    submit_rfd4_proteina_design,
 )
 from foldrun_app.skills.results_analysis.instruction import RESULTS_ANALYSIS_INSTRUCTION
 from foldrun_app.skills.results_analysis.tools import (
+    analyze_bindcraft_job,
+    analyze_boltzgen_job,
     analyze_job,
     analyze_job_parallel,
     analyze_prediction_quality,
+    analyze_rfd4_proteina_job,
     boltz2_analyze_job_parallel,
     boltz2_get_analysis_results,
     download_job_artifacts,
     get_af3_results,
     get_analysis_results,
+    get_bindcraft_results,
+    get_boltzgen_results,
     get_prediction_results,
+    get_rfd4_proteina_results,
     of3_analyze_job_parallel,
     of3_get_analysis_results,
 )
@@ -76,12 +85,15 @@ from foldrun_app.skills.storage_management.tools import (
 from foldrun_app.skills.visualization.instruction import VISUALIZATION_INSTRUCTION
 from foldrun_app.skills.visualization.tools import (
     open_af3_structure_viewer,
+    open_bindcraft_structure_viewer,
     open_boltz2_structure_viewer,
+    open_boltzgen_structure_viewer,
     open_of3_structure_viewer,
+    open_rfd4_proteina_structure_viewer,
     open_structure_viewer,
 )
 
-CORE_HEADER = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2.
+CORE_HEADER = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, AlphaFold3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, and BindCraft.
 
 Your role is to help researchers and scientists with:
 1. Submitting protein structure predictions (monomers and multimers)
@@ -156,6 +168,9 @@ class SkillRegistry:
         """Register the baseline FoldRun domain skills with environment-conditional tools."""
         has_of3 = bool(os.getenv("OPENFOLD3_COMPONENTS_IMAGE"))
         has_boltz2 = bool(os.getenv("BOLTZ2_COMPONENTS_IMAGE"))
+        has_boltzgen = bool(os.getenv("BOLTZGEN_COMPONENTS_IMAGE"))
+        has_rfd4 = bool(os.getenv("RFD4_PROTEINA_COMPONENTS_IMAGE"))
+        has_bindcraft = bool(os.getenv("BINDCRAFT_COMPONENTS_IMAGE"))
         has_af3 = bool(
             os.getenv("AF3_ENDPOINT")
             or os.getenv("AF3_AGENT_PLATFORM_ENDPOINT")
@@ -181,13 +196,19 @@ class SkillRegistry:
             submission_tools.append(submit_of3_prediction)
         if has_boltz2:
             submission_tools.append(submit_boltz2_prediction)
+        if has_boltzgen:
+            submission_tools.append(submit_boltzgen_design)
+        if has_rfd4:
+            submission_tools.append(submit_rfd4_proteina_design)
+        if has_bindcraft:
+            submission_tools.append(submit_bindcraft_design)
         if has_af3:
             submission_tools.extend([submit_af3_endpoint_prediction, submit_af3_batch_predictions])
 
         self.register(
             Skill(
                 name="job_submission",
-                description="Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2",
+                description="Submission of biomolecular predictions and binder designs via AlphaFold2, AlphaFold3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, and BindCraft",
                 instruction=_get_instruction("job_submission", JOB_SUBMISSION_INSTRUCTION),
                 tool_functions=submission_tools,
             )
@@ -236,13 +257,19 @@ class SkillRegistry:
             analysis_tools.extend([of3_analyze_job_parallel, of3_get_analysis_results])
         if has_boltz2:
             analysis_tools.extend([boltz2_analyze_job_parallel, boltz2_get_analysis_results])
+        if has_boltzgen:
+            analysis_tools.extend([analyze_boltzgen_job, get_boltzgen_results])
+        if has_rfd4:
+            analysis_tools.extend([analyze_rfd4_proteina_job, get_rfd4_proteina_results])
+        if has_bindcraft:
+            analysis_tools.extend([analyze_bindcraft_job, get_bindcraft_results])
         if has_af3:
             analysis_tools.append(get_af3_results)
 
         self.register(
             Skill(
                 name="results_analysis",
-                description="Quality assessment (pLDDT, PAE, PDE, ipTM, pTM), AF3 confidence metrics, parallel batch analysis via Cloud Run, and troubleshooting",
+                description="Quality assessment (pLDDT, PAE, PDE, ipTM, pTM, scRMSD), AF3 & generative binder metrics, parallel batch analysis via Cloud Run, and troubleshooting",
                 instruction=_get_instruction("results_analysis", RESULTS_ANALYSIS_INSTRUCTION),
                 tool_functions=analysis_tools,
             )
@@ -256,13 +283,19 @@ class SkillRegistry:
             vis_tools.append(open_of3_structure_viewer)
         if has_boltz2:
             vis_tools.append(open_boltz2_structure_viewer)
+        if has_boltzgen:
+            vis_tools.append(open_boltzgen_structure_viewer)
+        if has_rfd4:
+            vis_tools.append(open_rfd4_proteina_structure_viewer)
+        if has_bindcraft:
+            vis_tools.append(open_bindcraft_structure_viewer)
         if has_af3:
             vis_tools.append(open_af3_structure_viewer)
 
         self.register(
             Skill(
                 name="visualization",
-                description="Interactive 3D structure visualization URLs with Mol* for AF2, AF3, OF3, and Boltz-2",
+                description="Interactive 3D structure visualization URLs with Mol* for AF2, AF3, OF3, Boltz-2, BoltzGen, RFD4-Proteina, and BindCraft",
                 instruction=_get_instruction("visualization", VISUALIZATION_INSTRUCTION),
                 tool_functions=vis_tools,
             )

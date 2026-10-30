@@ -30,6 +30,12 @@ def mock_env_vars(monkeypatch):
     """Set all required environment variables from tests/.env.test."""
     for key, value in _TEST_ENV.items():
         monkeypatch.setenv(key, value)
+    for opt_var in (
+        "BOLTZGEN_COMPONENTS_IMAGE",
+        "RFD4_PROTEINA_COMPONENTS_IMAGE",
+        "BINDCRAFT_COMPONENTS_IMAGE",
+    ):
+        monkeypatch.delenv(opt_var, raising=False)
     return dict(_TEST_ENV)
 
 

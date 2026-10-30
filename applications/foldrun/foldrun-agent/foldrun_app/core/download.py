@@ -274,10 +274,11 @@ def submit_download(
         f"echo '=== Done ==='\n"
     )
 
-    # Job ID: <model>-dl-<db_name>-<timestamp>
+    # Job ID: <model>-dl-<db_name>-<timestamp> (Cloud Batch requires ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    clean_model = _clean_label(model).replace("_", "-")
     clean_name = _clean_label(db_name).replace("_", "-")
-    job_id = f"{model}-dl-{clean_name}-{timestamp}"
+    job_id = f"{clean_model}-dl-{clean_name}-{timestamp}"[:62].rstrip("-")
 
     labels = {
         "task": "database-download",

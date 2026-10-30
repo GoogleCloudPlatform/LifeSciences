@@ -113,3 +113,32 @@ class TestToolRegistry:
             assert len(reg._agents) == 28
             for tool_name in expected_tools:
                 assert tool_name in reg._agents, f"Tool '{tool_name}' not registered"
+
+    def test_generative_binder_tools_registered(self, mock_env_vars, monkeypatch):
+        """When BoltzGen, RFD4-Proteina, and BindCraft images are set, all 40 tools register."""
+        self._reset_registry()
+        monkeypatch.setenv("BOLTZGEN_COMPONENTS_IMAGE", "test-boltzgen-image:latest")
+        monkeypatch.setenv("RFD4_PROTEINA_COMPONENTS_IMAGE", "test-rfd4-image:latest")
+        monkeypatch.setenv("BINDCRAFT_COMPONENTS_IMAGE", "test-bindcraft-image:latest")
+
+        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
+            import foldrun_app.skills._tool_registry as reg
+            from foldrun_app.skills._tool_registry import get_tool
+
+            get_tool("af2_submit_monomer")
+            assert len(reg._agents) == 40
+            for tool_name in [
+                "boltzgen_submit_design",
+                "boltzgen_analyze_parallel",
+                "boltzgen_get_analysis_results",
+                "boltzgen_open_viewer",
+                "rfd4_proteina_submit_design",
+                "rfd4_proteina_analyze_job",
+                "rfd4_proteina_get_analysis_results",
+                "rfd4_proteina_open_viewer",
+                "bindcraft_submit_design",
+                "bindcraft_analyze_job",
+                "bindcraft_get_analysis_results",
+                "bindcraft_open_viewer",
+            ]:
+                assert tool_name in reg._agents, f"Tool '{tool_name}' not registered"

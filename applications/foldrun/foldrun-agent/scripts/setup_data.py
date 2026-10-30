@@ -77,13 +77,28 @@ def get_infra_params(config: CoreConfig) -> dict:
     }
 
 
+def _check_local_nfs_exists(nfs_mount: str, db_cfg: dict) -> bool:
+    """Return True if the database directory (or expected_file) exists on local NFS."""
+    if not nfs_mount or not os.path.isdir(nfs_mount):
+        return False
+    nfs_path = db_cfg.get("nfs_path", "")
+    if not nfs_path:
+        return False
+    target = os.path.join(nfs_mount, nfs_path)
+    expected_file = db_cfg.get("expected_file")
+    if expected_file:
+        return os.path.exists(os.path.join(target, expected_file.lstrip("/")))
+    return os.path.isdir(target) and bool(os.listdir(target))
+
+
 def show_status(manifest):
-    """Check which databases exist in GCS and display status."""
+    """Check which databases exist in GCS (and local NFS if mounted) and display status."""
     from foldrun_app.core.download import check_gcs_exists
     from foldrun_app.models.af2.tools.download_database import MMSEQS2_INDEXABLE_DATABASES
 
     config = CoreConfig()
     gcs_bucket = config.databases_bucket_name
+    local_nfs_mounted = bool(config.nfs_mount_point and os.path.isdir(config.nfs_mount_point))
 
     databases = manifest.get("databases", {})
     db_names = list(databases.keys())
@@ -100,14 +115,19 @@ def show_status(manifest):
 
     by_model = {}
     for name, db in databases.items():
+        nfs_exists = _check_local_nfs_exists(config.nfs_mount_point, db)
+        is_present = existing.get(name, False) or nfs_exists
         for model in _get_models(db):
-            by_model.setdefault(model, []).append((name, db, existing.get(name, False)))
+            by_model.setdefault(model, []).append((name, db, is_present, nfs_exists))
 
     for model, dbs in sorted(by_model.items()):
         print(f"\n{model}:")
-        for name, db, exists in dbs:
+        for name, db, exists, nfs_exists in dbs:
             status = "present" if exists else "MISSING"
             line = f"  {name:25s} [{status:7s}]  {db.get('display_name', '')}"
+            if local_nfs_mounted:
+                nfs_str = "present" if nfs_exists else "missing"
+                line += f"  (nfs: {nfs_str})"
             if name in mmseqs2_status:
                 mmseqs = "ready" if mmseqs2_status[name] else "not built"
                 line += f"  (mmseqs2: {mmseqs})"
@@ -130,7 +150,8 @@ def dry_run(db_names, config, manifest, force):
         db = databases_config.get(name, {})
         display = db.get("display_name", name)
         nfs_path = db.get("nfs_path", name)
-        if existing.get(name) and not force:
+        is_present = existing.get(name) or _check_local_nfs_exists(config.nfs_mount_point, db)
+        if is_present and not force:
             to_skip.append((name, display, nfs_path))
         else:
             to_download.append((name, display, nfs_path))
@@ -225,8 +246,10 @@ def main():
         return
 
     if not args.models and not args.db:
-        # Default: use DOWNLOAD_MODELS env var, or af2,of3,boltz
-        models_str = os.environ.get("DOWNLOAD_MODELS", "af2,of3,boltz")
+        # Default: use DOWNLOAD_MODELS env var, or all supported models
+        models_str = os.environ.get(
+            "DOWNLOAD_MODELS", "af2,of3,boltz,boltzgen,rfd4_proteina,bindcraft"
+        )
         args.models = models_str
 
     if not args.mode:

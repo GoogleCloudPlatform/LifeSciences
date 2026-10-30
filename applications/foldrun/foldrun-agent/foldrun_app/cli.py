@@ -337,7 +337,13 @@ async def main():
         "--model",
         type=str,
         default=None,
-        choices=["gemini-3.8-flash", "gemini-4-argon"],
+        choices=[
+            "gemini-3.8-flash",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-4-argon",
+            "gemini-3.1-pro-preview",
+        ],
         help="Gemini model to use (default: from .env or gemini-3.8-flash)",
     )
 

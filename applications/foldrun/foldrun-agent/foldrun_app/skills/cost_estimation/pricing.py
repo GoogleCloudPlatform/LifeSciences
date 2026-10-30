@@ -192,6 +192,57 @@ DURATION_ANCHORS = {
             (3000, 70, 40, 12),
         ],
     },
+    "boltzgen": {
+        # Generative binder design (no MSA phase; msa_min=0, per-seed diffusion + folding)
+        "A100": [
+            (100, 0, 4.0, 0),
+            (300, 0, 7.0, 0),
+            (600, 0, 12.0, 0),
+            (1000, 0, 20.0, 0),
+        ],
+        "A100_80GB": [
+            (100, 0, 3.0, 0),
+            (300, 0, 5.5, 0),
+            (600, 0, 9.5, 0),
+            (1000, 0, 15.0, 0),
+            (2000, 0, 26.0, 0),
+        ],
+    },
+    "rfd4_proteina": {
+        # Flow-matching backbone + LigandMPNN (fast mode ~metrics default; msa_min=0)
+        "L4": [
+            (100, 0, 3.0, 0),
+            (300, 0, 5.0, 0),
+            (600, 0, 9.0, 0),
+        ],
+        "A100": [
+            (100, 0, 1.8, 0),
+            (300, 0, 3.0, 0),
+            (600, 0, 5.5, 0),
+            (1000, 0, 9.0, 0),
+        ],
+        "A100_80GB": [
+            (100, 0, 1.5, 0),
+            (300, 0, 2.5, 0),
+            (600, 0, 4.5, 0),
+            (1000, 0, 7.5, 0),
+        ],
+    },
+    "bindcraft": {
+        # AF2 backpropagation hallucination + SolubleMPNN + OpenMM scoring (msa_min=0)
+        "A100": [
+            (100, 0, 8.0, 0),
+            (300, 0, 15.0, 0),
+            (600, 0, 25.0, 0),
+            (1000, 0, 40.0, 0),
+        ],
+        "A100_80GB": [
+            (100, 0, 6.0, 0),
+            (300, 0, 11.0, 0),
+            (600, 0, 19.0, 0),
+            (1000, 0, 30.0, 0),
+        ],
+    },
     "of3": {
         # predict_per_task is per seed (each seed runs num_diffusion_samples)
         "A100": [
@@ -254,6 +305,9 @@ DEFAULT_PREDICT_TASKS = {
     "af2_multimer": 25,
     "of3": 5,
     "boltz2": 5,
+    "boltzgen": 5,
+    "rfd4_proteina": 5,
+    "bindcraft": 5,
 }
 
 # Infrastructure monthly costs (always-on, independent of job volume)
@@ -332,12 +386,16 @@ def _auto_select_gpu(job_type: str, sequence_length: int) -> str:
         return "A100" if sequence_length <= 2200 else "A100_80GB"
     elif job_type == "boltz2":
         return "A100" if sequence_length <= 2000 else "A100_80GB"
-    elif job_type == "af2_multimer":
+    if job_type in ["boltzgen", "bindcraft"]:
+        return "A100" if sequence_length <= 800 else "A100_80GB"
+    if job_type == "rfd4_proteina":
+        return "A100" if sequence_length <= 1000 else "A100_80GB"
+    if job_type == "af2_multimer":
         return "A100" if sequence_length < 1000 else "A100_80GB"
-    else:  # af2_monomer — L4 no longer auto-selected (provisions slowly under DWS)
-        if sequence_length <= 1500:
-            return "A100"
-        return "A100_80GB"
+    # af2_monomer — L4 no longer auto-selected (provisions slowly under DWS)
+    if sequence_length <= 1500:
+        return "A100"
+    return "A100_80GB"
 
 
 def _relax_gpu(predict_gpu: str) -> str:
@@ -550,22 +608,23 @@ def _estimate_phases(
 
     phases = []
 
-    # Phase 1: MSA / Data Pipeline (always CPU)
-    msa_machine = "c2-standard-16"
-    msa_rate = _hourly_rate(msa_machine, None, 0, spot, prices)
-    msa_cost = (msa_min / 60) * msa_rate
-    phases.append(
-        {
-            "phase": "MSA / Data Pipeline",
-            "machine_type": msa_machine,
-            "gpu": "None (CPU, Jackhmmer)",
-            "duration_minutes": round(msa_min, 1),
-            "hourly_rate": round(msa_rate, 4),
-            "cost": round(msa_cost, 2),
-        }
-    )
+    # Phase 1: MSA / Data Pipeline (CPU; omitted for generative binder models with msa_min == 0)
+    if msa_min > 0:
+        msa_machine = "c2-standard-16"
+        msa_rate = _hourly_rate(msa_machine, None, 0, spot, prices)
+        msa_cost = (msa_min / 60) * msa_rate
+        phases.append(
+            {
+                "phase": "MSA / Data Pipeline",
+                "machine_type": msa_machine,
+                "gpu": "None (CPU, Jackhmmer)",
+                "duration_minutes": round(msa_min, 1),
+                "hourly_rate": round(msa_rate, 4),
+                "cost": round(msa_cost, 2),
+            }
+        )
 
-    # Phase 2: Predict
+    # Phase 2: Predict / Design
     predict_machine = _machine_for_gpu(gpu_type)
     predict_rate = _hourly_rate(predict_machine, gpu_type, 1, spot, prices)
 
@@ -573,6 +632,10 @@ def _estimate_phases(
         # OF3/Boltz-2: each seed task runs num_diffusion_samples sequentially
         predict_total_min = predict_per_task_min * num_diffusion_samples * num_predictions
         predict_desc = f"{num_predictions} seeds x {num_diffusion_samples} samples"
+    elif job_type in ["boltzgen", "rfd4_proteina", "bindcraft"]:
+        designs_per_seed = max(1, num_diffusion_samples)
+        predict_total_min = predict_per_task_min * designs_per_seed * num_predictions
+        predict_desc = f"{num_predictions} seeds x {designs_per_seed} designs"
     elif job_type == "af2_multimer":
         predict_total_min = predict_per_task_min * num_predictions
         predict_desc = f"5 models x {num_predictions // 5} seeds = {num_predictions} predictions"
@@ -819,6 +882,9 @@ def estimate_monthly(
     af2_multimer_jobs: int = 0,
     of3_jobs: int = 0,
     boltz2_jobs: int = 0,
+    boltzgen_jobs: int = 0,
+    rfd4_proteina_jobs: int = 0,
+    bindcraft_jobs: int = 0,
     avg_sequence_length: int = 300,
     include_infrastructure: bool = True,
     region: str = "us-central1",
@@ -838,6 +904,9 @@ def estimate_monthly(
         af2_multimer_jobs: Monthly AF2 multimer job count
         of3_jobs: Monthly OF3 job count
         boltz2_jobs: Monthly Boltz-2 job count
+        boltzgen_jobs: Monthly BoltzGen job count
+        rfd4_proteina_jobs: Monthly RFD4-Proteina job count
+        bindcraft_jobs: Monthly BindCraft job count
         avg_sequence_length: Average sequence length for cost estimation
             (drives duration interpolation and GPU auto-selection)
         include_infrastructure: Include always-on infrastructure costs (default True)
@@ -854,6 +923,9 @@ def estimate_monthly(
         ("af2_multimer", af2_multimer_jobs, avg_sequence_length),
         ("of3", of3_jobs, avg_sequence_length),
         ("boltz2", boltz2_jobs, avg_sequence_length),
+        ("boltzgen", boltzgen_jobs, avg_sequence_length),
+        ("rfd4_proteina", rfd4_proteina_jobs, avg_sequence_length),
+        ("bindcraft", bindcraft_jobs, avg_sequence_length),
     ]
 
     spot_items, spot_compute = _compute_items_for_mode(
@@ -1130,7 +1202,12 @@ def get_actual_costs(
         seq_len_str = pipeline["seq_len"]
         if seq_len_str and seq_len_str.isdigit():
             seq_len = int(seq_len_str)
-            jt = None
+            jt = {
+                "boltzgen": "boltzgen",
+                "rfd4_proteina": "rfd4_proteina",
+                "rfd4-proteina": "rfd4_proteina",
+                "bindcraft": "bindcraft",
+            }.get(model)
             if model == "alphafold2":
                 jt = "af2_monomer" if pipeline["job_type"] == "monomer" else "af2_multimer"
             elif model == "openfold3":
