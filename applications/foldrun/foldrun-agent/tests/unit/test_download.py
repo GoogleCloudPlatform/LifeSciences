@@ -356,26 +356,26 @@ class TestDownloadSecurity:
             assert expected_quoted in script
 
             # Check the gcloud storage cp command line specifically
-            cp_lines = [
-                line for line in script.splitlines() if line.startswith("gcloud storage cp")
+            rsync_lines = [
+                line for line in script.splitlines() if line.startswith("gcloud storage rsync")
             ]
-            assert len(cp_lines) == 1
+            assert len(rsync_lines) == 1
             assert (
-                cp_lines[0]
-                == f"gcloud storage cp --recursive /mnt/nfs/foldrun/uniref90/* {expected_quoted} 2>&1"
+                rsync_lines[0]
+                == f"gcloud storage rsync --recursive /mnt/nfs/foldrun/uniref90/ {expected_quoted} 2>&1"
             )
 
             # Check the echo command line specifically
             expected_echo = f"echo {shlex.quote(f'=== Backing up to GCS: {normalized_gcs} ===')}"
             assert expected_echo in script
 
-            # Verify shlex.split parses the cp command without breaking on semicolon
-            tokens = shlex.split(cp_lines[0])
+            # Verify shlex.split parses the rsync command without breaking on semicolon
+            tokens = shlex.split(rsync_lines[0])
             assert tokens[0] == "gcloud"
             assert tokens[1] == "storage"
-            assert tokens[2] == "cp"
+            assert tokens[2] == "rsync"
             assert tokens[3] == "--recursive"
-            assert tokens[4] == "/mnt/nfs/foldrun/uniref90/*"
+            assert tokens[4] == "/mnt/nfs/foldrun/uniref90/"
             assert tokens[5] == normalized_gcs
 
     def test_gcs_output_path_subshell_injection(self):
@@ -412,13 +412,13 @@ class TestDownloadSecurity:
             expected_quoted = shlex.quote(f"{malicious_gcs}/")
             assert expected_quoted in script
 
-            cp_lines = [
-                line for line in script.splitlines() if line.startswith("gcloud storage cp")
+            rsync_lines = [
+                line for line in script.splitlines() if line.startswith("gcloud storage rsync")
             ]
-            assert len(cp_lines) == 1
+            assert len(rsync_lines) == 1
             assert (
-                cp_lines[0]
-                == f"gcloud storage cp --recursive /mnt/nfs/foldrun/uniref90/* {expected_quoted} 2>&1"
+                rsync_lines[0]
+                == f"gcloud storage rsync --recursive /mnt/nfs/foldrun/uniref90/ {expected_quoted} 2>&1"
             )
 
     def test_gcs_output_path_single_quote_breakout(self):
@@ -455,13 +455,13 @@ class TestDownloadSecurity:
             expected_quoted = shlex.quote(malicious_gcs)
             assert expected_quoted in script
 
-            cp_lines = [
-                line for line in script.splitlines() if line.startswith("gcloud storage cp")
+            rsync_lines = [
+                line for line in script.splitlines() if line.startswith("gcloud storage rsync")
             ]
-            assert len(cp_lines) == 1
+            assert len(rsync_lines) == 1
             assert (
-                cp_lines[0]
-                == f"gcloud storage cp --recursive /mnt/nfs/foldrun/uniref90/* {expected_quoted} 2>&1"
+                rsync_lines[0]
+                == f"gcloud storage rsync --recursive /mnt/nfs/foldrun/uniref90/ {expected_quoted} 2>&1"
             )
 
             expected_echo = f"echo {shlex.quote(f'=== Backing up to GCS: {malicious_gcs} ===')}"
@@ -529,14 +529,14 @@ class TestDownloadSecurity:
 
             for call in mock_submit.call_args_list:
                 script = call[1]["script"]
-                cp_lines = [
-                    line for line in script.splitlines() if line.startswith("gcloud storage cp")
+                rsync_lines = [
+                    line for line in script.splitlines() if line.startswith("gcloud storage rsync")
                 ]
-                assert len(cp_lines) == 1
-                tokens = shlex.split(cp_lines[0])
+                assert len(rsync_lines) == 1
+                tokens = shlex.split(rsync_lines[0])
                 assert tokens[0] == "gcloud"
                 assert tokens[1] == "storage"
-                assert tokens[2] == "cp"
+                assert tokens[2] == "rsync"
                 assert tokens[3] == "--recursive"
                 assert tokens[5].startswith("gs://bucket/path/ ; id > /mnt/nfs/pwned.txt #")
 

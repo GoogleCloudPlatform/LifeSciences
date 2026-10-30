@@ -32,6 +32,7 @@ from google.genai import types
 matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
 
 from .shared_utils import (
+    _sanitize_data,
     build_and_upload_run_archive,
     calculate_plddt_stats,
     download_from_gcs,
@@ -180,14 +181,34 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
         top_preds = summary_data["top_predictions"][:3]
 
         pae_mean_str = (
-            f"{best['pae_mean']:.2f}" if best["pae_mean"] is not None else "N/A"
+            f"{best['pae_mean']:.2f}" if best.get("pae_mean") is not None else "N/A"
+        )
+        plddt_mean_str = (
+            f"{best['plddt_mean']:.2f}" if best.get("plddt_mean") is not None else "N/A"
+        )
+        plddt_median_str = (
+            f"{best['plddt_median']:.2f}"
+            if best.get("plddt_median") is not None
+            else "N/A"
+        )
+        plddt_range_str = (
+            f"{best['plddt_min']:.2f} - {best['plddt_max']:.2f}"
+            if best.get("plddt_min") is not None and best.get("plddt_max") is not None
+            else "N/A"
+        )
+        rank_conf_str = (
+            f"{best['ranking_confidence']:.4f}"
+            if best.get("ranking_confidence") is not None
+            else "N/A"
         )
 
         is_multimer = "multimer" in best.get("model_name", "")
         model_type_str = "multimer" if is_multimer else "monomer"
         ranking_formula = "0.8 * ipTM + 0.2 * pTM" if is_multimer else "average pLDDT"
 
-        plddt_means = [p["plddt_mean"] for p in top_preds]
+        plddt_means = [
+            p["plddt_mean"] for p in top_preds if p.get("plddt_mean") is not None
+        ]
         model_agreement = (
             max(plddt_means) - min(plddt_means) if len(plddt_means) > 1 else 0
         )
@@ -214,11 +235,11 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
 - Best Model: {best["model_name"]} (Rank #{best["rank"]})
 
 **Quality Metrics (Best Model):**
-- Mean pLDDT: {best["plddt_mean"]:.2f}
-- Median pLDDT: {best["plddt_median"]:.2f}
-- pLDDT Range: {best["plddt_min"]:.2f} - {best["plddt_max"]:.2f}
+- Mean pLDDT: {plddt_mean_str}
+- Median pLDDT: {plddt_median_str}
+- pLDDT Range: {plddt_range_str}
 - Mean PAE: {pae_mean_str} A
-- Ranking Confidence: {best["ranking_confidence"]:.4f}
+- Ranking Confidence: {rank_conf_str}
 - Quality Assessment: {best["quality_assessment"].replace("_", " ").title()}
 
 **Confidence Distribution (Best Model):**
@@ -231,9 +252,19 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
 """
         for i, pred in enumerate(top_preds, 1):
             pred_pae_str = (
-                f"{pred['pae_mean']:.2f}" if pred["pae_mean"] is not None else "N/A"
+                f"{pred['pae_mean']:.2f}" if pred.get("pae_mean") is not None else "N/A"
             )
-            prompt += f"\n{i}. {pred['model_name']}: pLDDT {pred['plddt_mean']:.2f}, PAE {pred_pae_str} A, ranking {pred['ranking_confidence']:.4f}"
+            pred_plddt_str = (
+                f"{pred['plddt_mean']:.2f}"
+                if pred.get("plddt_mean") is not None
+                else "N/A"
+            )
+            pred_rank_conf_str = (
+                f"{pred['ranking_confidence']:.4f}"
+                if pred.get("ranking_confidence") is not None
+                else "N/A"
+            )
+            prompt += f"\n{i}. {pred['model_name']}: pLDDT {pred_plddt_str}, PAE {pred_pae_str} A, ranking {pred_rank_conf_str}"
 
         if summary["protein_info"].get("fasta_sequence"):
             fasta_seq = summary["protein_info"]["fasta_sequence"]
@@ -365,13 +396,16 @@ def consolidate_results(
 
     job_metadata = get_job_metadata(job_id)
 
-    # Sort analyses by pLDDT
+    # Sort analyses by pLDDT (with None-safe keys)
     all_analyses.sort(
         key=lambda x: (
-            x["plddt_mean"],
-            x["plddt_min"],
-            -x["pae_mean"] if x["pae_mean"] is not None else 0,
-            x["ranking_confidence"],
+            x.get("plddt_mean") is not None,
+            x["plddt_mean"] if x.get("plddt_mean") is not None else -1e9,
+            x["plddt_min"] if x.get("plddt_min") is not None else -1e9,
+            -x["pae_mean"] if x.get("pae_mean") is not None else 0.0,
+            x["ranking_confidence"]
+            if x.get("ranking_confidence") is not None
+            else -1e9,
         ),
         reverse=True,
     )
@@ -380,7 +414,9 @@ def consolidate_results(
         analysis["plddt_rank"] = i + 1
 
     best = all_analyses[0]
-    plddt_means = [a["plddt_mean"] for a in all_analyses]
+    plddt_means = [
+        a["plddt_mean"] for a in all_analyses if a.get("plddt_mean") is not None
+    ]
 
     fasta_sequence = None
     fasta_header = None
@@ -420,10 +456,10 @@ def consolidate_results(
             "total_predictions": len(all_analyses),
             "analyzed_successfully": len(all_analyses),
             "plddt_stats": {
-                "mean": sum(plddt_means) / len(plddt_means),
-                "min": min(plddt_means),
-                "max": max(plddt_means),
-                "range": max(plddt_means) - min(plddt_means),
+                "mean": sum(plddt_means) / len(plddt_means) if plddt_means else None,
+                "min": min(plddt_means) if plddt_means else None,
+                "max": max(plddt_means) if plddt_means else None,
+                "range": (max(plddt_means) - min(plddt_means)) if plddt_means else None,
             },
         },
     }
@@ -472,7 +508,7 @@ def consolidate_results(
     local_summary = "/tmp/summary.json"
 
     with open(local_summary, "w") as f:
-        json.dump(summary_data, f, indent=2)
+        json.dump(_sanitize_data(summary_data), f, indent=2, allow_nan=False)
 
     upload_to_gcs(local_summary, summary_uri)
     os.remove(local_summary)
@@ -487,108 +523,116 @@ def run_task(
     bucket_name: str,
     analysis_path: str,
 ):
-    """Execute the analysis for a specific AF2 prediction task."""
+    """Execute the analysis for AF2 prediction tasks assigned to task_index."""
     predictions = task_config.get("predictions", [])
-    if task_index >= len(predictions):
+    total_predictions = len(predictions)
+    if task_index >= total_predictions:
         logger.error(
-            f"Task index {task_index} out of range (total predictions: {len(predictions)})"
+            f"Task index {task_index} out of range (total predictions: {total_predictions})"
         )
         sys.exit(1)
 
-    pred = predictions[task_index]
     job_id = task_config.get("job_id")
-
-    prediction_index = pred["index"]
-    prediction_uri = pred["uri"]
-    model_name = pred["model_name"]
-    ranking_confidence = pred["ranking_confidence"]
-    output_uri = pred["output_uri"]
-
-    logger.info(f"Starting analysis for prediction {prediction_index}: {model_name}")
+    stride = max(1, task_count)
+    assigned_indices = list(range(task_index, total_predictions, stride))
 
     try:
-        _validate_task_gcs_uri(prediction_uri, expected_bucket=bucket_name)
-        _validate_task_gcs_uri(output_uri, expected_bucket=bucket_name)
+        for pred_idx in assigned_indices:
+            pred = predictions[pred_idx]
+            prediction_index = pred.get("index", pred_idx)
+            prediction_uri = pred["uri"]
+            model_name = pred["model_name"]
+            ranking_confidence = pred["ranking_confidence"]
+            output_uri = pred["output_uri"]
 
-        with tempfile.TemporaryDirectory(
-            prefix=f"af2_analysis_{prediction_index}_"
-        ) as tmp_dir:
-            local_pickle = os.path.join(tmp_dir, "raw_prediction.pkl")
-            download_from_gcs(prediction_uri, local_pickle)
-
-            raw_prediction = load_raw_prediction(local_pickle)
-            plddt_stats = calculate_plddt_stats(raw_prediction["plddt"].tolist())
-            pae_stats = calculate_pae_stats(raw_prediction)
-
-            quality = get_quality_assessment(plddt_stats["mean"])
-
-            # Generate plots
-            plot_files = {}
-            output_base = output_uri.rsplit("/", 1)[0]
-
-            plddt_plot_path = os.path.join(
-                tmp_dir, f"plddt_plot_{prediction_index}.png"
-            )
-            plot_plddt_distribution(
-                raw_prediction["plddt"], model_name, plddt_plot_path
+            logger.info(
+                f"Starting analysis for prediction {prediction_index}: {model_name}"
             )
 
-            plddt_plot_uri = f"{output_base}/plddt_plot_{prediction_index}.png"
-            upload_to_gcs(plddt_plot_path, plddt_plot_uri)
-            plot_files["plddt_plot"] = plddt_plot_uri
+            _validate_task_gcs_uri(prediction_uri, expected_bucket=bucket_name)
+            _validate_task_gcs_uri(output_uri, expected_bucket=bucket_name)
 
-            if pae_stats is not None:
-                pae_plot_path = os.path.join(
-                    tmp_dir, f"pae_plot_{prediction_index}.png"
+            with tempfile.TemporaryDirectory(
+                prefix=f"af2_analysis_{prediction_index}_"
+            ) as tmp_dir:
+                local_pickle = os.path.join(tmp_dir, "raw_prediction.pkl")
+                download_from_gcs(prediction_uri, local_pickle)
+
+                raw_prediction = load_raw_prediction(local_pickle)
+                plddt_stats = calculate_plddt_stats(raw_prediction["plddt"].tolist())
+                pae_stats = calculate_pae_stats(raw_prediction)
+
+                quality = get_quality_assessment(plddt_stats["mean"])
+
+                # Generate plots
+                plot_files = {}
+                output_base = output_uri.rsplit("/", 1)[0]
+
+                plddt_plot_path = os.path.join(
+                    tmp_dir, f"plddt_plot_{prediction_index}.png"
                 )
-                max_pae = raw_prediction.get("max_predicted_aligned_error", 31.0)
-                plot_error_matrix(
-                    raw_prediction["predicted_aligned_error"],
-                    model_name,
-                    "Expected Position Error (Å)",
-                    pae_plot_path,
-                    max_value=max_pae,
+                plot_plddt_distribution(
+                    raw_prediction["plddt"], model_name, plddt_plot_path
                 )
 
-                pae_plot_uri = f"{output_base}/pae_plot_{prediction_index}.png"
-                upload_to_gcs(pae_plot_path, pae_plot_uri)
-                plot_files["pae_plot"] = pae_plot_uri
+                plddt_plot_uri = f"{output_base}/plddt_plot_{prediction_index}.png"
+                upload_to_gcs(plddt_plot_path, plddt_plot_uri)
+                plot_files["plddt_plot"] = plddt_plot_uri
 
-            analysis = {
-                "prediction_index": prediction_index,
-                "model_name": model_name,
-                "rank": prediction_index + 1,
-                "ranking_confidence": ranking_confidence,
-                "plddt_mean": plddt_stats["mean"],
-                "plddt_median": plddt_stats["median"],
-                "plddt_min": plddt_stats["min"],
-                "plddt_max": plddt_stats["max"],
-                "plddt_std": plddt_stats["std"],
-                "plddt_distribution": plddt_stats["distribution"],
-                "plddt_scores": plddt_stats["per_residue"],
-                "pae_mean": pae_stats["mean"] if pae_stats else None,
-                "pae_median": pae_stats["median"] if pae_stats else None,
-                "pae_min": pae_stats["min"] if pae_stats else None,
-                "pae_max": pae_stats["max"] if pae_stats else None,
-                "quality_assessment": quality,
-                "has_pae": pae_stats is not None,
-                "uri": prediction_uri,
-                "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
-                "plots": plot_files,
-            }
+                if pae_stats is not None:
+                    pae_plot_path = os.path.join(
+                        tmp_dir, f"pae_plot_{prediction_index}.png"
+                    )
+                    max_pae = raw_prediction.get("max_predicted_aligned_error", 31.0)
+                    plot_error_matrix(
+                        raw_prediction["predicted_aligned_error"],
+                        model_name,
+                        "Expected Position Error (Å)",
+                        pae_plot_path,
+                        max_value=max_pae,
+                    )
 
-            local_json = os.path.join(tmp_dir, f"analysis_{prediction_index}.json")
-            with open(local_json, "w") as f:
-                json.dump(analysis, f, indent=2)
+                    pae_plot_uri = f"{output_base}/pae_plot_{prediction_index}.png"
+                    upload_to_gcs(pae_plot_path, pae_plot_uri)
+                    plot_files["pae_plot"] = pae_plot_uri
 
-            upload_to_gcs(local_json, output_uri)
+                analysis = {
+                    "prediction_index": prediction_index,
+                    "model_name": model_name,
+                    "rank": prediction_index + 1,
+                    "ranking_confidence": ranking_confidence,
+                    "plddt_mean": plddt_stats["mean"],
+                    "plddt_median": plddt_stats["median"],
+                    "plddt_min": plddt_stats["min"],
+                    "plddt_max": plddt_stats["max"],
+                    "plddt_std": plddt_stats["std"],
+                    "plddt_distribution": plddt_stats["distribution"],
+                    "plddt_scores": plddt_stats["per_residue"],
+                    "pae_mean": pae_stats["mean"] if pae_stats else None,
+                    "pae_median": pae_stats["median"] if pae_stats else None,
+                    "pae_min": pae_stats["min"] if pae_stats else None,
+                    "pae_max": pae_stats["max"] if pae_stats else None,
+                    "quality_assessment": quality,
+                    "has_pae": pae_stats is not None,
+                    "uri": prediction_uri,
+                    "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat()
+                    + "Z",
+                    "plots": plot_files,
+                }
 
-        logger.info(f"✅ Completed analysis for prediction {prediction_index}")
+                local_json = os.path.join(tmp_dir, f"analysis_{prediction_index}.json")
+                with open(local_json, "w") as f:
+                    json.dump(_sanitize_data(analysis), f, indent=2, allow_nan=False)
+
+                upload_to_gcs(local_json, output_uri)
+
+            logger.info(f"✅ Completed analysis for prediction {prediction_index}")
 
         # Consolidation check
-        if task_index == task_count - 1:
-            wait_for_sibling_tasks(bucket_name, analysis_path, task_count)
-            consolidate_results(job_id, analysis_path, bucket_name, task_count)
+        consolidator_task_index = min(stride, total_predictions) - 1
+        if task_index == consolidator_task_index:
+            wait_for_sibling_tasks(bucket_name, analysis_path, total_predictions)
+            consolidate_results(job_id, analysis_path, bucket_name, total_predictions)
 
     except Exception as e:
         logger.error(f"Error running AF2 analysis task: {e}", exc_info=True)

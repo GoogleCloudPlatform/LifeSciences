@@ -268,7 +268,7 @@ def calculate_plddt_stats(plddt_scores: list | np.ndarray | None) -> dict[str, A
     return stats
 
 
-def get_quality_assessment(plddt_mean: float | None, *args, **kwargs) -> str:
+def get_quality_assessment(plddt_mean: float | None) -> str:
     """Get quality assessment based on mean pLDDT."""
     if plddt_mean is None:
         return "uncomputed"
@@ -519,7 +519,7 @@ def parse_cif_chains(
 def plot_plddt_distribution(
     plddt_scores: list,
     title_name: str,
-    output_path: str | None = None,
+    output_path: str,
     chain_info: list[dict] | None = None,
     expected_bucket: str | None = None,
 ) -> None:
@@ -527,10 +527,6 @@ def plot_plddt_distribution(
     if plt is None:
         logger.warning("matplotlib not available; skipping pLDDT plot generation")
         return
-
-    if output_path is None:
-        output_path = title_name
-        title_name = "Best Candidate"
 
     if not plddt_scores:
         return
@@ -837,14 +833,12 @@ def is_prediction_analysis_blob(blob_name: str) -> bool:
 def wait_for_sibling_tasks(
     bucket_name: str,
     prefix: str,
-    task_count: int | list,
+    task_count: int,
     max_wait: int = 300,
     interval: int = 2,
 ) -> bool:
     """Wait for all expected per-prediction analysis files to be written to GCS."""
-    expected_count = (
-        len(task_count) if isinstance(task_count, list) else int(task_count)
-    )
+    expected_count = int(task_count)
     if expected_count <= 0:
         return True
 
@@ -878,21 +872,9 @@ def wait_for_sibling_tasks(
 
 
 def calculate_per_chain_plddt(
-    plddt_scores: list | str, chain_info: list[dict]
+    plddt_scores: list, chain_info: list[dict]
 ) -> dict[str, dict[str, Any]]:
     """Calculate per-chain pLDDT statistics without fabricating placeholder values."""
-    if isinstance(plddt_scores, str):
-        cif_content = plddt_scores
-        plddt_scores = chain_info if isinstance(chain_info, list) else []
-        chain_info, _ = parse_cif_chains(cif_content, extract_plddt=False)
-    elif (
-        isinstance(plddt_scores, list)
-        and plddt_scores
-        and isinstance(plddt_scores[0], dict)
-        and isinstance(chain_info, list)
-    ):
-        plddt_scores, chain_info = chain_info, plddt_scores  # type: ignore[assignment]
-
     if not plddt_scores or not chain_info:
         return {}
 

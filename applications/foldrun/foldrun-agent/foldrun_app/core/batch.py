@@ -192,9 +192,13 @@ def _template_nic_matches(existing: Any, network: str, subnet: str) -> bool:
     net_suffix = (
         f"/global/networks/{network.split('/global/networks/')[-1]}"
         if "/global/networks/" in network
-        else network
+        else f"/networks/{network.lstrip('/')}"
     )
-    sub_suffix = f"/regions/{subnet.split('/regions/')[-1]}" if "/regions/" in subnet else subnet
+    sub_suffix = (
+        f"/regions/{subnet.split('/regions/')[-1]}"
+        if "/regions/" in subnet
+        else f"/subnetworks/{subnet.lstrip('/')}"
+    )
     return existing_net.endswith(net_suffix) and existing_sub.endswith(sub_suffix)
 
 

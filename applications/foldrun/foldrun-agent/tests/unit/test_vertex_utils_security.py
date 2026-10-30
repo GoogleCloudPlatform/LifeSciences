@@ -103,9 +103,11 @@ class TestGetPipelineJobSecurity:
 
     @patch("google.cloud.aiplatform_v1.PipelineServiceClient")
     def test_display_name_fallback_when_get_fails(self, mock_client_cls):
+        from google.api_core import exceptions as google_exceptions
+
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
-        mock_client.get_pipeline_job.side_effect = RuntimeError("404 Not Found")
+        mock_client.get_pipeline_job.side_effect = google_exceptions.NotFound("404 Not Found")
         matched_job = MagicMock()
         mock_client.list_pipeline_jobs.return_value = [matched_job]
 

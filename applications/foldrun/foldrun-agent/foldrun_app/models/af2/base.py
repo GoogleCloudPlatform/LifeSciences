@@ -15,12 +15,14 @@
 """Base class for AlphaFold 2 tools."""
 
 import logging
-import os
-import threading
 from typing import Any
 
 from foldrun_app.core.base_tool import BaseTool
-from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
+from foldrun_app.core.compile_lock import (
+    GLOBAL_COMPILE_LOCK,
+    CompileEnvContext,
+    setup_compile_env_vars,
+)
 
 from .config import Config
 
@@ -33,42 +35,7 @@ _MMSEQS2_ENV_KEYS = (
     "MMSEQS2_ACCELERATOR_COUNT",
 )
 
-
-class _CompileEnvContext:
-    """Re-entrant context manager that serializes compile env access and restores os.environ on exit."""
-
-    def __init__(
-        self,
-        lock: threading.RLock,
-        env_vars: dict[str, str],
-        keys_to_clear: tuple[str, ...] = (),
-        previous_env: dict[str, str | None] | None = None,
-    ):
-        self._lock = lock
-        self._env_vars = env_vars
-        self._keys_to_clear = keys_to_clear
-        self._previous_env = previous_env if previous_env is not None else {}
-
-    def __enter__(self) -> dict[str, str]:
-        self._lock.acquire()
-        try:
-            for key in self._keys_to_clear:
-                os.environ.pop(key, None)
-            os.environ.update(self._env_vars)
-            return self._env_vars
-        except Exception:
-            self._lock.release()
-            raise
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        try:
-            for key, prev_val in self._previous_env.items():
-                if prev_val is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = prev_val
-        finally:
-            self._lock.release()
+_CompileEnvContext = CompileEnvContext
 
 
 class AF2Tool(BaseTool):
@@ -144,18 +111,10 @@ class AF2Tool(BaseTool):
         else:
             keys_to_clear = _MMSEQS2_ENV_KEYS
 
-        with self._compile_env_lock:
-            tracked_keys = set(env_vars.keys()) | set(keys_to_clear)
-            previous_env = {key: os.environ.get(key) for key in tracked_keys}
-            for key in keys_to_clear:
-                os.environ.pop(key, None)
-            os.environ.update(env_vars)
-
-        return _CompileEnvContext(
-            lock=self._compile_env_lock,
-            env_vars=env_vars,
+        return setup_compile_env_vars(
+            env_vars,
             keys_to_clear=keys_to_clear,
-            previous_env=previous_env,
+            lock=self._compile_env_lock,
         )
 
     @staticmethod

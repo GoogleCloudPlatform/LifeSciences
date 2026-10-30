@@ -43,8 +43,6 @@ def model_pipeline_load_context(
     (so ``importlib.reload`` and attribute lookups never see stale module objects)
     while binding bare ``config`` for vendored component decorators during load.
     """
-    from unittest.mock import NonCallableMock
-
     abs_pipeline_dir = os.path.abspath(vertex_pipeline_dir)
     with PIPELINE_COMPILE_LOCK:
         had_pipeline_dir = abs_pipeline_dir in sys.path
@@ -78,15 +76,7 @@ def model_pipeline_load_context(
 
             pipe_full_name = f"{pkg_prefix}.pipelines.{pipeline_module_name}"
             if pipe_full_name in sys.modules and sys.modules[pipe_full_name] is not None:
-                existing_pipe_mod = sys.modules[pipe_full_name]
-                mocked_attrs = {
-                    k: v
-                    for k, v in vars(existing_pipe_mod).items()
-                    if isinstance(v, NonCallableMock)
-                }
-                pipe_mod = importlib.reload(existing_pipe_mod)
-                for k, v in mocked_attrs.items():
-                    setattr(pipe_mod, k, v)
+                pipe_mod = importlib.reload(sys.modules[pipe_full_name])
             else:
                 pipe_mod = importlib.import_module(pipe_full_name)
 

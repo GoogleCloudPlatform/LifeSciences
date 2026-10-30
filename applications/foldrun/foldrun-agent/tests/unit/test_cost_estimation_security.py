@@ -133,10 +133,13 @@ def test_af3_and_h100_cost_estimation(monkeypatch):
     )
     assert single["gpu_type"] == "H100"
     assert single["region"] == "us-central1"
+    assert single["num_predict_tasks"] == 1
     assert single["num_diffusion_samples"] == 5
+    assert single["default_mode"] == "on_demand"
     predict_phase = next(p for p in single["on_demand"]["phases"] if p["phase"] == "Predict")
     assert predict_phase["machine_type"] == "a3-highgpu-1g"
-    assert single["dws_flex_start"]["estimated_total"] < single["on_demand"]["estimated_total"]
+    assert len(single["on_demand"]["phases"]) == 1
+    assert single["dws_flex_start"]["estimated_total"] == single["on_demand"]["estimated_total"]
 
     monthly = estimate_monthly_cost(af3_jobs=2, include_infrastructure=False, region="global")
     assert monthly["region"] == "us-central1"

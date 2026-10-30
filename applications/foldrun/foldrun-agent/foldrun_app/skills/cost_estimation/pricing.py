@@ -282,11 +282,12 @@ DURATION_ANCHORS = {
 # Number of predict tasks per job type
 # AF2 monomer:  5 models x 1 seed = 5 tasks
 # AF2 multimer: 5 models x num_predictions_per_model (default 5) = 25 tasks
-# AF3/OF3/Boltz-2: num_seeds tasks (each runs num_diffusion_samples serially)
+# AF3: 1 seed default on Vertex AI Dedicated Endpoint (runs num_diffusion_samples serially)
+# OF3/Boltz-2: num_seeds tasks (default 5, each runs num_diffusion_samples serially)
 DEFAULT_PREDICT_TASKS = {
     "af2_monomer": 5,
     "af2_multimer": 25,
-    "af3": 5,
+    "af3": 1,
     "of3": 5,
     "boltz2": 5,
 }
@@ -596,7 +597,33 @@ def _estimate_phases(
 
     phases = []
 
-    # Phase 1: MSA / Data Pipeline (always CPU)
+    if job_type == "af3":
+        # AF3 executes both MSA/template search and diffusion inference inside a
+        # single endpoint.predict() call on the Vertex AI Dedicated Endpoint
+        # (a3-highgpu-1g / H100), which is billed at on-demand rates (DWS FLEX_START
+        # does not apply to Model Garden Dedicated Endpoints).
+        predict_machine = _machine_for_gpu(gpu_type)
+        predict_rate = _hourly_rate(predict_machine, gpu_type, 1, False, prices)
+        diffusion_min = predict_per_task_min * num_diffusion_samples * num_predictions
+        predict_total_min = msa_min + diffusion_min
+        predict_cost = (predict_total_min / 60) * predict_rate
+        phases.append(
+            {
+                "phase": "Predict",
+                "machine_type": predict_machine,
+                "gpu": f"{gpu_type} x 1",
+                "duration_minutes": round(predict_total_min, 1),
+                "detail": (
+                    f"Dedicated Endpoint: {round(msa_min, 1)}m MSA + "
+                    f"{num_predictions} seed(s) x {num_diffusion_samples} samples ({round(diffusion_min, 1)}m)"
+                ),
+                "hourly_rate": round(predict_rate, 4),
+                "cost": round(predict_cost, 2),
+            }
+        )
+        return phases
+
+    # Phase 1: MSA / Data Pipeline (CPU for AF2, OF3, Boltz-2)
     msa_machine = "c2-standard-16"
     msa_rate = _hourly_rate(msa_machine, None, 0, spot, prices)
     msa_cost = (msa_min / 60) * msa_rate
@@ -615,8 +642,8 @@ def _estimate_phases(
     predict_machine = _machine_for_gpu(gpu_type)
     predict_rate = _hourly_rate(predict_machine, gpu_type, 1, spot, prices)
 
-    if job_type in ["of3", "boltz2", "af3"]:
-        # AF3/OF3/Boltz-2: each seed task runs num_diffusion_samples sequentially
+    if job_type in ["of3", "boltz2"]:
+        # OF3/Boltz-2: each seed task runs num_diffusion_samples sequentially
         predict_total_min = predict_per_task_min * num_diffusion_samples * num_predictions
         predict_desc = f"{num_predictions} seeds x {num_diffusion_samples} samples"
     elif job_type == "af2_multimer":
@@ -665,7 +692,7 @@ def estimate_single_job(
     job_type: str,
     gpu_type: str = "auto",
     sequence_length: int = 300,
-    num_predictions_per_model: int = 5,
+    num_predictions_per_model: int | None = None,
     num_diffusion_samples: int = 5,
     region: str = "us-central1",
 ) -> dict:
@@ -705,9 +732,16 @@ def estimate_single_job(
     if job_type == "af2_monomer":
         num_predictions = 5  # always 5 models x 1 seed
     elif job_type == "af2_multimer":
-        num_predictions = 5 * num_predictions_per_model  # 5 models x N seeds
+        eff_per_model = num_predictions_per_model if num_predictions_per_model is not None else 5
+        num_predictions = 5 * eff_per_model  # 5 models x N seeds
+    elif job_type == "af3":
+        num_predictions = (
+            num_predictions_per_model
+            if num_predictions_per_model is not None
+            else DEFAULT_PREDICT_TASKS["af3"]
+        )
     else:  # of3 or boltz2
-        num_predictions = num_predictions_per_model  # num_seeds
+        num_predictions = num_predictions_per_model if num_predictions_per_model is not None else 5
 
     # Build phases for both pricing modes
     spot_phases = _estimate_phases(
@@ -753,7 +787,7 @@ def estimate_single_job(
             "estimated_total": spot_total,
         },
         "flex_start_savings_pct": savings_pct,
-        "default_mode": "dws_flex_start",
+        "default_mode": "on_demand" if job_type == "af3" else "dws_flex_start",
         "disclaimer": DISCLAIMER,
     }
 
@@ -992,7 +1026,17 @@ def estimate_monthly(
             "monthly_total": round(other_total, 2),
         },
         "flex_start_savings_pct": savings_pct,
-        "default_mode": "dws_flex_start",
+        "default_mode": (
+            "on_demand"
+            if (
+                af3_jobs > 0
+                and af2_monomer_jobs == 0
+                and af2_multimer_jobs == 0
+                and of3_jobs == 0
+                and boltz2_jobs == 0
+            )
+            else "dws_flex_start"
+        ),
         "disclaimer": DISCLAIMER,
     }
 
