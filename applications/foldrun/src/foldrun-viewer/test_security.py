@@ -444,6 +444,63 @@ class TestCustomSlugResolutionAndAnalyzeRouting(unittest.TestCase):
         )
         self.assertEqual(summary["job_id"], "custom-job-42")
 
+    def test_resolve_summary_and_uri_unanalyzed_job_does_not_leak_unrelated_summary(
+        self,
+    ):
+        """Unanalyzed timestamped jobs must raise FileNotFoundError instead of returning an older job's summary.json."""
+        # Case A: Step 2 PipelineJob lookup succeeds, but analysis/summary.json does not exist yet
+        mock_authed = MagicMock()
+        pj_resp = MagicMock()
+        pj_resp.ok = True
+        pj_resp.json.return_value = {
+            "runtimeConfig": {
+                "gcsOutputDirectory": "gs://allowed-foldrun-bucket/pipeline_runs/20261102_120000"
+            }
+        }
+        mock_authed.get.return_value = pj_resp
+
+        mock_bucket = MagicMock()
+        missing_blob = MagicMock()
+        missing_blob.exists.return_value = False
+        mock_bucket.blob.return_value = missing_blob
+
+        with (
+            patch.object(viewer_app, "_get_authed_session", return_value=mock_authed),
+            patch.object(viewer_app.storage_client, "bucket", return_value=mock_bucket),
+        ):
+            with self.assertRaises(FileNotFoundError):
+                viewer_app._resolve_summary_and_uri(
+                    job_id="alphafold-inference-pipeline-20261102120000"
+                )
+        mock_bucket.list_blobs.assert_not_called()
+
+        # Case B: Step 2 fails, Step 3 date_prefix scan is empty and widens to pipeline_runs/
+        # where an unrelated older job's summary.json exists.
+        pj_resp_fail = MagicMock()
+        pj_resp_fail.ok = False
+        mock_authed.get.return_value = pj_resp_fail
+
+        older_blob = MagicMock()
+        older_blob.name = "pipeline_runs/20261001_090000/analysis/summary.json"
+        older_blob.download_as_bytes.return_value = b'{"job_id": "alphafold-inference-pipeline-20261001090000", "model_type": "af2"}'
+
+        def _list_blobs_side_effect(prefix=None, match_glob=None):
+            if prefix == "pipeline_runs/20261102":
+                return []
+            if prefix == "pipeline_runs/":
+                return [older_blob]
+            return []
+
+        mock_bucket.list_blobs.side_effect = _list_blobs_side_effect
+        with (
+            patch.object(viewer_app, "_get_authed_session", return_value=mock_authed),
+            patch.object(viewer_app.storage_client, "bucket", return_value=mock_bucket),
+        ):
+            with self.assertRaises(FileNotFoundError):
+                viewer_app._resolve_summary_and_uri(
+                    job_id="alphafold-inference-pipeline-20261102120000"
+                )
+
     def test_trigger_analysis_rejects_unknown_model_type(self):
         resp = self.client.post(
             "/api/analyze",

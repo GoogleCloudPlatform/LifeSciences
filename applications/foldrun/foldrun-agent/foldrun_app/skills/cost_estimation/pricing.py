@@ -914,7 +914,8 @@ def estimate_monthly(
     Uses default prediction counts:
     - AF2 monomer: 5 models x 1 seed = 5 predictions per job
     - AF2 multimer: 5 models x 5 seeds = 25 predictions per job
-    - AF3/OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures per job
+    - AF3: 1 seed x 5 diffusion samples = 5 structures per job
+    - OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures per job
 
     Args:
         af2_monomer_jobs: Monthly AF2 monomer job count

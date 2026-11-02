@@ -159,14 +159,17 @@ def calculate_pae_stats(raw_prediction: dict) -> dict | None:
     if "predicted_aligned_error" not in raw_prediction:
         return None
 
-    pae = raw_prediction["predicted_aligned_error"]
-    max_pae = raw_prediction.get("max_predicted_aligned_error", np.nanmax(pae))
+    pae_arr = np.asarray(raw_prediction["predicted_aligned_error"], dtype=float)
+    if pae_arr.size == 0 or np.all(np.isnan(pae_arr)):
+        return None
+
+    max_pae = raw_prediction.get("max_predicted_aligned_error", np.nanmax(pae_arr))
 
     stats = {
-        "mean": float(np.nanmean(pae)),
-        "median": float(np.nanmedian(pae)),
-        "min": float(np.nanmin(pae)),
-        "max": float(np.nanmax(pae)),
+        "mean": float(np.nanmean(pae_arr)),
+        "median": float(np.nanmedian(pae_arr)),
+        "min": float(np.nanmin(pae_arr)),
+        "max": float(np.nanmax(pae_arr)),
         "max_predicted": float(max_pae),
     }
 

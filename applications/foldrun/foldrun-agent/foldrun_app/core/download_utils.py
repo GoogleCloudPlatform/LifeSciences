@@ -571,9 +571,12 @@ def _build_af3_archive_and_downloads(
                         continue
                     elif rel_name == "input.json":
                         arc_name = f"input/{rel_name}"
+                        zf.writestr(arc_name, b.download_as_bytes())
                     else:
-                        arc_name = f"metrics/{rel_name}"
-                    zf.writestr(arc_name, b.download_as_bytes())
+                        arc_name, content_bytes = _maybe_decompress_zst(
+                            f"metrics/{rel_name}", b.download_as_bytes()
+                        )
+                        zf.writestr(arc_name, content_bytes)
             bundle_blob.upload_from_filename(tmp_zip_path, content_type="application/zip")
         finally:
             if os.path.exists(tmp_zip_path):
@@ -598,33 +601,48 @@ def _build_af3_archive_and_downloads(
     if signed_zip:
         downloads["artifacts_bundle_signed_url"] = signed_zip
 
-    for b in blobs:
-        rel_name = b.name[len(prefix) + 1 :]
-        uri = f"gs://{bucket_name}/{b.name}"
-        if rel_name.endswith(".cif") or rel_name.endswith(".cif.zst"):
-            downloads["best_structure_uri"] = uri
-            signed_cif = generate_signed_download_url(
-                uri,
-                download_filename=rel_name,
-                expiration_seconds=expiration_seconds,
-                project_id=project_id,
-                storage_client=signing_client,
-                credentials=signing_creds,
-            )
-            if signed_cif:
-                downloads["best_structure_signed_url"] = signed_cif
-        elif rel_name.endswith("summary_confidences.json"):
-            signed_conf = generate_signed_download_url(
-                uri,
-                download_filename=rel_name,
-                expiration_seconds=expiration_seconds,
-                project_id=project_id,
-                content_type="application/json",
-                storage_client=signing_client,
-                credentials=signing_creds,
-            )
-            if signed_conf:
-                downloads["summary_json_signed_url"] = signed_conf
+    cif_blobs = [b for b in blobs if b.name[len(prefix) + 1 :].endswith((".cif", ".cif.zst"))]
+    root_cifs = [b for b in cif_blobs if "/" not in b.name[len(prefix) + 1 :]]
+    best_cif_blob = root_cifs[0] if root_cifs else (cif_blobs[0] if cif_blobs else None)
+    if best_cif_blob is not None:
+        rel_name = best_cif_blob.name[len(prefix) + 1 :]
+        uri = f"gs://{bucket_name}/{best_cif_blob.name}"
+        downloads["best_structure_uri"] = uri
+        signed_cif = generate_signed_download_url(
+            uri,
+            download_filename=rel_name,
+            expiration_seconds=expiration_seconds,
+            project_id=project_id,
+            storage_client=signing_client,
+            credentials=signing_creds,
+        )
+        if signed_cif:
+            downloads["best_structure_signed_url"] = signed_cif
+
+    conf_blobs = [
+        b
+        for b in blobs
+        if b.name[len(prefix) + 1 :].endswith(
+            ("summary_confidences.json", "summary_confidences.json.zst")
+        )
+    ]
+    root_confs = [b for b in conf_blobs if "/" not in b.name[len(prefix) + 1 :]]
+    best_conf_blob = root_confs[0] if root_confs else (conf_blobs[0] if conf_blobs else None)
+    if best_conf_blob is not None:
+        rel_name = best_conf_blob.name[len(prefix) + 1 :]
+        uri = f"gs://{bucket_name}/{best_conf_blob.name}"
+        content_type = "application/zstd" if rel_name.endswith(".zst") else "application/json"
+        signed_conf = generate_signed_download_url(
+            uri,
+            download_filename=rel_name,
+            expiration_seconds=expiration_seconds,
+            project_id=project_id,
+            content_type=content_type,
+            storage_client=signing_client,
+            credentials=signing_creds,
+        )
+        if signed_conf:
+            downloads["summary_json_signed_url"] = signed_conf
 
     return {
         "status": "success",
@@ -713,7 +731,10 @@ def download_job_artifacts_for_job(
             bucket = storage_client.bucket(b_name)
             blobs = list(bucket.list_blobs(prefix=root_prefix))
             struct_blobs = [
-                b for b in blobs if b.name.endswith((".cif", ".pdb")) and "/analysis/" not in b.name
+                b
+                for b in blobs
+                if b.name.endswith((".cif", ".pdb", ".cif.zst", ".pdb.zst"))
+                and "/analysis/" not in b.name
             ]
             if not struct_blobs:
                 return {
@@ -739,10 +760,11 @@ def download_job_artifacts_for_job(
                     ) as zf:
                         for idx, sb in enumerate(struct_blobs, start=1):
                             fname = _sanitize_filename(sb.name.rsplit("/", 1)[-1])
-                            zf.writestr(
+                            arc_name, content_bytes = _maybe_decompress_zst(
                                 f"structures/{idx:02d}_{fname}",
                                 sb.download_as_bytes(),
                             )
+                            zf.writestr(arc_name, content_bytes)
                     bundle_blob.upload_from_filename(tmp_zip_path, content_type="application/zip")
                 finally:
                     if os.path.exists(tmp_zip_path):

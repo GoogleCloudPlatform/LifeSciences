@@ -359,7 +359,14 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
             )
             if gcs_output_dir.startswith(f"gs://{BUCKET_NAME}/"):
                 exact_uri = f"{gcs_output_dir}/analysis/summary.json"
+                _, exact_blob_path = parse_gcs_uri(exact_uri)
+                if not bucket.blob(exact_blob_path).exists():
+                    raise FileNotFoundError(
+                        f"Analysis summary not ready yet for pipeline job {job_id} at {exact_uri}"
+                    )
                 return load_gcs_file(exact_uri, as_json=True), exact_uri
+    except FileNotFoundError:
+        raise
     except Exception as e:
         logger.debug(
             f"Direct PipelineJob lookup for {job_id} fell back to GCS scan: {e}"
@@ -374,24 +381,29 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
         bucket.list_blobs(prefix=prefix, match_glob="**/analysis/summary.json")
     )
 
+    broad_scan = False
     if not summary_blobs and date_prefix:
         summary_blobs = list(
             bucket.list_blobs(
                 prefix="pipeline_runs/", match_glob="**/analysis/summary.json"
             )
         )
+        broad_scan = True
 
     if not summary_blobs:
         all_blobs = list(bucket.list_blobs(prefix=prefix))
         summary_blobs = [
             b for b in all_blobs if b.name.endswith("/analysis/summary.json")
         ]
+        if summary_blobs:
+            broad_scan = False
 
     if not summary_blobs and date_prefix:
         all_blobs = list(bucket.list_blobs(prefix="pipeline_runs/"))
         summary_blobs = [
             b for b in all_blobs if b.name.endswith("/analysis/summary.json")
         ]
+        broad_scan = True
 
     if not summary_blobs:
         raise FileNotFoundError(
@@ -399,7 +411,7 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
             f"Searched gs://{BUCKET_NAME}/{af3_summary_path} and gs://{BUCKET_NAME}/pipeline_runs/**/analysis/summary.json"
         )
 
-    if len(summary_blobs) == 1 and date_prefix:
+    if len(summary_blobs) == 1 and date_prefix and not broad_scan:
         uri = f"gs://{BUCKET_NAME}/{summary_blobs[0].name}"
         return load_gcs_file(uri, as_json=True), uri
 
@@ -435,7 +447,7 @@ def _resolve_summary_and_uri(job_id=None, summary_uri=None):
                     uri = f"gs://{BUCKET_NAME}/{blob.name}"
                     return load_gcs_file(uri, as_json=True), uri
 
-    if not date_prefix:
+    if not date_prefix or broad_scan:
         raise FileNotFoundError(
             f"No analysis summary matching custom job_id '{job_id}' found under pipeline_runs/"
         )

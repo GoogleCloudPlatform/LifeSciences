@@ -58,6 +58,21 @@ class TestAF2Analysis:
         stats = af2_analyzer.calculate_pae_stats(raw_prediction)
         assert stats is None
 
+    def test_calculate_pae_stats_empty_or_all_nan(self):
+        """Returns None gracefully when PAE is empty or all-NaN."""
+        import numpy as np
+
+        assert (
+            af2_analyzer.calculate_pae_stats({"predicted_aligned_error": np.array([])})
+            is None
+        )
+        assert (
+            af2_analyzer.calculate_pae_stats(
+                {"predicted_aligned_error": np.array([[np.nan, np.nan]])}
+            )
+            is None
+        )
+
     def test_quality_assessment_thresholds(self):
         """get_quality_assessment maps pLDDT score ranges accurately."""
         assert af2_analyzer.get_quality_assessment(95.0) == "very_high_confidence"

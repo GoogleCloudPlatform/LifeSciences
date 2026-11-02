@@ -41,15 +41,24 @@ class CompileEnvContext:
         env_vars: dict[str, str],
         keys_to_clear: tuple[str, ...] = (),
         previous_env: dict[str, str | None] | None = None,
+        *,
+        acquired_in_setup: bool = False,
     ):
         self._lock = lock
         self._env_vars = env_vars
         self._keys_to_clear = keys_to_clear
         self._previous_env = previous_env if previous_env is not None else {}
+        self._acquired_in_setup = acquired_in_setup
 
     def __enter__(self) -> dict[str, str]:
-        self._lock.acquire()
+        if self._acquired_in_setup:
+            self._acquired_in_setup = False
+        else:
+            self._lock.acquire()
         try:
+            if not self._previous_env:
+                tracked_keys = set(self._env_vars.keys()) | set(self._keys_to_clear)
+                self._previous_env = {key: os.environ.get(key) for key in tracked_keys}
             for key in self._keys_to_clear:
                 os.environ.pop(key, None)
             os.environ.update(self._env_vars)
@@ -68,25 +77,38 @@ class CompileEnvContext:
         finally:
             self._lock.release()
 
+    def __del__(self) -> None:
+        if getattr(self, "_acquired_in_setup", False):
+            self._acquired_in_setup = False
+            try:
+                self._lock.release()
+            except RuntimeError:
+                pass
+
 
 def setup_compile_env_vars(
     env_vars: dict[str, str],
     keys_to_clear: tuple[str, ...] = (),
     lock: threading.RLock = GLOBAL_COMPILE_LOCK,
 ) -> CompileEnvContext:
-    """Apply env_vars under lock immediately and return a CompileEnvContext for `with` restoration."""
-    with lock:
+    """Acquire lock, apply env_vars immediately, and return a CompileEnvContext that holds lock until __exit__."""
+    lock.acquire()
+    try:
         tracked_keys = set(env_vars.keys()) | set(keys_to_clear)
         previous_env = {key: os.environ.get(key) for key in tracked_keys}
         for key in keys_to_clear:
             os.environ.pop(key, None)
         os.environ.update(env_vars)
-    return CompileEnvContext(
-        lock=lock,
-        env_vars=env_vars,
-        keys_to_clear=keys_to_clear,
-        previous_env=previous_env,
-    )
+        return CompileEnvContext(
+            lock=lock,
+            env_vars=env_vars,
+            keys_to_clear=keys_to_clear,
+            previous_env=previous_env,
+            acquired_in_setup=True,
+        )
+    except Exception:
+        lock.release()
+        raise
 
 
 @contextmanager
