@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "AI Agent for protein structure prediction using Google ADK"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     {name = "FoldRun Contributors"}
 ]
