@@ -411,7 +411,7 @@ def parse_cif_chains(
             comp_id = line[17:20].strip()
             chain_id = line[21:22].strip() or "A"
             seq_id = line[22:26].strip()
-            if extract_plddt and len(line) >= 66:
+            if extract_plddt and len(line) > 60:
                 token = line[60:66].strip()
                 try:
                     val = float(token)
@@ -1219,7 +1219,10 @@ def build_and_upload_run_archive(
             blob = bucket.blob(blob_name)
             if not blob.exists():
                 return arc_path, None
-            return arc_path, blob.download_as_bytes()
+            raw_bytes = blob.download_as_bytes()
+            if uri.lower().endswith(".zst"):
+                raw_bytes = decompress_zst_bytes(raw_bytes)
+            return arc_path, raw_bytes
         except Exception as e:
             logger.debug(f"Skipping optional archive member {uri}: {e}")
             return arc_path, None

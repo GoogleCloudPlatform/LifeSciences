@@ -289,6 +289,9 @@ class TestGetDatabasesForModels:
         class _DummyCoreConfig:
             databases_bucket_name = ""
 
+            def __init__(self, *args, **kwargs):
+                pass
+
         with patch.object(setup_data, "CoreConfig", _DummyCoreConfig):
             setup_data.main()
 

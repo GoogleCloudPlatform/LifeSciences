@@ -137,6 +137,13 @@ data "google_compute_subnetwork" "existing_subnet" {
   name    = var.subnet_name
   region  = var.region
   project = local.network_project_id
+
+  lifecycle {
+    precondition {
+      condition     = var.subnet_name != ""
+      error_message = "subnet_name must be provided whenever network_name is set."
+    }
+  }
 }
 
 resource "google_compute_network" "foldrun_vpc" {

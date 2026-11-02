@@ -256,7 +256,7 @@ def _sanitize_structure_bfactors(content: str, fmt: str | None = None) -> str:
             )
             # Fixed-width PDB ATOM/HETATM record (columns 61-66 are tempFactor)
             if is_pdb_line:
-                if len(body) >= 66:
+                if len(body) > 60:
                     bfac_slice = body[60:66].strip()
                     if bfac_slice and _NONFINITE_TOKEN_RE.match(bfac_slice):
                         out_lines.append(
@@ -1465,14 +1465,29 @@ def _ensure_bundle_in_gcs(summary: dict, summary_uri: str) -> str:
                 if struct_uri and struct_uri.startswith("gs://"):
                     try:
                         _, s_blob_path = parse_gcs_uri(
-                            struct_uri, allowed_extensions=(".pdb", ".cif")
+                            struct_uri,
+                            allowed_extensions=(
+                                ".pdb",
+                                ".cif",
+                                ".cif.zst",
+                                ".pdb.zst",
+                            ),
                         )
                         s_blob = bucket.blob(s_blob_path)
                         if s_blob.exists():
-                            ext = ".cif" if s_blob_path.endswith(".cif") else ".pdb"
+                            s_lower = s_blob_path.lower()
+                            ext = (
+                                ".cif"
+                                if s_lower.endswith(".cif")
+                                or s_lower.endswith(".cif.zst")
+                                else ".pdb"
+                            )
                             arc = f"structures/rank_{rank:02d}_{sample_label}{ext}"
                             if arc not in seen_arcnames:
-                                zf.writestr(arc, s_blob.download_as_bytes())
+                                raw_bytes = s_blob.download_as_bytes()
+                                if s_lower.endswith(".zst"):
+                                    raw_bytes = _decompress_zst_bytes(raw_bytes)
+                                zf.writestr(arc, raw_bytes)
                                 seen_arcnames.add(arc)
                     except Exception as exc:
                         logger.warning(f"Skipping structure {struct_uri} in zip: {exc}")
@@ -1580,11 +1595,17 @@ def _serve_gcs_download(
         gcs_uri, allowed_extensions=allowed_extensions
     )
     safe_filename = _sanitize_filename(download_filename)
+    is_zst_to_plain = blob_path.lower().endswith(
+        ".zst"
+    ) and not safe_filename.lower().endswith(".zst")
+
+    signed_filename = f"{safe_filename}.zst" if is_zst_to_plain else safe_filename
+    signed_response_type = "application/zstd" if is_zst_to_plain else response_type
 
     signed_url = _generate_signed_url_or_none(
         gcs_uri=gcs_uri,
-        download_filename=safe_filename,
-        response_type=response_type,
+        download_filename=signed_filename,
+        response_type=signed_response_type,
     )
 
     if request.args.get("format") == "json":
@@ -1592,12 +1613,12 @@ def _serve_gcs_download(
             {
                 "gcs_uri": gcs_uri,
                 "signed_url": signed_url,
-                "filename": safe_filename,
+                "filename": signed_filename,
                 "expires_in_seconds": SIGNED_URL_EXPIRATION_SECONDS,
             }
         )
 
-    if signed_url:
+    if signed_url and not is_zst_to_plain:
         parsed = urllib.parse.urlparse(signed_url)
         if parsed.scheme == "https" and parsed.netloc == "storage.googleapis.com":
             return redirect(signed_url, code=302)
@@ -1608,6 +1629,8 @@ def _serve_gcs_download(
         return jsonify({"error": f"Artifact not found: {blob_path}"}), 404
 
     data = blob.download_as_bytes()
+    if is_zst_to_plain:
+        data = _decompress_zst_bytes(data)
     return Response(
         data,
         status=200,
@@ -1755,14 +1778,19 @@ def download_file():
                 )
             if not struct_uri:
                 return jsonify({"error": "No structure URI found for prediction"}), 404
-            ext = ".cif" if struct_uri.endswith(".cif") else ".pdb"
+            struct_lower = struct_uri.lower()
+            ext = (
+                ".cif"
+                if struct_lower.endswith(".cif") or struct_lower.endswith(".cif.zst")
+                else ".pdb"
+            )
             content_type = "chemical/x-mmcif" if ext == ".cif" else "chemical/x-pdb"
             filename = f"{effective_job_id}_rank_{pred_rank:02d}_{sample_label}{ext}"
             return _serve_gcs_download(
                 gcs_uri=struct_uri,
                 download_filename=filename,
                 response_type=content_type,
-                allowed_extensions=(".pdb", ".cif"),
+                allowed_extensions=(".pdb", ".cif", ".cif.zst", ".pdb.zst"),
             )
 
         if artifact_type in (

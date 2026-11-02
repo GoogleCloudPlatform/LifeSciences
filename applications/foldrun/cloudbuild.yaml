@@ -254,6 +254,7 @@ steps:
       - 'FOLDRUN_VIEWER_URL=${_FOLDRUN_VIEWER_URL}'
       - 'PIPELINES_SA_EMAIL=${_PIPELINES_SA_EMAIL}'
       - 'NETWORK_ID=${_NETWORK_ID}'
+      - 'SUBNET_ID=${_SUBNET_ID}'
       - 'NETWORK_PROJECT_NUMBER=${_NETWORK_PROJECT_NUMBER}'
       - 'AGENT_SA_EMAIL=${_AGENT_SA_EMAIL}'
       - 'AF3_ENDPOINT=${_AF3_ENDPOINT}'
@@ -309,7 +310,8 @@ steps:
 
         ENV_VARS=$(IFS=,; echo "$${ENV_VARS_ARR[*]}")
         [[ -n "$$FILESTORE_LOCATION" ]] && ENV_VARS="$$ENV_VARS,FILESTORE_LOCATION=$$FILESTORE_LOCATION"
-        [[ -n "$$NETWORK_ID" ]] && ENV_VARS="$$ENV_VARS,NETWORK=$$NETWORK_ID"
+        [[ -n "$$NETWORK_ID" ]] && ENV_VARS="$$ENV_VARS,NETWORK=$$NETWORK_ID,FILESTORE_NETWORK=$$NETWORK_ID"
+        [[ -n "$$SUBNET_ID" ]] && ENV_VARS="$$ENV_VARS,SUBNET_ID=$$SUBNET_ID"
         [[ -n "$$NETWORK_PROJECT_NUMBER" ]] && ENV_VARS="$$ENV_VARS,NETWORK_PROJECT_NUMBER=$$NETWORK_PROJECT_NUMBER"
 
         uvx google-agents-cli@1.10.0 deploy \
@@ -366,6 +368,7 @@ substitutions:
   _REGION: us-central1
   _ZONE: ""
   _NETWORK_ID: ""
+  _SUBNET_ID: ""
   _NETWORK_PROJECT_NUMBER: ""
   _AR_REPO: foldrun-repo
   _BUCKET_NAME: required_bucket_name

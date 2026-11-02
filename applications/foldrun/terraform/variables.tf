@@ -63,6 +63,11 @@ variable "subnet_name" {
   description = "Name of the existing subnetwork to use. If not provided, a new subnetwork will be created."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.network_name == "" || var.subnet_name != ""
+    error_message = "subnet_name must be provided whenever network_name is set."
+  }
 }
 
 variable "network_project_id" {

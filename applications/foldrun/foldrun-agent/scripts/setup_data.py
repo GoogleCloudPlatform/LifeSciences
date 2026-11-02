@@ -84,7 +84,11 @@ def show_status(manifest):
     from foldrun_app.core.download import check_gcs_exists
     from foldrun_app.models.af2.tools.download_database import MMSEQS2_INDEXABLE_DATABASES
 
-    config = CoreConfig(env_path=_DEFAULT_ENV_PATH if os.path.exists(_DEFAULT_ENV_PATH) else None)
+    config = (
+        CoreConfig(env_path=_DEFAULT_ENV_PATH)
+        if os.path.exists(_DEFAULT_ENV_PATH)
+        else CoreConfig()
+    )
     gcs_bucket = config.databases_bucket_name
 
     databases = manifest.get("databases", {})
@@ -247,7 +251,11 @@ def main():
         print("No databases to download.")
         return
 
-    config = CoreConfig(env_path=_DEFAULT_ENV_PATH if os.path.exists(_DEFAULT_ENV_PATH) else None)
+    config = (
+        CoreConfig(env_path=_DEFAULT_ENV_PATH)
+        if os.path.exists(_DEFAULT_ENV_PATH)
+        else CoreConfig()
+    )
 
     if args.dry_run:
         dry_run(db_names, config, manifest, args.force)

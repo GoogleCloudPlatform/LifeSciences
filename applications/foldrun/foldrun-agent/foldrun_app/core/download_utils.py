@@ -34,6 +34,35 @@ from google.cloud import storage
 logger = logging.getLogger(__name__)
 
 SIGNED_URL_EXPIRATION_SECONDS = int(os.getenv("SIGNED_URL_EXPIRATION_SECONDS", "3600"))
+MAX_ZST_DECOMPRESSED_BYTES = 512 * 1024 * 1024
+
+
+def _maybe_decompress_zst(arc_path: str, raw_bytes: bytes) -> tuple[str, bytes]:
+    """Decompress .zst bytes into plain text when zstandard is available; otherwise preserve .zst extension."""
+    if not arc_path.lower().endswith(".zst"):
+        return arc_path, raw_bytes
+    try:
+        import io
+
+        import zstandard as zstd
+
+        dctx = zstd.ZstdDecompressor()
+        chunks: list[bytes] = []
+        total = 0
+        with dctx.stream_reader(io.BytesIO(raw_bytes)) as reader:
+            while True:
+                chunk = reader.read(65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_ZST_DECOMPRESSED_BYTES:
+                    raise ValueError(
+                        f"Decompressed .zst payload exceeds safety limit of {MAX_ZST_DECOMPRESSED_BYTES} bytes"
+                    )
+                chunks.append(chunk)
+        return arc_path[:-4], b"".join(chunks)
+    except ImportError:
+        return arc_path, raw_bytes
 
 
 def _sanitize_filename(name: str, fallback: str = "artifact") -> str:
@@ -218,7 +247,9 @@ def ensure_run_archive_in_gcs(
             rank_prefix = f"rank_{rank:02d}_{label}"
 
             if pred.get("cif_uri"):
-                download_tasks.append((f"structures/{rank_prefix}.cif", pred["cif_uri"]))
+                cif_uri = str(pred["cif_uri"])
+                cif_ext = ".cif.zst" if cif_uri.lower().endswith(".cif.zst") else ".cif"
+                download_tasks.append((f"structures/{rank_prefix}{cif_ext}", cif_uri))
             elif pred.get("pdb_uri") or pred.get("uri"):
                 raw_uri = str(pred.get("pdb_uri") or pred.get("uri"))
                 if raw_uri.endswith("/raw_prediction.pkl"):
@@ -253,7 +284,10 @@ def ensure_run_archive_in_gcs(
                 bl = bucket.blob(bl_name)
                 if not bl.exists():
                     return arc_path, None
-                return arc_path, bl.download_as_bytes()
+                raw_bytes = bl.download_as_bytes()
+                if arc_path.lower().endswith(".zst"):
+                    arc_path, raw_bytes = _maybe_decompress_zst(arc_path, raw_bytes)
+                return arc_path, raw_bytes
             except Exception:
                 return arc_path, None
 
@@ -395,7 +429,11 @@ def build_agent_downloads_dict(
     best = summary_data.get("best_prediction") or {}
     best_name = _sanitize_filename(best.get("sample_name") or best.get("model_name") or "rank_01")
     best_struct_uri = best.get("cif_uri")
-    best_ext = "cif"
+    best_ext = (
+        "cif.zst"
+        if best_struct_uri and str(best_struct_uri).lower().endswith(".cif.zst")
+        else "cif"
+    )
     if not best_struct_uri and (best.get("pdb_uri") or best.get("uri")):
         raw_uri = str(best.get("pdb_uri") or best.get("uri"))
         best_struct_uri = (
@@ -447,7 +485,7 @@ def build_agent_downloads_dict(
             pred.get("sample_name") or pred.get("model_name") or f"model_{rank}"
         )
         struct_uri = pred.get("cif_uri")
-        ext = "cif"
+        ext = "cif.zst" if struct_uri and str(struct_uri).lower().endswith(".cif.zst") else "cif"
         if not struct_uri and (pred.get("pdb_uri") or pred.get("uri")):
             r_uri = str(pred.get("pdb_uri") or pred.get("uri"))
             struct_uri = (
@@ -525,8 +563,12 @@ def _build_af3_archive_and_downloads(
                     rel_name = b.name[len(prefix) + 1 :]
                     if not rel_name or rel_name.endswith(".zip"):
                         continue
-                    if rel_name.endswith(".cif"):
-                        arc_name = f"structures/{rel_name}"
+                    if rel_name.endswith(".cif") or rel_name.endswith(".cif.zst"):
+                        arc_name, content_bytes = _maybe_decompress_zst(
+                            f"structures/{rel_name}", b.download_as_bytes()
+                        )
+                        zf.writestr(arc_name, content_bytes)
+                        continue
                     elif rel_name == "input.json":
                         arc_name = f"input/{rel_name}"
                     else:
@@ -559,7 +601,7 @@ def _build_af3_archive_and_downloads(
     for b in blobs:
         rel_name = b.name[len(prefix) + 1 :]
         uri = f"gs://{bucket_name}/{b.name}"
-        if rel_name.endswith(".cif"):
+        if rel_name.endswith(".cif") or rel_name.endswith(".cif.zst"):
             downloads["best_structure_uri"] = uri
             signed_cif = generate_signed_download_url(
                 uri,

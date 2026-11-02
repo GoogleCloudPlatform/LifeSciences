@@ -52,8 +52,8 @@ def estimate_job_cost(
             For multimers, use the total across all chains. Larger proteins take
             proportionally longer to predict.
         num_predictions_per_model: For AF2 multimer: predictions per model (default
-            5, giving 5 models x 5 = 25 total). For AF3/OF3/Boltz-2: number of seeds (default 5).
-            Ignored for AF2 monomer (always 5 models x 1).
+            5, giving 5 models x 5 = 25 total). For OF3/Boltz-2: number of seeds (default 5).
+            For AF3: number of seeds (default 1). Ignored for AF2 monomer (always 5 models x 1).
         num_diffusion_samples: AF3/OF3/Boltz-2 only — diffusion samples per seed (default 5).
             Ignored for AF2 jobs.
         region: GCP region (default: us-central1).
@@ -93,7 +93,8 @@ def estimate_monthly_cost(
     Uses default prediction counts per job type:
     - AF2 monomer: 5 predictions (5 models x 1 seed)
     - AF2 multimer: 25 predictions (5 models x 5 seeds)
-    - AF3/OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures
+    - AF3: 1 seed x 5 diffusion samples = 5 structures
+    - OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures
 
     Calculates total cost across three categories:
     - Compute: GPU prediction costs based on job volumes (varies by pricing mode)

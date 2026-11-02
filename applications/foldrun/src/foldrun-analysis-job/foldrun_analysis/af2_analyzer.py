@@ -160,13 +160,13 @@ def calculate_pae_stats(raw_prediction: dict) -> dict | None:
         return None
 
     pae = raw_prediction["predicted_aligned_error"]
-    max_pae = raw_prediction.get("max_predicted_aligned_error", np.max(pae))
+    max_pae = raw_prediction.get("max_predicted_aligned_error", np.nanmax(pae))
 
     stats = {
-        "mean": float(np.mean(pae)),
-        "median": float(np.median(pae)),
-        "min": float(np.min(pae)),
-        "max": float(np.max(pae)),
+        "mean": float(np.nanmean(pae)),
+        "median": float(np.nanmedian(pae)),
+        "min": float(np.nanmin(pae)),
+        "max": float(np.nanmax(pae)),
         "max_predicted": float(max_pae),
     }
 
@@ -402,7 +402,7 @@ def consolidate_results(
             x.get("plddt_mean") is not None,
             x["plddt_mean"] if x.get("plddt_mean") is not None else -1e9,
             x["plddt_min"] if x.get("plddt_min") is not None else -1e9,
-            -x["pae_mean"] if x.get("pae_mean") is not None else 0.0,
+            -x["pae_mean"] if x.get("pae_mean") is not None else -1e9,
             x["ranking_confidence"]
             if x.get("ranking_confidence") is not None
             else -1e9,
