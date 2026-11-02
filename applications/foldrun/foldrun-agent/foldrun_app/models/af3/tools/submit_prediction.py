@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import tempfile
-import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +27,8 @@ from urllib.parse import urlparse
 
 from google.api_core.exceptions import DeadlineExceeded, GoogleAPICallError
 from google.cloud import aiplatform as vertex_ai
+
+from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
 
 from ..base import MODEL_CIF_FILENAME, SUMMARY_CONFIDENCES_FILENAME, AF3Tool
 from ..utils.input_converter import (
@@ -41,7 +42,7 @@ from ..utils.viewer_artifacts import build_and_upload_af3_viewer_artifacts
 
 logger = logging.getLogger(__name__)
 
-_COMPILE_LOCK = threading.Lock()
+_COMPILE_LOCK = GLOBAL_COMPILE_LOCK
 _LAST_PIPELINE_TS = 0
 
 
@@ -52,7 +53,7 @@ def _allocate_unique_pipeline_timestamps() -> tuple[str, str]:
     are submitted within the same second (e.g., via `submit_af3_batch_predictions`).
     """
     global _LAST_PIPELINE_TS
-    with _COMPILE_LOCK:
+    with GLOBAL_COMPILE_LOCK:
         now_epoch = int(time.time())
         if now_epoch <= _LAST_PIPELINE_TS:
             now_epoch = _LAST_PIPELINE_TS + 1
@@ -237,7 +238,7 @@ class AF3SubmitPredictionTool(AF3Tool):
         except Exception as act_exc:
             logger.debug(f"Could not write activity file: {act_exc}")
 
-        with _COMPILE_LOCK:
+        with GLOBAL_COMPILE_LOCK:
             from kfp import compiler
 
             from ..pipeline import create_af3_inference_pipeline
@@ -416,11 +417,18 @@ class AF3SubmitPredictionTool(AF3Tool):
                 or input_data.startswith("../")
                 or os.path.exists(input_data)
             ):
-                allowed_dirs = [
-                    Path(os.environ.get("FOLDRUN_WORKSPACE_DIR", os.getcwd())).resolve(),
+                workspace_dir = Path(os.environ.get("FOLDRUN_WORKSPACE_DIR", os.getcwd())).resolve()
+                allowed_dirs = [workspace_dir]
+                for tmp_candidate in (
+                    Path(tempfile.gettempdir()).resolve(),
                     Path("/tmp").resolve(),
                     Path("/private/tmp").resolve(),
-                ]
+                ):
+                    if (
+                        workspace_dir != tmp_candidate
+                        and tmp_candidate not in workspace_dir.parents
+                    ):
+                        allowed_dirs.append(tmp_candidate)
                 target_path = Path(input_data).resolve()
                 is_allowed = any(
                     target_path == allowed_dir or allowed_dir in target_path.parents

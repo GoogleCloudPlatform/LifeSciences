@@ -16,6 +16,7 @@
 
 import re
 
+from google.api_core import exceptions as google_exceptions
 from google.cloud import aiplatform_v1 as vertex_ai
 
 _JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -55,6 +56,7 @@ def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.Pip
 
     Accepts either a full resource name (projects/.../pipelineJobs/...)
     or a short job name/ID and constructs the full name automatically.
+    Falls back to querying by display_name when the ID is not a direct resource name.
 
     Args:
         job_id: Full resource name or short job name/ID.
@@ -64,10 +66,28 @@ def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.Pip
     Returns:
         PipelineJob proto object.
     """
-    job_id = resolve_pipeline_job_name(job_id, project_id, region)
+    full_name = resolve_pipeline_job_name(job_id, project_id, region)
+    raw_id = full_name.rsplit("/", 1)[-1]
 
     client = vertex_ai.PipelineServiceClient(
         client_options={"api_endpoint": f"{region}-aiplatform.googleapis.com"}
     )
-    request = vertex_ai.GetPipelineJobRequest(name=job_id)
-    return client.get_pipeline_job(request=request)
+
+    try:
+        request = vertex_ai.GetPipelineJobRequest(name=full_name)
+        return client.get_pipeline_job(request=request)
+    except (google_exceptions.NotFound, google_exceptions.InvalidArgument) as orig_exc:
+        parent = f"projects/{project_id}/locations/{region}"
+        try:
+            list_req = vertex_ai.ListPipelineJobsRequest(
+                parent=parent,
+                filter=f'display_name="{raw_id}"',
+                order_by="create_time desc",
+                page_size=10,
+            )
+            matches = list(client.list_pipeline_jobs(request=list_req))
+            if matches:
+                return matches[0]
+        except Exception:
+            pass
+        raise orig_exc

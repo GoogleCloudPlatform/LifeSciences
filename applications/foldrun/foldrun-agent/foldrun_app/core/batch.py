@@ -158,14 +158,24 @@ def get_project_number(project_id: str) -> str:
     return project.name.split("/")[-1]
 
 
+def _extract_network_project(network: str, default_project: str) -> str:
+    """Extract the host project from a 'projects/<host>/global/networks/<vpc>' string."""
+    if network and network.startswith("projects/") and "/global/networks/" in network:
+        host = network.split("/", 2)[1]
+        if host:
+            return host
+    return default_project
+
+
 def resolve_subnet(project_id: str, region: str, network: str) -> str:
     """Find the subnet name for a VPC network in a given region."""
     from google.cloud import compute_v1
 
+    host_project = _extract_network_project(network, project_id)
     vpc_name = network.split("/")[-1] if "/" in network else network
     subnets_client = compute_v1.SubnetworksClient()
     request = compute_v1.ListSubnetworksRequest(
-        project=project_id,
+        project=host_project,
         region=region,
     )
     matching = [
@@ -189,7 +199,17 @@ def _template_nic_matches(existing: Any, network: str, subnet: str) -> bool:
     nic = nics[0]
     existing_net = getattr(nic, "network", "") or ""
     existing_sub = getattr(nic, "subnetwork", "") or ""
-    return existing_net.endswith(network) and existing_sub.endswith(subnet)
+    net_suffix = (
+        f"/global/networks/{network.split('/global/networks/')[-1]}"
+        if "/global/networks/" in network
+        else f"/networks/{network.lstrip('/')}"
+    )
+    sub_suffix = (
+        f"/regions/{subnet.split('/regions/')[-1]}"
+        if "/regions/" in subnet
+        else f"/subnetworks/{subnet.lstrip('/')}"
+    )
+    return existing_net.endswith(net_suffix) and existing_sub.endswith(sub_suffix)
 
 
 def get_or_create_instance_template(
@@ -337,18 +357,19 @@ def submit_batch_job(
             project_id, region, filestore_network
         )
 
+    host_project = _extract_network_project(filestore_network, project_id)
     if "global/networks/" in filestore_network:
         batch_network = filestore_network
     else:
         net_name = (
             filestore_network.split("/")[-1] if "/" in filestore_network else filestore_network
         )
-        batch_network = f"projects/{project_id}/global/networks/{net_name}"
+        batch_network = f"projects/{host_project}/global/networks/{net_name}"
 
     if subnet_name.startswith("projects/"):
         batch_subnet = subnet_name
     else:
-        batch_subnet = f"projects/{project_id}/regions/{region}/subnetworks/{subnet_name}"
+        batch_subnet = f"projects/{host_project}/regions/{region}/subnetworks/{subnet_name}"
 
     instance_template_url = get_or_create_instance_template(
         project_id=project_id,

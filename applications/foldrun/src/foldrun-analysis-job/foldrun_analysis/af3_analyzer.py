@@ -29,6 +29,7 @@ from google.genai import types
 matplotlib.use("Agg")
 
 from .shared_utils import (
+    _sanitize_data,
     build_and_upload_run_archive,
     calculate_per_chain_plddt,
     calculate_plddt_stats,
@@ -69,7 +70,7 @@ def _extract_residue_plddts_from_cif(cif_text: str) -> list[float]:
     res_scores: dict[tuple[str, str], list[float]] = {}
     res_order: list[tuple[str, str]] = []
     for chain_id, res_seq, bfac in atom_lines:
-        if bfac is None:
+        if bfac is None or not np.isfinite(bfac):
             continue
         key = (chain_id, res_seq)
         if key not in res_scores:
@@ -375,7 +376,12 @@ def consolidate_results(
         return
 
     all_analyses.sort(
-        key=lambda x: (x.get("ranking_score", 0.0), x.get("plddt_mean", 0.0)),
+        key=lambda x: (
+            x.get("ranking_score") is not None,
+            x["ranking_score"] if x.get("ranking_score") is not None else -1e9,
+            x.get("plddt_mean") is not None,
+            x["plddt_mean"] if x.get("plddt_mean") is not None else -1e9,
+        ),
         reverse=True,
     )
 
@@ -422,7 +428,8 @@ def consolidate_results(
             if best.get("pae_mean") is not None:
                 best_sum_data["mean_pae"] = best["pae_mean"]
             bucket.blob(f"{job_prefix_clean}/{conf_filename}").upload_from_string(
-                json.dumps(best_sum_data, indent=2), content_type="application/json"
+                json.dumps(_sanitize_data(best_sum_data), indent=2, allow_nan=False),
+                content_type="application/json",
             )
     except Exception as copy_exc:
         logger.warning(f"Could not write top-level canonical CIF/conf: {copy_exc}")
@@ -459,8 +466,14 @@ def consolidate_results(
             total_residues += int(ci.get("residue_count", 0))
             chain_composition.append(ci)
 
-    all_plddt_means = [float(p["plddt_mean"]) for p in all_analyses]
-    all_ranking_scores = [float(p["ranking_score"]) for p in all_analyses]
+    all_plddt_means = [
+        float(p["plddt_mean"]) for p in all_analyses if p.get("plddt_mean") is not None
+    ]
+    all_ranking_scores = [
+        float(p["ranking_score"])
+        for p in all_analyses
+        if p.get("ranking_score") is not None
+    ]
     all_pae_means = [
         float(p["pae_mean"]) for p in all_analyses if p.get("pae_mean") is not None
     ]
@@ -480,6 +493,15 @@ def consolidate_results(
         else None
     ) or [1]
 
+    best_plddt_str = (
+        f"{best['plddt_mean']:.2f}" if best.get("plddt_mean") is not None else "N/A"
+    )
+    best_rs_str = (
+        f"{best['ranking_score']:.4f}"
+        if best.get("ranking_score") is not None
+        else "N/A"
+    )
+
     summary_data = {
         "job_id": job_name,
         "pipeline_job_id": pipeline_job_id,
@@ -496,21 +518,37 @@ def consolidate_results(
                 "total_predictions": len(all_analyses),
                 "analyzed_successfully": len(all_analyses),
                 "ranking_score_stats": {
-                    "mean": round(float(np.mean(all_ranking_scores)), 4),
-                    "min": round(float(np.min(all_ranking_scores)), 4),
-                    "max": round(float(np.max(all_ranking_scores)), 4),
+                    "mean": round(float(np.mean(all_ranking_scores)), 4)
+                    if all_ranking_scores
+                    else None,
+                    "min": round(float(np.min(all_ranking_scores)), 4)
+                    if all_ranking_scores
+                    else None,
+                    "max": round(float(np.max(all_ranking_scores)), 4)
+                    if all_ranking_scores
+                    else None,
                     "range": round(
                         float(np.max(all_ranking_scores) - np.min(all_ranking_scores)),
                         4,
-                    ),
+                    )
+                    if all_ranking_scores
+                    else None,
                 },
                 "plddt_stats": {
-                    "mean": round(float(np.mean(all_plddt_means)), 2),
-                    "min": round(float(np.min(all_plddt_means)), 2),
-                    "max": round(float(np.max(all_plddt_means)), 2),
+                    "mean": round(float(np.mean(all_plddt_means)), 2)
+                    if all_plddt_means
+                    else None,
+                    "min": round(float(np.min(all_plddt_means)), 2)
+                    if all_plddt_means
+                    else None,
+                    "max": round(float(np.max(all_plddt_means)), 2)
+                    if all_plddt_means
+                    else None,
                     "range": round(
                         float(np.max(all_plddt_means) - np.min(all_plddt_means)), 2
-                    ),
+                    )
+                    if all_plddt_means
+                    else None,
                 },
             },
             "protein_info": {
@@ -559,21 +597,39 @@ def consolidate_results(
                 "quality_assessment": best["quality_assessment"],
             },
             "ranking_score_stats": {
-                "mean": round(float(np.mean(all_ranking_scores)), 4),
-                "min": round(float(np.min(all_ranking_scores)), 4),
-                "max": round(float(np.max(all_ranking_scores)), 4),
+                "mean": round(float(np.mean(all_ranking_scores)), 4)
+                if all_ranking_scores
+                else None,
+                "min": round(float(np.min(all_ranking_scores)), 4)
+                if all_ranking_scores
+                else None,
+                "max": round(float(np.max(all_ranking_scores)), 4)
+                if all_ranking_scores
+                else None,
                 "range": round(
                     float(np.max(all_ranking_scores) - np.min(all_ranking_scores)), 4
-                ),
+                )
+                if all_ranking_scores
+                else None,
             },
             "plddt_stats": {
-                "mean_across_models": round(float(np.mean(all_plddt_means)), 2),
-                "std_across_models": round(float(np.std(all_plddt_means)), 2),
-                "min_model_mean": round(float(np.min(all_plddt_means)), 2),
-                "max_model_mean": round(float(np.max(all_plddt_means)), 2),
+                "mean_across_models": round(float(np.mean(all_plddt_means)), 2)
+                if all_plddt_means
+                else None,
+                "std_across_models": round(float(np.std(all_plddt_means)), 2)
+                if all_plddt_means
+                else None,
+                "min_model_mean": round(float(np.min(all_plddt_means)), 2)
+                if all_plddt_means
+                else None,
+                "max_model_mean": round(float(np.max(all_plddt_means)), 2)
+                if all_plddt_means
+                else None,
                 "range": round(
                     float(np.max(all_plddt_means) - np.min(all_plddt_means)), 2
-                ),
+                )
+                if all_plddt_means
+                else None,
             },
             "pae_stats": {
                 "mean_across_models": round(float(np.mean(all_pae_means)), 2),
@@ -583,7 +639,10 @@ def consolidate_results(
             if all_pae_means
             else {},
             "recommendations": [
-                f"Best structure: {best['sample_name']} (pLDDT: {best['plddt_mean']:.2f}, pTM: {best.get('ptm')}, Ranking Score: {best['ranking_score']:.4f})",
+                f"Best structure: {best['sample_name']} ("
+                f"pLDDT: {best_plddt_str}, "
+                f"pTM: {best.get('ptm')}, "
+                f"Ranking Score: {best_rs_str})",
             ],
         },
         "best_prediction": best,
@@ -607,8 +666,9 @@ def consolidate_results(
 
     summary_uri = f"{analysis_path}summary.json"
     local_summary = "/tmp/af3_summary.json"
+    summary_data = _sanitize_data(summary_data)
     with open(local_summary, "w") as f:
-        json.dump(summary_data, f, indent=2)
+        json.dump(summary_data, f, indent=2, allow_nan=False)
     upload_to_gcs(local_summary, summary_uri)
     os.remove(local_summary)
 
@@ -617,7 +677,8 @@ def consolidate_results(
         kfp_summary = dict(summary_data)
         kfp_summary["job_id"] = pipeline_job_id
         bucket.blob(f"{pipeline_root_prefix}/analysis/summary.json").upload_from_string(
-            json.dumps(kfp_summary, indent=2), content_type="application/json"
+            json.dumps(_sanitize_data(kfp_summary), indent=2, allow_nan=False),
+            content_type="application/json",
         )
 
     logger.info(f"AF3 consolidation complete! Summary written to {summary_uri}")
@@ -632,200 +693,222 @@ def run_task(
 ) -> None:
     """Execute parallel AlphaFold 3 sample analysis for task_index."""
     predictions = task_config.get("predictions", [])
-    if task_index >= len(predictions):
-        logger.error(f"Task index {task_index} out of range ({len(predictions)})")
+    total_predictions = len(predictions)
+    if task_index >= total_predictions:
+        logger.error(f"Task index {task_index} out of range ({total_predictions})")
         sys.exit(1)
 
-    pred = predictions[task_index]
     job_id = task_config.get("job_id", "af3_prediction")
-    sample_name = pred["sample_name"]
-    cif_uri = pred["cif_uri"]
-    summary_uri = pred.get("summary_uri") or pred.get("aggregated_uri")
-    confidences_uri = pred.get("confidences_uri")
-    output_uri = pred["output_uri"]
     pipeline_root_prefix = (task_config.get("pipeline_root_prefix") or "").strip("/")
     mode_label = task_config.get("mode_label") or "Full MSA + Templates"
-
-    logger.info(
-        f"Task {task_index}/{task_count}: Starting AF3 analysis for {sample_name}"
-    )
+    stride = max(1, task_count)
+    assigned_indices = list(range(task_index, total_predictions, stride))
 
     try:
-        summary_conf = download_json_from_gcs(summary_uri) if summary_uri else {}
-        cif_text = download_text_from_gcs(cif_uri)
-
-        chain_info, atom_plddts = parse_cif_chains(cif_text, extract_plddt=True)
-        res_plddts = _extract_residue_plddts_from_cif(cif_text)
-        effective_plddts = res_plddts or atom_plddts
-
-        if effective_plddts:
-            plddt_stats = calculate_plddt_stats(effective_plddts)
-            plddt_mean = round(float(plddt_stats["mean"]), 2)
-            plddt_median = round(float(plddt_stats["median"]), 2)
-            plddt_min = round(float(plddt_stats["min"]), 2)
-            plddt_max = round(float(plddt_stats["max"]), 2)
-            plddt_dist = plddt_stats["distribution"]
-        else:
-            raw_mean = summary_conf.get("mean_plddt", 0.0)
-            plddt_mean = round(float(raw_mean or 0.0), 2)
-            plddt_median = plddt_mean
-            plddt_min = plddt_mean
-            plddt_max = plddt_mean
-            plddt_dist = {
-                "very_low_confidence": 0,
-                "low_confidence": 0,
-                "high_confidence": 0,
-                "very_high_confidence": 0,
-            }
-
-        per_chain_plddt = {}
-        if atom_plddts and chain_info:
-            per_chain_plddt = calculate_per_chain_plddt(atom_plddts, chain_info)
-
-        ranking_score = _compute_af3_ranking_score(summary_conf)
-        ptm = summary_conf.get("ptm")
-        iptm = summary_conf.get("iptm")
-        has_clash = float(summary_conf.get("has_clash", 0.0) or 0.0)
-        fraction_disordered = float(summary_conf.get("fraction_disordered", 0.0) or 0.0)
-        chain_ptm = summary_conf.get("chain_ptm")
-        chain_iptm = summary_conf.get("chain_iptm")
-        chain_pair_iptm = summary_conf.get("chain_pair_iptm")
-        chain_pair_pae_min = summary_conf.get("chain_pair_pae_min")
-
-        pae_matrix = None
-        if confidences_uri:
-            try:
-                conf_data = download_json_from_gcs(confidences_uri)
-                pae_matrix = conf_data.get("pae")
-            except Exception as conf_exc:
-                logger.warning(
-                    f"Task {task_index}: Could not load confidences from {confidences_uri}: {conf_exc}"
-                )
-
-        if pae_matrix and len(pae_matrix) > 0:
-            pae_arr = np.array(pae_matrix, dtype=float)
-            pae_mean = round(float(np.mean(pae_arr)), 2)
-            pae_median = round(float(np.median(pae_arr)), 2)
-            pae_min = round(float(np.min(pae_arr)), 2)
-            pae_max = round(float(np.max(pae_arr)), 2)
-        else:
-            pae_mean = summary_conf.get("mean_pae")
-            pae_median = pae_mean
-            pae_min = pae_mean
-            pae_max = pae_mean
-
-        quality = get_quality_assessment(plddt_mean)
-
-        plot_files: dict[str, str] = {}
-        output_base = output_uri.rsplit("/", 1)[0]
         storage_client = storage.Client()
         bucket = storage_client.bucket(bucket_name)
 
-        if effective_plddts:
-            plddt_plot_path = f"/tmp/plddt_plot_{task_index}.png"
-            plot_plddt_distribution(
-                effective_plddts, sample_name, plddt_plot_path, chain_info=None
-            )
-            plddt_plot_uri = f"{output_base}/plddt_plot_{task_index}.png"
-            upload_to_gcs(plddt_plot_path, plddt_plot_uri)
-            if pipeline_root_prefix and os.path.exists(plddt_plot_path):
-                bucket.blob(
-                    f"{pipeline_root_prefix}/analysis/plddt_plot_{task_index}.png"
-                ).upload_from_filename(plddt_plot_path, content_type="image/png")
-            plot_files["plddt_plot"] = plddt_plot_uri
-            if os.path.exists(plddt_plot_path):
-                os.remove(plddt_plot_path)
+        for pred_idx in assigned_indices:
+            pred = predictions[pred_idx]
+            sample_name = pred["sample_name"]
+            cif_uri = pred["cif_uri"]
+            summary_uri = pred.get("summary_uri") or pred.get("aggregated_uri")
+            confidences_uri = pred.get("confidences_uri")
+            output_uri = pred["output_uri"]
 
-        if pae_matrix and len(pae_matrix) > 0:
-            pae_plot_path = f"/tmp/pae_plot_{task_index}.png"
-            plot_error_matrix(
-                pae_matrix,
-                sample_name,
-                "Expected Position Error (Å)",
-                pae_plot_path,
-                chain_info=chain_info,
-                max_value=31.75,
+            logger.info(
+                f"Task {task_index}/{task_count}: Starting AF3 analysis for {sample_name} (index {pred_idx})"
             )
-            pae_plot_uri = f"{output_base}/pae_plot_{task_index}.png"
-            upload_to_gcs(pae_plot_path, pae_plot_uri)
-            if pipeline_root_prefix and os.path.exists(pae_plot_path):
-                bucket.blob(
-                    f"{pipeline_root_prefix}/analysis/pae_plot_{task_index}.png"
-                ).upload_from_filename(pae_plot_path, content_type="image/png")
-            plot_files["pae_plot"] = pae_plot_uri
-            if os.path.exists(pae_plot_path):
-                os.remove(pae_plot_path)
 
-        if isinstance(chain_pair_iptm, dict) and len(chain_info) > 1:
-            iptm_plot_path = f"/tmp/iptm_matrix_{task_index}.png"
-            plot_iptm_matrix(
-                chain_pair_iptm,
-                sample_name,
-                iptm_plot_path,
-                chain_ptm if isinstance(chain_ptm, dict) else None,
-                chain_info,
+            summary_conf = download_json_from_gcs(summary_uri) if summary_uri else {}
+            cif_text = download_text_from_gcs(cif_uri)
+
+            chain_info, atom_plddts = parse_cif_chains(cif_text, extract_plddt=True)
+            res_plddts = _extract_residue_plddts_from_cif(cif_text)
+            effective_plddts = res_plddts or atom_plddts
+
+            plddt_stats = calculate_plddt_stats(effective_plddts)
+            if plddt_stats["mean"] is not None:
+                plddt_mean = round(float(plddt_stats["mean"]), 2)
+                plddt_median = round(float(plddt_stats["median"]), 2)
+                plddt_min = round(float(plddt_stats["min"]), 2)
+                plddt_max = round(float(plddt_stats["max"]), 2)
+                plddt_dist = plddt_stats["distribution"]
+            else:
+                raw_mean = summary_conf.get("mean_plddt")
+                plddt_mean = round(float(raw_mean), 2) if raw_mean is not None else None
+                plddt_median = plddt_mean
+                plddt_min = plddt_mean
+                plddt_max = plddt_mean
+                plddt_dist = plddt_stats["distribution"]
+
+            per_chain_plddt = {}
+            if atom_plddts and chain_info:
+                per_chain_plddt = calculate_per_chain_plddt(atom_plddts, chain_info)
+
+            ranking_score = _compute_af3_ranking_score(summary_conf)
+            ptm = summary_conf.get("ptm")
+            iptm = summary_conf.get("iptm")
+            has_clash = float(summary_conf.get("has_clash", 0.0) or 0.0)
+            fraction_disordered = float(
+                summary_conf.get("fraction_disordered", 0.0) or 0.0
             )
-            if os.path.exists(iptm_plot_path):
-                iptm_plot_uri = f"{output_base}/iptm_matrix_{task_index}.png"
-                upload_to_gcs(iptm_plot_path, iptm_plot_uri)
-                if pipeline_root_prefix:
+            chain_ptm = summary_conf.get("chain_ptm")
+            chain_iptm = summary_conf.get("chain_iptm")
+            chain_pair_iptm = summary_conf.get("chain_pair_iptm")
+            chain_pair_pae_min = summary_conf.get("chain_pair_pae_min")
+
+            pae_matrix = None
+            if confidences_uri:
+                try:
+                    conf_data = download_json_from_gcs(confidences_uri)
+                    pae_matrix = conf_data.get("pae")
+                except Exception as conf_exc:
+                    logger.warning(
+                        f"Task {task_index}: Could not load confidences from {confidences_uri}: {conf_exc}"
+                    )
+
+            if pae_matrix and len(pae_matrix) > 0:
+                pae_arr = np.array(
+                    [
+                        [np.nan if v is None else float(v) for v in row]
+                        for row in pae_matrix
+                    ],
+                    dtype=float,
+                )
+                if np.any(~np.isnan(pae_arr)):
+                    pae_mean = round(float(np.nanmean(pae_arr)), 2)
+                    pae_median = round(float(np.nanmedian(pae_arr)), 2)
+                    pae_min = round(float(np.nanmin(pae_arr)), 2)
+                    pae_max = round(float(np.nanmax(pae_arr)), 2)
+                else:
+                    pae_mean = summary_conf.get("mean_pae")
+                    pae_median = pae_mean
+                    pae_min = pae_mean
+                    pae_max = pae_mean
+            else:
+                pae_mean = summary_conf.get("mean_pae")
+                pae_median = pae_mean
+                pae_min = pae_mean
+                pae_max = pae_mean
+
+            quality = get_quality_assessment(plddt_mean)
+
+            plot_files: dict[str, str] = {}
+            output_base = output_uri.rsplit("/", 1)[0]
+
+            if effective_plddts:
+                plddt_plot_path = f"/tmp/plddt_plot_{pred_idx}.png"
+                plot_plddt_distribution(
+                    effective_plddts, sample_name, plddt_plot_path, chain_info=None
+                )
+                plddt_plot_uri = f"{output_base}/plddt_plot_{pred_idx}.png"
+                upload_to_gcs(plddt_plot_path, plddt_plot_uri)
+                if pipeline_root_prefix and os.path.exists(plddt_plot_path):
                     bucket.blob(
-                        f"{pipeline_root_prefix}/analysis/iptm_matrix_{task_index}.png"
-                    ).upload_from_filename(iptm_plot_path, content_type="image/png")
-                plot_files["iptm_matrix_plot"] = iptm_plot_uri
-                os.remove(iptm_plot_path)
+                        f"{pipeline_root_prefix}/analysis/plddt_plot_{pred_idx}.png"
+                    ).upload_from_filename(plddt_plot_path, content_type="image/png")
+                plot_files["plddt_plot"] = plddt_plot_uri
+                if os.path.exists(plddt_plot_path):
+                    os.remove(plddt_plot_path)
 
-        analysis = {
-            "prediction_index": task_index,
-            "rank": task_index + 1,
-            "sample_name": sample_name,
-            "model_name": f"AlphaFold 3 ({mode_label})",
-            "cif_uri": cif_uri,
-            "uri": cif_uri,
-            "summary_uri": summary_uri,
-            "confidences_uri": confidences_uri,
-            "ranking_score": ranking_score,
-            "ranking_confidence": ranking_score,
-            "ptm": ptm,
-            "iptm": iptm,
-            "plddt_mean": plddt_mean,
-            "plddt_median": plddt_median,
-            "plddt_min": plddt_min,
-            "plddt_max": plddt_max,
-            "plddt_distribution": plddt_dist,
-            "plddt_scores": [round(x, 2) for x in effective_plddts],
-            "per_chain_plddt": per_chain_plddt,
-            "chain_info": chain_info,
-            "pae_mean": pae_mean,
-            "pae_median": pae_median,
-            "pae_min": pae_min,
-            "pae_max": pae_max,
-            "has_pae": pae_mean is not None,
-            "has_pde": False,
-            "has_clash": has_clash,
-            "fraction_disordered": fraction_disordered,
-            "chain_ptm": chain_ptm,
-            "chain_iptm": chain_iptm,
-            "chain_pair_iptm": chain_pair_iptm,
-            "chain_pair_pae_min": chain_pair_pae_min,
-            "quality_assessment": quality,
-            "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
-            "plots": plot_files,
-        }
+            if pae_matrix and len(pae_matrix) > 0:
+                pae_plot_path = f"/tmp/pae_plot_{pred_idx}.png"
+                plot_error_matrix(
+                    pae_matrix,
+                    sample_name,
+                    "Expected Position Error (Å)",
+                    pae_plot_path,
+                    chain_info=chain_info,
+                    max_value=31.75,
+                )
+                pae_plot_uri = f"{output_base}/pae_plot_{pred_idx}.png"
+                upload_to_gcs(pae_plot_path, pae_plot_uri)
+                if pipeline_root_prefix and os.path.exists(pae_plot_path):
+                    bucket.blob(
+                        f"{pipeline_root_prefix}/analysis/pae_plot_{pred_idx}.png"
+                    ).upload_from_filename(pae_plot_path, content_type="image/png")
+                plot_files["pae_plot"] = pae_plot_uri
+                if os.path.exists(pae_plot_path):
+                    os.remove(pae_plot_path)
 
-        local_json = f"/tmp/af3_analysis_{task_index}.json"
-        with open(local_json, "w") as f:
-            json.dump(analysis, f, indent=2)
-        upload_to_gcs(local_json, output_uri)
-        os.remove(local_json)
+            if isinstance(chain_pair_iptm, dict) and len(chain_info) > 1:
+                iptm_plot_path = f"/tmp/iptm_matrix_{pred_idx}.png"
+                plot_iptm_matrix(
+                    chain_pair_iptm,
+                    sample_name,
+                    iptm_plot_path,
+                    chain_ptm if isinstance(chain_ptm, dict) else None,
+                    chain_info,
+                )
+                if os.path.exists(iptm_plot_path):
+                    iptm_plot_uri = f"{output_base}/iptm_matrix_{pred_idx}.png"
+                    upload_to_gcs(iptm_plot_path, iptm_plot_uri)
+                    if pipeline_root_prefix:
+                        bucket.blob(
+                            f"{pipeline_root_prefix}/analysis/iptm_matrix_{pred_idx}.png"
+                        ).upload_from_filename(iptm_plot_path, content_type="image/png")
+                    plot_files["iptm_matrix_plot"] = iptm_plot_uri
+                    os.remove(iptm_plot_path)
 
-        if task_index == task_count - 1:
-            wait_for_sibling_tasks(bucket_name, analysis_path, task_count, max_wait=240)
+            analysis = {
+                "prediction_index": pred_idx,
+                "rank": pred_idx + 1,
+                "sample_name": sample_name,
+                "model_name": f"AlphaFold 3 ({mode_label})",
+                "cif_uri": cif_uri,
+                "uri": cif_uri,
+                "summary_uri": summary_uri,
+                "confidences_uri": confidences_uri,
+                "ranking_score": ranking_score,
+                "ranking_confidence": ranking_score,
+                "ptm": ptm,
+                "iptm": iptm,
+                "plddt_mean": plddt_mean,
+                "plddt_median": plddt_median,
+                "plddt_min": plddt_min,
+                "plddt_max": plddt_max,
+                "plddt_distribution": plddt_dist,
+                "plddt_scores": [
+                    round(x, 2) if x is not None and np.isfinite(x) else None
+                    for x in effective_plddts
+                ],
+                "per_chain_plddt": per_chain_plddt,
+                "chain_info": chain_info,
+                "pae_mean": pae_mean,
+                "pae_median": pae_median,
+                "pae_min": pae_min,
+                "pae_max": pae_max,
+                "has_pae": pae_mean is not None,
+                "has_pde": False,
+                "has_clash": has_clash,
+                "fraction_disordered": fraction_disordered,
+                "chain_ptm": chain_ptm,
+                "chain_iptm": chain_iptm,
+                "chain_pair_iptm": chain_pair_iptm,
+                "chain_pair_pae_min": chain_pair_pae_min,
+                "quality_assessment": quality,
+                "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
+                "plots": plot_files,
+            }
+
+            local_json = f"/tmp/af3_analysis_{pred_idx}.json"
+            analysis = _sanitize_data(analysis)
+            with open(local_json, "w") as f:
+                json.dump(analysis, f, indent=2, allow_nan=False)
+            upload_to_gcs(local_json, output_uri)
+            os.remove(local_json)
+
+        consolidator_task_index = min(stride, total_predictions) - 1
+        if task_index == consolidator_task_index:
+            wait_for_sibling_tasks(
+                bucket_name, analysis_path, total_predictions, max_wait=240
+            )
             consolidate_results(
                 job_id,
                 analysis_path,
                 bucket_name,
-                task_count,
+                total_predictions,
                 task_config=task_config,
             )
     except Exception as e:

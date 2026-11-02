@@ -180,14 +180,14 @@ databases:
       RSYNC_PID=$!
 
       # 3. Incremental Processing Loop
-      echo "Processing and syncing files as they are downloaded..."
+      echo "Processing and copying files as they are downloaded..."
       while kill -0 $RSYNC_PID 2>/dev/null; do
         # Decompress finished files (not starting with .)
         find /mnt/scratch/raw -name '[!.]*.cif.gz' -exec unpigz -f {} + 2>/dev/null || true
         # Move to flat directory
         find /mnt/scratch/raw -name '[!.]*.cif' -exec mv -t /mnt/scratch/pdb_mmcif/mmcif_files/ {} + 2>/dev/null || true
-        # Incremental sync to NFS
-        rsync -ah /mnt/scratch/pdb_mmcif/mmcif_files/ {dest}/mmcif_files/ 2>/dev/null || true
+        # Incremental copy to NFS
+        cp -au /mnt/scratch/pdb_mmcif/mmcif_files/. {dest}/mmcif_files/ 2>/dev/null || true
         sleep 30
       done
       wait $RSYNC_PID
@@ -198,9 +198,9 @@ databases:
       find /mnt/scratch/raw -name '*.cif' -exec mv -t /mnt/scratch/pdb_mmcif/mmcif_files/ {} +
       rm -rf /mnt/scratch/raw
 
-      # 5. Final high-bandwidth Sync to NFS
-      echo "Syncing final files to NFS..."
-      rsync -ah --info=progress2 /mnt/scratch/pdb_mmcif/mmcif_files/ {dest}/mmcif_files/
+      # 5. Final copy to NFS
+      echo "Copying final files to NFS..."
+      cp -au /mnt/scratch/pdb_mmcif/mmcif_files/. {dest}/mmcif_files/
       
       # 6. Additional metadata
       echo "Downloading obsolete metadata..."

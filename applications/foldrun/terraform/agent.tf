@@ -59,6 +59,12 @@ resource "google_storage_bucket_iam_member" "foldrun_agent_bucket_access" {
   member = "serviceAccount:${google_service_account.agent_sa.email}"
 }
 
+resource "google_storage_bucket_iam_member" "foldrun_agent_bucket_metadata" {
+  bucket = google_storage_bucket.foldrun_bucket.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.agent_sa.email}"
+}
+
 resource "google_storage_bucket_iam_member" "foldrun_agent_databases_bucket_access" {
   bucket = google_storage_bucket.databases_bucket.name
   role   = "roles/storage.objectViewer"
@@ -86,6 +92,7 @@ resource "google_vertex_ai_reasoning_engine" "agent_runtime" {
     google_project_iam_member.agent_roles,
     google_service_account_iam_member.build_sa_actas_agent,
     google_storage_bucket_iam_member.foldrun_agent_bucket_access,
+    google_storage_bucket_iam_member.foldrun_agent_bucket_metadata,
     google_storage_bucket_iam_member.foldrun_agent_databases_bucket_access,
   ]
 }

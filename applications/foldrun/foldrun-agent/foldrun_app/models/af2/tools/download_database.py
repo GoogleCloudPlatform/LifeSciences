@@ -307,7 +307,7 @@ class ConvertMMseqs2Tool(AF2Tool):
                     "  exit 1",
                     "fi",
                     "echo '=== Syncing to GCS ==='",
-                    f"gcloud storage rsync --recursive {nfs_mount}/{subdir}/ gs://{self.config.databases_bucket_name}/{subdir}/ 2>&1",
+                    f"gcloud storage rsync --recursive {shlex.quote(f'{nfs_mount}/{subdir}/')} {shlex.quote(f'gs://{self.config.databases_bucket_name}/{subdir}/')} 2>&1",
                     f"echo '=== {db_name} conversion complete ==='",
                 ]
             )

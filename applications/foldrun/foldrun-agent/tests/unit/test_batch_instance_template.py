@@ -143,3 +143,27 @@ class TestInstanceTemplateIsolation:
 
         assert link == created.self_link
         client.insert.assert_called_once()
+
+    @patch("google.cloud.compute_v1.InstanceTemplatesClient")
+    def test_shared_vpc_project_id_vs_number_reuses_template(self, mock_client_cls):
+        """Shared VPC template returned with host project ID still matches host project number request."""
+        client = MagicMock()
+        mock_client_cls.return_value = client
+
+        existing = _make_mock_template(
+            name="shared-vpc-template",
+            network="https://www.googleapis.com/compute/v1/projects/host-proj-id/global/networks/shared-vpc",
+            subnet="https://www.googleapis.com/compute/v1/projects/host-proj-id/regions/us-central1/subnetworks/shared-sub",
+            self_link="projects/service-proj/global/instanceTemplates/shared-vpc-template",
+        )
+        client.get.return_value = existing
+
+        link = get_or_create_instance_template(
+            project_id="service-proj",
+            machine_type="n1-standard-8",
+            network="projects/123456789012/global/networks/shared-vpc",
+            subnet="projects/123456789012/regions/us-central1/subnetworks/shared-sub",
+        )
+
+        assert link == existing.self_link
+        client.insert.assert_not_called()

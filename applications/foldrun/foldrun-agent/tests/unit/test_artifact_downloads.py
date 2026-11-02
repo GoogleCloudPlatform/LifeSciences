@@ -218,3 +218,63 @@ class TestDownloadUtils:
         )
         downloads_raw = res_raw["downloads"]
         assert "raw_artifact_signed_url" in downloads_raw["top_predictions"][0]
+
+    @patch("foldrun_app.core.download_utils.prepare_signing_context")
+    @patch("foldrun_app.core.download_utils.generate_signed_download_url")
+    @patch("foldrun_app.core.download_utils.storage.Client")
+    def test_build_af3_archive_prioritizes_root_structure_and_decompresses_zst(
+        self,
+        mock_storage_cls,
+        mock_sign_url,
+        mock_prep_ctx,
+    ):
+        """_build_af3_archive_and_downloads selects root model CIF over sample subdirs and decompresses .zst."""
+        import zstandard as zstd
+
+        mock_prep_ctx.return_value = (MagicMock(), MagicMock())
+        mock_sign_url.side_effect = lambda gcs_uri, download_filename=None, **kwargs: (
+            f"https://storage.googleapis.com/signed/{download_filename}"
+        )
+
+        cctx = zstd.ZstdCompressor()
+        root_cif = MagicMock()
+        root_cif.name = "af3_predictions/job123/job123_model.cif.zst"
+        root_cif.download_as_bytes.return_value = cctx.compress(b"data_root_model\n")
+
+        sample_cif = MagicMock()
+        sample_cif.name = "af3_predictions/job123/seed-1_sample-4/model.cif.zst"
+        sample_cif.download_as_bytes.return_value = cctx.compress(b"data_sample_4\n")
+
+        root_conf = MagicMock()
+        root_conf.name = "af3_predictions/job123/job123_summary_confidences.json.zst"
+        root_conf.download_as_bytes.return_value = cctx.compress(b'{"ranking_score": 0.95}')
+
+        mock_bundle_blob = MagicMock()
+        mock_bundle_blob.exists.return_value = False
+        mock_bucket = MagicMock()
+        mock_bucket.list_blobs.return_value = [root_cif, root_conf, sample_cif]
+        mock_bucket.blob.return_value = mock_bundle_blob
+        mock_client = MagicMock()
+        mock_client.bucket.return_value = mock_bucket
+        mock_storage_cls.return_value = mock_client
+
+        res = download_utils._build_af3_archive_and_downloads(
+            job_id="job123",
+            bucket_name="test-bucket",
+            project_id="test-project",
+        )
+        assert res is not None
+        assert res["status"] == "success"
+        downloads = res["downloads"]
+        assert (
+            downloads["best_structure_uri"]
+            == "gs://test-bucket/af3_predictions/job123/job123_model.cif.zst"
+        )
+        assert (
+            downloads["best_structure_signed_url"]
+            == "https://storage.googleapis.com/signed/job123_model.cif.zst"
+        )
+        assert (
+            downloads["summary_json_signed_url"]
+            == "https://storage.googleapis.com/signed/job123_summary_confidences.json.zst"
+        )

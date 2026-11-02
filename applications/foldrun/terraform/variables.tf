@@ -63,6 +63,11 @@ variable "subnet_name" {
   description = "Name of the existing subnetwork to use. If not provided, a new subnetwork will be created."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.network_name == "" || var.subnet_name != ""
+    error_message = "subnet_name must be provided whenever network_name is set."
+  }
 }
 
 variable "network_project_id" {
@@ -142,9 +147,15 @@ variable "artifact_repo_name" {
 }
 
 variable "iap_access_domain" {
-  description = "Domain to grant IAP access to the viewer (e.g., your-company.com)"
+  description = "Domain to grant IAP access to the viewer (e.g., your-company.com). Leave empty for consumer (@gmail.com) or service account identities."
   type        = string
   default     = ""
+}
+
+variable "iap_access_members" {
+  description = "Explicit IAM members to grant IAP access to the viewer (e.g., ['user:alice@gmail.com']) when iap_access_domain is empty or unsupported."
+  type        = list(string)
+  default     = []
 }
 
 variable "enable_viewer_iap" {

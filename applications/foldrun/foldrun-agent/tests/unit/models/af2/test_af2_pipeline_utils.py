@@ -67,10 +67,17 @@ class TestAF2PipelineUtilsSysPathIsolation:
                     observed["config_file"] = os.path.abspath(config.__file__)
                     return "mock_pipeline"
 
-                with patch.object(
-                    af2_pipeline_mod,
-                    "create_alphafold_inference_pipeline",
-                    side_effect=fake_create_pipeline,
+                orig_reload = importlib.reload
+
+                def reload_preserving_fake(mod):
+                    reloaded = orig_reload(mod)
+                    if mod is af2_pipeline_mod:
+                        reloaded.create_alphafold_inference_pipeline = fake_create_pipeline
+                    return reloaded
+
+                with patch(
+                    "foldrun_app.core.pipeline_utils.importlib.reload",
+                    side_effect=reload_preserving_fake,
                 ):
                     result = pipeline_utils.load_vertex_pipeline()
 
@@ -113,10 +120,17 @@ class TestAF2PipelineUtilsSysPathIsolation:
                     lock_held_during_create.append(pipeline_utils._PIPELINE_LOAD_LOCK.locked())
                     return "mock_pipeline"
 
-                with patch.object(
-                    af2_pipeline_mod,
-                    "create_alphafold_inference_pipeline",
-                    side_effect=fake_create_pipeline,
+                orig_reload = importlib.reload
+
+                def reload_preserving_fake(mod):
+                    reloaded = orig_reload(mod)
+                    if mod is af2_pipeline_mod:
+                        reloaded.create_alphafold_inference_pipeline = fake_create_pipeline
+                    return reloaded
+
+                with patch(
+                    "foldrun_app.core.pipeline_utils.importlib.reload",
+                    side_effect=reload_preserving_fake,
                 ):
                     pipeline_utils.load_vertex_pipeline()
 
