@@ -3,18 +3,18 @@
 # AlphaFold core dependencies (vendored from commit 42719e135a62438aa651d2bc1d143626083c3703)
 pip>=26.2.2
 absl-py==1.0.0
-biopython==1.79
+biopython>=1.88
 dm-haiku==0.0.12
 docker==5.0.0
 matplotlib==3.8.0
 ml-collections==0.1.0
-numpy==1.24.3
+numpy==1.26.4
 openmm[cuda12]==8.2.0
 openmm-cuda-12==8.2.0
 pdbfixer==1.12.0
-pytest<8.5.0
-setuptools<72.0.0
-tensorflow-cpu==2.15.0
+pytest>=9.0.3
+setuptools>=84.1.0
+tensorflow-cpu==2.18.0
 
 # JAX with CUDA support
 jax==0.4.26
