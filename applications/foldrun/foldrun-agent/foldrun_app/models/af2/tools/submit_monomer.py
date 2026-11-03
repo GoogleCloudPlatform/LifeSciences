@@ -50,8 +50,7 @@ class AF2SubmitMonomerTool(AF2Tool):
                 'max_template_date': Template search date,
                 'use_small_bfd': Use small BFD database,
                 'run_relaxation': Run AMBER relaxation,
-                'gpu_type': 'L4', 'A100', or 'A100_80GB',
-                'vertex_repo_path': (Deprecated) Pipeline is now vendored internally
+                'gpu_type': 'L4', 'A100', or 'A100_80GB'
             }
 
         Returns:
@@ -76,7 +75,6 @@ class AF2SubmitMonomerTool(AF2Tool):
         relax_gpu_type = arguments.get("relax_gpu_type")  # Optional override for relax phase
         enable_flex_start = arguments.get("enable_flex_start", True)
         msa_method = arguments.get("msa_method", "auto")  # 'auto', 'jackhmmer', or 'mmseqs2'
-        arguments.get("vertex_repo_path")  # No longer needed, kept for backwards compatibility
 
         # Validate: explicit mmseqs2 requires use_small_bfd=True and pre-built indexes
         if msa_method == "mmseqs2":

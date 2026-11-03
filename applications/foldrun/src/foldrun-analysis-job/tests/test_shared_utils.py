@@ -375,3 +375,28 @@ class TestSharedUtilsFixes:
         big_compressed = zstd.ZstdCompressor().compress(b"A" * 4096)
         with pytest.raises(ValueError, match="exceeds safety limit"):
             shared_utils.decompress_zst_bytes(big_compressed, max_bytes=1024)
+
+    def test_plot_plddt_distribution_accepts_numpy_ndarray(self, tmp_path):
+        import numpy as np
+
+        mock_fig = MagicMock()
+        mock_ax = MagicMock()
+        mock_plt = MagicMock()
+        mock_plt.subplots.return_value = (mock_fig, mock_ax)
+
+        with patch.object(shared_utils, "plt", mock_plt):
+            out_png = tmp_path / "plddt.png"
+            shared_utils.plot_plddt_distribution(
+                np.array([92.5, 88.1, 79.4], dtype=np.float32),
+                "model_1_pred_0",
+                str(out_png),
+            )
+            mock_plt.savefig.assert_called_once()
+
+            mock_plt.savefig.reset_mock()
+            shared_utils.plot_plddt_distribution(
+                np.array([], dtype=np.float32),
+                "empty_model",
+                str(out_png),
+            )
+            mock_plt.savefig.assert_not_called()

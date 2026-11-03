@@ -89,3 +89,16 @@ def test_cloudbuild_files_do_not_use_deprecated_builder_images():
             assert name not in ("docker", "docker:latest"), (
                 f"{path} should use a tagged CLI docker image (e.g. 'docker:29-cli'), got '{name}'"
             )
+            assert "python3.12" not in name, (
+                f"{path} still references Python 3.12 builder image '{name}'"
+            )
+
+
+def test_cloudbuild_agent_steps_use_python_313_uv_image():
+    """Verify deploy-agent-runtime and register-agent use uv Python 3.13 image."""
+    config = yaml.safe_load(CLOUDBUILD_YAML_PATH.read_text(encoding="utf-8"))
+    steps_by_id = {step.get("id"): step for step in config.get("steps", [])}
+
+    for step_id in ("deploy-agent-runtime", "register-agent"):
+        assert step_id in steps_by_id, f"Missing expected Cloud Build step '{step_id}'"
+        assert steps_by_id[step_id]["name"] == "ghcr.io/astral-sh/uv:python3.13-bookworm-slim"

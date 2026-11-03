@@ -274,7 +274,7 @@ IMPORTANT: Begin your response directly with the analysis. Do NOT include any pr
 
         return {
             "status": "success",
-            "analysis": response.text + disclaimer,
+            "analysis": (response.text or "") + disclaimer,
             "model": gemini_model,
             "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
             "ai_generated": True,

@@ -3,7 +3,7 @@ name = "foldrun-analysis"
 version = "0.1.0"
 description = "FoldRun Prediction Post-Processing and Scoring Analysis Service"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = "~=3.13.0"
 dependencies = [
     "google-cloud-storage>=3.0.0",
     "google-cloud-aiplatform>=1.85.0",
@@ -34,7 +34,7 @@ lint = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [
@@ -57,7 +57,7 @@ known-first-party = ["foldrun_analysis"]
 # See: https://docs.astral.sh/ty/
 
 [tool.ty.environment]
-python-version = "3.11"
+python-version = "3.13"
 
 [tool.ty.src]
 exclude = [".venv/**"]
@@ -71,7 +71,7 @@ invalid-assignment = "ignore"
 invalid-return-type = "ignore"
 possibly-missing-attribute = "ignore"
 not-subscriptable = "ignore"
-deprecated = "ignore"
+deprecated = "warn"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

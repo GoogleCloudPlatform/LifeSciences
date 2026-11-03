@@ -324,3 +324,56 @@ class TestCreateAgent:
             instruction = agent.instruction
             assert "Your Current Configuration" in instruction
             assert mock_env_vars["GCP_PROJECT_ID"] in instruction
+
+    def test_preview_gemini_model_rejected(self, mock_env_vars):
+        """Preview Gemini model IDs (e.g. gemini-3.1-pro-preview) are rejected."""
+        with (
+            _mock_startup(),
+            patch("google.cloud.aiplatform.init"),
+            patch("google.cloud.storage.Client"),
+        ):
+            from foldrun_app.agent import create_alphafold_agent, create_foldrun_agent
+
+            with pytest.raises(ValueError, match="not supported"):
+                create_alphafold_agent(model="gemini-3.1-pro-preview")
+            with pytest.raises(ValueError, match="not supported"):
+                create_foldrun_agent(model="gemini-3.1-pro-preview")
+
+    def test_af2_submission_tools_exclude_deprecated_vertex_repo_path(self):
+        """AF2 submission skill wrappers do not expose deprecated vertex_repo_path."""
+        import inspect
+
+        from foldrun_app.skills.job_submission.tools import (
+            submit_af2_monomer_prediction,
+            submit_af2_multimer_prediction,
+        )
+
+        monomer_params = inspect.signature(submit_af2_monomer_prediction).parameters
+        multimer_params = inspect.signature(submit_af2_multimer_prediction).parameters
+        assert "vertex_repo_path" not in monomer_params
+        assert "vertex_repo_path" not in multimer_params
+
+    def test_af3_kfp_pipeline_uses_python_313_slim_and_function_scoped_utc(self, tmp_path):
+        """AF3 KFP pipeline compiles cleanly onto python:3.13-slim with function-scoped UTC."""
+        import yaml
+        from kfp import compiler
+
+        from foldrun_app.models.af3.pipeline import create_af3_inference_pipeline
+
+        pipeline_fn = create_af3_inference_pipeline()
+        out_yaml = tmp_path / "af3_pipeline.yaml"
+        compiler.Compiler().compile(pipeline_func=pipeline_fn, package_path=str(out_yaml))
+
+        spec = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+        executors = spec["deploymentSpec"]["executors"]
+        assert len(executors) == 4
+        for exec_name, exec_cfg in executors.items():
+            container = exec_cfg["container"]
+            assert container["image"] == "python:3.13-slim", (
+                f"Executor {exec_name} expected python:3.13-slim, got {container['image']}"
+            )
+            joined_args = "\n".join(container.get("args", []))
+            if "datetime.now(UTC)" in joined_args:
+                assert "from datetime import UTC" in joined_args, (
+                    f"Executor {exec_name} uses UTC without function-local import"
+                )

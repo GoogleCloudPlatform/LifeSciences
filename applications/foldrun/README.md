@@ -9,7 +9,7 @@
 - **Multi-Model Support**: Plugin architecture for **AlphaFold 2**, **AlphaFold 3**, **OpenFold 3**, and **Boltz-2** — shared databases, unified KFP orchestration, and dedicated H100 endpoint management
 - **4-Stage AF3 KFP Pipeline + Scale-to-Zero**: Orchestrates AlphaFold 3 predictions across 4 observable KFP stages (*Provision & Queue Endpoint $\rightarrow$ Run H100 Inference $\rightarrow$ Report Endpoint Available $\rightarrow$ Process Results & Expert Analysis*) with FIFO GCS replica slot locking; the endpoint scales to zero after 20 minutes idle (`$0.00/hr` when idle)
 - **Automated Execution & Reservation-Aware Hardware**: Provisions infrastructure, detects GCE GPU reservations, and automatically falls back across GPU tiers (`H100_80GB` $\rightarrow$ `A100_80GB` $\rightarrow$ `A100` $\rightarrow$ `L4`)
-- **Multimodal Gemini 3.1 Pro Expert Analysis**: Generates structural metrics (`pLDDT`, `PAE`, `pTM`, `ipTM`, `ranking_score`) and multimodal AI biological interpretation from 3D coordinates and plots
+- **Multimodal Gemini 4 Argon Expert Analysis**: Generates structural metrics (`pLDDT`, `PAE`, `pTM`, `ipTM`, `ranking_score`) and multimodal AI biological interpretation from 3D coordinates and plots
 - **Interactive Visualization & Signed Artifact Bundles**: Web-based 3D structure viewer (3Dmol.js) with confidence coloring, PAE/ipTM heatmaps, and 1-click V4 signed ZIP archive downloads (`artifacts_bundle.zip`)
 - **Smart Database Management**: YAML-driven downloads via Cloud Batch with GCS-based gap detection — shared databases downloaded once across models
 
@@ -26,11 +26,11 @@
 
 - **Agent**: Google ADK with up to 36 native tools across 10 Skill packages (AF2 + AF3 + OF3 + Boltz-2), deployed to Agent Runtime
 - **A2A**: Native Agent-to-Agent protocol integration for agent interoperability
-- **AI**: Gemini 3.8 Flash (agent orchestration) & Gemini 3.1 Pro (multimodal structural expert analysis)
+- **AI**: Gemini 3.8 Flash (agent orchestration) & Gemini 4 Argon (multimodal structural expert analysis)
 - **Compute**: Agent Platform Pipelines (KFP v2), Vertex AI Dedicated Endpoints (`a3-highgpu-1g` H100 80GB), Cloud Run, Cloud Batch
 - **Storage**: GCS (artifacts, V4 signed bundles, AF3 630 GB MSA bundle), Filestore (NFS genetic databases)
 - **Infrastructure**: Terraform, Cloud Build
-- **Language**: Python 3.11+
+- **Language**: Python 3.13+
 
 ## Getting Started
 
@@ -520,7 +520,7 @@ uv run adk web foldrun_app
 | AF2 prediction (per job, A100) | ~$8 per job (MSA + 5 seeds predict + relax) |
 | OF3 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
 | Boltz-2 prediction (per job, A100) | ~$13 per job (MSA + 5 seeds predict) |
-| Gemini 3.1 Pro API (per expert analysis) | ~$0.01-0.05 per analysis |
+| Gemini 4 Argon API (per expert analysis) | ~$0.01-0.05 per analysis |
 
 The dominant fixed cost is Filestore (~$770/mo). Default databases (`af2`, `of3`, `boltz`) plus in-place decompression scratch and runtime MSA caches fit comfortably within the 2.5 TB provisioned, leaving room for full BFD (~272 GB) and GPU MMseqs2 index databases (~460 GB). `BASIC_SSD` avoids write/read throughput throttling during concurrent database downloads and CPU MSA scans. Prices in this section are `us-central1` list prices from the [Filestore pricing page](https://cloud.google.com/filestore/pricing). AlphaFold 3 mounts its 630 GB MSA bundle directly onto the H100 VM's 3 TB local NVMe SSD at endpoint startup and automatically undeploys back to `$0.00/hr` after 20 minutes of inactivity. Terraform ignores Filestore capacity changes after provisioning, so you can resize via Console or gcloud without drift. To stop fixed storage costs completely, delete the Filestore instance when not in use and restore databases from the GCS backup bucket when needed.
 
@@ -640,7 +640,7 @@ foldrun/
         ├──→ Agent Platform Pipelines  ← AF2 + AF3 (4-stage KFP) + OF3 + Boltz-2 orchestration
         ├──→ Vertex AI H100 Endpoint   ← AlphaFold 3 (a3-highgpu-1g + 630 GB NVMe MSA + 20m auto-drain)
         ├──→ Cloud Batch               ← Genetic database downloads
-        ├──→ Cloud Run Jobs            ← Parallel analysis + Gemini 3.1 Pro multimodal expert analysis
+        ├──→ Cloud Run Jobs            ← Parallel analysis + Gemini 4 Argon multimodal expert analysis
         └──→ Cloud Run Service         ← Interactive 3D viewer & V4 signed ZIP bundle downloads
 ```
 
@@ -661,7 +661,7 @@ but don't meet enterprise requirements for drug discovery pipelines:
 | **Multi-model** | AF2 only (ColabFold) or AF3 only (AF Server) | **AF2 + AF3 + OF3 + Boltz-2** via unified plugin architecture |
 | **Customization** | Fixed parameters | Full control: GPU tier, Full-MSA vs `--msa-free`, seeds, samples |
 | **Scale** | Rate-limited (daily job quota) | Unlimited batch KFP queueing across warm H100 replicas |
-| **Integration** | Web UI only | Conversational AI agent, A2A API, CI/CD, Gemini 3.1 Pro multimodal analysis |
+| **Integration** | Web UI only | Conversational AI agent, A2A API, CI/CD, Gemini 4 Argon multimodal analysis |
 
 **Bottom line**: FoldRun is built for the pharma/biotech use case where proprietary
 sequences (pre-clinical targets, engineered antibodies, novel drug candidates) must

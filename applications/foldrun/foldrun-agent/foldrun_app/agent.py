@@ -216,7 +216,6 @@ def create_alphafold_agent(model: str | None = None) -> LlmAgent:
         "gemini-3.8-flash",
         "gemini-3.5-flash",
         "gemini-4-argon",
-        "gemini-3.1-pro-preview",
     ]
     if gemini_model not in allowed_models:
         raise ValueError(
@@ -253,7 +252,6 @@ def create_foldrun_agent(model: str | None = None) -> LlmAgent:
         "gemini-3.8-flash",
         "gemini-3.5-flash",
         "gemini-4-argon",
-        "gemini-3.1-pro-preview",
     ]
     if gemini_model not in allowed_models:
         raise ValueError(

@@ -120,7 +120,7 @@ class TestVertexTaskDetailsAndEpochGuard:
     """Tests for get_task_details custom_job extraction and unset epoch start_time guard."""
 
     def test_unset_epoch_start_time_ignored(self):
-        from datetime import datetime, timezone
+        from datetime import UTC, datetime
 
         from foldrun_app.models.af2.utils.vertex_utils import get_job_status, get_task_details
 
@@ -128,9 +128,9 @@ class TestVertexTaskDetailsAndEpochGuard:
         job.name = "projects/my-project/locations/us-central1/pipelineJobs/job-1"
         job.display_name = "my-pipeline-run"
         job.state.name = "PIPELINE_STATE_PENDING"
-        job.create_time = datetime(2026, 4, 15, 12, 0, tzinfo=timezone.utc)
-        job.start_time = datetime(1970, 1, 1, 0, 0, tzinfo=timezone.utc)
-        job.end_time = datetime(2026, 4, 15, 12, 5, tzinfo=timezone.utc)
+        job.create_time = datetime(2026, 4, 15, 12, 0, tzinfo=UTC)
+        job.start_time = datetime(1970, 1, 1, 0, 0, tzinfo=UTC)
+        job.end_time = datetime(2026, 4, 15, 12, 5, tzinfo=UTC)
         job.labels = {}
         job.pipeline_spec = {}
         job.error = None
@@ -143,8 +143,8 @@ class TestVertexTaskDetailsAndEpochGuard:
         task.task_id = 101
         task.task_name = "predict"
         task.state.name = "RUNNING"
-        task.create_time = datetime(2026, 4, 15, 12, 1, tzinfo=timezone.utc)
-        task.start_time = datetime(1970, 1, 1, 0, 0, tzinfo=timezone.utc)
+        task.create_time = datetime(2026, 4, 15, 12, 1, tzinfo=UTC)
+        task.start_time = datetime(1970, 1, 1, 0, 0, tzinfo=UTC)
         task.end_time = None
         task.executor_detail = None
         task.execution.metadata = {

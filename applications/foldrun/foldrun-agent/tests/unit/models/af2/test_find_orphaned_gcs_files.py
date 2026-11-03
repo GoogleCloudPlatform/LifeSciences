@@ -15,7 +15,7 @@
 """Unit tests for AF2FindOrphanedGCSFilesTool."""
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,7 +41,7 @@ def _make_mock_blob(name: str, size: int = 1024):
     blob = MagicMock()
     blob.name = name
     blob.size = size
-    blob.updated = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    blob.updated = datetime(2026, 1, 1, tzinfo=UTC)
     return blob
 
 

@@ -20,7 +20,7 @@ import logging
 import os
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -58,7 +58,7 @@ def _allocate_unique_pipeline_timestamps() -> tuple[str, str]:
         if now_epoch <= _LAST_PIPELINE_TS:
             now_epoch = _LAST_PIPELINE_TS + 1
         _LAST_PIPELINE_TS = now_epoch
-        dt = datetime.fromtimestamp(now_epoch, tz=timezone.utc)
+        dt = datetime.fromtimestamp(now_epoch, tz=UTC)
         return dt.strftime("%Y%m%d_%H%M%S"), dt.strftime("%Y%m%d%H%M%S")
 
 
@@ -225,9 +225,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                     {
                         "endpoint_id": getattr(endpoint, "resource_name", str(endpoint)),
                         "last_activity_epoch": time.time(),
-                        "last_activity_iso": datetime.now(timezone.utc)
-                        .isoformat()
-                        .replace("+00:00", "Z"),
+                        "last_activity_iso": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                         "last_event": f"submitted:{job_name}",
                         "last_pipeline_job_id": pipeline_job_id,
                     },
@@ -378,10 +376,7 @@ class AF3SubmitPredictionTool(AF3Tool):
                 "message": "Missing required argument 'input' (must provide FASTA or AF3 JSON).",
             }
 
-        job_name = (
-            arguments.get("job_name")
-            or f"af3_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-        )
+        job_name = arguments.get("job_name") or f"af3_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
         try:
             job_name = self.validate_job_name(str(job_name))
         except ValueError as exc:

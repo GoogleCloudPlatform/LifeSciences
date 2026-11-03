@@ -52,8 +52,7 @@ class AF2SubmitMultimerTool(AF2Tool):
                 'use_small_bfd': Use small BFD database,
                 'run_relaxation': Run AMBER relaxation,
                 'gpu_type': 'L4', 'A100', or 'A100_80GB',
-                'num_predictions_per_model': Number of predictions per model (1-25),
-                'vertex_repo_path': (Deprecated) Pipeline is now vendored internally
+                'num_predictions_per_model': Number of predictions per model (1-25)
             }
 
         Returns:
@@ -74,7 +73,6 @@ class AF2SubmitMultimerTool(AF2Tool):
         num_predictions_per_model = arguments.get("num_predictions_per_model", 5)
         enable_flex_start = arguments.get("enable_flex_start", True)
         msa_method = arguments.get("msa_method", "auto")  # 'auto', 'jackhmmer', or 'mmseqs2'
-        arguments.get("vertex_repo_path")  # No longer needed, kept for backwards compatibility
 
         # Validate: explicit mmseqs2 requires use_small_bfd=True and pre-built indexes
         if msa_method == "mmseqs2":

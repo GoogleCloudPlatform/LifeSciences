@@ -1,6 +1,6 @@
 # FoldRun Structure Viewer
 
-Flask web application for visualizing biomolecular structure predictions from **AlphaFold 2**, **AlphaFold 3**, **OpenFold 3**, and **Boltz-2** with interactive 3D rendering, confidence metrics, multimodal **Gemini 3.1 Pro** Expert Analysis, and 1-click ZIP artifact bundle downloads.
+Flask web application for visualizing biomolecular structure predictions from **AlphaFold 2**, **AlphaFold 3**, **OpenFold 3**, and **Boltz-2** with interactive 3D rendering, confidence metrics, multimodal **Gemini 4 Argon** Expert Analysis, and 1-click ZIP artifact bundle downloads.
 
 ## Features
 
@@ -10,7 +10,7 @@ Flask web application for visualizing biomolecular structure predictions from **
 - **pLDDT Confidence Coloring:** Standard AlphaFold color scale (`>90` dark blue, `70–90` light blue, `50–70` yellow, `<50` orange)
 - **Per-Chain Confidence & Composition Table:** Polymer residue counts and ligand CCD/SMILES breakdown
 - **Analysis Plots:** Per-residue pLDDT profiles, PAE/PDE heatmaps, and chain-pair ipTM matrices
-- **Multimodal Gemini 3.1 Pro Expert Analysis:** 8-section AI structural biology assessment (`status: "success"`) rendered as formatted Markdown
+- **Multimodal Gemini 4 Argon Expert Analysis:** 8-section AI structural biology assessment (`status: "success"`) rendered as formatted Markdown
 - **1-Click Artifact Downloads:** Download the complete job bundle (`artifacts_bundle.zip` — structure, plots, `expert_analysis.md`, `execution.log`, `input.json`, `summary.json`) or individual files
 
 ## Architecture

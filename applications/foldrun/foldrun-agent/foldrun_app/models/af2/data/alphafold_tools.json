@@ -45,10 +45,6 @@
             "jackhmmer"
           ]
         },
-        "vertex_repo_path": {
-          "type": "string",
-          "description": "Path to vertex-ai-alphafold-inference-pipeline repository (optional)"
-        },
         "enable_flex_start": {
           "type": "boolean",
           "description": "Enable DWS FLEX_START scheduling to queue job when GPUs unavailable (default: true)"
@@ -108,10 +104,6 @@
         "num_predictions_per_model": {
           "type": "integer",
           "description": "Number of predictions per model (1-25, default: 5)"
-        },
-        "vertex_repo_path": {
-          "type": "string",
-          "description": "Path to vertex-ai-alphafold-inference-pipeline repository (optional)"
         },
         "enable_flex_start": {
           "type": "boolean",

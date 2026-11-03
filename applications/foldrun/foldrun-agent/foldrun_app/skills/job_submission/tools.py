@@ -71,7 +71,6 @@ def submit_af2_monomer_prediction(
     run_relaxation: bool = True,
     gpu_type: str = "auto",
     relax_gpu_type: str | None = None,
-    vertex_repo_path: str | None = None,
     enable_flex_start: bool = True,
     msa_method: str = "auto",
 ) -> dict:
@@ -95,7 +94,6 @@ def submit_af2_monomer_prediction(
         "run_relaxation": run_relaxation,
         "gpu_type": gpu_type,
         "relax_gpu_type": relax_gpu_type,
-        "vertex_repo_path": vertex_repo_path,
         "enable_flex_start": enable_flex_start,
         "msa_method": msa_method,
     }
@@ -113,7 +111,6 @@ def submit_af2_multimer_prediction(
     gpu_type: str = "auto",
     relax_gpu_type: str | None = None,
     num_predictions_per_model: int = 5,
-    vertex_repo_path: str | None = None,
     enable_flex_start: bool = True,
     msa_method: str = "auto",
 ) -> dict:
@@ -138,7 +135,6 @@ def submit_af2_multimer_prediction(
         "gpu_type": gpu_type,
         "relax_gpu_type": relax_gpu_type,
         "num_predictions_per_model": num_predictions_per_model,
-        "vertex_repo_path": vertex_repo_path,
         "enable_flex_start": enable_flex_start,
         "msa_method": msa_method,
     }

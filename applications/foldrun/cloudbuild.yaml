@@ -236,7 +236,7 @@ steps:
   # Skipped only for analysis-job-only targets.
   # ============================================================================
   - id: 'deploy-agent-runtime'
-    name: 'ghcr.io/astral-sh/uv:python3.12-bookworm-slim'
+    name: 'ghcr.io/astral-sh/uv:python3.13-bookworm-slim'
     dir: 'foldrun-agent'
     entrypoint: bash
     env:
@@ -314,7 +314,7 @@ steps:
         [[ -n "$$SUBNET_ID" ]] && ENV_VARS="$$ENV_VARS,SUBNET_ID=$$SUBNET_ID"
         [[ -n "$$NETWORK_PROJECT_NUMBER" ]] && ENV_VARS="$$ENV_VARS,NETWORK_PROJECT_NUMBER=$$NETWORK_PROJECT_NUMBER"
 
-        uvx google-agents-cli@1.10.0 deploy \
+        uvx google-agents-cli@1.11.0 deploy \
             --project="$$PROJECT_ID" \
             --region="$$REGION" \
             --deployment-target=agent_runtime \
@@ -351,7 +351,7 @@ steps:
 
         # Run publish command
         export GOOGLE_CLOUD_PROJECT="$$PROJECT_ID"
-        uvx google-agents-cli@1.10.0 publish gemini-enterprise \
+        uvx google-agents-cli@1.11.0 publish gemini-enterprise \
           --agent-runtime-id="$$AGENT_RUNTIME_ID" \
           --gemini-enterprise-app-id="$$GEMINI_ENTERPRISE_APP_ID" \
           --display-name="FoldRun" \

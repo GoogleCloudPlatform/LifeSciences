@@ -281,7 +281,7 @@ GCP_REGION=us-central1
 GCS_BUCKET_NAME=test-af2-bucket
 FILESTORE_ID=test-filestore
 ALPHAFOLD_COMPONENTS_IMAGE=us-central1-docker.pkg.dev/.../alphafold-components:latest
-GEMINI_MODEL=gemini-flash-latest
+GEMINI_MODEL=gemini-3.8-flash
 ```
 
 These values are injected by the `mock_env_vars` fixture. They don't need to point to

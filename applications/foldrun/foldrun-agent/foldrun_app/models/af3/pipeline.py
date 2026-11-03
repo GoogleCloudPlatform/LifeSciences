@@ -43,7 +43,7 @@ from kfp import dsl
 
 
 @dsl.component(
-    base_image="python:3.12-slim",
+    base_image="python:3.13-slim",
     packages_to_install=[
         "google-cloud-aiplatform>=1.50.0",
         "google-cloud-storage>=2.10.0",
@@ -424,7 +424,7 @@ def provision_and_queue_af3_endpoint_task(
 
 
 @dsl.component(
-    base_image="python:3.12-slim",
+    base_image="python:3.13-slim",
     packages_to_install=[
         "google-cloud-aiplatform>=1.50.0",
         "google-cloud-storage>=2.10.0",
@@ -465,7 +465,7 @@ def run_af3_inference_task(
     import threading
     import time
     from collections import namedtuple
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     from google.cloud import aiplatform, storage
 
@@ -577,7 +577,7 @@ def run_af3_inference_task(
             "num_diffusion_samples": int(num_diffusion_samples),
             "output_dir": raw_output_gcs_uri,
         }
-        start_dt = datetime.now(timezone.utc)
+        start_dt = datetime.now(UTC)
         start_iso = start_dt.isoformat()
         t0 = time.time()
         wakeup_t0 = t0
@@ -785,7 +785,7 @@ def run_af3_inference_task(
 
         cif_b, conf_b, sum_b = _find_gcs_raw_outputs()
         elapsed_sec = round(time.time() - t0, 2)
-        end_dt = datetime.now(timezone.utc)
+        end_dt = datetime.now(UTC)
         end_iso = end_dt.isoformat()
 
         # If inline fallback was used, persist raw files into raw_output_prefix so Stage 4 reads uniformly
@@ -855,7 +855,7 @@ def run_af3_inference_task(
 
         try:
             now_ts = time.time()
-            now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
             activity_blob = bucket.blob(f"af3_predictions/.locks/{endpoint_short_id}_activity.json")
             activity_blob.upload_from_string(
                 json.dumps(
@@ -876,7 +876,7 @@ def run_af3_inference_task(
 
 
 @dsl.component(
-    base_image="python:3.12-slim",
+    base_image="python:3.13-slim",
     packages_to_install=[
         "google-cloud-aiplatform>=1.50.0",
         "google-cloud-storage>=2.10.0",
@@ -910,7 +910,7 @@ def report_af3_endpoint_available_task(
     import logging
     import time
     from collections import namedtuple
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     import google.auth
     from google.auth.transport.requests import AuthorizedSession
@@ -946,7 +946,7 @@ def report_af3_endpoint_available_task(
             log.debug(f"[AF3 Stage 3] Slot verification note: {exc}")
 
     now_ts = time.time()
-    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     stale_heartbeat_sec = 210.0
 
     # Inspect other active AF3 pipeline jobs and active slot locks
@@ -1029,7 +1029,7 @@ def report_af3_endpoint_available_task(
 
 
 @dsl.component(
-    base_image="python:3.12-slim",
+    base_image="python:3.13-slim",
     packages_to_install=[
         "google-cloud-aiplatform>=1.50.0",
         "google-cloud-storage>=2.10.0",
@@ -1066,13 +1066,13 @@ def process_af3_results_task(
         ("mean_plddt", float),
     ],
 ):
-    """Stage 4: Harvest container logs, render confidence plots, and run Gemini 3.1 Pro Expert Analysis."""
+    """Stage 4: Harvest container logs, render confidence plots, and run Gemini 4 Argon Expert Analysis."""
     import io
     import json
     import logging
     import time
     from collections import namedtuple
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     import numpy as np
     from google.cloud import storage
@@ -1110,7 +1110,7 @@ def process_af3_results_task(
             f'resource.type="aiplatform.googleapis.com/Endpoint" '
             f'AND resource.labels.endpoint_id="{endpoint_short_id}" '
             f'AND timestamp>="{start_iso}" '
-            f'AND timestamp<="{datetime.now(timezone.utc).isoformat()}"'
+            f'AND timestamp<="{datetime.now(UTC).isoformat()}"'
         )
         fetched_lines = []
         for entry in log_client.list_entries(filter_=log_filter, page_size=500):
@@ -1309,7 +1309,7 @@ def process_af3_results_task(
                 "job_id": job_name,
                 "pipeline_job_id": pipeline_job_id,
                 "total_predictions": len(predictions_cfg),
-                "started_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "status": "running",
                 "model_type": "alphafold3",
                 "execution_method": "cloud_run_job",
@@ -1749,7 +1749,7 @@ def process_af3_results_task(
         "af3_job_dir": f"gs://{bucket_name}/{job_prefix_clean}",
         "execution_log_uri": f"gs://{bucket_name}/{job_prefix_clean}/execution.log",
         "model_type": "alphafold3",
-        "analyzed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "analyzed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "total_predictions": len(ranked_predictions),
         "successful_analyses": len(ranked_predictions),
         "failed_analyses": 0,
@@ -1829,7 +1829,7 @@ def process_af3_results_task(
         "all_predictions_summary": ranked_predictions,
     }
 
-    now_ea_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now_ea_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     disclaimer_text = (
         "\n\n---\n"
         "*This analysis was generated by AI (Google Gemini) and has not been "
@@ -1944,11 +1944,11 @@ IMPORTANT: Begin your response directly with the markdown headings/analysis. Do 
             content_parts.append(types.Part.from_bytes(data=pae_png, mime_type="image/png"))
 
         genai_client = genai.Client(vertexai=True, project=project_id, location="global")
-        for candidate_model in (
-            "gemini-4-argon",
-            "gemini-2.5-pro",
-            "gemini-2.5-flash",
-        ):
+        preferred_model = os.environ.get("GEMINI_ANALYSIS_MODEL", "gemini-4-argon")
+        candidate_models = [preferred_model] + [
+            m for m in ("gemini-4-argon", "gemini-3.8-flash") if m != preferred_model
+        ]
+        for candidate_model in candidate_models:
             try:
                 resp = genai_client.models.generate_content(
                     model=candidate_model,
@@ -2018,7 +2018,7 @@ def create_af3_inference_pipeline():
         description=(
             "AlphaFold 3 4-stage structure prediction pipeline on Vertex AI Dedicated H100 Endpoint: "
             "(1) Provision & Queue Endpoint, (2) Run AF3 Inference, (3) Report Endpoint Available, "
-            "(4) Process Results & Gemini 3.1 Pro Multimodal Expert Analysis."
+            "(4) Process Results & Gemini 4 Argon Multimodal Expert Analysis."
         ),
     )
     def af3_inference_pipeline(

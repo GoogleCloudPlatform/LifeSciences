@@ -105,7 +105,7 @@ def _compute_af3_ranking_score(summary_conf: dict) -> float:
 def generate_gemini_expert_analysis(
     summary_data: dict, task_config: dict | None = None
 ) -> dict:
-    """Generate multimodal expert analysis using Gemini 3.1 Pro via Google GenAI SDK."""
+    """Generate multimodal expert analysis using Gemini 4 Argon via Google GenAI SDK."""
     task_config = task_config or {}
     now_ea_iso = datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z"
     disclaimer_text = (
@@ -310,9 +310,7 @@ IMPORTANT: Begin your response directly with the markdown headings/analysis. Do 
         )
         preferred_model = os.environ.get("GEMINI_MODEL", "gemini-4-argon")
         candidate_models = [preferred_model] + [
-            m
-            for m in ("gemini-4-argon", "gemini-3.1-pro-preview", "gemini-2.5-flash")
-            if m != preferred_model
+            m for m in ("gemini-4-argon", "gemini-3.8-flash") if m != preferred_model
         ]
         for candidate_model in candidate_models:
             try:

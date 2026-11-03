@@ -517,7 +517,7 @@ def parse_cif_chains(
 
 
 def plot_plddt_distribution(
-    plddt_scores: list,
+    plddt_scores: list | np.ndarray,
     title_name: str,
     output_path: str,
     chain_info: list[dict] | None = None,
@@ -528,7 +528,7 @@ def plot_plddt_distribution(
         logger.warning("matplotlib not available; skipping pLDDT plot generation")
         return
 
-    if not plddt_scores:
+    if plddt_scores is None or len(plddt_scores) == 0:
         return
 
     scores = np.array(

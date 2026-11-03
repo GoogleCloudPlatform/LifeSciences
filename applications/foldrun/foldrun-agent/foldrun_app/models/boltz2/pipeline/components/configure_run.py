@@ -22,7 +22,7 @@ from kfp import dsl
 
 
 @dsl.component(
-    base_image="python:3.12-slim",
+    base_image="python:3.13-slim",
 )
 def configure_seeds_boltz2(
     num_model_seeds: int,

@@ -38,7 +38,7 @@ Built with **Google ADK** using **native Skills** — all skills run directly wi
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.13+
 - Google Cloud Project with Agent Platform enabled
 - Application Default Credentials (`gcloud auth application-default login`)
 - GCS bucket for pipeline artifacts and results
@@ -155,7 +155,7 @@ Tool count depends on which models are configured:
 | `submit_af3_batch_predictions` | Submit multiple AF3 targets in batch as async 4-stage KFP PipelineJobs with FIFO H100 replica slot queueing |
 | `check_af3_endpoint` | Inspect health, active deployed models, replica count, and hourly cost state of the AF3 Endpoint |
 | `get_af3_results` | Retrieve completed AF3 prediction metrics (`ranking_score`, `ptm`, `iptm`, `mean_plddt`, `mean_pae`, mmCIF URI) |
-| `open_af3_structure_viewer` | Open the FoldRun 3D viewer for an AF3 job (renders all-atom mmCIF + Gemini 3.1 Pro Expert Analysis) |
+| `open_af3_structure_viewer` | Open the FoldRun 3D viewer for an AF3 job (renders all-atom mmCIF + Gemini 4 Argon Expert Analysis) |
 
 ### OpenFold 3 Tools (4)
 
