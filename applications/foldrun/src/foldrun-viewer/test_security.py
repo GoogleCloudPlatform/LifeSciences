@@ -14,6 +14,7 @@
 
 """Security unit tests for FoldRun Viewer (Findings 4.44 and 4.45)."""
 
+import json
 import os
 import sys
 import unittest
@@ -542,6 +543,7 @@ class TestCustomSlugResolutionAndAnalyzeRouting(unittest.TestCase):
         mock_bucket.list_blobs.side_effect = [
             [],  # af3_predictions/ check
             blob_list,  # pipeline_runs/af3-run-01 check
+            [],  # stale analysis blob cleanup check
         ]
         mock_bucket.blob.return_value = MagicMock()
 
@@ -560,6 +562,93 @@ class TestCustomSlugResolutionAndAnalyzeRouting(unittest.TestCase):
         self.assertEqual(payload["task_count"], 25)
         cr_call_json = mock_authed.post.call_args.kwargs["json"]
         self.assertEqual(cr_call_json["overrides"]["taskCount"], 25)
+
+    def test_trigger_analysis_boltz2_includes_affinity_query_yaml_and_cleans_stale_blobs(
+        self,
+    ):
+        mock_authed = MagicMock()
+        pj_resp = MagicMock()
+        pj_resp.status_code = 200
+        pj_resp.raise_for_status.return_value = None
+        pj_resp.json.return_value = {
+            "name": "projects/test-project/locations/us-central1/pipelineJobs/boltz-job-1",
+            "displayName": "boltz-kinase-01",
+            "labels": {
+                "model_type": "boltz2",
+                "query_name": "boltz-kinase-01",
+                "managed_by": "foldrun",
+            },
+            "runtimeConfig": {
+                "gcsOutputDirectory": "gs://allowed-foldrun-bucket/pipeline_runs/boltz-run-01",
+                "parameterValues": {
+                    "query_json_path": "gs://allowed-foldrun-bucket/boltz2_queries/boltz-kinase-01.yaml"
+                },
+            },
+        }
+        cr_resp = MagicMock()
+        cr_resp.raise_for_status.return_value = None
+        mock_authed.get.return_value = pj_resp
+        mock_authed.post.return_value = cr_resp
+
+        conf_blob = MagicMock()
+        conf_blob.name = "pipeline_runs/boltz-run-01/predict-boltz2/predictions/q/confidence_q_model_0.json"
+        aff_blob = MagicMock()
+        aff_blob.name = (
+            "pipeline_runs/boltz-run-01/predict-boltz2/predictions/q/affinity_q.json"
+        )
+
+        stale_pred = MagicMock()
+        stale_pred.name = (
+            "pipeline_runs/boltz-run-01/analysis/prediction_0_analysis.json"
+        )
+        stale_summary = MagicMock()
+        stale_summary.name = "pipeline_runs/boltz-run-01/analysis/summary.json"
+        keep_meta = MagicMock()
+        keep_meta.name = "pipeline_runs/boltz-run-01/analysis/analysis_metadata.json"
+
+        mock_bucket = MagicMock()
+        mock_bucket.list_blobs.side_effect = [
+            [conf_blob, aff_blob],
+            [stale_pred, stale_summary, keep_meta],
+        ]
+        tc_blob_mock = MagicMock()
+        mock_bucket.blob.return_value = tc_blob_mock
+
+        with (
+            patch.object(viewer_app, "_get_authed_session", return_value=mock_authed),
+            patch.object(viewer_app.storage_client, "bucket", return_value=mock_bucket),
+        ):
+            resp = self.client.post(
+                "/api/analyze", json={"job_id": "boltz-job-1", "model_type": "boltz2"}
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        stale_pred.delete.assert_called_once()
+        stale_summary.delete.assert_called_once()
+        keep_meta.delete.assert_not_called()
+
+        uploaded_json = json.loads(
+            tc_blob_mock.upload_from_string.call_args_list[0].args[0]
+        )
+        self.assertEqual(
+            uploaded_json["affinity_uri"],
+            "gs://allowed-foldrun-bucket/pipeline_runs/boltz-run-01/predict-boltz2/predictions/q/affinity_q.json",
+        )
+        self.assertEqual(
+            uploaded_json["query_yaml_uri"],
+            "gs://allowed-foldrun-bucket/boltz2_queries/boltz-kinase-01.yaml",
+        )
+
+    def test_resolve_boltz2_query_yaml_uri_rejects_cross_bucket_and_traversal(self):
+        bad_pj = {
+            "runtimeConfig": {
+                "parameterValues": {
+                    "query_json_path": "gs://evil-bucket/boltz2_queries/q.yaml"
+                }
+            },
+            "labels": {"query_name": "../secret"},
+        }
+        self.assertIsNone(viewer_app._resolve_boltz2_query_yaml_uri(bad_pj))
 
 
 if __name__ == "__main__":

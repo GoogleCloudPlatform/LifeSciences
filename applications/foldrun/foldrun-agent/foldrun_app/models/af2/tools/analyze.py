@@ -16,19 +16,172 @@
 
 import logging
 import os
+import pickle
 import tempfile
 from typing import Any
 
+import numpy as np
+
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job, get_task_details
-from ..utils.viz_utils import (
-    calculate_pae_stats,
-    calculate_plddt_stats,
-    get_quality_assessment,
-    load_raw_prediction,
-)
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_BUILTINS = {
+    "dict",
+    "list",
+    "tuple",
+    "set",
+    "frozenset",
+    "int",
+    "float",
+    "str",
+    "bytes",
+    "bool",
+    "complex",
+    "slice",
+    "range",
+}
+
+_ALLOWED_NUMPY_MODULES = {
+    "numpy",
+    "numpy.core.multiarray",
+    "numpy.core.numeric",
+    "numpy._core.multiarray",
+    "numpy._core.numeric",
+}
+
+_ALLOWED_NUMPY_NAMES = {
+    "_reconstruct",
+    "scalar",
+    "ndarray",
+    "dtype",
+    "_frombuffer",
+}
+
+_ALLOWED_NUMPY_RECONSTRUCTORS = {
+    getattr(getattr(np, "_core", np.core).multiarray, "_reconstruct", None),
+} - {None}
+
+PLDDT_BANDS = [
+    (0, 50, "#FF7D45", "Very low"),
+    (50, 70, "#FFDB13", "Low"),
+    (70, 90, "#65CBF3", "Confident"),
+    (90, 100, "#0053D6", "Very high"),
+]
+
+
+def _safe_reconstruct_jax_array(
+    fun: Any, args: Any, arr_state: Any, aval_state: Any = None
+) -> np.ndarray:
+    """Safely reconstruct a pickled JAX ArrayImpl into a NumPy ndarray."""
+    if fun not in _ALLOWED_NUMPY_RECONSTRUCTORS:
+        raise pickle.UnpicklingError(f"Forbidden constructor in JAX array reconstruction: {fun!r}")
+    np_value = fun(*args)
+    if not isinstance(np_value, np.ndarray):
+        raise pickle.UnpicklingError(
+            f"Expected ndarray from JAX array reconstruction, got {type(np_value).__name__}"
+        )
+    np_value.__setstate__(arr_state)
+    if getattr(np_value.dtype, "hasobject", False):
+        raise pickle.UnpicklingError("Object-dtype NumPy arrays are forbidden")
+    return np_value
+
+
+def _reject_object_dtype_arrays(obj: Any) -> None:
+    """Recursively ensure no object-dtype NumPy arrays exist in deserialized payload."""
+    if isinstance(obj, np.ndarray):
+        if getattr(obj.dtype, "hasobject", False):
+            raise pickle.UnpicklingError("Object-dtype NumPy arrays are forbidden")
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            _reject_object_dtype_arrays(k)
+            _reject_object_dtype_arrays(v)
+    elif isinstance(obj, (list, tuple, set, frozenset)):
+        for item in obj:
+            _reject_object_dtype_arrays(item)
+
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    """Restricted unpickler allowing only safe builtins and NumPy/JAX array primitives."""
+
+    def find_class(self, module: str, name: str) -> Any:
+        if (module, name) == ("jax._src.array", "_reconstruct_array"):
+            return _safe_reconstruct_jax_array
+        if (module, name) == ("ml_dtypes", "bfloat16"):
+            return super().find_class(module, name)
+        if module == "builtins" and name in _ALLOWED_BUILTINS:
+            return super().find_class(module, name)
+        if module in _ALLOWED_NUMPY_MODULES and name in _ALLOWED_NUMPY_NAMES:
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(f"Global '{module}.{name}' is forbidden")
+
+
+def load_raw_prediction(pickle_path: str) -> dict[str, Any]:
+    """Load raw prediction pickle file using restricted deserialization."""
+    with open(pickle_path, "rb") as f:
+        raw_prediction = _RestrictedUnpickler(f).load()
+
+    if not isinstance(raw_prediction, dict):
+        raise pickle.UnpicklingError(
+            f"Expected prediction payload to be a dict, got {type(raw_prediction).__name__}"
+        )
+
+    _reject_object_dtype_arrays(raw_prediction)
+    logger.info(f"Loaded raw prediction from {pickle_path}")
+    return raw_prediction
+
+
+def calculate_plddt_stats(raw_prediction: dict[str, Any]) -> dict[str, Any]:
+    """Calculate pLDDT statistics."""
+    plddt_scores = raw_prediction["plddt"]
+
+    stats = {
+        "mean": float(np.mean(plddt_scores)),
+        "median": float(np.median(plddt_scores)),
+        "min": float(np.min(plddt_scores)),
+        "max": float(np.max(plddt_scores)),
+        "std": float(np.std(plddt_scores)),
+        "per_residue": plddt_scores.tolist(),
+    }
+
+    distribution = {}
+    for min_val, max_val, _, label in PLDDT_BANDS:
+        count = np.sum((plddt_scores >= min_val) & (plddt_scores <= max_val))
+        distribution[label.lower().replace(" ", "_")] = int(count)
+
+    stats["distribution"] = distribution
+    return stats
+
+
+def calculate_pae_stats(raw_prediction: dict[str, Any]) -> dict[str, Any] | None:
+    """Calculate PAE statistics (if available)."""
+    if "predicted_aligned_error" not in raw_prediction:
+        return None
+
+    pae = raw_prediction["predicted_aligned_error"]
+    max_pae = raw_prediction.get("max_predicted_aligned_error", np.max(pae))
+
+    return {
+        "mean": float(np.mean(pae)),
+        "median": float(np.median(pae)),
+        "min": float(np.min(pae)),
+        "max": float(np.max(pae)),
+        "max_predicted": float(max_pae),
+        "matrix": pae.tolist(),
+    }
+
+
+def get_quality_assessment(plddt_mean: float) -> str:
+    """Get quality assessment based on mean pLDDT."""
+    if plddt_mean >= 90:
+        return "very_high_confidence"
+    elif plddt_mean >= 70:
+        return "high_confidence"
+    elif plddt_mean >= 50:
+        return "low_confidence"
+    else:
+        return "very_low_confidence"
 
 
 class AF2AnalysisTool(AF2Tool):

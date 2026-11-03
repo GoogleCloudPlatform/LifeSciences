@@ -83,6 +83,36 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
             logger.warning(f"Could not check for existing analysis: {e}")
             return False, None
 
+    def _cleanup_stale_analysis_blobs(self, analysis_path: str) -> int:
+        """Delete stale per-prediction and summary blobs prior to re-analysis."""
+        bucket_name, prefix = self._validate_gcs_uri(analysis_path)
+        if not prefix.endswith("/"):
+            prefix += "/"
+        deleted = 0
+        try:
+            storage_client = storage.Client(project=self.config.project_id)
+            bucket = storage_client.bucket(bucket_name)
+            for blob in list(bucket.list_blobs(prefix=prefix)):
+                filename = blob.name.rsplit("/", 1)[-1]
+                is_stale = (
+                    filename in ("summary.json", "artifacts_bundle.zip", "error.json")
+                    or filename.endswith("_analysis.json")
+                    or (
+                        filename.startswith("analysis_")
+                        and filename.endswith(".json")
+                        and filename != "analysis_metadata.json"
+                    )
+                )
+                if is_stale:
+                    try:
+                        blob.delete()
+                        deleted += 1
+                    except Exception as del_err:
+                        logger.warning(f"Failed to delete stale blob {blob.name}: {del_err}")
+        except Exception as list_err:
+            logger.warning(f"Could not list stale analysis blobs under {analysis_path}: {list_err}")
+        return deleted
+
     def _discover_boltz2_samples(self, job: Any) -> tuple[list[dict[str, Any]], str | None]:
         """Discover BOLTZ2 output samples and optional affinity file from GCS.
 
@@ -190,6 +220,9 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
 
         if not samples:
             return {"status": "no_predictions", "message": "No BOLTZ2 samples found for this job"}
+
+        # Remove stale artifacts from any prior incomplete or overwritten run
+        self._cleanup_stale_analysis_blobs(analysis_path)
 
         # Resolve query YAML URI now, while we have the pipeline job in hand.
         # The agent reads labels reliably; passing the resolved URI in task_config

@@ -701,7 +701,6 @@ if $run_convert; then
 
         echo "  Converting: $db"
         uv run python -c "
-from foldrun_app.models.af2.tools.download_database import ConvertMMseqs2Tool
 import os
 os.environ.setdefault('GCP_PROJECT_ID', '$PROJECT_ID')
 os.environ.setdefault('GCP_REGION', '$REGION')
@@ -710,12 +709,31 @@ if '$FILESTORE_LOCATION':
     os.environ.setdefault('FILESTORE_LOCATION', '$FILESTORE_LOCATION')
 os.environ.setdefault('GCS_BUCKET_NAME', '$GCS_BUCKET_NAME')
 os.environ.setdefault('GCS_DATABASES_BUCKET', '$GCS_DATABASES_BUCKET')
-os.environ.setdefault('ALPHAFOLD_COMPONENTS_IMAGE', '$ALPHAFOLD_COMPONENTS_IMAGE')
-from foldrun_app.models.af2.config import Config
-config = Config()
-tool_config = {'name': 'convert_mmseqs2', 'description': 'Convert to MMseqs2'}
-tool = ConvertMMseqs2Tool(tool_config=tool_config, config=config)
-result = tool.run({'databases': ['$db']})
+from foldrun_app.core import batch
+from foldrun_app.core.config import CoreConfig
+from foldrun_app.core.download import submit_mmseqs2_conversions
+config = CoreConfig()
+fs_ip, fs_net = batch.get_filestore_info(
+    project_id=config.project_id,
+    zone=config.zone,
+    filestore_id=config.filestore_id,
+    filestore_ip=config.filestore_ip,
+    filestore_network=config.filestore_network,
+    region=config.region,
+    filestore_location=config.filestore_location,
+    network_project_number=config.network_project_number,
+)
+result = submit_mmseqs2_conversions(
+    project_id=config.project_id,
+    region=config.region,
+    zone=config.zone,
+    filestore_ip=fs_ip,
+    filestore_network=fs_net,
+    nfs_share=config.nfs_share,
+    nfs_mount=config.nfs_mount_point,
+    gcs_bucket=config.databases_bucket_name,
+    databases=['$db'],
+)
 print(result)
 " 2>&1 || echo "  Warning: conversion submission for $db may have failed"
     done

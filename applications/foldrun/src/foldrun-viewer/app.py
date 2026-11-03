@@ -558,14 +558,17 @@ def _discover_of3_predictions(pipeline_root: str) -> list:
     return predictions
 
 
-def _discover_boltz2_predictions(pipeline_root: str) -> list:
-    """Scan GCS for Boltz-2 confidence_*.json files under pipeline_root."""
+def _discover_boltz2_predictions_and_affinity(
+    pipeline_root: str,
+) -> tuple[list, str | None]:
+    """Scan GCS for Boltz-2 confidence_*.json and optional affinity_*.json files."""
     bucket_name, prefix = parse_gcs_uri(pipeline_root)
     if not prefix.endswith("/"):
         prefix += "/"
     bucket = storage_client.bucket(bucket_name)
     predictions = []
     seen = set()
+    affinity_uri = None
     for blob in bucket.list_blobs(prefix=prefix):
         name = blob.name
         if "/predictions/" not in name or not name.endswith(".json"):
@@ -592,7 +595,81 @@ def _discover_boltz2_predictions(pipeline_root: str) -> list:
                     "pde_uri": f"gs://{bucket_name}/{pde_name}",
                 }
             )
+        elif filename.startswith("affinity_") and affinity_uri is None:
+            affinity_uri = f"gs://{bucket_name}/{name}"
+    return predictions, affinity_uri
+
+
+def _discover_boltz2_predictions(pipeline_root: str) -> list:
+    """Scan GCS for Boltz-2 confidence_*.json files under pipeline_root."""
+    predictions, _ = _discover_boltz2_predictions_and_affinity(pipeline_root)
     return predictions
+
+
+def _resolve_boltz2_query_yaml_uri(pj: dict) -> str | None:
+    """Resolve and validate the Boltz-2 input YAML URI within BUCKET_NAME."""
+    expected_prefix = f"gs://{BUCKET_NAME}/boltz2_queries/"
+    param_vals = (pj.get("runtimeConfig") or {}).get("parameterValues") or {}
+    raw_query_uri = param_vals.get("query_json_path")
+    if isinstance(raw_query_uri, str) and raw_query_uri.startswith(expected_prefix):
+        rel = raw_query_uri[len(expected_prefix) :]
+        segments = [seg for seg in rel.split("/") if seg]
+        if (
+            segments
+            and ".." not in segments
+            and "." not in segments
+            and rel.lower().endswith((".yaml", ".yml"))
+        ):
+            return raw_query_uri
+
+    labels = pj.get("labels") or {}
+    query_name = labels.get("query_name") or pj.get("displayName") or ""
+    if (
+        isinstance(query_name, str)
+        and query_name
+        and "/" not in query_name
+        and ".." not in query_name
+        and JOB_ID_PATTERN.fullmatch(query_name)
+    ):
+        return f"{expected_prefix}{query_name}.yaml"
+    return None
+
+
+def _is_stale_analysis_blob(filename: str) -> bool:
+    """Return True if filename is an artifact from a previous analysis run."""
+    if filename in ("summary.json", "artifacts_bundle.zip", "error.json"):
+        return True
+    if filename.endswith("_analysis.json"):
+        return True
+    if (
+        filename.startswith("analysis_")
+        and filename.endswith(".json")
+        and filename != "analysis_metadata.json"
+    ):
+        return True
+    return False
+
+
+def _cleanup_stale_analysis_blobs(bucket, analysis_prefix: str) -> int:
+    """Delete stale per-prediction and consolidated blobs prior to re-analysis."""
+    prefix = analysis_prefix if analysis_prefix.endswith("/") else f"{analysis_prefix}/"
+    deleted = 0
+    try:
+        for blob in list(bucket.list_blobs(prefix=prefix)):
+            filename = blob.name.rsplit("/", 1)[-1]
+            if _is_stale_analysis_blob(filename):
+                try:
+                    blob.delete()
+                    deleted += 1
+                except Exception as del_err:
+                    logger.warning(
+                        f"Failed to delete stale blob {blob.name}: {del_err}"
+                    )
+    except Exception as list_err:
+        logger.warning(
+            f"Could not list stale analysis blobs under {prefix}: {list_err}"
+        )
+    return deleted
 
 
 def _validate_job_id(job_id: str) -> str:
@@ -1159,6 +1236,7 @@ def trigger_analysis():
 
         analysis_path = f"{gcs_output_dir}analysis/"
         af3_extra_cfg: dict = {}
+        boltz2_extra_cfg: dict = {}
 
         # Discover predictions based on model type
         if model_type == "alphafold3":
@@ -1194,7 +1272,13 @@ def trigger_analysis():
         elif model_type == "openfold3":
             raw_predictions = _discover_of3_predictions(gcs_output_dir)
         elif model_type == "boltz2":
-            raw_predictions = _discover_boltz2_predictions(gcs_output_dir)
+            raw_predictions, affinity_uri = _discover_boltz2_predictions_and_affinity(
+                gcs_output_dir
+            )
+            boltz2_extra_cfg = {
+                "affinity_uri": affinity_uri,
+                "query_yaml_uri": _resolve_boltz2_query_yaml_uri(pj),
+            }
         else:
             raw_predictions = _discover_af2_predictions(gcs_output_dir)
 
@@ -1259,12 +1343,16 @@ def trigger_analysis():
             "analysis_path": analysis_path,
             "task_config_uri": f"{analysis_path}task_config.json",
             "predictions": predictions_cfg,
+            **boltz2_extra_cfg,
             **af3_extra_cfg,
         }
 
-        # Write task_config.json to GCS before triggering the job (tasks read it on startup)
+        # Clear any stale analysis artifacts before writing task_config.json so
+        # sibling tasks do not prematurely consolidate against old outputs.
         tc_bucket_name, tc_blob_path = parse_gcs_uri(f"{analysis_path}task_config.json")
         tc_bucket = storage_client.bucket(tc_bucket_name)
+        _, analysis_prefix = parse_gcs_uri(analysis_path)
+        _cleanup_stale_analysis_blobs(tc_bucket, analysis_prefix)
 
         tc_bucket.blob(tc_blob_path).upload_from_string(
             json.dumps(task_config, indent=2), content_type="application/json"

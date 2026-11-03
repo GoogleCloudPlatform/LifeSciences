@@ -122,9 +122,9 @@ class TestModelParamsLocation:
 
     def test_params_download_subdir_namespaced(self):
         """AlphaFold params download to alphafold2/params/ subdir."""
-        from foldrun_app.models.af2.tools.download_database import DATABASE_SUBDIRS
+        from foldrun_app.core.download import load_manifest
 
-        assert DATABASE_SUBDIRS["alphafold_params"] == "alphafold2/params"
+        assert load_manifest()["databases"]["alphafold_params"]["nfs_path"] == "alphafold2/params"
 
 
 # ------------------------------------------------------------------ #

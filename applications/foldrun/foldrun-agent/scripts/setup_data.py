@@ -81,8 +81,7 @@ def get_infra_params(config: CoreConfig) -> dict:
 
 def show_status(manifest):
     """Check which databases exist in GCS and display status."""
-    from foldrun_app.core.download import check_gcs_exists
-    from foldrun_app.models.af2.tools.download_database import MMSEQS2_INDEXABLE_DATABASES
+    from foldrun_app.core.download import MMSEQS2_INDEXABLE_DATABASES, check_gcs_exists
 
     config = (
         CoreConfig(env_path=_DEFAULT_ENV_PATH)

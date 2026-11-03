@@ -249,6 +249,46 @@ class TestSkillRegistry:
             assert skill.frontmatter.description
             assert len(skill.instructions) > 0
 
+    def test_all_skill_md_additional_tools_resolve_to_registered_tools(self, monkeypatch):
+        """Every tool in SKILL.md adk_additional_tools must exist in SkillRegistry."""
+        monkeypatch.setenv("OPENFOLD3_COMPONENTS_IMAGE", "test-of3:latest")
+        monkeypatch.setenv("BOLTZ2_COMPONENTS_IMAGE", "test-boltz2:latest")
+        monkeypatch.setenv(
+            "AF3_VERTEX_ENDPOINT", "projects/test-proj/locations/us-central1/endpoints/123"
+        )
+
+        full_registry = SkillRegistry()
+        compiled_tools = full_registry.compile_tools()
+        compiled_names = {
+            getattr(t, "name", None)
+            or getattr(getattr(t, "func", None), "__name__", None)
+            or str(t)
+            for t in compiled_tools
+        }
+
+        adk_skills = {s.frontmatter.name: s for s in full_registry.load_adk_skills()}
+        for skill_name, skill_pkg in adk_skills.items():
+            metadata = skill_pkg.frontmatter.metadata or {}
+            additional_tools = metadata.get("adk_additional_tools", [])
+            assert additional_tools, f"{skill_name} SKILL.md has empty adk_additional_tools"
+            missing = [t for t in additional_tools if t not in compiled_names]
+            assert not missing, f"{skill_name}/SKILL.md lists unregistered tools: {missing}"
+
+        jm_tools = set(adk_skills["job-management"].frontmatter.metadata["adk_additional_tools"])
+        assert {"check_job_status", "check_gpu_quota"}.issubset(jm_tools)
+        assert "cancel_job" not in jm_tools
+
+        ra_tools = set(adk_skills["results-analysis"].frontmatter.metadata["adk_additional_tools"])
+        assert {
+            "get_prediction_results",
+            "analyze_prediction_quality",
+            "analyze_job_parallel",
+            "get_analysis_results",
+            "analyze_job",
+        }.issubset(ra_tools)
+        assert "af2_analyze_job_parallel" not in ra_tools
+        assert "af2_get_analysis_results" not in ra_tools
+
     def test_get_skill_toolset(self):
         """get_skill_toolset returns a SkillToolset with loaded skills and candidate tools."""
         toolset = skill_registry.get_skill_toolset()

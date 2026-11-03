@@ -3,10 +3,11 @@ name: job-management
 description: Management, monitoring, quota checks, and safe deletion of FoldRun prediction jobs
 metadata:
   adk_additional_tools:
+    - check_job_status
     - list_jobs
     - get_job_details
-    - cancel_job
     - delete_job
+    - check_gpu_quota
     - check_af3_endpoint
 ---
 

@@ -23,7 +23,13 @@ from google.cloud import storage
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job
 
-ALLOWED_BASE_PREFIXES = ("pipeline_runs/", "fasta/")
+ALLOWED_BASE_PREFIXES = (
+    "pipeline_runs/",
+    "fasta/",
+    "of3_queries/",
+    "boltz2_queries/",
+    "af3_predictions/",
+)
 DISALLOWED_JOB_IDS = frozenset(
     {
         "pipeline",
@@ -32,6 +38,9 @@ DISALLOWED_JOB_IDS = frozenset(
         "runs",
         "run",
         "fasta",
+        "of3_queries",
+        "boltz2_queries",
+        "af3_predictions",
         "model",
         "models",
         "output",
@@ -40,9 +49,24 @@ DISALLOWED_JOB_IDS = frozenset(
         "data",
         "alphafold",
         "alphafold2",
+        "alphafold3",
+        "af3",
+        "openfold3",
+        "of3",
+        "boltz",
+        "boltz2",
     }
 )
 JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,127}$")
+_PIPELINE_TIMESTAMP_PREFIXES = (
+    "alphafold2-inference-pipeline-",
+    "alphafold-inference-pipeline-",
+    "alphafold3-inference-pipeline-",
+    "openfold3-inference-pipeline-",
+    "of3-inference-pipeline-",
+    "boltz2-inference-pipeline-",
+    "boltz-inference-pipeline-",
+)
 
 
 class AF2CleanupGCSFilesTool(AF2Tool):
@@ -240,6 +264,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
         job_name = None
         job_exists = True
         pipeline_root = None
+        job_input_blob = None
         try:
             job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
             job_name = job.display_name
@@ -254,6 +279,25 @@ class AF2CleanupGCSFilesTool(AF2Tool):
                     # Extract the path after gs://bucket/
                     if pipeline_root.startswith("gs://"):
                         pipeline_root = "/".join(pipeline_root.split("/")[3:])
+                param_vals = (
+                    dict(job.runtime_config.parameter_values)
+                    if getattr(job.runtime_config, "parameter_values", None)
+                    else {}
+                )
+                raw_input_uri = param_vals.get("sequence_path") or param_vals.get("query_json_path")
+                expected_bucket_prefix = f"gs://{self.config.bucket_name}/"
+                if isinstance(raw_input_uri, str) and raw_input_uri.startswith(
+                    expected_bucket_prefix
+                ):
+                    rel_blob = raw_input_uri[len(expected_bucket_prefix) :]
+                    segments = rel_blob.strip("/").split("/")
+                    if (
+                        rel_blob.startswith(ALLOWED_BASE_PREFIXES)
+                        and len(segments) >= 2
+                        and ".." not in segments
+                        and "." not in segments
+                    ):
+                        job_input_blob = rel_blob
         except Exception:
             # Job doesn't exist in Agent Platform anymore
             # Use job_id as job_name (user can pass the job name directly)
@@ -268,15 +312,12 @@ class AF2CleanupGCSFilesTool(AF2Tool):
             raise ValueError(f"Resolved job_name is invalid or overly generic: {job_name}")
 
         # Extract timestamp from job ID for timestamped directory search
-        # Job ID format: alphafold2-inference-pipeline-20251112172826 (new)
-        #                alphafold-inference-pipeline-20251112172826  (legacy)
+        # Job ID formats: {alphafold2,openfold3,boltz2,alphafold3}-inference-pipeline-20251112172826
         # Timestamped dir: pipeline_runs/20251112_172826/
         timestamp_search = None
-        if (
-            "alphafold2-inference-pipeline-" in job_id.lower()
-            or "alphafold-inference-pipeline-" in job_id.lower()
-        ):
-            timestamp = job_id.split("-")[-1]  # Get the timestamp part
+        lower_job_id = candidate_id.lower()
+        if any(prefix in lower_job_id for prefix in _PIPELINE_TIMESTAMP_PREFIXES):
+            timestamp = candidate_id.split("-")[-1]  # Get the timestamp part
             if timestamp.isdigit() and len(timestamp) >= 14:
                 # Format as YYYYMMDD_HHMMSS
                 timestamp_search = f"{timestamp[:8]}_{timestamp[8:]}"
@@ -362,21 +403,31 @@ class AF2CleanupGCSFilesTool(AF2Tool):
             except Exception as e:
                 found_files["timestamped_fallback_error"] = str(e)
 
-        # 3. Search for FASTA file
-        fasta_path = f"fasta/{job_name}.fasta"
+        # 3. Search for input query files (AF2 FASTA, OF3 JSON, Boltz-2 YAML)
+        candidate_input_paths = [
+            f"fasta/{job_name}.fasta",
+            f"of3_queries/{job_name}.json",
+            f"boltz2_queries/{job_name}.yaml",
+        ]
+        if job_input_blob and job_input_blob not in candidate_input_paths:
+            candidate_input_paths.append(job_input_blob)
+
         try:
-            fasta_blob = bucket.blob(fasta_path)
-            if fasta_blob.exists():
-                found_files["fasta"].append(
-                    {
-                        "path": f"gs://{self.config.bucket_name}/{fasta_path}",
-                        "size_bytes": fasta_blob.size,
-                        "size_mb": round(fasta_blob.size / (1024 * 1024), 2),
-                        "updated": fasta_blob.updated.isoformat() if fasta_blob.updated else None,
-                    }
-                )
-                if include_fasta:
-                    found_files["total_size_bytes"] += fasta_blob.size
+            for input_blob_path in candidate_input_paths:
+                input_blob = bucket.blob(input_blob_path)
+                if input_blob.exists():
+                    found_files["fasta"].append(
+                        {
+                            "path": f"gs://{self.config.bucket_name}/{input_blob_path}",
+                            "size_bytes": input_blob.size,
+                            "size_mb": round(input_blob.size / (1024 * 1024), 2),
+                            "updated": input_blob.updated.isoformat()
+                            if input_blob.updated
+                            else None,
+                        }
+                    )
+                    if include_fasta:
+                        found_files["total_size_bytes"] += input_blob.size
         except Exception as e:
             found_files["fasta_search_error"] = str(e)
 

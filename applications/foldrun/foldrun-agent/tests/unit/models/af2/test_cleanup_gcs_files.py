@@ -206,6 +206,73 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
             ["gs://test-af2-bucket/pipeline_runs/20260101_120000/job_alpha/output.pdb"],
         )
 
+    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    def test_delete_paths_allows_of3_and_boltz2_query_files(self, mock_storage_client):
+        """Allow cleanup of of3_queries/ and boltz2_queries/ subpaths."""
+        mock_bucket = MagicMock()
+        mock_storage_client.return_value.bucket.return_value = mock_bucket
+        mock_blob = MagicMock()
+        mock_blob.size = 512
+        mock_blob.exists.return_value = True
+        mock_bucket.blob.return_value = mock_blob
+
+        result = self.tool._delete_paths(
+            [
+                "gs://test-af2-bucket/of3_queries/job_of3.json",
+                "gs://test-af2-bucket/boltz2_queries/job_boltz2.yaml",
+            ],
+            search_only=True,
+            confirm_delete=False,
+        )
+        self.assertEqual(result["files_found"], 2)
+
+        for root_prefix in [
+            "gs://test-af2-bucket/of3_queries/",
+            "gs://test-af2-bucket/boltz2_queries/",
+        ]:
+            with self.assertRaises(ValueError):
+                self.tool._delete_paths([root_prefix], search_only=True, confirm_delete=False)
+
+    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.get_pipeline_job")
+    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    def test_cleanup_job_discovers_boltz2_timestamp_and_query_yaml(
+        self, mock_storage_client, mock_get_job
+    ):
+        """Extract timestamp for boltz2-inference-pipeline-* and find query YAML."""
+        mock_get_job.side_effect = RuntimeError("Deleted from Vertex")
+        mock_bucket = MagicMock()
+        mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+        pipeline_blob = MagicMock()
+        pipeline_blob.name = "pipeline_runs/20260203_141516/model_0.cif"
+        pipeline_blob.size = 4096
+        pipeline_blob.updated = None
+        mock_bucket.list_blobs.return_value = [pipeline_blob]
+
+        def blob_side_effect(blob_path: str):
+            b = MagicMock()
+            b.name = blob_path
+            b.size = 256
+            b.updated = None
+            b.exists.return_value = blob_path.endswith(".yaml")
+            return b
+
+        mock_bucket.blob.side_effect = blob_side_effect
+
+        result = self.tool._cleanup_job(
+            job_id="boltz2-inference-pipeline-20260203141516",
+            search_only=True,
+            confirm_delete=False,
+            include_fasta=True,
+        )
+        self.assertEqual(result["summary"]["pipeline_files"], 1)
+        self.assertEqual(result["summary"]["fasta_files"], 1)
+        self.assertTrue(
+            result["files_found"]["fasta"][0]["path"].endswith(
+                "boltz2_queries/boltz2-inference-pipeline-20260203141516.yaml"
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

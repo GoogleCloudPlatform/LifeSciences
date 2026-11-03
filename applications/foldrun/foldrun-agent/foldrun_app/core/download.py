@@ -41,6 +41,28 @@ logger = logging.getLogger(__name__)
 DATABASES_YAML = Path(__file__).parent.parent.parent / "databases.yaml"
 BUNDLED_DATABASES_YAML = Path(__file__).parent.parent / "databases.yaml"
 
+# Databases that support MMseqs2 GPU indexing (FASTA format only).
+MMSEQS2_INDEXABLE_DATABASES = {
+    "uniref90": {
+        "fasta_file": "uniref90.fasta",
+        "mmseqs_name": "uniref90_mmseqs",
+        "index_splits": 1,
+    },
+    "mgnify": {
+        "fasta_file": "mgy_clusters_2022_05.fa",
+        "mmseqs_name": "mgnify_mmseqs",
+        "index_splits": 1,
+    },
+    "small_bfd": {
+        "fasta_file": "bfd-first_non_consensus_sequences.fasta",
+        "mmseqs_name": "small_bfd_mmseqs",
+        "index_splits": 1,
+    },
+}
+
+MMSEQS2_MACHINE_TYPE = "n1-highmem-32"
+MMSEQS2_LOCAL_SSD_COUNT = 2
+
 
 def _get_models(db_config: dict[str, Any]) -> list[str]:
     """Get the list of models for a database entry.
@@ -420,4 +442,130 @@ def submit_downloads(
         "skipped_count": len(skipped),
         "error_count": len(errors),
         "jobs": results,
+    }
+
+
+def submit_mmseqs2_conversions(
+    project_id: str,
+    region: str,
+    zone: str,
+    filestore_ip: str,
+    filestore_network: str,
+    nfs_share: str,
+    nfs_mount: str,
+    gcs_bucket: str,
+    databases: list[str] | None = None,
+    machine_type: str | None = None,
+    manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Submit Cloud Batch jobs to build MMseqs2 GPU indexes on local NVMe RAID-0."""
+    target_dbs = databases or list(MMSEQS2_INDEXABLE_DATABASES.keys())
+    invalid = [db for db in target_dbs if db not in MMSEQS2_INDEXABLE_DATABASES]
+    if invalid:
+        return {
+            "status": "error",
+            "message": (
+                f"Invalid database(s): {', '.join(invalid)}. "
+                f"Supported: {', '.join(MMSEQS2_INDEXABLE_DATABASES.keys())}"
+            ),
+        }
+
+    if manifest is None:
+        manifest = load_manifest()
+    databases_config = manifest.get("databases", {})
+
+    results = []
+    for db_name in target_dbs:
+        db_info = MMSEQS2_INDEXABLE_DATABASES[db_name]
+        subdir = databases_config.get(db_name, {}).get("nfs_path", db_name)
+        fasta_path = f"{nfs_mount}/{subdir}/{db_info['fasta_file']}"
+        mmseqs_path = f"{nfs_mount}/{subdir}/{db_info['mmseqs_name']}"
+        resolved_machine = machine_type or MMSEQS2_MACHINE_TYPE
+        index_splits = db_info.get("index_splits", 1)
+        local_mmseqs = f"/mnt/localssd/{db_info['mmseqs_name']}"
+
+        script = "\n".join(
+            [
+                "set -e",
+                "echo '=== Setting up local SSD RAID-0 (750 GB) ==='",
+                "apt-get update -qq",
+                "apt-get install -y -qq mdadm python3-crcmod 2>/dev/null || true",
+                "mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme0n1 /dev/nvme0n2 --force --run",
+                "mkfs.ext4 -F /dev/md0",
+                "mkdir -p /mnt/localssd",
+                "mount /dev/md0 /mnt/localssd",
+                "export TMPDIR=/mnt/localssd/tmp && mkdir -p $TMPDIR",
+                f"echo '=== Cleaning up previous MMseqs2 files for {db_name} ==='",
+                f"rm -f '{mmseqs_path}' '{mmseqs_path}'.*  '{mmseqs_path}_h' '{mmseqs_path}_h'.*",
+                f"rm -f '{mmseqs_path}_tmp' '{mmseqs_path}_tmp'.* '{mmseqs_path}_tmp_h' '{mmseqs_path}_tmp_h'.*",
+                "echo '=== Installing MMseqs2 ==='",
+                "wget -q -O- https://mmseqs.com/latest/mmseqs-linux-avx2.tar.gz | tar xz -C /mnt/localssd",
+                "MMSEQS=/mnt/localssd/mmseqs/bin/mmseqs",
+                f"echo '=== Converting {db_name} on local SSD ==='",
+                f"if [ -f '{fasta_path}' ]; then",
+                f"  $MMSEQS createdb '{fasta_path}' '{local_mmseqs}_tmp'",
+                f"  echo '{db_name}: makepaddedseqdb'",
+                f"  $MMSEQS makepaddedseqdb '{local_mmseqs}_tmp' '{local_mmseqs}'",
+                f"  rm -f '{local_mmseqs}_tmp' '{local_mmseqs}_tmp'.* '{local_mmseqs}_tmp_h' '{local_mmseqs}_tmp_h'.*",
+                f"  echo '{db_name}: createindex (--split {index_splits}, fully on local SSD)'",
+                f"  $MMSEQS createindex '{local_mmseqs}' /mnt/localssd/tmp --split {index_splits} --index-subset 2 --remove-tmp-files 1",
+                f"  echo '{db_name}: copying results to NFS'",
+                f"  cp {local_mmseqs}* {nfs_mount}/{subdir}/",
+                f"  echo '{db_name}: done'",
+                "else",
+                f"  echo '{db_name}: FASTA not found at {fasta_path}, skipping'",
+                "  exit 1",
+                "fi",
+                "echo '=== Syncing to GCS ==='",
+                f"gcloud storage rsync --recursive {shlex.quote(f'{nfs_mount}/{subdir}/')} {shlex.quote(f'gs://{gcs_bucket}/{subdir}/')} 2>&1",
+                f"echo '=== {db_name} conversion complete ==='",
+            ]
+        )
+
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        clean_name = _clean_label(db_name).replace("_", "-")
+        job_id = f"af2-mmseqs2-{clean_name}-{timestamp}"[:62].rstrip("-")
+
+        try:
+            result = batch_utils.submit_batch_job(
+                project_id=project_id,
+                region=region,
+                zone=zone,
+                job_id=job_id,
+                script=script,
+                machine_type=resolved_machine,
+                filestore_ip=filestore_ip,
+                filestore_network=filestore_network,
+                nfs_share=nfs_share,
+                nfs_mount=nfs_mount,
+                labels={
+                    "task": "mmseqs2-conversion",
+                    "database": _clean_label(db_name),
+                    "submitted-by": "foldrun",
+                },
+                local_ssd_count=MMSEQS2_LOCAL_SSD_COUNT,
+            )
+            result["status"] = "submitted"
+            result["database_name"] = db_name
+            results.append(result)
+        except Exception as e:
+            logger.error(f"Failed to submit MMseqs2 conversion for {db_name}: {e}", exc_info=True)
+            results.append(
+                {
+                    "status": "error",
+                    "database_name": db_name,
+                    "message": f"Failed to submit: {e!s}",
+                }
+            )
+
+    submitted = [r for r in results if r.get("status") == "submitted"]
+    failed = [r for r in results if r.get("status") == "error"]
+
+    return {
+        "status": "submitted" if submitted else "error",
+        "jobs": results,
+        "summary": (
+            f"Submitted {len(submitted)} parallel conversion job(s)"
+            + (f", {len(failed)} failed to submit" if failed else "")
+        ),
     }

@@ -70,19 +70,21 @@ class TestDownloadScriptsMMseqs2:
 
     def test_download_scripts_are_download_only(self):
         """Download scripts should NOT include mmseqs createdb (conversion is separate)."""
-        from foldrun_app.core.download import build_script
-        from foldrun_app.models.af2.tools.download_database import DATABASE_REGISTRY
+        from foldrun_app.core.download import _get_models, build_script, load_manifest
 
-        for db_name, db_info in DATABASE_REGISTRY.items():
+        databases = load_manifest().get("databases", {})
+        for db_name, db_info in databases.items():
+            if "af2" not in _get_models(db_info):
+                continue
             script = build_script(db_name, db_info, "/tmp/test")
             assert "mmseqs createdb" not in script, (
                 f"Download script for '{db_name}' should not include mmseqs createdb "
-                "(conversion is handled by ConvertMMseqs2Tool in a separate batch job)"
+                "(conversion is handled by submit_mmseqs2_conversions in a separate batch job)"
             )
 
     def test_indexable_databases_flag_conversion_needed(self):
         """MMSEQS2-indexable databases signal that conversion is needed."""
-        from foldrun_app.models.af2.tools.download_database import (
+        from foldrun_app.core.download import (
             MMSEQS2_INDEXABLE_DATABASES,
             MMSEQS2_LOCAL_SSD_COUNT,
             MMSEQS2_MACHINE_TYPE,
@@ -96,13 +98,13 @@ class TestDownloadScriptsMMseqs2:
 
     def test_mmseqs2_indexable_databases_registry(self):
         """MMSEQS2_INDEXABLE_DATABASES contains exactly 3 FASTA databases."""
-        from foldrun_app.models.af2.tools.download_database import MMSEQS2_INDEXABLE_DATABASES
+        from foldrun_app.core.download import MMSEQS2_INDEXABLE_DATABASES
 
         assert set(MMSEQS2_INDEXABLE_DATABASES.keys()) == {"uniref90", "mgnify", "small_bfd"}
 
     def test_mmseqs2_indexable_databases_have_required_keys(self):
         """Each indexable database entry has fasta_file and mmseqs_name."""
-        from foldrun_app.models.af2.tools.download_database import MMSEQS2_INDEXABLE_DATABASES
+        from foldrun_app.core.download import MMSEQS2_INDEXABLE_DATABASES
 
         for db_name, info in MMSEQS2_INDEXABLE_DATABASES.items():
             assert "fasta_file" in info, f"{db_name} missing fasta_file"
@@ -112,120 +114,47 @@ class TestDownloadScriptsMMseqs2:
         """Default download machine type is n1-standard-4 (cheap, network-bound)."""
         import inspect
 
-        from foldrun_app.models.af2.tools.download_database import DownloadDatabaseTool
+        from foldrun_app.core.download import submit_download
 
-        source = inspect.getsource(DownloadDatabaseTool.run)
+        source = inspect.getsource(submit_download)
         assert "n1-standard-4" in source
 
     def test_index_splits_are_single_pass(self):
         """All indexable databases use --split 1 (single-pass on n1-highmem-32)."""
-        from foldrun_app.models.af2.tools.download_database import MMSEQS2_INDEXABLE_DATABASES
+        from foldrun_app.core.download import MMSEQS2_INDEXABLE_DATABASES
 
         for db_name, info in MMSEQS2_INDEXABLE_DATABASES.items():
             assert info.get("index_splits", 1) == 1, (
                 f"{db_name} should use index_splits=1 for single-pass indexing"
             )
 
+    def test_submit_download_does_not_chain_conversion(self):
+        """submit_download script should not contain createdb/createindex."""
+        from foldrun_app.core.download import load_manifest, submit_download
 
-# ------------------------------------------------------------------ #
-# Download tool response flags
-# ------------------------------------------------------------------ #
+        mgnify_cfg = load_manifest()["databases"]["mgnify"]
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
+            submit_download(
+                db_name="mgnify",
+                db_config=mgnify_cfg,
+                project_id="proj",
+                region="us-central1",
+                zone="us-central1-a",
+                filestore_ip="10.0.0.1",
+                filestore_network="projects/123/global/networks/default",
+                nfs_share="/datasets",
+                nfs_mount="/mnt/nfs/foldrun",
+                gcs_bucket="db-bucket",
+            )
 
-
-class TestDownloadToolResponse:
-    """Verify download tool returns correct MMseqs2 conversion hints."""
-
-    def _make_tool(self, mock_env_vars):
-        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
-            from foldrun_app.models.af2.config import Config
-            from foldrun_app.models.af2.tools.download_database import DownloadDatabaseTool
-
-            tool_config = {"name": "download_database", "description": "test"}
-            config = Config()
-            return DownloadDatabaseTool(tool_config, config)
-
-    def test_indexable_db_returns_conversion_hint(self, mock_env_vars):
-        """Download of MMseqs2-indexable DB returns mmseqs2_conversion_available flag."""
-        tool = self._make_tool(mock_env_vars)
-
-        with (
-            patch.object(
-                tool,
-                "_get_filestore_info",
-                return_value=("10.0.0.1", "projects/123/global/networks/default"),
-            ),
-            patch("google.cloud.compute_v1.SubnetworksClient") as mock_subnets,
-        ):
-            mock_subnet = MagicMock()
-            mock_subnet.name = "test-subnet"
-            mock_subnet.network = "projects/123/global/networks/default"
-            mock_subnets.return_value.list.return_value = [mock_subnet]
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
-                result = tool.run({"database_name": "uniref90"})
-
-                assert result.get("mmseqs2_conversion_available") is True
-                assert "mmseqs2_note" in result
-
-    def test_non_indexable_db_no_conversion_hint(self, mock_env_vars):
-        """Download of non-indexable DB does not include conversion flag."""
-        tool = self._make_tool(mock_env_vars)
-
-        with (
-            patch.object(
-                tool,
-                "_get_filestore_info",
-                return_value=("10.0.0.1", "projects/123/global/networks/default"),
-            ),
-            patch("google.cloud.compute_v1.SubnetworksClient") as mock_subnets,
-        ):
-            mock_subnet = MagicMock()
-            mock_subnet.name = "test-subnet"
-            mock_subnet.network = "projects/123/global/networks/default"
-            mock_subnets.return_value.list.return_value = [mock_subnet]
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
-                result = tool.run({"database_name": "pdb70"})
-
-                assert "mmseqs2_conversion_available" not in result
-                assert "mmseqs2_note" not in result
-
-    def test_download_does_not_chain_conversion(self, mock_env_vars):
-        """Download tool script should not contain createdb/createindex."""
-        tool = self._make_tool(mock_env_vars)
-
-        with (
-            patch.object(
-                tool,
-                "_get_filestore_info",
-                return_value=("10.0.0.1", "projects/123/global/networks/default"),
-            ),
-            patch("google.cloud.compute_v1.SubnetworksClient") as mock_subnets,
-        ):
-            mock_subnet = MagicMock()
-            mock_subnet.name = "test-subnet"
-            mock_subnet.network = "projects/123/global/networks/default"
-            mock_subnets.return_value.list.return_value = [mock_subnet]
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
-                tool.run({"database_name": "mgnify"})
-
-                script = mock_submit.call_args[1]["script"]
-                assert "createdb" not in script, "Download should not chain MMseqs2 conversion"
-                assert "createindex" not in script, "Download should not chain MMseqs2 conversion"
-                assert "localssd" not in script, "Download should not use local SSD"
+            script = mock_submit.call_args[1]["script"]
+            assert "createdb" not in script, "Download should not chain MMseqs2 conversion"
+            assert "createindex" not in script, "Download should not chain MMseqs2 conversion"
 
 
 # ------------------------------------------------------------------ #
@@ -303,212 +232,103 @@ class TestNetworkQualification:
 
 
 # ------------------------------------------------------------------ #
-# Conversion tool local SSD count
+# submit_mmseqs2_conversions validation & local SSD configuration
 # ------------------------------------------------------------------ #
 
 
-class TestConversionLocalSSD:
-    """Verify conversion jobs request local SSDs."""
+class TestSubmitMMseqs2Conversions:
+    """Tests for foldrun_app.core.download.submit_mmseqs2_conversions."""
 
-    def _make_tool(self, mock_env_vars):
-        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
-            from foldrun_app.models.af2.config import Config
-            from foldrun_app.models.af2.tools.download_database import ConvertMMseqs2Tool
+    def _call_convert(self, databases=None):
+        from foldrun_app.core.download import submit_mmseqs2_conversions
 
-            tool_config = {"name": "af2_convert_mmseqs2", "description": "test"}
-            config = Config()
-            return ConvertMMseqs2Tool(tool_config, config)
+        return submit_mmseqs2_conversions(
+            project_id="test-proj",
+            region="us-central1",
+            zone="us-central1-a",
+            filestore_ip="10.0.0.1",
+            filestore_network="projects/123/global/networks/default",
+            nfs_share="/datasets",
+            nfs_mount="/mnt/nfs/foldrun",
+            gcs_bucket="test-databases-bucket",
+            databases=databases,
+        )
 
-    def test_conversion_passes_local_ssd_count(self, mock_env_vars):
-        """Conversion jobs pass MMSEQS2_LOCAL_SSD_COUNT to _submit_batch_job."""
-        from foldrun_app.models.af2.tools.download_database import MMSEQS2_LOCAL_SSD_COUNT
+    def test_conversion_passes_local_ssd_count(self):
+        """Conversion jobs pass MMSEQS2_LOCAL_SSD_COUNT to submit_batch_job."""
+        from foldrun_app.core.download import MMSEQS2_LOCAL_SSD_COUNT
 
-        tool = self._make_tool(mock_env_vars)
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
+            self._call_convert(databases=["uniref90"])
+            assert mock_submit.call_args[1]["local_ssd_count"] == MMSEQS2_LOCAL_SSD_COUNT
+            assert MMSEQS2_LOCAL_SSD_COUNT == 2
 
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
-                tool.run({"databases": ["uniref90"]})
-
-                assert mock_submit.call_args[1]["local_ssd_count"] == MMSEQS2_LOCAL_SSD_COUNT
-                assert MMSEQS2_LOCAL_SSD_COUNT == 2
-
-
-# ------------------------------------------------------------------ #
-# ConvertMMseqs2Tool validation
-# ------------------------------------------------------------------ #
-
-
-class TestConvertMMseqs2Tool:
-    """Tests for ConvertMMseqs2Tool validation logic."""
-
-    def _make_tool(self, mock_env_vars):
-        """Create a tool instance with mocked dependencies."""
-        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
-            from foldrun_app.models.af2.config import Config
-            from foldrun_app.models.af2.tools.download_database import ConvertMMseqs2Tool
-
-            tool_config = {"name": "af2_convert_mmseqs2", "description": "test"}
-            config = Config()
-            return ConvertMMseqs2Tool(tool_config, config)
-
-    def test_invalid_database_returns_error(self, mock_env_vars):
-        """Invalid database names return error status."""
-        tool = self._make_tool(mock_env_vars)
-        result = tool.run({"databases": ["invalid_db"]})
-
+    def test_invalid_database_returns_error(self):
+        result = self._call_convert(databases=["invalid_db"])
         assert result["status"] == "error"
         assert "invalid_db" in result["message"]
 
-    def test_mixed_valid_invalid_returns_error(self, mock_env_vars):
-        """Mix of valid and invalid database names returns error."""
-        tool = self._make_tool(mock_env_vars)
-        result = tool.run({"databases": ["uniref90", "bfd"]})
-
+    def test_mixed_valid_invalid_returns_error(self):
+        result = self._call_convert(databases=["uniref90", "bfd"])
         assert result["status"] == "error"
         assert "bfd" in result["message"]
 
-    def test_default_databases_when_none(self, mock_env_vars):
-        """When databases is None, submits one job per indexable database (3 total)."""
-        tool = self._make_tool(mock_env_vars)
+    def test_default_databases_when_none(self):
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
+            result = self._call_convert(databases=None)
+            assert mock_submit.call_count == 3
+            job_ids = [call[1]["job_id"] for call in mock_submit.call_args_list]
+            assert any("uniref90" in jid for jid in job_ids)
+            assert any("mgnify" in jid for jid in job_ids)
+            assert any("small-bfd" in jid for jid in job_ids)
+            assert result["status"] == "submitted"
+            assert len(result["jobs"]) == 3
 
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
+    def test_specific_databases_only(self):
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
+            result = self._call_convert(databases=["uniref90"])
+            assert mock_submit.call_count == 1
+            assert "uniref90" in mock_submit.call_args[1]["job_id"]
+            assert len(result["jobs"]) == 1
 
-                result = tool.run({})
-
-                # Should submit 3 parallel jobs, one per database
-                assert mock_submit.call_count == 3
-                job_ids = [call[1]["job_id"] for call in mock_submit.call_args_list]
-                assert any("uniref90" in jid for jid in job_ids)
-                assert any("mgnify" in jid for jid in job_ids)
-                assert any("small-bfd" in jid for jid in job_ids)
-                assert result["status"] == "submitted"
-                assert len(result["jobs"]) == 3
-
-    def test_specific_databases_only(self, mock_env_vars):
-        """Only requested databases get a conversion job."""
-        tool = self._make_tool(mock_env_vars)
-
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
-
-                result = tool.run({"databases": ["uniref90"]})
-
-                assert mock_submit.call_count == 1
-                assert "uniref90" in mock_submit.call_args[1]["job_id"]
-                assert len(result["jobs"]) == 1
-
-    def test_conversion_script_includes_gpu_preparation(self, mock_env_vars):
-        """Conversion script includes makepaddedseqdb and createindex for GPU readiness."""
-        tool = self._make_tool(mock_env_vars)
-
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
-
-                tool.run({"databases": ["uniref90"]})
-
-                # Extract the script from the submitted batch job
-                script = mock_submit.call_args[1]["script"]
-
-                # Should set up local SSD RAID-0 for fast scratch I/O
-                assert "RAID-0" in script, "Script must set up local SSD RAID-0"
-                assert "mdadm" in script, "Script must use mdadm for RAID"
-                assert "/mnt/localssd" in script, "Script must mount local SSD"
-                # Should create temp db, then pad it, then index it
-                assert "createdb" in script
-                assert "_tmp'" in script, "createdb should write to a _tmp path"
-                assert "makepaddedseqdb" in script, (
-                    "Script must include makepaddedseqdb for GPU support"
-                )
-                assert "createindex" in script, (
-                    "Script must include createindex for GPU k-mer index"
-                )
-                assert "--split 1" in script, (
-                    "uniref90 should use --split 1 (single-pass on n1-highmem-32)"
-                )
-                assert "--index-subset 2" in script
-                assert "--remove-tmp-files 1" in script, (
-                    "createindex must clean up intermediates during build"
-                )
-                # Should copy results to NFS and clean up
-                assert "cp " in script and "localssd" in script, (
-                    "Must copy results from local SSD to NFS"
-                )
-                assert "rm -f" in script and "_tmp" in script
-
-    def test_conversion_script_cleanup_includes_tmp(self, mock_env_vars):
-        """Pre-cleanup section removes both final and _tmp artifacts on retry."""
-        tool = self._make_tool(mock_env_vars)
-
-        with patch.object(
-            tool,
-            "_get_filestore_info",
-            return_value=("10.0.0.1", "projects/123/global/networks/default"),
-        ):
-            with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
-                mock_submit.return_value = {
-                    "job_id": "test-123",
-                    "job_name": "test",
-                    "console_url": "http://test",
-                }
-
-                tool.run({"databases": ["uniref90"]})
-
-                script = mock_submit.call_args[1]["script"]
-
-                # Pre-cleanup should handle both the final db and _tmp artifacts
-                lines = script.split("\n")
-                cleanup_lines = [
-                    line for line in lines if "rm -f" in line and "Cleaning" not in line
-                ]
-                tmp_cleanup = [line for line in cleanup_lines if "_tmp" in line]
-                assert len(tmp_cleanup) >= 1, "Should clean up _tmp files from failed previous runs"
-
-    def test_filestore_failure_returns_error(self, mock_env_vars):
-        """Filestore info failure returns error status."""
-        tool = self._make_tool(mock_env_vars)
-
-        with patch.object(tool, "_get_filestore_info", side_effect=Exception("No Filestore")):
-            result = tool.run({"databases": ["uniref90"]})
-
-            assert result["status"] == "error"
-            assert "Filestore" in result["message"]
+    def test_conversion_script_includes_gpu_preparation_and_tmp_cleanup(self):
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "test-123",
+                "job_name": "test",
+                "console_url": "http://test",
+            }
+            self._call_convert(databases=["uniref90"])
+            script = mock_submit.call_args[1]["script"]
+            assert "RAID-0" in script
+            assert "mdadm" in script
+            assert "/mnt/localssd" in script
+            assert "createdb" in script
+            assert "_tmp'" in script
+            assert "makepaddedseqdb" in script
+            assert "createindex" in script
+            assert "--split 1" in script
+            assert "--index-subset 2" in script
+            assert "--remove-tmp-files 1" in script
+            cleanup_lines = [
+                line for line in script.split("\n") if "rm -f" in line and "Cleaning" not in line
+            ]
+            assert any("_tmp" in line for line in cleanup_lines)
 
 
 # ------------------------------------------------------------------ #

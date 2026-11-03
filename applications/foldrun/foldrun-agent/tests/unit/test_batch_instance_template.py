@@ -16,7 +16,11 @@
 
 from unittest.mock import MagicMock, patch
 
-from foldrun_app.core.batch import get_or_create_instance_template
+from foldrun_app.core.batch import (
+    get_machine_resources,
+    get_or_create_instance_template,
+    submit_batch_job,
+)
 
 
 def _make_mock_template(name: str, network: str, subnet: str, self_link: str) -> MagicMock:
@@ -167,3 +171,58 @@ class TestInstanceTemplateIsolation:
 
         assert link == existing.self_link
         client.insert.assert_not_called()
+
+
+class TestMachineResourceSizing:
+    """Verify Cloud Batch CPU and RAM sizing across GCE machine families."""
+
+    def test_n2d_standard_4_fits_within_16_gib_ram(self):
+        """boltz2_cache uses n2d-standard-4 (4 vCPU, 16 GiB = 16,384 MiB physical RAM)."""
+        cpu_milli, memory_mib = get_machine_resources("n2d-standard-4")
+        assert cpu_milli == 4000
+        assert memory_mib == 16000
+        assert memory_mib < 16384
+
+    def test_n2d_standard_8_uses_all_8_vcpus(self):
+        """Database downloads on n2d-standard-8 must allocate 8000 cpu_milli, not 4000."""
+        cpu_milli, memory_mib = get_machine_resources("n2d-standard-8")
+        assert cpu_milli == 8000
+        assert memory_mib == 32000
+
+    def test_n1_and_modern_families(self):
+        assert get_machine_resources("n1-standard-4") == (4000, 15000)
+        assert get_machine_resources("n1-highmem-32") == (32000, 208000)
+        assert get_machine_resources("c2-standard-16") == (16000, 64000)
+        assert get_machine_resources("e2-highcpu-8") == (8000, 8000)
+        assert get_machine_resources("c3-standard-8-lssd") == (8000, 32000)
+        assert get_machine_resources("n2d-custom-8-32768") == (8000, 32000)
+        assert get_machine_resources("unknown-type") == (4000, 15000)
+
+    @patch("foldrun_app.core.batch.get_or_create_instance_template")
+    @patch("foldrun_app.core.batch.batch_v1.BatchServiceClient")
+    def test_submit_batch_job_wires_computed_cpu_and_memory(self, mock_batch_cls, mock_get_tmpl):
+        mock_get_tmpl.return_value = "projects/p/global/instanceTemplates/t"
+        mock_client = MagicMock()
+        mock_created = MagicMock()
+        mock_created.name = "projects/p/locations/us-central1/jobs/j1"
+        mock_client.create_job.return_value = mock_created
+        mock_batch_cls.return_value = mock_client
+
+        submit_batch_job(
+            project_id="p",
+            region="us-central1",
+            zone="us-central1-a",
+            job_id="j1",
+            script="echo ok",
+            machine_type="n2d-standard-8",
+            filestore_ip="10.0.0.2",
+            filestore_network="projects/123/global/networks/default",
+            nfs_share="/datasets",
+            nfs_mount="/mnt/nfs/foldrun",
+            subnet_name="default",
+        )
+
+        req = mock_client.create_job.call_args.kwargs["request"]
+        cr = req.job.task_groups[0].task_spec.compute_resource
+        assert cr.cpu_milli == 8000
+        assert cr.memory_mib == 32000

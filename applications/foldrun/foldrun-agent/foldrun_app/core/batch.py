@@ -20,13 +20,14 @@ Provides NFS-mounted Batch job submission for any model's download tools.
 import hashlib
 import logging
 import os
+import re
 from typing import Any
 
 from google.cloud import batch_v1
 
 logger = logging.getLogger(__name__)
 
-# Machine type -> memory in MiB (Batch defaults to 2GB without this)
+# Machine type -> memory in MiB (~1000 MiB per GiB leaves ~2.4% headroom for OS/Batch agent)
 MACHINE_MEMORY_MB = {
     "n1-standard-4": 15000,
     "n1-standard-8": 30000,
@@ -36,6 +37,64 @@ MACHINE_MEMORY_MB = {
     "n1-highmem-16": 104000,
     "n1-highmem-32": 208000,
 }
+
+_CUSTOM_MACHINE_RE = re.compile(r"^(?:[a-z][a-z0-9]*-)?custom-(\d+)-(\d+)(?:-ext)?$")
+_STANDARD_MACHINE_RE = re.compile(
+    r"^([a-z][a-z0-9]*)-(standard|highmem|highcpu|megamem|ultramem|hypermem)-(\d+)(?:-[a-z0-9]+)*$"
+)
+_N1_GB_PER_VCPU = {
+    "standard": 3.75,
+    "highmem": 6.5,
+    "highcpu": 0.9,
+    "megamem": 14.933333,
+    "ultramem": 24.025,
+}
+_MODERN_GB_PER_VCPU = {
+    "standard": 4.0,
+    "highmem": 8.0,
+    "highcpu": 1.0,
+    "megamem": 14.0,
+    "ultramem": 24.0,
+    "hypermem": 16.0,
+}
+
+
+def get_machine_resources(machine_type: str) -> tuple[int, int]:
+    """Compute (cpu_milli, memory_mib) for a GCE machine type.
+
+    Uses ~1000 MiB per GiB of physical VM RAM (~97.6% of total MiB) so Cloud Batch
+    tasks never exceed usable host memory after kernel/agent reservation.
+    """
+    mt = (machine_type or "").strip().lower()
+
+    custom_match = _CUSTOM_MACHINE_RE.match(mt)
+    if custom_match:
+        vcpus = int(custom_match.group(1))
+        raw_mib = int(custom_match.group(2))
+        memory_mib = MACHINE_MEMORY_MB.get(mt, max(1024, (raw_mib * 1000) // 1024))
+        return vcpus * 1000, memory_mib
+
+    std_match = _STANDARD_MACHINE_RE.match(mt)
+    if std_match:
+        family, tier, vcpus_str = std_match.groups()
+        vcpus = int(vcpus_str)
+        if mt in MACHINE_MEMORY_MB:
+            return vcpus * 1000, MACHINE_MEMORY_MB[mt]
+        if family == "n1":
+            gb_per_vcpu = _N1_GB_PER_VCPU.get(tier, 3.75)
+        elif tier == "highcpu" and family in ("c2d", "c3", "c3d", "c4"):
+            gb_per_vcpu = 2.0
+        else:
+            gb_per_vcpu = _MODERN_GB_PER_VCPU.get(tier, 4.0)
+        return vcpus * 1000, round(vcpus * gb_per_vcpu * 1000)
+
+    if mt in MACHINE_MEMORY_MB:
+        return 4000, MACHINE_MEMORY_MB[mt]
+
+    logger.warning(
+        f"Unrecognized machine_type '{machine_type}', defaulting Batch compute_resource to 4 vCPU / 15000 MiB"
+    )
+    return 4000, 15000
 
 
 def filestore_location_candidates(
@@ -324,11 +383,7 @@ def submit_batch_job(
     task_spec.max_run_duration = "86400s"
 
     compute_resource = batch_v1.ComputeResource()
-    if machine_type.startswith("n1-"):
-        compute_resource.cpu_milli = int(machine_type.split("-")[-1]) * 1000
-    else:
-        compute_resource.cpu_milli = 4000
-    compute_resource.memory_mib = MACHINE_MEMORY_MB.get(machine_type, 30000)
+    compute_resource.cpu_milli, compute_resource.memory_mib = get_machine_resources(machine_type)
     task_spec.compute_resource = compute_resource
 
     nfs_volume = batch_v1.Volume()

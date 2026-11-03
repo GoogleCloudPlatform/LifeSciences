@@ -87,7 +87,7 @@ class AF2SubmitMonomerTool(AF2Tool):
                 }
             logger.info(
                 "MMseqs2 requested — requires pre-built MMseqs2 indexes on NFS. "
-                "If indexes are missing, run ConvertMMseqs2Tool first."
+                "If indexes are missing, run './deploy-all.sh <PROJECT_ID> <REGION> --steps convert' first."
             )
 
         # Validate and prepare FASTA

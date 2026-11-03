@@ -77,7 +77,7 @@ class TestToolRegistry:
             get_tool("af2_submit_monomer")
 
             expected_tools = [
-                # AF2 tools (19 from JSON + 1 dynamic)
+                # AF2 tools (18 from JSON + 1 dynamic)
                 "af2_submit_monomer",
                 "af2_submit_multimer",
                 "af2_submit_batch",
@@ -90,7 +90,6 @@ class TestToolRegistry:
                 "af2_cleanup_gcs_files",
                 "af2_find_orphaned_files",
                 "af2_analyze_quality",
-                "af2_visualize_structure",
                 "af2_get_analysis_results",
                 "af2_analyze_parallel",
                 "af2_open_viewer",
@@ -110,6 +109,6 @@ class TestToolRegistry:
                 "boltz2_open_viewer",
             ]
 
-            assert len(reg._agents) == 28
+            assert len(reg._agents) == 27
             for tool_name in expected_tools:
                 assert tool_name in reg._agents, f"Tool '{tool_name}' not registered"

@@ -413,40 +413,6 @@
     }
   },
   {
-    "type": "AF2VisualizationTool",
-    "name": "af2_visualize_structure",
-    "description": "Generate 3D visualization of predicted structure with pLDDT confidence coloring.",
-    "parameter": {
-      "type": "object",
-      "properties": {
-        "pdb_path": {
-          "type": "string",
-          "description": "Path to PDB file (local or GCS)"
-        },
-        "raw_prediction_path": {
-          "type": "string",
-          "description": "Path to raw prediction pickle for pLDDT coloring (optional)"
-        },
-        "output_path": {
-          "type": "string",
-          "description": "Output path for visualization (optional)"
-        },
-        "output_format": {
-          "type": "string",
-          "description": "Output format: pdb_colored, html, or both (default: pdb_colored)",
-          "enum": [
-            "pdb_colored",
-            "html",
-            "both"
-          ]
-        }
-      },
-      "required": [
-        "pdb_path"
-      ]
-    }
-  },
-  {
     "type": "AF2GetAnalysisResultsTool",
     "name": "af2_get_analysis_results",
     "description": "Get async analysis results from Cloud Run. Aggregates individual analysis results from GCS and returns comprehensive summary with statistics, rankings, and recommendations. Can optionally wait/poll until analysis completes.",

@@ -113,3 +113,64 @@ class TestAF2FindOrphanedGCSFilesTool:
 
         orphaned_job_names = [f["job_name"] for f in result["orphaned_fasta_files"]]
         assert orphaned_job_names == ["truly-orphaned"]
+
+    def test_detects_orphaned_of3_and_boltz2_query_files(self):
+        from foldrun_app.models.af2.config import Config
+        from foldrun_app.models.af2.tools.find_orphaned_gcs_files import (
+            AF2FindOrphanedGCSFilesTool,
+        )
+
+        config = Config()
+        tool = AF2FindOrphanedGCSFilesTool(
+            tool_config={"name": "find_orphaned_gcs_files"}, config=config
+        )
+
+        active_of3 = _make_mock_job("active-of3-job")
+        active_boltz = _make_mock_job("active-boltz-job")
+
+        mock_pipeline_runs_iter = MagicMock()
+        mock_pipeline_runs_iter.__iter__.return_value = iter([])
+        mock_pipeline_runs_iter.prefixes = set()
+
+        def list_blobs_side_effect(prefix=None, delimiter=None):
+            if prefix == "pipeline_runs/":
+                return mock_pipeline_runs_iter
+            if prefix == "fasta/":
+                return iter([])
+            if prefix == "of3_queries/":
+                return iter(
+                    [
+                        _make_mock_blob("of3_queries/active-of3-job.json", size=500),
+                        _make_mock_blob("of3_queries/orphaned-of3-job.json", size=600),
+                    ]
+                )
+            if prefix == "boltz2_queries/":
+                return iter(
+                    [
+                        _make_mock_blob("boltz2_queries/active-boltz-job.yaml", size=700),
+                        _make_mock_blob("boltz2_queries/orphaned-boltz-job.yaml", size=800),
+                    ]
+                )
+            return iter([])
+
+        mock_bucket = MagicMock()
+        mock_bucket.list_blobs.side_effect = list_blobs_side_effect
+        mock_storage_client = MagicMock()
+        mock_storage_client.bucket.return_value = mock_bucket
+
+        with (
+            patch(
+                "foldrun_app.models.af2.tools.find_orphaned_gcs_files.list_pipeline_jobs",
+                return_value=[active_of3, active_boltz],
+            ),
+            patch(
+                "foldrun_app.models.af2.tools.find_orphaned_gcs_files.storage.Client",
+                return_value=mock_storage_client,
+            ),
+        ):
+            result = tool.run({"check_fasta": True})
+
+        assert [f["job_name"] for f in result["orphaned_of3_queries"]] == ["orphaned-of3-job"]
+        assert [f["job_name"] for f in result["orphaned_boltz2_queries"]] == ["orphaned-boltz-job"]
+        assert result["summary"]["orphaned_of3_queries_count"] == 1
+        assert result["summary"]["orphaned_boltz2_queries_count"] == 1

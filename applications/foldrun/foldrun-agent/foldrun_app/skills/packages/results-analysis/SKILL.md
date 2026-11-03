@@ -3,9 +3,12 @@ name: results-analysis
 description: Quality assessment, confidence scoring (pLDDT, PAE, ipTM), and parallel evaluation of predicted protein structures
 metadata:
   adk_additional_tools:
+    - get_prediction_results
     - download_job_artifacts
-    - af2_analyze_job_parallel
-    - af2_get_analysis_results
+    - analyze_prediction_quality
+    - analyze_job_parallel
+    - get_analysis_results
+    - analyze_job
     - of3_analyze_job_parallel
     - of3_get_analysis_results
     - boltz2_analyze_job_parallel

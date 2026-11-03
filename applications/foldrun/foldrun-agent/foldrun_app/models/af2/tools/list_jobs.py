@@ -181,7 +181,12 @@ class AF2ListJobsTool(AF2Tool):
                 filter_str = " AND ".join(label_filters)
 
         # List jobs - fetch more if using client-side filters
-        needs_client_filter = seq_name_filter or min_seq_length or max_seq_length or state_value
+        needs_client_filter = bool(
+            seq_name_filter
+            or min_seq_length is not None
+            or max_seq_length is not None
+            or state_value
+        )
         page_size = min(limit * 3 if needs_client_filter else limit * 2, 100)
 
         jobs = list_pipeline_jobs(
@@ -210,24 +215,27 @@ class AF2ListJobsTool(AF2Tool):
             if state_value and status["state"] != state_value:
                 continue
 
-            # Filter by sequence name (partial match, case-insensitive)
+            # Filter by sequence/query name (partial match, case-insensitive)
+            # AF2 uses 'seq_name'; OF3, Boltz-2, and AF3 use 'query_name'
             if seq_name_filter:
-                seq_name_label = labels.get("seq_name", "")
+                seq_name_label = labels.get("seq_name") or labels.get("query_name", "")
                 if seq_name_filter.lower() not in seq_name_label.lower():
                     continue
 
-            # Filter by sequence length range
-            if min_seq_length or max_seq_length:
+            # Filter by sequence length / token count range
+            # AF2 uses 'seq_len'; OF3, Boltz-2, and AF3 use 'num_tokens'
+            if min_seq_length is not None or max_seq_length is not None:
+                raw_seq_len = labels.get("seq_len") or labels.get("num_tokens")
+                if raw_seq_len is None:
+                    continue
                 try:
-                    seq_len = int(labels.get("seq_len", 0))
-                    if min_seq_length and seq_len < min_seq_length:
+                    seq_len = int(raw_seq_len)
+                    if min_seq_length is not None and seq_len < min_seq_length:
                         continue
-                    if max_seq_length and seq_len > max_seq_length:
+                    if max_seq_length is not None and seq_len > max_seq_length:
                         continue
                 except (ValueError, TypeError):
-                    # Skip jobs without valid seq_len label
-                    if min_seq_length or max_seq_length:
-                        continue
+                    continue
 
             # Stop if we've collected enough jobs
             if len(job_list) >= limit:
@@ -272,10 +280,23 @@ class AF2ListJobsTool(AF2Tool):
                 job_info["error_message"] = status["error_message"]
 
             # Add experiment-like grouping info
+            model_type = labels.get("model_type", "alphafold2").lower()
+            model_display_map = {
+                "alphafold2": "AlphaFold",
+                "af2": "AlphaFold",
+                "alphafold3": "AlphaFold 3",
+                "af3": "AlphaFold 3",
+                "openfold3": "OpenFold3",
+                "of3": "OpenFold3",
+                "boltz2": "Boltz-2",
+                "boltz": "Boltz-2",
+            }
+            model_prefix = model_display_map.get(model_type, labels.get("model_type", "AlphaFold"))
             if "job_type" in labels:
-                job_info["experiment"] = f"AlphaFold {labels['job_type'].title()}"
-            if "seq_name" in labels:
-                job_info["sequence_name"] = labels["seq_name"]
+                job_info["experiment"] = f"{model_prefix} {labels['job_type'].title()}"
+            seq_or_query_name = labels.get("seq_name") or labels.get("query_name")
+            if seq_or_query_name:
+                job_info["sequence_name"] = seq_or_query_name
             if "gpu_type" in labels:
                 job_info["gpu_type"] = labels["gpu_type"]
 

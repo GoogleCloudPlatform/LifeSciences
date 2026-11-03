@@ -147,8 +147,8 @@ The system automatically validates all sequences before submission and will prov
 - **msa_method: 'jackhmmer'**: Explicit CPU-based MSA search. Uses Jackhmmer (UniRef90, MGnify) and HHblits (UniRef30, BFD). Works with all database configurations.
 - **msa_method: 'mmseqs2'**: GPU-accelerated MSA search (optional, 177x faster). **Requires**:
   1. `use_small_bfd=True` (FASTA databases only)
-  2. Pre-built MMseqs2 indexes on Filestore (run ConvertMMseqs2Tool first)
-  - If the user requests mmseqs2 but indexes haven't been built, remind them to run the conversion tool first. The conversion is a one-time step that takes ~3-4 hours on n1-highmem-32 with local SSDs.
+  2. Pre-built MMseqs2 indexes on Filestore (built via `./deploy-all.sh <PROJECT_ID> <REGION> --steps convert`)
+  - If the user requests mmseqs2 but indexes haven't been built, remind them to run the `--steps convert` deployment step first. The conversion is a one-time step that takes ~3-4 hours on n1-highmem-32 with local SSDs.
 
 ### Database Options
 - **use_small_bfd: true**: Faster, recommended for most cases (15-30 min for small proteins). Compatible with both jackhmmer and mmseqs2 MSA methods.

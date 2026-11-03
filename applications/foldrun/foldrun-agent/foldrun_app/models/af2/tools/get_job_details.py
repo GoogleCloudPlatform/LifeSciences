@@ -57,7 +57,7 @@ class AF2GetJobDetailsTool(AF2Tool):
         params = dict(job.runtime_config.parameter_values) if job.runtime_config else {}
 
         # Get the original input path from parameters
-        # AF2 jobs use 'sequence_path' (FASTA), OF3 jobs use 'query_json_path' (JSON)
+        # AF2 uses 'sequence_path' (FASTA); OF3, Boltz-2, and AF3 pass 'query_json_path'
         sequence_path = params.get("sequence_path")
         query_json_path = params.get("query_json_path")
         input_path = sequence_path or query_json_path
@@ -65,7 +65,36 @@ class AF2GetJobDetailsTool(AF2Tool):
         if not input_path:
             raise ValueError(f"Could not find sequence_path or query_json_path in job {job_id}")
 
-        is_of3 = labels.get("model_type") == "openfold3" or query_json_path is not None
+        raw_model_type = labels.get("model_type", "").lower()
+        lower_input_path = input_path.lower()
+        is_boltz2 = (
+            raw_model_type in ("boltz2", "boltz")
+            or lower_input_path.endswith((".yaml", ".yml"))
+            or "/boltz2_queries/" in lower_input_path
+        )
+        is_af3 = raw_model_type in ("alphafold3", "af3") or "/af3_predictions/" in lower_input_path
+        is_of3 = (
+            not is_boltz2
+            and not is_af3
+            and (
+                raw_model_type in ("openfold3", "of3")
+                or "/of3_queries/" in lower_input_path
+                or query_json_path is not None
+            )
+        )
+
+        if is_boltz2:
+            resolved_model_type = "boltz2"
+            input_format = "yaml"
+        elif is_af3:
+            resolved_model_type = "alphafold3"
+            input_format = "json"
+        elif is_of3:
+            resolved_model_type = "openfold3"
+            input_format = "json"
+        else:
+            resolved_model_type = labels.get("model_type") or "alphafold2"
+            input_format = "fasta"
 
         # Step 2: Download the input content from GCS
         fasta_header = None
@@ -84,10 +113,15 @@ class AF2GetJobDetailsTool(AF2Tool):
                 blob = bucket.blob(blob_path)
                 fasta_content = blob.download_as_text()
 
-                if is_of3:
-                    # OF3 input is JSON
+                if is_boltz2:
+                    fasta_header = "Boltz-2 query YAML"
+                    fasta_sequence = fasta_content
+                elif is_af3:
+                    fasta_header = "AF3 query JSON"
+                    fasta_sequence = fasta_content
+                elif is_of3:
                     fasta_header = "OF3 query JSON"
-                    fasta_sequence = fasta_content  # Store raw JSON as the "sequence"
+                    fasta_sequence = fasta_content
                 else:
                     # AF2 input is FASTA
                     lines = fasta_content.strip().split("\n")
@@ -179,10 +213,10 @@ class AF2GetJobDetailsTool(AF2Tool):
                 "length": labels.get("seq_len") or labels.get("num_tokens", "unknown"),
                 "name": labels.get("seq_name") or labels.get("query_name", "unknown"),
                 "path": input_path,
-                "format": "json" if is_of3 else "fasta",
+                "format": input_format,
             },
             "parameters": {
-                "model_type": labels.get("model_type", "alphafold2"),
+                "model_type": resolved_model_type,
                 "gpu_type": labels.get("gpu_type", "unknown"),
                 "max_template_date": params.get("max_template_date", "unknown"),
                 "use_small_bfd": params.get("use_small_bfd", True),
@@ -207,10 +241,10 @@ class AF2GetJobDetailsTool(AF2Tool):
                 "input_available": fasta_sequence is not None,
                 "suggested_params": {
                     "input": fasta_sequence
-                    if is_of3
+                    if input_format in ("json", "yaml")
                     else (f">{fasta_header}\n{fasta_sequence}" if fasta_sequence else None),
                     "job_name": f"{job.display_name}_retry",
-                    "model_type": labels.get("model_type", "alphafold2"),
+                    "model_type": resolved_model_type,
                     "gpu_type": labels.get("gpu_type", "").upper().replace("-", "_")
                     if labels.get("gpu_type")
                     else None,

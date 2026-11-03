@@ -63,8 +63,16 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
 
         vertex_job_names = set()
         vertex_pipeline_roots = set()
+        active_input_blobs = set()
+        expected_bucket_prefix = f"gs://{self.config.bucket_name}/"
         for job in jobs:
             vertex_job_names.add(job.display_name)
+            job_labels = getattr(job, "labels", None)
+            if isinstance(job_labels, dict) or hasattr(job_labels, "get"):
+                for label_key in ("seq_name", "query_name"):
+                    val = job_labels.get(label_key)
+                    if isinstance(val, str) and val:
+                        vertex_job_names.add(val)
 
             # Extract pipeline root from runtime_config.gcs_output_directory
             # This is where Agent Platform stores the actual output directory for the pipeline
@@ -82,6 +90,13 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
                         root_path = "/".join(pipeline_root.split("/")[3:])  # Skip gs://bucket/
                         vertex_pipeline_roots.add(root_path)
                         logger.debug(f"Added pipeline root: {root_path}")
+
+                param_vals = getattr(job.runtime_config, "parameter_values", None)
+                if isinstance(param_vals, dict) or hasattr(param_vals, "get"):
+                    for param_key in ("sequence_path", "query_json_path"):
+                        uri = param_vals.get(param_key)
+                        if isinstance(uri, str) and uri.startswith(expected_bucket_prefix):
+                            active_input_blobs.add(uri[len(expected_bucket_prefix) :])
 
         logger.info(
             f"Found {len(vertex_job_names)} jobs and {len(vertex_pipeline_roots)} pipeline roots in Agent Platform"
@@ -150,8 +165,10 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
                 )
                 total_orphaned_size += dir_size
 
-        # Step 3: Check for orphaned FASTA files
+        # Step 3: Check for orphaned input files (AF2 FASTA, OF3 JSON, Boltz-2 YAML)
         orphaned_fasta = []
+        orphaned_of3_queries = []
+        orphaned_boltz2_queries = []
         if check_fasta:
             logger.info("Scanning FASTA files...")
             fasta_blobs = bucket.list_blobs(prefix="fasta/")
@@ -161,11 +178,54 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
                 if blob.name.endswith(".fasta"):
                     fasta_job_name = blob.name.removeprefix("fasta/").removesuffix(".fasta")
 
-                    if fasta_job_name not in vertex_job_names:
+                    if (
+                        fasta_job_name not in vertex_job_names
+                        and blob.name not in active_input_blobs
+                    ):
                         orphaned_fasta.append(
                             {
                                 "path": f"gs://{self.config.bucket_name}/{blob.name}",
                                 "job_name": fasta_job_name,
+                                "size_bytes": blob.size,
+                                "size_kb": round(blob.size / 1024, 2),
+                                "updated": blob.updated.isoformat() if blob.updated else None,
+                            }
+                        )
+                        total_orphaned_size += blob.size
+
+            logger.info("Scanning OF3 query JSON files...")
+            for blob in bucket.list_blobs(prefix="of3_queries/"):
+                if blob.name.endswith(".json"):
+                    of3_job_name = blob.name.removeprefix("of3_queries/").removesuffix(".json")
+                    if of3_job_name not in vertex_job_names and blob.name not in active_input_blobs:
+                        orphaned_of3_queries.append(
+                            {
+                                "path": f"gs://{self.config.bucket_name}/{blob.name}",
+                                "job_name": of3_job_name,
+                                "size_bytes": blob.size,
+                                "size_kb": round(blob.size / 1024, 2),
+                                "updated": blob.updated.isoformat() if blob.updated else None,
+                            }
+                        )
+                        total_orphaned_size += blob.size
+
+            logger.info("Scanning Boltz-2 query YAML files...")
+            for blob in bucket.list_blobs(prefix="boltz2_queries/"):
+                if blob.name.endswith((".yaml", ".yml")):
+                    boltz_rel = blob.name.removeprefix("boltz2_queries/")
+                    boltz_job_name = (
+                        boltz_rel.removesuffix(".yaml")
+                        if boltz_rel.endswith(".yaml")
+                        else boltz_rel.removesuffix(".yml")
+                    )
+                    if (
+                        boltz_job_name not in vertex_job_names
+                        and blob.name not in active_input_blobs
+                    ):
+                        orphaned_boltz2_queries.append(
+                            {
+                                "path": f"gs://{self.config.bucket_name}/{blob.name}",
+                                "job_name": boltz_job_name,
                                 "size_bytes": blob.size,
                                 "size_kb": round(blob.size / 1024, 2),
                                 "updated": blob.updated.isoformat() if blob.updated else None,
@@ -181,9 +241,13 @@ class AF2FindOrphanedGCSFilesTool(AF2Tool):
             "vertex_jobs_checked": len(vertex_job_names),
             "orphaned_pipeline_dirs": orphaned_dirs,
             "orphaned_fasta_files": orphaned_fasta,
+            "orphaned_of3_queries": orphaned_of3_queries,
+            "orphaned_boltz2_queries": orphaned_boltz2_queries,
             "summary": {
                 "orphaned_pipeline_dirs_count": len(orphaned_dirs),
                 "orphaned_fasta_count": len(orphaned_fasta),
+                "orphaned_of3_queries_count": len(orphaned_of3_queries),
+                "orphaned_boltz2_queries_count": len(orphaned_boltz2_queries),
                 "total_orphaned_size_mb": total_mb,
                 "total_orphaned_size_gb": total_gb,
                 "potential_savings": f"${round(total_gb * 0.02, 2)}/month"

@@ -186,15 +186,25 @@ class TestAF2AnalysisGcsValidation:
         )
         assert data == {"status": "ok"}
 
-    def test_write_to_gcs_rejects_unauthorized_and_traversal(self, get_analysis_results_tool):
+    def test_write_to_gcs_rejects_unauthorized_and_traversal(
+        self, get_analysis_results_tool, analyze_job_tool
+    ):
+        assert not hasattr(get_analysis_results_tool, "_write_to_gcs")
+
         with pytest.raises(ValueError, match="Unauthorized GCS bucket"):
-            get_analysis_results_tool._write_to_gcs(
-                "gs://attacker-bucket/data.json", {"test": "val"}
-            )
+            analyze_job_tool._write_to_gcs("gs://attacker-bucket/data.json", {"test": "val"})
 
         with pytest.raises(ValueError, match="Path traversal detected"):
-            get_analysis_results_tool._write_to_gcs(
+            analyze_job_tool._write_to_gcs(
                 "gs://authorized-pipeline-bucket/../secret.json", {"test": "val"}
+            )
+
+        with pytest.raises(ValueError, match="Unauthorized GCS bucket"):
+            analyze_job_tool._cleanup_stale_analysis_blobs("gs://attacker-bucket/run1/analysis/")
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            analyze_job_tool._cleanup_stale_analysis_blobs(
+                "gs://authorized-pipeline-bucket/run1/../analysis/"
             )
 
     def test_list_completed_analyses_rejects_unauthorized_and_traversal(

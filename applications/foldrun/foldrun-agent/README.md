@@ -141,7 +141,7 @@ Tool count depends on which models are configured:
 |----------|-------|
 | Job Submission (3) | `submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_af2_batch_predictions` |
 | Job Management (5) | `check_job_status`, `list_jobs`, `get_job_details`, `delete_job`, `check_gpu_quota` |
-| Results, Analysis & Downloads (6) | `download_job_artifacts`, `get_prediction_results`, `analyze_prediction_quality`, `af2_analyze_job_parallel`, `af2_get_analysis_results`, `analyze_job` |
+| Results, Analysis & Downloads (6) | `download_job_artifacts`, `get_prediction_results`, `analyze_prediction_quality`, `analyze_job_parallel`, `get_analysis_results`, `analyze_job` |
 | Database Queries (3) | `query_alphafold_db_prediction`, `query_alphafold_db_summary`, `query_alphafold_db_annotations` |
 | Storage Management (2) | `cleanup_gcs_files`, `find_orphaned_gcs_files` |
 | Visualization (1) | `open_structure_viewer` |
