@@ -103,3 +103,31 @@ class TestAF2Config:
         config = Config()
         # Should include at least A100 by default
         assert "A100" in config.supported_gpus
+
+    def test_dockerfile_uses_miniforge_and_pins_mmseqs2_with_sha256(self):
+        """Ensure alphafold-components Dockerfile avoids Anaconda TOS and verifies MMseqs2/Miniforge SHA-256."""
+        dockerfile_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "alphafold-components",
+            "Dockerfile",
+        )
+        with open(dockerfile_path, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "repo.anaconda.com" not in content
+        assert "CONDA_PLUGINS_AUTO_ACCEPT_TOS" not in content
+        assert "mmseqs.com/latest" not in content
+        assert "conda-forge/miniforge/releases/download/" in content
+        assert "--override-channels --channel conda-forge" in content
+        assert "ARG MMSEQS2_VERSION=18-8cc5c" in content
+        assert (
+            "soedinglab/MMseqs2/releases/download/${MMSEQS2_VERSION}/mmseqs-linux-gpu.tar.gz"
+            in content
+        )
+        assert content.count("sha256sum -c -") >= 2

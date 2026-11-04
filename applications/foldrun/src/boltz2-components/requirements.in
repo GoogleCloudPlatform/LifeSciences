@@ -1,13 +1,11 @@
-
-# Pin PyTorch to a cu121 wheel.
-# boltz[cuda] would otherwise resolve and install the latest PyTorch wheel,
-# which as of Boltz-2 2.2.x is compiled against CUDA 12.4+. Agent Platform A100
-# nodes report CUDA driver version 12.2 (12020 in PyTorch's encoding), which
-# is too old for CUDA 12.4-compiled PyTorch and causes a hard RuntimeError at
-# GPU initialization. Pinning here ensures boltz uses a compatible PyTorch.
-# We also install boltz (not boltz[cuda]) so pip does not pull cuequivariance_ops_torch_cu12
-# which also links against a newer CUDA runtime. The --no_kernels flag at predict
-# time disables the cuequivariance fast-path and falls back to standard PyTorch ops.
-torch>=2.2,<2.5
+# Pin PyTorch to a CUDA 12.6 wheel (`+cu126`) from the PyTorch wheel index so
+# `boltz` runs cleanly on CUDA 12 GPU node drivers (default PyPI wheels for
+# PyTorch >=2.13 link against CUDA 13) while remediating PyTorch CVEs.
+# We install `boltz` (not `boltz[cuda]`) so pip does not pull cuequivariance
+# wheels; `--no_kernels` at predict time falls back to standard PyTorch ops.
+torch==2.14.1+cu126
 boltz==2.2.1
+# Bake kfp into the container so Vertex AI Pipelines run in air-gapped Shared
+# VPC environments (`install_kfp_package=False`) without runtime PyPI access.
+kfp>=2.16.1
 pip>=26.2.2

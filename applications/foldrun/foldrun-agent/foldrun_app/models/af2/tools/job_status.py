@@ -50,9 +50,10 @@ class AF2JobStatusTool(AF2Tool):
         status = get_job_status(job)
         state = status["state"]
 
-        # Get task details for progress calculation
+        # Get task details for progress calculation (prefer wrapper-filtered task_list)
         task_details = get_task_details(job)
         tasks = task_details.get("tasks", {})
+        step_tasks = task_details.get("task_list") or list(tasks.values())
 
         # Build concise result based on job state
         result = {
@@ -85,12 +86,14 @@ class AF2JobStatusTool(AF2Tool):
             if "error_message" in status:
                 result["error_message"] = status["error_message"]
 
-            # Find which task failed
-            failed_tasks = [name for name, info in tasks.items() if info.get("state") == "FAILED"]
+            # Find which task failed (exclude root pipeline wrapper tasks)
+            failed_tasks = [
+                t.get("task_name", "") for t in step_tasks if t.get("state") == "FAILED"
+            ] or [name for name, info in tasks.items() if info.get("state") == "FAILED"]
             if failed_tasks:
                 result["failed_task"] = failed_tasks[0]
                 # Include error from failed task
-                failed_task_info = tasks[failed_tasks[0]]
+                failed_task_info = tasks.get(failed_tasks[0], {})
                 if "error" in failed_task_info:
                     result["task_error"] = failed_task_info["error"]
 
@@ -98,13 +101,13 @@ class AF2JobStatusTool(AF2Tool):
             # For running jobs, show progress summary
             result["message"] = "Job is currently running"
 
-            # Count task states
-            total_tasks = len(tasks)
-            completed_tasks = sum(1 for t in tasks.values() if t.get("state") == "SUCCEEDED")
-            running_tasks = [name for name, t in tasks.items() if t.get("state") == "RUNNING"]
-            pending_tasks = sum(
-                1 for t in tasks.values() if t.get("state") in ["PENDING", "QUEUED"]
-            )
+            # Count task states across real pipeline step tasks
+            total_tasks = len(step_tasks)
+            completed_tasks = sum(1 for t in step_tasks if t.get("state") == "SUCCEEDED")
+            running_tasks = [
+                t.get("task_name", "") for t in step_tasks if t.get("state") == "RUNNING"
+            ]
+            pending_tasks = sum(1 for t in step_tasks if t.get("state") in ["PENDING", "QUEUED"])
 
             result["progress"] = {
                 "total_tasks": total_tasks,
@@ -116,10 +119,11 @@ class AF2JobStatusTool(AF2Tool):
             # Show current running task(s)
             if running_tasks:
                 result["current_step"] = running_tasks[0]
-                # Extract task type from name (e.g., "data-pipeline-123" -> "data-pipeline")
+                # Strip trailing numeric index if present (e.g., "data-pipeline-123" -> "data-pipeline")
+                parts = running_tasks[0].split("-")
                 task_type = (
-                    "-".join(running_tasks[0].split("-")[:-1])
-                    if "-" in running_tasks[0]
+                    "-".join(parts[:-1])
+                    if len(parts) > 1 and parts[-1].isdigit()
                     else running_tasks[0]
                 )
                 result["message"] = (
@@ -129,7 +133,7 @@ class AF2JobStatusTool(AF2Tool):
         elif state == "PIPELINE_STATE_PENDING":
             # For pending jobs
             result["message"] = "Job is pending"
-            total_tasks = len(tasks)
+            total_tasks = len(step_tasks)
             if total_tasks > 0:
                 result["total_tasks"] = total_tasks
         else:

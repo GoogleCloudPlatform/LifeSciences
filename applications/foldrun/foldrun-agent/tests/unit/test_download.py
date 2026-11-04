@@ -115,6 +115,25 @@ class TestDatabasesYaml:
                 prefix=f"of3/params/{DEFAULT_OF3_CHECKPOINT}", max_results=1
             )
 
+    def test_boltz2_cache_checks_expected_file_in_gcs(self, manifest):
+        """boltz2_cache specifies expected_file so partial boltz2/cache/ prefixes do not falsely satisfy check_existing."""
+        from unittest.mock import MagicMock, patch
+
+        from foldrun_app.core.download import check_existing
+
+        assert manifest["databases"]["boltz2_cache"].get("expected_file") == "boltz2_conf.ckpt"
+
+        with patch("foldrun_app.core.download.storage.Client") as mock_client:
+            mock_bucket = MagicMock()
+            mock_client.return_value.bucket.return_value = mock_bucket
+            mock_bucket.list_blobs.return_value = []
+
+            res = check_existing(["boltz2_cache"], "test-gdbs", manifest)
+            assert res == {"boltz2_cache": False}
+            mock_bucket.list_blobs.assert_called_once_with(
+                prefix="boltz2/cache/boltz2_conf.ckpt", max_results=1
+            )
+
 
 # ------------------------------------------------------------------ #
 # build_script
@@ -546,3 +565,58 @@ class TestDatabaseSetupScripts:
             "Script should fail under 'set -e' when background rsync exits with non-zero status"
         )
         assert "SHOULD_NOT_REACH_HERE" not in result.stdout
+
+    def test_boltz2_cache_pins_immutable_commit_and_verifies_sha256(self, tmp_path):
+        """boltz2_cache pins Hugging Face commit SHA and fails fast on SHA-256 mismatch before extraction."""
+        import subprocess
+
+        manifest = load_manifest()
+        script = build_script("boltz2_cache", manifest["databases"]["boltz2_cache"], str(tmp_path))
+
+        assert "resolve/main/" not in script
+        assert "model-gateway.boltz.bio" not in script
+        assert "6fdef46d763fee7fbb83ca5501ccceff43b85607" in script
+        assert "sha256sum -c" in script
+
+        # Extract the sha256sum -c heredoc block and ensure tampered files fail under set -e
+        lines = script.splitlines()
+        start_idx = next(i for i, ln in enumerate(lines) if "sha256sum -c" in ln)
+        end_idx = next(i for i in range(start_idx + 1, len(lines)) if lines[i].strip() == "EOF")
+        checksum_block = "\n".join(lines[start_idx : end_idx + 1])
+
+        for fname in ("boltz2_conf.ckpt", "boltz2_aff.ckpt", "mols.tar"):
+            (tmp_path / fname).write_bytes(b"corrupted-payload")
+
+        res = subprocess.run(["bash", "-e", "-c", checksum_block], capture_output=True, text=True)
+        assert res.returncode != 0
+
+    def test_mmseqs2_conversion_pins_tagged_release_and_verifies_sha256(self):
+        """submit_mmseqs2_conversions uses a tagged MMseqs2 release with SHA-256 verification."""
+        from unittest.mock import patch
+
+        from foldrun_app.core.download import submit_mmseqs2_conversions
+
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {
+                "job_id": "mmseqs-1",
+                "job_name": "mmseqs",
+                "console_url": "http://test",
+            }
+            out = submit_mmseqs2_conversions(
+                project_id="proj",
+                region="us-central1",
+                zone="us-central1-a",
+                filestore_ip="10.0.0.1",
+                filestore_network="default",
+                nfs_share="datasets",
+                nfs_mount="/mnt/nfs/foldrun",
+                gcs_bucket="my-bucket",
+                databases=["uniref90"],
+            )
+            assert out["status"] == "submitted"
+            script = mock_submit.call_args[1]["script"]
+            assert "mmseqs.com/latest" not in script
+            assert (
+                "soedinglab/MMseqs2/releases/download/18-8cc5c/mmseqs-linux-avx2.tar.gz" in script
+            )
+            assert "sha256sum -c -" in script

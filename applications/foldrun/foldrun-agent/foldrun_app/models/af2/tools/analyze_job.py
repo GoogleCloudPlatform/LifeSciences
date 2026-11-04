@@ -164,6 +164,13 @@ class AF2JobAnalysisTool(AF2Tool):
             job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
         except Exception as e:
             return {"status": "error", "message": f"Could not find job {job_id}: {e!s}"}
+
+        job_res_name = getattr(job, "name", None)
+        job_id = (
+            job_res_name.rsplit("/", 1)[-1]
+            if isinstance(job_res_name, str) and job_res_name
+            else str(job_id).rsplit("/", 1)[-1]
+        )
         task_details = get_task_details(job)
         predictions = task_details.get("predictions", [])
 

@@ -18,7 +18,7 @@ from kfp import dsl
 from kfp.dsl import Artifact, Input, Output
 
 
-@dsl.component(base_image=config.BOLTZ2_COMPONENTS_IMAGE)
+@dsl.component(base_image=config.BOLTZ2_COMPONENTS_IMAGE, install_kfp_package=False)
 def msa_pipeline_boltz2(
     query_json: Input[Artifact],
     ref_databases: Input[Artifact],

@@ -42,32 +42,38 @@ databases:
     models: [boltz, boltz2]
     display_name: Boltz-2 Model Weights + CCD (unified cache)
     nfs_path: boltz2/cache
+    expected_file: boltz2_conf.ckpt
     machine_type: n2d-standard-4
     script: |
       echo "Downloading Boltz-2 model weights + CCD to {dest}..."
       mkdir -p {dest}
 
+      # Weights and CCD pinned to immutable Hugging Face commit SHA (boltz-community/boltz-2).
       # Weights: boltz2_conf.ckpt and boltz2_aff.ckpt must be directly under {dest}
       # (boltz predict --cache={dest} expects {dest}/boltz2_conf.ckpt)
+      BOLTZ2_HF_COMMIT="6fdef46d763fee7fbb83ca5501ccceff43b85607"
+      BOLTZ2_HF_BASE="https://huggingface.co/boltz-community/boltz-2/resolve/${BOLTZ2_HF_COMMIT}"
+
       aria2c --continue=true --max-connection-per-server=16 --split=16 \
-        'https://model-gateway.boltz.bio/boltz2_conf.ckpt' \
-        --dir={dest} --out=boltz2_conf.ckpt || \
-      aria2c --continue=true --max-connection-per-server=16 --split=16 \
-        'https://huggingface.co/boltz-community/boltz-2/resolve/main/boltz2_conf.ckpt' \
+        "${BOLTZ2_HF_BASE}/boltz2_conf.ckpt" \
         --dir={dest} --out=boltz2_conf.ckpt
 
       aria2c --continue=true --max-connection-per-server=16 --split=16 \
-        'https://model-gateway.boltz.bio/boltz2_aff.ckpt' \
-        --dir={dest} --out=boltz2_aff.ckpt || \
-      aria2c --continue=true --max-connection-per-server=16 --split=16 \
-        'https://huggingface.co/boltz-community/boltz-2/resolve/main/boltz2_aff.ckpt' \
+        "${BOLTZ2_HF_BASE}/boltz2_aff.ckpt" \
         --dir={dest} --out=boltz2_aff.ckpt
 
       # CCD: mols.tar must extract to {dest}/mols/
       # (boltz predict --cache={dest} expects {dest}/mols/)
       aria2c --continue=true --max-connection-per-server=16 --split=16 \
-        'https://huggingface.co/boltz-community/boltz-2/resolve/main/mols.tar' \
+        "${BOLTZ2_HF_BASE}/mols.tar" \
         --dir={dest} --out=mols.tar
+
+      echo "Verifying Boltz-2 SHA-256 checksums..."
+      sha256sum -c <<'EOF'
+      090e82ac8c92f5e943fa1b39e7410a44027bea7243c0bbb3caa67a77fc1428e1  {dest}/boltz2_conf.ckpt
+      dcc5cd3722b1c9eaa34267e4ae32f55cbbf1963f4c19319381ccfa30fdd2ca9e  {dest}/boltz2_aff.ckpt
+      39e076d96dbec6b4e86982bbda16f3a53a2a60c9bdc17828d88f6f9a0c7d1fd7  {dest}/mols.tar
+      EOF
 
       echo "Extracting mols.tar..."
       tar -xf {dest}/mols.tar -C {dest}

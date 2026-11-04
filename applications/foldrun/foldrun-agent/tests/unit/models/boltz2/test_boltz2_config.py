@@ -84,3 +84,28 @@ class TestBOLTZ2Config:
         }
         assert set(d.keys()) == expected_keys
         assert d["base_image"] == "test-boltz2-image:stable"
+
+    def test_dockerfile_and_lockfile_harden_runtime_and_bake_kfp(self):
+        """Ensure boltz2-components Dockerfile uses --no-install-recommends and bakes kfp in requirements.lock."""
+        boltz2_dir = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "boltz2-components",
+        )
+        with open(os.path.join(boltz2_dir, "Dockerfile"), encoding="utf-8") as f:
+            dockerfile = f.read()
+        with open(os.path.join(boltz2_dir, "requirements.in"), encoding="utf-8") as f:
+            req_in = f.read()
+        with open(os.path.join(boltz2_dir, "requirements.lock"), encoding="utf-8") as f:
+            req_lock = f.read()
+
+        assert "--no-install-recommends" in dockerfile
+        assert "--require-hashes" in dockerfile
+        assert "register_checkpoint_safe_globals.py" in dockerfile
+        assert "kfp>=" in req_in
+        assert "\nkfp==" in req_lock or req_lock.startswith("kfp==")

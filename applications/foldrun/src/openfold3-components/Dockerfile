@@ -51,23 +51,30 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
     TORCH_EXTENSIONS_DIR=${OF3_ENV_PREFIX}/caches/torch_extensions \
     CUTLASS_PATH=DS_IGNORE_CUTLASS_DETECTION
 
-# Update ca-certificates, certifi, and pip in the Pixi openfold3-cuda12 environment
-# to remediate the October 2026 eMudhra (emSign) CA compromise.
-RUN CONDA_OVERRIDE_CUDA=12.0 /root/.pixi/bin/pixi update \
-    --manifest-path /opt/pixi-project/pixi.toml \
-    -e openfold3-cuda12 \
-    -p linux-64-cuda12 \
-    ca-certificates certifi pip
+# Sync the Pixi openfold3-cuda12 environment deterministically from the committed
+# pixi.toml + pixi.lock (no live solver drift), clean the Pixi package cache, and
+# verify that installed Python packages match the OSV-scanned requirements.lock.
+COPY pixi.toml pixi.lock /opt/pixi-project/
+COPY requirements.lock /tmp/requirements.lock
+COPY verify_lockfile_sync.py /tmp/verify_lockfile_sync.py
+RUN CONDA_OVERRIDE_CUDA=12.0 /root/.pixi/bin/pixi install \
+        --locked \
+        --manifest-path /opt/pixi-project/pixi.toml \
+        -e openfold3-cuda12 \
+    && /root/.pixi/bin/pixi clean cache --yes \
+    && python3 /tmp/verify_lockfile_sync.py /tmp/requirements.lock \
+    && rm -f /tmp/requirements.lock /tmp/verify_lockfile_sync.py
 
 # Build-time contract check (executed without ENTRYPOINT, matching KFP runtime):
 # Verify pip, openfold3, torch, certifi, CLI binaries, and that all libtorch_cuda.so shared
 # libraries resolve cleanly via LD_LIBRARY_PATH.
 RUN python3 -m pip --version \
-    && python3 -c "import importlib.metadata, os, openfold3, torch; print('openfold3', importlib.metadata.version('openfold3'), 'torch', torch.__version__); lib = os.path.join(os.path.dirname(torch.__file__), 'lib', 'libtorch_cuda.so'); assert os.path.isfile(lib), lib" \
+    && python3 -c "import importlib.metadata, os, openfold3, torch, biotite.structure as struc; from lightning_fabric.utilities.apply_func import move_data_to_device; print('openfold3', importlib.metadata.version('openfold3'), 'torch', torch.__version__); lib = os.path.join(os.path.dirname(torch.__file__), 'lib', 'libtorch_cuda.so'); assert os.path.isfile(lib), lib; arr = struc.AtomArray(819); assert len(move_data_to_device({'atom_array': [arr]}, torch.device('cpu'))['atom_array'][0]) == 819" \
     && python3 -c "import certifi; print('certifi', certifi.__version__); assert tuple(int(x) for x in certifi.__version__.split('.')) >= (2026, 10, 19), certifi.__version__" \
     && python3 -c "import pip; print('pip', pip.__version__); assert tuple(int(x) for x in pip.__version__.split('.')) >= (26, 2, 2), pip.__version__" \
     && ! ldd "${OF3_ENV_PREFIX}"/lib/python*/site-packages/torch/lib/libtorch_cuda.so | grep -q "not found" \
-    && command -v run_openfold jackhmmer nhmmer
+    && command -v run_openfold jackhmmer nhmmer \
+    && run_openfold --help >/dev/null
 
 # Do NOT bake in weights — they come from NFS at runtime
 # Do NOT bake in databases — they come from NFS

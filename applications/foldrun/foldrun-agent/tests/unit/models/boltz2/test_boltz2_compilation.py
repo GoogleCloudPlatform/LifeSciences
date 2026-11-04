@@ -191,6 +191,36 @@ class TestBOLTZ2PipelineCompilation:
         assert "relax" not in pipeline_spec.lower()
         os.remove(output_path)
 
+    def test_gpu_components_disable_runtime_kfp_install(self):
+        """MSA and predict components set install_kfp_package=False for air-gapped Shared VPC support."""
+        for key in list(sys.modules.keys()):
+            if key == "config":
+                del sys.modules[key]
+
+        from foldrun_app.models.boltz2.utils.pipeline_utils import load_vertex_pipeline
+
+        pipeline = load_vertex_pipeline(enable_flex_start=False)
+
+        output_path = os.path.join(tempfile.gettempdir(), "boltz2_test_pipeline_airgap.yaml")
+        from kfp import compiler
+
+        compiler.Compiler().compile(
+            pipeline_func=pipeline,
+            package_path=output_path,
+        )
+
+        with open(output_path) as f:
+            pipeline_yaml = yaml.safe_load(f)
+
+        os.remove(output_path)
+        executors = pipeline_yaml.get("deploymentSpec", {}).get("executors", {})
+        for exec_name in ("exec-msa-pipeline-boltz2", "exec-predict-boltz2"):
+            assert exec_name in executors, f"Missing executor {exec_name} in {list(executors)}"
+            cmd_joined = " ".join(executors[exec_name]["container"]["command"])
+            assert "pip install" not in cmd_joined, (
+                f"{exec_name} still runs runtime pip install: {cmd_joined}"
+            )
+
 
 class TestBOLTZ2PredictComponentArgs:
     """Verify predict component has correct CLI args for run_openfold."""

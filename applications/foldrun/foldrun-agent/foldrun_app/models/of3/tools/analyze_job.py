@@ -192,6 +192,13 @@ class OF3JobAnalysisTool(OF3Tool):
         except Exception as e:
             return {"status": "error", "message": f"Could not find job {job_id}: {e!s}"}
 
+        job_res_name = getattr(job, "name", None)
+        job_id = (
+            job_res_name.rsplit("/", 1)[-1]
+            if isinstance(job_res_name, str) and job_res_name
+            else str(job_id).rsplit("/", 1)[-1]
+        )
+
         # Determine analysis path
         analysis_path = self._get_analysis_path(job)
 

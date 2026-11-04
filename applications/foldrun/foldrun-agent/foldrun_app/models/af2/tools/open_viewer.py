@@ -66,6 +66,14 @@ class AF2OpenViewerTool(AF2Tool):
         if not job_id:
             raise ValueError("job_id is required")
 
+        if isinstance(job_id, str) and job_id.startswith("projects/"):
+            from foldrun_app.core.vertex_utils import extract_short_job_id
+
+            try:
+                job_id = extract_short_job_id(job_id, self.config.project_id, self.config.region)
+            except ValueError as e:
+                raise ValueError(f"Invalid job_id '{job_id}': {e}") from e
+
         if not isinstance(job_id, str) or not _JOB_ID_PATTERN.match(job_id):
             raise ValueError(f"Invalid job_id '{job_id}': must match ^[a-zA-Z0-9_-]+$")
 

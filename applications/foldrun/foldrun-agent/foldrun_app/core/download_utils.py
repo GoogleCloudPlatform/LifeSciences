@@ -661,6 +661,38 @@ def download_job_artifacts_for_job(
     expiration_minutes: int = 60,
 ) -> dict[str, Any]:
     """Generate V4 Signed URLs for a job's ZIP archive bundle and key individual artifacts."""
+    from foldrun_app.core.vertex_utils import extract_short_job_id, get_pipeline_job
+
+    target_job_id = str(job_id) if job_id is not None else ""
+    job = None
+    try:
+        job = get_pipeline_job(target_job_id, project_id, region)
+    except ValueError as e:
+        return {
+            "status": "error",
+            "job_id": job_id,
+            "message": f"Invalid job_id format: {e}",
+        }
+    except Exception:
+        job = None
+
+    if job is not None:
+        job_res_name = getattr(job, "name", None)
+        job_id = (
+            job_res_name.rsplit("/", 1)[-1]
+            if isinstance(job_res_name, str) and job_res_name
+            else extract_short_job_id(target_job_id, project_id, region)
+        )
+    elif isinstance(job_id, str) and job_id.startswith("projects/"):
+        try:
+            job_id = extract_short_job_id(job_id, project_id, region)
+        except ValueError as e:
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": f"Invalid job_id format: {e}",
+            }
+
     if not job_id or not re.match(r"^[a-zA-Z0-9_-]+$", str(job_id)):
         return {
             "status": "error",
@@ -669,15 +701,6 @@ def download_job_artifacts_for_job(
         }
 
     expiration_seconds = max(60, min(int(expiration_minutes) * 60, 7 * 24 * 3600))
-
-    # 1. Try resolving as a Vertex AI / Agent Platform PipelineJob (AF2, OF3, Boltz-2)
-    from foldrun_app.core.vertex_utils import get_pipeline_job
-
-    job = None
-    try:
-        job = get_pipeline_job(job_id, project_id, region)
-    except Exception:
-        job = None
 
     if job is not None:
         pipeline_root = None

@@ -55,23 +55,28 @@ class AF2AnalyzeJobDeepTool(AF2Tool):
             # Initialize Agent Platform
             aiplatform.init(project=self.config.project_id, location=self.config.region)
 
-            # Get the pipeline job
-            job = aiplatform.PipelineJob.get(
-                resource_name=f"projects/{self.config.project_id}/locations/{self.config.region}/pipelineJobs/{job_id}"
+            from foldrun_app.core.vertex_utils import resolve_pipeline_job_name
+
+            full_resource_name = resolve_pipeline_job_name(
+                job_id, self.config.project_id, self.config.region
             )
+            short_job_id = full_resource_name.rsplit("/", 1)[-1]
+
+            # Get the pipeline job
+            job = aiplatform.PipelineJob.get(resource_name=full_resource_name)
 
             # Get job state
             state = job.state.name if job.state else "UNKNOWN"
 
             # Base analysis info
             analysis = {
-                "job_id": job_id,
+                "job_id": short_job_id,
                 "display_name": job.display_name,
                 "state": state,
                 "create_time": str(job.create_time) if hasattr(job, "create_time") else None,
                 "console_url": (
                     f"https://console.cloud.google.com/vertex-ai/locations/{self.config.region}/"
-                    f"pipelines/runs/{job_id}?project={self.config.project_id}"
+                    f"pipelines/runs/{short_job_id}?project={self.config.project_id}"
                 ),
                 "analysis_type": None,
             }

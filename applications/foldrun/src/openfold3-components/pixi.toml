@@ -1,0 +1,135 @@
+# Pixi manifest for the FoldRun OpenFold3 CUDA 12 runtime environment.
+# Scoped to openfold3-cuda12 on linux-64 / linux-64-cuda12 with security
+# lower bounds remediating known CVEs in transitive dependencies.
+
+[workspace]
+name = "openfold3"
+version = "0.5.0"
+authors = ["OpenFold Team <support@openfold.io>"]
+channels = ["conda-forge", "bioconda"]
+platforms = [
+    "linux-64",
+    { name = "linux-64-cuda12", platform = "linux-64", cuda = "12.0" },
+]
+requires-pixi = ">=0.73.0"
+
+[environments]
+default = { features = ["python"] }
+openfold3-cuda12 = { no-default-feature = true, features = [
+    "python",
+    "openfold3-base",
+    "cuda12",
+    "pytorch-conda-cuda",
+    "deepspeed",
+    "deepspeed-build",
+    "cuequivariance-cuda12",
+    "openfold3-editable",
+    "tests",
+] }
+
+[feature.openfold3-editable.pypi-dependencies]
+openfold3 = { path = "../openfold3", editable = true }
+
+[feature.python.dependencies]
+python = ">=3.14,<3.15"
+pip = ">=26.2.2"
+ca-certificates = ">=2026.10.23"
+certifi = ">=2026.10.23"
+setuptools = ">=84.1.0"
+
+[feature.openfold3-base.dependencies]
+numpy = "*"
+scipy = "*"
+pandas = "*"
+ml-collections = "*"
+rdkit = "<2026"
+biotite = ">=1.6,<1.8"
+pdbeccdutils = "*"
+kalign-python = "*"
+pyyaml = "*"
+ijson = "*"
+memory_profiler = "*"
+wandb = "*"
+func_timeout = "*"
+tqdm = "*"
+typing-extensions = "*"
+python-lmdb = ">=2.2.0"
+requests = ">=2.33.0"
+awscli = "*"
+awscrt = "*"
+boto3 = "*"
+aria2 = "*"
+pytest = "*"
+pytest-xdist = "*"
+pytest-cov = "*"
+pytest-benchmark = "*"
+pytest-regressions = "*"
+pytest-vcr = "*"
+ruff = "*"
+mypy = "*"
+sphinx = "*"
+myst-parser = "*"
+furo = "*"
+pre-commit = "*"
+
+# Explicit security lower bounds for transitive packages
+brotli-python = ">=1.2.1"
+filelock = ">=4.2.1"
+gitpython = ">=3.2.1"
+h2 = ">=4.4.1"
+msgpack-python = ">=1.2.3"
+pillow = ">=13.0.0"
+soupsieve = ">=2.9.0"
+urllib3 = ">=2.8.0"
+virtualenv = ">=21.14.9"
+
+[feature.openfold3-base.pypi-dependencies]
+mypy-baseline = "*"
+
+[feature.openfold3-base.target.linux-64.dependencies]
+mkl = "*"
+
+[feature.pytorch-conda-cuda.dependencies]
+pytorch-lightning = ">=2.6.6,<2.7"
+pytorch-gpu = ">=2.13.0"
+pytorch = ">=2.13.0"
+
+[feature.cuda12]
+platforms = ["linux-64-cuda12"]
+
+[feature.cuda12.dependencies]
+cuda-version = ">=12,<13"
+
+[feature.cuda12.activation]
+env.TRITON_PTXAS_PATH = "$CONDA_PREFIX/bin/ptxas"
+env.TRITON_PTXAS_BLACKWELL_PATH = "$TRITON_PTXAS_PATH"
+
+[feature.deepspeed]
+platforms = ["linux-64-cuda12"]
+
+[feature.deepspeed.target.linux-64.dependencies]
+deepspeed = ">=0.18.7"
+
+[feature.deepspeed-build.dependencies]
+cuda-version = "<13.3"
+ninja = "*"
+cutlass = "*"
+cuda-minimal-build = "*"
+libcusparse-dev = "*"
+libcublas-dev = "*"
+libcusolver-dev = "*"
+libcurand-dev = "*"
+
+[feature.deepspeed-build.activation]
+env.CUTLASS_PATH = "DS_IGNORE_CUTLASS_DETECTION"
+env.TRITON_CACHE_DIR = "$CONDA_PREFIX/caches/triton"
+env.TORCH_EXTENSIONS_DIR = "$CONDA_PREFIX/caches/torch_extensions"
+env.NVCC_PREPEND_FLAGS = "-ccbin=$CC"
+
+[feature.cuequivariance-cuda12.target."*-cuda12".pypi-dependencies]
+cuequivariance = ">=0.13.0"
+cuequivariance-torch = ">=0.13.0"
+cuequivariance-ops-torch-cu12 = ">=0.13.0"
+
+[feature.tests]
+tasks.test.cmd = ["python", "-m", "pytest", "-v", "."]

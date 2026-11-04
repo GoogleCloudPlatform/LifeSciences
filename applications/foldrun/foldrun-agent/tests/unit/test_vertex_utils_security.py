@@ -18,11 +18,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from foldrun_app.core.vertex_utils import get_pipeline_job
+from foldrun_app.core.vertex_utils import (
+    _PROJECT_NUMBERS,
+    extract_short_job_id,
+    get_pipeline_job,
+    resolve_pipeline_job_name,
+)
 
 
 class TestGetPipelineJobSecurity:
     """Tests preventing IDOR and traversal via get_pipeline_job()."""
+
+    def setup_method(self):
+        _PROJECT_NUMBERS.clear()
 
     @patch("google.cloud.aiplatform_v1.PipelineServiceClient")
     def test_valid_short_job_id(self, mock_client_cls):
@@ -114,6 +122,125 @@ class TestGetPipelineJobSecurity:
         result = get_pipeline_job("af2-ubiquitin-display", "my-project", "us-central1")
         assert result == matched_job
         mock_client.list_pipeline_jobs.assert_called_once()
+
+    @patch("google.cloud.aiplatform_v1.PipelineServiceClient")
+    def test_valid_numeric_project_number_resource_name(self, mock_client_cls):
+        """Vertex AI submit_* returns projects/<PROJECT_NUMBER>/.../pipelineJobs/<id>."""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_job = MagicMock()
+        mock_job.name = "projects/123456789012/locations/us-central1/pipelineJobs/openfold3-inference-pipeline-1"
+        mock_client.get_pipeline_job.return_value = mock_job
+
+        numeric_name = "projects/123456789012/locations/us-central1/pipelineJobs/openfold3-inference-pipeline-1"
+        result = get_pipeline_job(numeric_name, "my-project", "us-central1")
+        assert result == mock_job
+
+        # Outgoing RPC must always target configured alphanumeric project_id
+        call_args = mock_client.get_pipeline_job.call_args
+        req = call_args.kwargs.get("request") or call_args.args[0]
+        assert (
+            req.name
+            == "projects/my-project/locations/us-central1/pipelineJobs/openfold3-inference-pipeline-1"
+        )
+        assert (
+            extract_short_job_id(numeric_name, "my-project", "us-central1")
+            == "openfold3-inference-pipeline-1"
+        )
+
+    @patch("google.cloud.aiplatform_v1.PipelineServiceClient")
+    def test_foreign_numeric_project_number_rejected(self, mock_client_cls):
+        """Numeric project prefix that mismatches actual project number is rejected."""
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+        mock_job = MagicMock()
+        mock_job.name = "projects/123456789012/locations/us-central1/pipelineJobs/openfold3-inference-pipeline-1"
+        mock_client.get_pipeline_job.return_value = mock_job
+
+        with pytest.raises(ValueError, match="Cross-project or cross-region"):
+            get_pipeline_job(
+                "projects/999999999999/locations/us-central1/pipelineJobs/openfold3-inference-pipeline-1",
+                "my-project",
+                "us-central1",
+            )
+
+        # Subsequent call with cached project number fails before making any RPC
+        mock_client.get_pipeline_job.reset_mock()
+        with pytest.raises(ValueError, match="Cross-project or cross-region"):
+            resolve_pipeline_job_name(
+                "projects/999999999999/locations/us-central1/pipelineJobs/other-job",
+                "my-project",
+                "us-central1",
+            )
+        mock_client.get_pipeline_job.assert_not_called()
+
+    def test_open_viewer_and_downloads_accept_numeric_resource_name(self):
+        """Viewer and artifact download tools normalize full numeric resource names to short IDs."""
+        from types import SimpleNamespace
+
+        from foldrun_app.core import download_utils
+        from foldrun_app.models.af2.tools.open_viewer import AF2OpenViewerTool
+        from foldrun_app.models.boltz2.tools.open_viewer import BOLTZ2OpenViewerTool
+        from foldrun_app.models.of3.tools.open_viewer import OF3OpenViewerTool
+
+        cfg = SimpleNamespace(
+            viewer_url="https://viewer.example.com",
+            project_id="my-project",
+            region="us-central1",
+            bucket_name="my-bucket",
+            databases_bucket_name="my-dbs",
+            filestore_id="nfs",
+            filestore_ip="10.0.0.2",
+            filestore_network="default",
+        )
+        full_num_id = "projects/123456789012/locations/us-central1/pipelineJobs/boltz2-inference-pipeline-2026"
+        with patch("foldrun_app.core.base_tool._ensure_clients"):
+            for cls in (AF2OpenViewerTool, OF3OpenViewerTool, BOLTZ2OpenViewerTool):
+                tool = cls(tool_config={"name": "open_viewer"}, config=cfg)
+                res = tool.run({"job_id": full_num_id, "open_browser": False})
+                assert (
+                    res["viewer_url"]
+                    == "https://viewer.example.com/job/boltz2-inference-pipeline-2026"
+                )
+                assert res["job_id"] == "boltz2-inference-pipeline-2026"
+
+            # Foreign project rejected in viewer too
+            tool = OF3OpenViewerTool(tool_config={"name": "open_viewer"}, config=cfg)
+            with pytest.raises(ValueError, match="Invalid job_id"):
+                tool.run(
+                    {
+                        "job_id": "projects/evil-project/locations/us-central1/pipelineJobs/boltz2-1",
+                        "open_browser": False,
+                    }
+                )
+
+        # Foreign project rejected in download_job_artifacts_for_job
+        dl_err = download_utils.download_job_artifacts_for_job(
+            job_id="projects/evil-project/locations/us-central1/pipelineJobs/boltz2-1",
+            project_id="my-project",
+            region="us-central1",
+        )
+        assert dl_err["status"] == "error"
+        assert "Invalid job_id" in dl_err["message"]
+
+        # Cold-start mismatched numeric project rejected in download_job_artifacts_for_job
+        from foldrun_app.core.vertex_utils import _PROJECT_NUMBERS
+
+        _PROJECT_NUMBERS.pop("my-project", None)
+        with patch("google.cloud.aiplatform_v1.PipelineServiceClient") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+            mock_job = MagicMock()
+            mock_job.name = "projects/123456789/locations/us-central1/pipelineJobs/boltz2-1"
+            mock_client.get_pipeline_job.return_value = mock_job
+            dl_err_num = download_utils.download_job_artifacts_for_job(
+                job_id="projects/999999999/locations/us-central1/pipelineJobs/boltz2-1",
+                project_id="my-project",
+                region="us-central1",
+            )
+            assert dl_err_num["status"] == "error"
+            assert "Invalid job_id" in dl_err_num["message"]
+            assert "does not match project" in dl_err_num["message"]
 
 
 class TestVertexTaskDetailsAndEpochGuard:

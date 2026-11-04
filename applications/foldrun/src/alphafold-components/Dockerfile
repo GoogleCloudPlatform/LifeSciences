@@ -49,22 +49,37 @@ RUN git clone --branch v3.3.0 --single-branch https://github.com/soedinglab/hh-s
     && rm -rf /tmp/hh-suite
 
 # Install MMseqs2 (GPU-accelerated sequence search, alternative to JackHMMER).
-RUN wget -q -O- https://mmseqs.com/latest/mmseqs-linux-gpu.tar.gz | tar xz -C /opt \
+ARG MMSEQS2_VERSION=18-8cc5c
+ARG MMSEQS2_GPU_SHA256=83969dd5c7d4c32858c2fc9a4d1024c15e8fe5da768ce76e787ab0195ffd64e7
+RUN wget -q -O /tmp/mmseqs-linux-gpu.tar.gz \
+      https://github.com/soedinglab/MMseqs2/releases/download/${MMSEQS2_VERSION}/mmseqs-linux-gpu.tar.gz \
+    && echo "${MMSEQS2_GPU_SHA256}  /tmp/mmseqs-linux-gpu.tar.gz" | sha256sum -c - \
+    && tar xzf /tmp/mmseqs-linux-gpu.tar.gz -C /opt \
+    && rm /tmp/mmseqs-linux-gpu.tar.gz \
     && ln -s /opt/mmseqs/bin/mmseqs /usr/local/bin/mmseqs
 
-# Install Miniconda package manager.
-ARG MINICONDA_VERSION=py311_24.11.1-0
-RUN wget -q -P /tmp \
-  https://repo.anaconda.com/miniconda/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh \
-    && bash /tmp/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh -b -p /opt/conda \
-    && rm /tmp/Miniconda3-${MINICONDA_VERSION}-Linux-x86_64.sh
+# Install Miniforge (conda-forge BSD-3-Clause; avoids Anaconda commercial TOS)
+# into a temporary bootstrap prefix and create /opt/conda from conda-forge only.
+ARG MINIFORGE_VERSION=26.9.4-1
+ARG MINIFORGE_SHA256=571b410272cc434f28bc6c5c49ca8ffd4a4d1bcba9f57f1b6baccdb46446cfcc
+RUN wget -q -O /tmp/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh \
+      https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh \
+    && echo "${MINIFORGE_SHA256}  /tmp/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh" | sha256sum -c - \
+    && bash /tmp/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh -b -p /opt/miniforge \
+    && rm /tmp/Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh \
+    && /opt/miniforge/bin/mamba create --quiet --yes -p /opt/conda \
+         --override-channels --channel conda-forge \
+         python=3.11 \
+         'ca-certificates>=2026.10' \
+         'certifi>=2026.10.19' \
+         'pip>=26.2.2' \
+         cuda-nvcc="$(cut -f1,2 -d. <<< "${CUDA}")" \
+         cuda-cudart="$(cut -f1,2 -d. <<< "${CUDA}")" \
+         cuda-version="$(cut -f1,2 -d. <<< "${CUDA}")" \
+    && /opt/miniforge/bin/mamba clean --all --force-pkgs-dirs --yes \
+    && rm -rf /opt/miniforge
 
-# Install conda packages.
 ENV PATH="/opt/conda/bin:$PATH"
-ENV CONDA_PLUGINS_AUTO_ACCEPT_TOS="yes"
-RUN conda install --quiet --yes --channel nvidia/label/cuda-${CUDA} \
-      conda==24.11.1 'ca-certificates>=2026.10' 'certifi>=2026.10.19' 'pip>=26.2.2' python=3.11 cuda==${CUDA} \
-    && conda clean --all --force-pkgs-dirs --yes
 
 # Symlink system libffi if needed to avoid undefined_symbol error before running system tools.
 RUN if [ -f /usr/lib/x86_64-linux-gnu/libffi.so.8 ]; then ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.8 /opt/conda/lib/libffi.so.8; elif [ -f /usr/lib/x86_64-linux-gnu/libffi.so.7 ]; then ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.7 /opt/conda/lib/libffi.so.7; fi
@@ -78,8 +93,21 @@ RUN pip3 install --no-cache-dir --require-hashes -r requirements-pip.txt
 
 RUN git clone https://github.com/deepmind/alphafold.git /app/alphafold
 RUN git -C /app/alphafold reset --hard $AF2_VERSION
-RUN wget -q -P /app/alphafold/alphafold/common/ \
-  https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
+
+# Fetch OpenStructure stereo_chemical_props.txt (commit 7102c636) via
+# content-addressed Software Heritage archive with GitHub/upstream fallbacks
+# (git.scicore.unibas.ch blocks cloud egress IPs with HTTP 403) and enforce
+# cryptographic SHA-256 verification regardless of source.
+ARG STEREO_CHEMICAL_PROPS_SHA256=24510899eeb49167cffedec8fa45363a4d08279c0c637a403b452f7d0ac09451
+RUN ( \
+      wget -q --tries=2 -T 15 -O /app/alphafold/alphafold/common/stereo_chemical_props.txt \
+        https://archive.softwareheritage.org/api/1/content/sha256:${STEREO_CHEMICAL_PROPS_SHA256}/raw/ \
+      || wget -q --tries=2 -T 15 -O /app/alphafold/alphafold/common/stereo_chemical_props.txt \
+        https://raw.githubusercontent.com/xrobin/openstructure/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt \
+      || wget -q --tries=1 -T 10 -O /app/alphafold/alphafold/common/stereo_chemical_props.txt \
+        https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt \
+    ) \
+    && echo "${STEREO_CHEMICAL_PROPS_SHA256}  /app/alphafold/alphafold/common/stereo_chemical_props.txt" | sha256sum -c -
 
 COPY requirements.lock /app/alphafold/requirements_resolved.txt
 RUN pip3 install --no-cache-dir --require-hashes \

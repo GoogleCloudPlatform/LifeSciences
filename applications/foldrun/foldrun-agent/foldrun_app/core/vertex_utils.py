@@ -20,35 +20,73 @@ from google.api_core import exceptions as google_exceptions
 from google.cloud import aiplatform_v1 as vertex_ai
 
 _JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_FULL_RESOURCE_PATTERN = re.compile(r"^projects/([^/]+)/locations/([^/]+)/pipelineJobs/(.*)$")
+_PROJECT_NUMBERS: dict[str, str] = {}
 
 
-def resolve_pipeline_job_name(job_id: str, project_id: str, region: str) -> str:
-    """Validate a pipeline job ID and return its full resource name.
-
-    Accepts either a full resource name (projects/.../pipelineJobs/...) or a short job
-    name/ID. Full resource names must match the configured project and region.
-
-    Raises:
-        ValueError: If the ID is malformed or targets another project/region.
-    """
+def _resolve_pipeline_job_target(
+    job_id: str, project_id: str, region: str
+) -> tuple[str, str | None]:
+    """Validate job_id and return (canonical_resource_name, caller_project_number)."""
     if not isinstance(job_id, str) or not job_id.strip() or "\x00" in job_id:
         raise ValueError("Invalid job_id: must be a non-empty string without null bytes")
 
     expected_prefix = f"projects/{project_id}/locations/{region}/pipelineJobs/"
     if job_id.startswith("projects/"):
-        if not job_id.startswith(expected_prefix):
+        match = _FULL_RESOURCE_PATTERN.match(job_id)
+        if not match:
             raise ValueError(
                 f"Cross-project or cross-region pipeline job access denied: '{job_id}' does not match expected prefix '{expected_prefix}'"
             )
-        short_id = job_id[len(expected_prefix) :]
+        proj, loc, short_id = match.groups()
+        if loc != region:
+            raise ValueError(
+                f"Cross-project or cross-region pipeline job access denied: '{job_id}' does not match expected prefix '{expected_prefix}'"
+            )
+        caller_project_number: str | None = None
+        if proj == project_id:
+            pass
+        elif proj.isdigit():
+            known_number = _PROJECT_NUMBERS.get(project_id)
+            if known_number is not None and proj != known_number:
+                raise ValueError(
+                    f"Cross-project or cross-region pipeline job access denied: '{job_id}' does not match project '{project_id}'"
+                )
+            caller_project_number = proj
+        else:
+            raise ValueError(
+                f"Cross-project or cross-region pipeline job access denied: '{job_id}' does not match expected prefix '{expected_prefix}'"
+            )
+
         if not _JOB_ID_PATTERN.match(short_id):
             raise ValueError(
                 f"Malformed pipeline job resource name: invalid short job ID '{short_id}'"
             )
-        return job_id
+        return f"{expected_prefix}{short_id}", caller_project_number
+
     if not _JOB_ID_PATTERN.match(job_id):
         raise ValueError(f"Malformed pipeline job ID: '{job_id}'")
-    return f"{expected_prefix}{job_id}"
+    return f"{expected_prefix}{job_id}", None
+
+
+def resolve_pipeline_job_name(job_id: str, project_id: str, region: str) -> str:
+    """Validate a pipeline job ID and return its canonical project resource name.
+
+    Accepts either a full resource name (projects/{project_id_or_number}/locations/{region}/pipelineJobs/{id})
+    or a short job name/ID. Always canonicalizes the returned resource name to
+    projects/{project_id}/locations/{region}/pipelineJobs/{id} so outgoing RPCs
+    never target another project or region.
+
+    Raises:
+        ValueError: If the ID is malformed or targets another project/region.
+    """
+    full_name, _ = _resolve_pipeline_job_target(job_id, project_id, region)
+    return full_name
+
+
+def extract_short_job_id(job_id: str, project_id: str, region: str) -> str:
+    """Validate a pipeline job ID (short ID or full resource name) and return its short ID."""
+    return resolve_pipeline_job_name(job_id, project_id, region).rsplit("/", 1)[-1]
 
 
 def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.PipelineJob:
@@ -66,7 +104,7 @@ def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.Pip
     Returns:
         PipelineJob proto object.
     """
-    full_name = resolve_pipeline_job_name(job_id, project_id, region)
+    full_name, caller_project_number = _resolve_pipeline_job_target(job_id, project_id, region)
     raw_id = full_name.rsplit("/", 1)[-1]
 
     client = vertex_ai.PipelineServiceClient(
@@ -75,8 +113,26 @@ def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.Pip
 
     try:
         request = vertex_ai.GetPipelineJobRequest(name=full_name)
-        return client.get_pipeline_job(request=request)
+        job = client.get_pipeline_job(request=request)
+        job_res_name = getattr(job, "name", None)
+        if isinstance(job_res_name, str):
+            res_match = _FULL_RESOURCE_PATTERN.match(job_res_name)
+            if res_match:
+                actual_proj = res_match.group(1)
+                if actual_proj.isdigit():
+                    _PROJECT_NUMBERS[project_id] = actual_proj
+                if (
+                    caller_project_number is not None
+                    and actual_proj != project_id
+                    and actual_proj != caller_project_number
+                ):
+                    raise ValueError(
+                        f"Cross-project or cross-region pipeline job access denied: '{job_id}' does not match project '{project_id}'"
+                    )
+        return job
     except (google_exceptions.NotFound, google_exceptions.InvalidArgument) as orig_exc:
+        if job_id.startswith("projects/"):
+            raise orig_exc
         parent = f"projects/{project_id}/locations/{region}"
         try:
             list_req = vertex_ai.ListPipelineJobsRequest(
