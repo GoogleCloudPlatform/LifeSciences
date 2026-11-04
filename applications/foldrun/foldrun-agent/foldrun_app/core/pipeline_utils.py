@@ -23,6 +23,7 @@ import tempfile
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
@@ -116,3 +117,60 @@ def compile_pipeline(
 
     logger.info(f"Compiled pipeline to {output_path}")
     return output_path
+
+
+def load_kfp_inference_pipeline(
+    *,
+    pkg_prefix: str,
+    vertex_pipeline_dir: str,
+    pipeline_module_name: str,
+    factory_attr: str,
+    enable_flex_start: bool = False,
+    model_label: str = "KFP",
+):
+    """Reload a vendored KFP pipeline package under lock and invoke its pipeline factory."""
+    with model_pipeline_load_context(
+        pkg_prefix=pkg_prefix,
+        vertex_pipeline_dir=vertex_pipeline_dir,
+        pipeline_module_name=pipeline_module_name,
+    ) as pipe_mod:
+        strategy = "FLEX_START" if enable_flex_start else "STANDARD"
+        logger.info(f"Loading {model_label} inference pipeline with {strategy} scheduling")
+        factory = getattr(pipe_mod, factory_attr)
+        return factory(strategy=strategy)
+
+
+_CONFIGURE_SEEDS_COMPONENT = None
+
+
+def get_configure_seeds_component():
+    """Return the shared KFP ``configure_seeds`` component used by OF3 and Boltz-2."""
+    global _CONFIGURE_SEEDS_COMPONENT
+    if _CONFIGURE_SEEDS_COMPONENT is not None:
+        return _CONFIGURE_SEEDS_COMPONENT
+
+    from kfp import dsl
+
+    @dsl.component(base_image="python:3.13-slim")
+    def configure_seeds(
+        num_model_seeds: int,
+        base_seed: int,
+    ) -> NamedTuple(
+        "ConfigureSeedsOutputs",
+        [
+            ("seed_configs", list),
+        ],
+    ):
+        """Generate seed configs for ParallelFor from ``base_seed``."""
+        import random
+        from collections import namedtuple
+
+        random.seed(base_seed)
+        seeds = [random.randint(0, 2**32 - 1) for _ in range(num_model_seeds)]
+        seed_configs = [{"seed_value": s} for s in seeds]
+
+        output = namedtuple("ConfigureSeedsOutputs", ["seed_configs"])
+        return output(seed_configs)
+
+    _CONFIGURE_SEEDS_COMPONENT = configure_seeds
+    return _CONFIGURE_SEEDS_COMPONENT

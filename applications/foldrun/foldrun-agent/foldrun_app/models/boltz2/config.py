@@ -54,11 +54,6 @@ class BOLTZ2Config(CoreConfig):
         """
         return os.getenv("BOLTZ2_CACHE_PATH", "boltz2/cache")
 
-    @property
-    def viewer_url(self) -> str:
-        """Cloud Run viewer service URL."""
-        return os.getenv("FOLDRUN_VIEWER_URL", "")
-
     def to_dict(self) -> dict:
         """Convert configuration to dictionary."""
         d = super().to_dict()

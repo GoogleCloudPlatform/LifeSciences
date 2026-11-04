@@ -12,125 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for triggering parallel analysis of BOLTZ2 predictions via Cloud Run Jobs."""
+"""Tool for triggering parallel analysis of Boltz-2 predictions via Cloud Run Jobs."""
 
-import json
 import logging
-import os
-from datetime import UTC, datetime
 from typing import Any
 
-from google.cloud import run_v2, storage
+from google.cloud import run_v2, storage  # noqa: F401
+
+from foldrun_app.core.kfp_tools import KFPAnalyzeJobTool
+from foldrun_app.core.vertex_utils import get_pipeline_job  # noqa: F401
 
 from ..base import BOLTZ2Tool
 
 logger = logging.getLogger(__name__)
 
 
-class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
-    """Triggers parallel analysis of Boltz2 predictions via Cloud Run Jobs."""
+class BOLTZ2JobAnalysisTool(KFPAnalyzeJobTool, BOLTZ2Tool):
+    """Triggers parallel analysis of Boltz-2 predictions via Cloud Run Jobs."""
 
-    def __init__(self, tool_config: dict[str, Any], config: Any):
-        super().__init__(tool_config, config)
-        self.job_name = os.getenv("ANALYSIS_JOB_NAME", "foldrun-analysis-job")
-
-    def _get_analysis_path(self, job: Any) -> str:
-        """Get GCS analysis path for a job."""
-        pipeline_root = None
-        if hasattr(job, "runtime_config") and job.runtime_config:
-            if (
-                hasattr(job.runtime_config, "gcs_output_directory")
-                and job.runtime_config.gcs_output_directory
-            ):
-                pipeline_root = job.runtime_config.gcs_output_directory
-
-        if not pipeline_root:
-            raise ValueError("Job does not have gcs_output_directory in runtime_config")
-
-        self._validate_gcs_uri(pipeline_root)
-
-        if not pipeline_root.endswith("/"):
-            pipeline_root += "/"
-
-        analysis_path = f"{pipeline_root}analysis/"
-        self._validate_gcs_uri(analysis_path)
-        return analysis_path
-
-    def _write_to_gcs(self, gcs_uri: str, data: dict[str, Any]) -> None:
-        """Write JSON data to GCS."""
-        bucket_name, blob_name = self._validate_gcs_uri(gcs_uri)
-
-        storage_client = storage.Client(project=self.config.project_id)
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-
-        blob.upload_from_string(json.dumps(data, indent=2), content_type="application/json")
-
-    def _check_existing_analysis(self, analysis_path: str) -> tuple[bool, dict | None]:
-        """Check if analysis already exists."""
-        bucket_name, prefix = self._validate_gcs_uri(analysis_path)
-        try:
-            storage_client = storage.Client(project=self.config.project_id)
-            bucket = storage_client.bucket(bucket_name)
-
-            summary_blob = bucket.blob(f"{prefix}summary.json")
-            if summary_blob.exists():
-                content = summary_blob.download_as_text()
-                return True, json.loads(content)
-
-            return False, None
-        except Exception as e:
-            logger.warning(f"Could not check for existing analysis: {e}")
-            return False, None
-
-    def _cleanup_stale_analysis_blobs(self, analysis_path: str) -> int:
-        """Delete stale per-prediction and summary blobs prior to re-analysis."""
-        bucket_name, prefix = self._validate_gcs_uri(analysis_path)
-        if not prefix.endswith("/"):
-            prefix += "/"
-        deleted = 0
-        try:
-            storage_client = storage.Client(project=self.config.project_id)
-            bucket = storage_client.bucket(bucket_name)
-            for blob in list(bucket.list_blobs(prefix=prefix)):
-                filename = blob.name.rsplit("/", 1)[-1]
-                is_stale = (
-                    filename in ("summary.json", "artifacts_bundle.zip", "error.json")
-                    or filename.endswith("_analysis.json")
-                    or (
-                        filename.startswith("analysis_")
-                        and filename.endswith(".json")
-                        and filename != "analysis_metadata.json"
-                    )
-                )
-                if is_stale:
-                    try:
-                        blob.delete()
-                        deleted += 1
-                    except Exception as del_err:
-                        logger.warning(f"Failed to delete stale blob {blob.name}: {del_err}")
-        except Exception as list_err:
-            logger.warning(f"Could not list stale analysis blobs under {analysis_path}: {list_err}")
-        return deleted
+    model_type = "boltz2"
+    display_label = "BOLTZ2"
+    check_existing_before_discovery = True
 
     def _discover_boltz2_samples(self, job: Any) -> tuple[list[dict[str, Any]], str | None]:
-        """Discover BOLTZ2 output samples and optional affinity file from GCS.
-
-        Returns:
-            (samples, affinity_uri) — samples is a list of dicts with cif_uri,
-            aggregated_uri, sample_name. affinity_uri is the GCS URI of the
-            affinity JSON if it exists (one per query, not per model), else None.
-        """
+        """Discover BOLTZ2 output samples and optional affinity file from GCS."""
         pipeline_root = job.runtime_config.gcs_output_directory
         bucket_name, prefix = self._validate_gcs_uri(pipeline_root)
         if not prefix.endswith("/"):
             prefix += "/"
 
-        storage_client = storage.Client(project=self.config.project_id)
+        storage_client = self._storage_module().Client(project=self.config.project_id)
         bucket = storage_client.bucket(bucket_name)
-
-        # List all blobs under pipeline root to find BOLTZ2 output files
-        # Pattern: predict-boltz2_*/predictions/patched_query/confidence_patched_query_model_0.json
         all_blobs = list(bucket.list_blobs(prefix=prefix))
 
         samples = []
@@ -144,21 +56,18 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                 filename = parts_list[-1]
 
                 if "/confidence_" in name:
-                    # e.g. .../boltz_results_patched_query/predictions/patched_query/confidence_patched_query_model_0.json
-                    cif_filename = filename.replace("confidence_", "", 1).replace(".json", ".cif")
-                    cif_name = "/".join([*parts_list[:-1], cif_filename])
-
-                    # pde_{stem}_model_N.npz — written when --write_full_pde is passed
-                    pde_filename = filename.replace("confidence_", "pde_", 1).replace(
-                        ".json", ".npz"
-                    )
-                    pde_name = "/".join([*parts_list[:-1], pde_filename])
-
                     if name in seen:
                         continue
                     seen.add(name)
 
+                    cif_filename = filename.replace("confidence_", "", 1).replace(".json", ".cif")
+                    cif_name = "/".join([*parts_list[:-1], cif_filename])
+                    pde_filename = filename.replace("confidence_", "pde_", 1).replace(
+                        ".json", ".npz"
+                    )
+                    pde_name = "/".join([*parts_list[:-1], pde_filename])
                     sample_name = filename.replace("confidence_", "", 1).replace(".json", "")
+
                     samples.append(
                         {
                             "sample_name": sample_name,
@@ -169,71 +78,23 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                     )
 
                 elif filename.startswith("affinity_") and affinity_uri is None:
-                    # affinity_{stem}.json — one per query, not per model seed
                     affinity_uri = f"gs://{bucket_name}/{name}"
                     logger.info(f"Found affinity results: {affinity_uri}")
 
         logger.info(f"Discovered {len(samples)} BOLTZ2 samples")
         return samples, affinity_uri
 
-    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Trigger parallel analysis via Cloud Run Job.
-
-        Args:
-            arguments: {
-                'job_id': Job ID (required),
-                'overwrite': Overwrite existing analysis (default: False)
-            }
-        """
-        job_id = arguments.get("job_id")
-        overwrite = arguments.get("overwrite", False)
-
-        if not job_id:
-            raise ValueError("job_id is required")
-
-        logger.info(f"Starting BOLTZ2 parallel analysis for job {job_id}")
-
-        # Get job from Agent Platform
-        from foldrun_app.core.vertex_utils import get_pipeline_job
-
-        try:
-            job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
-        except Exception as e:
-            return {"status": "error", "message": f"Could not find job {job_id}: {e!s}"}
-
-        job_res_name = getattr(job, "name", None)
-        job_id = (
-            job_res_name.rsplit("/", 1)[-1]
-            if isinstance(job_res_name, str) and job_res_name
-            else str(job_id).rsplit("/", 1)[-1]
-        )
-
-        # Determine analysis path
-        analysis_path = self._get_analysis_path(job)
-
-        # Check if analysis already exists
-        exists, existing_summary = self._check_existing_analysis(analysis_path)
-        if not overwrite and exists:
-            return {
-                "status": "already_exists",
-                "message": "Analysis already exists. Use overwrite=true to re-analyze, or use boltz2_get_analysis_results to retrieve.",
-                "analysis_path": analysis_path,
-                "summary_uri": f"{analysis_path}summary.json",
-                **existing_summary,
-            }
-
-        # Discover BOLTZ2 samples and optional affinity file from GCS
+    def _discover_and_build_task_config(
+        self,
+        job: Any,
+        job_id: str,
+        analysis_path: str,
+        arguments: dict[str, Any],
+    ) -> tuple[dict[str, Any], int, dict[str, Any]] | dict[str, Any]:
         samples, affinity_uri = self._discover_boltz2_samples(job)
-
         if not samples:
             return {"status": "no_predictions", "message": "No BOLTZ2 samples found for this job"}
 
-        # Remove stale artifacts from any prior incomplete or overwritten run
-        self._cleanup_stale_analysis_blobs(analysis_path)
-
-        # Resolve query YAML URI now, while we have the pipeline job in hand.
-        # The agent reads labels reliably; passing the resolved URI in task_config
-        # avoids a second Agent Platform API call from inside the Cloud Run Job.
         query_yaml_uri = None
         try:
             labels = dict(job.labels) if hasattr(job, "labels") and job.labels else {}
@@ -254,11 +115,11 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
         except Exception as e:
             logger.warning(f"Could not resolve query YAML URI: {e}")
 
-        # Build task configuration
         task_config = {
             "job_id": job_id,
-            "affinity_uri": affinity_uri,  # None if affinity was not requested
-            "query_yaml_uri": query_yaml_uri,  # Resolved here; passed to consolidate_results
+            "analysis_path": analysis_path,
+            "affinity_uri": affinity_uri,
+            "query_yaml_uri": query_yaml_uri,
             "predictions": [
                 {
                     "index": i,
@@ -272,77 +133,4 @@ class BOLTZ2JobAnalysisTool(BOLTZ2Tool):
                 for i, s in enumerate(samples)
             ],
         }
-        task_config_path = f"{analysis_path}task_config.json"
-        self._write_to_gcs(task_config_path, task_config)
-
-        # Write metadata
-        metadata = {
-            "job_id": job_id,
-            "total_predictions": len(samples),
-            "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            "status": "running",
-            "execution_method": "cloud_run_job",
-            "model_type": "boltz2",
-        }
-        self._write_to_gcs(f"{analysis_path}analysis_metadata.json", metadata)
-
-        # Execute Cloud Run Job
-        client = run_v2.JobsClient()
-        job_path = (
-            f"projects/{self.config.project_id}/locations/{self.config.region}/jobs/{self.job_name}"
-        )
-        task_count = len(samples)
-
-        try:
-            request = run_v2.RunJobRequest(
-                name=job_path,
-                overrides=run_v2.RunJobRequest.Overrides(
-                    task_count=task_count,
-                    timeout={"seconds": 600},
-                    container_overrides=[
-                        run_v2.RunJobRequest.Overrides.ContainerOverride(
-                            env=[
-                                run_v2.EnvVar(name="ANALYSIS_PATH", value=analysis_path),
-                                run_v2.EnvVar(name="MODEL_TYPE", value="boltz2"),
-                                run_v2.EnvVar(
-                                    name="GEMINI_MODEL",
-                                    value=os.getenv("GEMINI_ANALYSIS_MODEL", "gemini-4-argon"),
-                                ),
-                            ]
-                        )
-                    ],
-                ),
-            )
-
-            operation = client.run_job(request=request)
-
-            execution_name = None
-            execution_uid = None
-            if hasattr(operation, "metadata") and operation.metadata:
-                if hasattr(operation.metadata, "name"):
-                    execution_name = operation.metadata.name
-                    execution_uid = execution_name.split("/")[-1] if execution_name else None
-
-            metadata["execution_name"] = execution_name
-            metadata["execution_uid"] = execution_uid
-            self._write_to_gcs(f"{analysis_path}analysis_metadata.json", metadata)
-
-            return {
-                "status": "started",
-                "job_id": job_id,
-                "analysis_path": analysis_path,
-                "gcs_console_url": self.gcs_console_url(analysis_path),
-                "total_predictions": len(samples),
-                "execution_name": execution_name,
-                "execution_uid": execution_uid,
-                "message": f"BOLTZ2 analysis started with {task_count} parallel tasks. Use boltz2_get_analysis_results to check status.",
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to execute Cloud Run Job: {e}", exc_info=True)
-            return {
-                "status": "failed",
-                "job_id": job_id,
-                "error": str(e),
-                "message": "Failed to start BOLTZ2 analysis Cloud Run Job execution",
-            }
+        return task_config, len(samples), {}

@@ -79,7 +79,7 @@ class TestCreateAgent:
                 create_alphafold_agent(model="invalid-model")
 
     def test_agent_has_all_tools(self, mock_env_vars):
-        """Agent has all FunctionTools (AF2 + OF3 + Boltz-2)."""
+        """Agent has all FunctionTools (AF2 + OF3 + Boltz-2 with unified post-submission tools)."""
         with (
             _mock_startup(),
             patch("google.cloud.aiplatform.init"),
@@ -88,7 +88,7 @@ class TestCreateAgent:
             from foldrun_app.agent import create_alphafold_agent
 
             agent = create_alphafold_agent()
-            assert len(agent.tools) == 31
+            assert len(agent.tools) == 25
 
     def test_agent_tool_names_complete(self, mock_env_vars):
         """Every expected tool function is present by name."""
@@ -108,14 +108,8 @@ class TestCreateAgent:
                 "submit_af2_batch_predictions",
                 # OF3
                 "submit_of3_prediction",
-                "of3_analyze_job_parallel",
-                "of3_get_analysis_results",
-                "open_of3_structure_viewer",
                 # Boltz-2
                 "submit_boltz2_prediction",
-                "boltz2_analyze_job_parallel",
-                "boltz2_get_analysis_results",
-                "open_boltz2_structure_viewer",
                 # Job management
                 "check_job_status",
                 "list_jobs",
@@ -126,7 +120,7 @@ class TestCreateAgent:
                 "estimate_job_cost",
                 "estimate_monthly_cost",
                 "get_actual_job_costs",
-                # Results & Analysis
+                # Results & Analysis (unified across AF2, OF3, Boltz-2, AF3)
                 "get_prediction_results",
                 "download_job_artifacts",
                 "analyze_prediction_quality",
@@ -140,7 +134,7 @@ class TestCreateAgent:
                 # Storage management
                 "cleanup_gcs_files",
                 "find_orphaned_gcs_files",
-                # Visualization
+                # Visualization (unified across AF2, OF3, Boltz-2, AF3)
                 "open_structure_viewer",
             }
             assert tool_func_names == expected

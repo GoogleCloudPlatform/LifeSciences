@@ -14,57 +14,8 @@
 
 """Visualization tool wrappers for ADK FunctionTool."""
 
+from foldrun_app.core.dispatch import dispatch_open_structure_viewer
 from foldrun_app.skills._tool_registry import get_tool
-
-
-def open_of3_structure_viewer(
-    job_id: str,
-    open_browser: bool = True,
-) -> dict:
-    """
-    Open the FoldRun structure viewer for OpenFold3 predictions.
-
-    Displays interactive 3D CIF structure with pLDDT confidence coloring,
-    ranking scores, ipTM matrix, and analysis plots.
-
-    Args:
-        job_id: OF3 pipeline job ID (e.g., 'openfold3-inference-pipeline-20260215153755')
-        open_browser: Automatically open in browser (default: True)
-
-    Returns:
-        Viewer URL and status information
-    """
-    return get_tool("of3_open_viewer").run(
-        {
-            "job_id": job_id,
-            "open_browser": open_browser,
-        }
-    )
-
-
-def open_boltz2_structure_viewer(
-    job_id: str,
-    open_browser: bool = True,
-) -> dict:
-    """
-    Open the FoldRun structure viewer for Boltz-2 predictions.
-
-    Displays interactive 3D CIF structure with pLDDT confidence coloring,
-    ranking scores, ipTM matrix, and analysis plots.
-
-    Args:
-        job_id: Boltz-2 pipeline job ID
-        open_browser: Automatically open in browser (default: True)
-
-    Returns:
-        Viewer URL and status information
-    """
-    return get_tool("boltz2_open_viewer").run(
-        {
-            "job_id": job_id,
-            "open_browser": open_browser,
-        }
-    )
 
 
 def open_structure_viewer(
@@ -75,52 +26,28 @@ def open_structure_viewer(
     open_browser: bool = True,
 ) -> dict:
     """
-    Open the FoldRun structure viewer in a web browser.
+    Open the FoldRun 3D structure viewer for any completed prediction job.
 
-    Displays interactive 3D protein structure with pLDDT confidence coloring,
-    quality metrics, analysis plots, and download links. Works with completed
-    prediction jobs.
+    Automatically detects the job's model backend (AlphaFold2, OpenFold3, Boltz-2,
+    or AlphaFold 3) and constructs the interactive Mol* viewer URL displaying
+    3D coordinates (PDB / mmCIF) with pLDDT confidence coloring, polymers, ligands,
+    quality metrics, and analysis plots.
 
     Args:
-        job_id: Pipeline job ID (e.g., 'alphafold2-inference-pipeline-20250421110959')
-        pdb_uri: GCS URI to PDB file (optional, defaults to ranked_0.pdb from job)
-        summary_uri: GCS URI to analysis summary.json (optional, auto-constructed from job_id)
+        job_id: Pipeline job ID or AlphaFold 3 job name
+        pdb_uri: GCS URI to PDB file (optional, AF2 only)
+        summary_uri: GCS URI to analysis summary.json (optional, AF2 only)
         model_name: Display name for the model (default: 'Best Model')
         open_browser: Automatically open in browser (default: True)
 
     Returns:
         Viewer URL and status information
     """
-    return get_tool("af2_open_viewer").run(
-        {
-            "job_id": job_id,
-            "pdb_uri": pdb_uri,
-            "summary_uri": summary_uri,
-            "model_name": model_name,
-            "open_browser": open_browser,
-        }
-    )
-
-
-def open_af3_structure_viewer(
-    job_id: str,
-    open_browser: bool = True,
-) -> dict:
-    """Open the FoldRun structure viewer for AlphaFold 3 all-atom predictions.
-
-    Displays interactive 3D mmCIF structure with pLDDT confidence coloring,
-    nucleic acids, ligands, and ions.
-
-    Args:
-        job_id: AlphaFold 3 prediction job ID
-        open_browser: Automatically open in browser (default: True)
-
-    Returns:
-        Viewer URL and status information
-    """
-    return get_tool("af3_open_viewer").run(
-        {
-            "job_id": job_id,
-            "open_browser": open_browser,
-        }
+    return dispatch_open_structure_viewer(
+        job_id,
+        pdb_uri=pdb_uri,
+        summary_uri=summary_uri,
+        model_name=model_name,
+        open_browser=open_browser,
+        get_tool_fn=get_tool,
     )

@@ -46,11 +46,6 @@ class Config(CoreConfig):
         return os.getenv("ALPHAFOLD_COMPONENTS_IMAGE")
 
     @property
-    def viewer_url(self) -> str:
-        """Cloud Run viewer service URL."""
-        return os.getenv("FOLDRUN_VIEWER_URL", "")
-
-    @property
     def parallelism(self) -> int:
         """Max concurrent predict/relax tasks in a pipeline run."""
         return int(os.getenv("AF2_PARALLELISM", "5"))

@@ -9,45 +9,35 @@ metadata:
     - analyze_job_parallel
     - get_analysis_results
     - analyze_job
-    - of3_analyze_job_parallel
-    - of3_get_analysis_results
-    - boltz2_analyze_job_parallel
-    - boltz2_get_analysis_results
-    - get_af3_results
 ---
 
 # Results Analysis & Quality Assessment
 
 - **Download artifacts & ZIP bundle**: Use `download_job_artifacts` to generate 60-minute GCS V4 Signed URLs for the complete job archive (`artifacts_bundle.zip`, containing ranked structures, plots, Gemini expert report `.md`, inputs, and `summary.json`) as well as individual structures and plots. Always present signed HTTPS URLs (`artifacts_bundle_signed_url`, `best_structure_signed_url`) instead of raw `gs://` or GCS Console links so isolated end users can download directly in their browser.
-- **Download results**: Use get_prediction_results to retrieve PDB files
+- **Download results**: Use get_prediction_results to retrieve AF2 PDB files
 - **Analyze quality**: Use analyze_prediction_quality for pLDDT and PAE metrics
-- **AF3 results**: Use get_af3_results to retrieve completed AlphaFold 3 prediction results from GCS (ranking_score, pTM, ipTM, mean pLDDT, and mmCIF path)
 
 ### Rule: AF3 Results Lookup Resolution
-When calling `get_af3_results`:
+When calling `get_analysis_results` for AlphaFold 3 jobs:
 - AF3 stores artifacts under the sanitized `job_name` (e.g. `gs://.../af3_predictions/<job_name>/`).
-- If `get_af3_results(pipeline_job_id)` returns `not_found`, immediately retry with the human-readable `job_name` before reporting an artifact error to the user.
+- If `get_analysis_results(pipeline_job_id)` returns `not_found`, immediately retry with the human-readable `job_name` before reporting an artifact error to the user.
 
 ### Rule: Idle Endpoint Scale-to-Zero Awareness
 When the last job in an active AF3 queue finishes:
 - Check `check_af3_endpoint`. If `active_slots_in_use: 0` and `queued_jobs_waiting: 0`:
   - Inform the user:
     "All jobs in this batch are complete. The endpoint will automatically scale down to 0 replicas ($0.00/hr) after 20 minutes of inactivity."
-- **Parallel analysis**: Use analyze_job_parallel for fast batch analysis (25 predictions in ~60s)
+- **Parallel analysis**: Use `analyze_job_parallel` for fast batch analysis across AF2, OF3, Boltz-2, and AF3 (automatically dispatches by `job_id` to generate pLDDT plots, PAE/PDE heatmaps, ipTM matrices, and Gemini expert analysis)
   - **IMPORTANT**: After starting analysis, DO NOT automatically check for results
   - Tell the user: "Analysis started. This will take 1-2 minutes. Ask me to check results in a few minutes."
   - Wait for the user to explicitly ask for results before checking
-- **Get analysis results**: Use get_analysis_results to retrieve completed parallel analyses
+- **Get analysis results**: Use `get_analysis_results` to retrieve completed analyses and confidence metrics across AF2, OF3, Boltz-2, and AF3
   - Only call this when the user explicitly asks to check/get analysis results
   - Check the 'status' field in response: 'complete', 'running', 'failed', 'likely_failed', 'incomplete'
   - If status is 'failed' or 'likely_failed', STOP retrying and explain the error to the user with error_hint/error_details
   - DO NOT repeatedly call get_analysis_results if it returns 'failed' status - the analysis has permanently failed
-  - Common failure: Cloud Run can't find prediction files (usually means AlphaFold job hasn't completed yet)
+  - Common failure: Cloud Run can't find prediction files (usually means the prediction job hasn't completed yet)
   - If status is 'running', you may check again ONCE after a brief wait, but not in a loop
-- **OF3 analysis**: Use of3_analyze_job_parallel to analyze OF3 predictions (generates pLDDT plots, PDE heatmaps, ipTM matrix, Gemini analysis)
-- **OF3 results**: Use of3_get_analysis_results to retrieve OF3 analysis results
-- **Boltz-2 analysis**: Use boltz2_analyze_job_parallel to analyze Boltz-2 predictions
-- **Boltz-2 results**: Use boltz2_get_analysis_results to retrieve Boltz-2 analysis results
 - **Job analysis**: Use analyze_job for comprehensive analysis of any job (failed, successful, or running)
   - Use detail_level='summary' for quick overview without log fetching (default, recommended for initial checks)
   - Use detail_level='detailed' for deep troubleshooting with Cloud Logging error logs (fetches top 5 ERROR logs per failed task)

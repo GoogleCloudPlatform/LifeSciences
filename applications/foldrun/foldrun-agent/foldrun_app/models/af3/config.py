@@ -177,11 +177,6 @@ class AF3Config(CoreConfig):
         """Whether to automatically fall back to lower GPU tiers (H100 -> A100_80GB -> A100 -> L4) on stockout/quota/reservation errors."""
         return os.getenv("AF3_AUTO_FALLBACK_GPU", "true").lower() in ("true", "1", "yes")
 
-    @property
-    def viewer_url(self) -> str:
-        """Cloud Run viewer service URL."""
-        return os.getenv("FOLDRUN_VIEWER_URL", "")
-
     def to_dict(self) -> dict:
         """Convert configuration to dictionary."""
         d = super().to_dict()

@@ -25,6 +25,12 @@ import logging
 import os
 import re
 
+from foldrun_app.core.hardware import AF3_HARDWARE_TIER_LADDER
+from foldrun_app.core.kfp_tools import KFPModelTool
+from foldrun_app.models.af2.base import AF2Tool
+from foldrun_app.models.boltz2.base import BOLTZ2Tool
+from foldrun_app.models.of3.base import OF3Tool
+
 logger = logging.getLogger(__name__)
 
 _VALID_PIPELINE_JOB_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -353,50 +359,40 @@ def _interpolate_durations(
 
 def _normalize_gpu_type(gpu_type: str | None) -> str:
     """Normalize GPU type strings (e.g. 'l4', 'a100-80gb', 'auto')."""
-    normalized = (gpu_type or "auto").strip()
-    if not normalized or normalized.lower() == "auto":
-        return "auto"
-    return normalized.upper().replace("-", "_")
+    return KFPModelTool._normalize_gpu_type(gpu_type)
 
 
 def _auto_select_gpu(job_type: str, sequence_length: int) -> str:
     """Auto-select GPU based on job type and sequence length.
 
-    Mirrors the logic in FoldRun's submission tools.
+    Delegates directly to each model plugin's canonical GPU recommender and
+    ``AF3_HARDWARE_TIER_LADDER`` so cost estimation never drifts from submission.
     """
     if job_type == "af3":
-        return "H100"
+        top_tier = AF3_HARDWARE_TIER_LADDER[0]["tier"]
+        return "H100" if top_tier.startswith("H100") else top_tier
     if job_type == "of3":
-        return "A100" if sequence_length <= 2200 else "A100_80GB"
-    elif job_type == "boltz2":
-        return "A100" if sequence_length <= 2000 else "A100_80GB"
-    elif job_type == "af2_multimer":
-        return "A100" if sequence_length < 1000 else "A100_80GB"
-    else:  # af2_monomer — L4 no longer auto-selected (provisions slowly under DWS)
-        if sequence_length <= 1500:
-            return "A100"
-        return "A100_80GB"
+        return OF3Tool._recommend_gpu(sequence_length)
+    if job_type == "boltz2":
+        return BOLTZ2Tool._recommend_gpu(sequence_length)
+    if job_type == "af2_multimer":
+        return AF2Tool._recommend_gpu(sequence_length, is_multimer=True)
+    return AF2Tool._recommend_gpu(sequence_length, is_multimer=False)
 
 
 def _relax_gpu(predict_gpu: str) -> str:
-    """Determine relax GPU. Matches predict tier — no downgrade to L4."""
-    return {
-        "H100": "A100",
-        "A100_80GB": "A100",
-        "A100": "A100",
-        "L4": "L4",  # only when user explicitly requested L4
-    }.get(predict_gpu, "A100")
+    """Determine relax GPU from ``KFPModelTool.RELAX_GPU_MAP``."""
+    return KFPModelTool.RELAX_GPU_MAP.get(predict_gpu, "A100")
 
 
 def _machine_for_gpu(gpu_type: str) -> str:
-    """Return the machine type paired with a GPU."""
-    if gpu_type == "L4":
-        return "g2-standard-12"
-    if gpu_type == "A100_80GB":
-        return "a2-ultragpu-1g"
-    if gpu_type == "H100":
-        return "a3-highgpu-1g"
-    return "a2-highgpu-1g"
+    """Return the machine type paired with a GPU from canonical hardware specs."""
+    if gpu_type in KFPModelTool.GPU_SPECS:
+        return KFPModelTool.GPU_SPECS[gpu_type][0]
+    for entry in AF3_HARDWARE_TIER_LADDER:
+        if entry["tier"] == gpu_type or (gpu_type == "H100" and entry["tier"].startswith("H100")):
+            return entry["machine_type"]
+    return KFPModelTool.GPU_SPECS["A100"][0]
 
 
 def _hourly_rate(
@@ -624,7 +620,7 @@ def _estimate_phases(
         return phases
 
     # Phase 1: MSA / Data Pipeline (CPU for AF2, OF3, Boltz-2)
-    msa_machine = "c2-standard-16"
+    msa_machine = KFPModelTool.DEFAULT_MSA_MACHINE
     msa_rate = _hourly_rate(msa_machine, None, 0, spot, prices)
     msa_cost = (msa_min / 60) * msa_rate
     phases.append(

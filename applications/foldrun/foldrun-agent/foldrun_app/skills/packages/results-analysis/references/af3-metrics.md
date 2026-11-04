@@ -5,7 +5,7 @@ AlphaFold 3 outputs all-atom structure predictions in standard macromolecular Cr
 
 ## Confidence Metrics per Prediction
 
-Summary metrics are output in `<job_name>_summary_confidences.json` and `analysis/summary.json`, and parsed by `get_af3_results`:
+Summary metrics are output in `<job_name>_summary_confidences.json` and `analysis/summary.json`, and parsed by `get_analysis_results`:
 
 1. **ranking_score** ($-100.0$ to $1.5$, typically $0.0$ to $1.1$):
    - Primary composite metric used to rank diffusion samples and assess overall prediction quality.

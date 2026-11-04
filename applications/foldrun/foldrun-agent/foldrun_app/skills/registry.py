@@ -59,14 +59,9 @@ from foldrun_app.skills.results_analysis.tools import (
     analyze_job,
     analyze_job_parallel,
     analyze_prediction_quality,
-    boltz2_analyze_job_parallel,
-    boltz2_get_analysis_results,
     download_job_artifacts,
-    get_af3_results,
     get_analysis_results,
     get_prediction_results,
-    of3_analyze_job_parallel,
-    of3_get_analysis_results,
 )
 from foldrun_app.skills.storage_management.instruction import STORAGE_MANAGEMENT_INSTRUCTION
 from foldrun_app.skills.storage_management.tools import (
@@ -75,9 +70,6 @@ from foldrun_app.skills.storage_management.tools import (
 )
 from foldrun_app.skills.visualization.instruction import VISUALIZATION_INSTRUCTION
 from foldrun_app.skills.visualization.tools import (
-    open_af3_structure_viewer,
-    open_boltz2_structure_viewer,
-    open_of3_structure_viewer,
     open_structure_viewer,
 )
 
@@ -232,12 +224,6 @@ class SkillRegistry:
             get_analysis_results,
             analyze_job,
         ]
-        if has_of3:
-            analysis_tools.extend([of3_analyze_job_parallel, of3_get_analysis_results])
-        if has_boltz2:
-            analysis_tools.extend([boltz2_analyze_job_parallel, boltz2_get_analysis_results])
-        if has_af3:
-            analysis_tools.append(get_af3_results)
 
         self.register(
             Skill(
@@ -252,12 +238,6 @@ class SkillRegistry:
         vis_tools = [
             open_structure_viewer,
         ]
-        if has_of3:
-            vis_tools.append(open_of3_structure_viewer)
-        if has_boltz2:
-            vis_tools.append(open_boltz2_structure_viewer)
-        if has_af3:
-            vis_tools.append(open_af3_structure_viewer)
 
         self.register(
             Skill(

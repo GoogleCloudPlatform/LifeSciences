@@ -17,18 +17,15 @@
 import logging
 from typing import Any
 
-from foldrun_app.core.base_tool import BaseTool
-from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK, setup_compile_env_vars
+from foldrun_app.core.kfp_tools import KFPModelTool
 
 from .config import BOLTZ2Config
 
 logger = logging.getLogger(__name__)
 
 
-class BOLTZ2Tool(BaseTool):
+class BOLTZ2Tool(KFPModelTool):
     """Base class for Boltz2 tools following ToolUniverse pattern."""
-
-    _compile_env_lock = GLOBAL_COMPILE_LOCK
 
     def __init__(self, tool_config: dict[str, Any], config: BOLTZ2Config | None = None):
         super().__init__(tool_config, config or BOLTZ2Config())
@@ -40,41 +37,29 @@ class BOLTZ2Tool(BaseTool):
         filestore_network: str | None = None,
     ):
         """Set up environment variables for BOLTZ2 pipeline compilation."""
-        nfs_server = filestore_ip or self.config.filestore_ip or ""
-        network = filestore_network or self.config.filestore_network or ""
-
-        env_vars = {
-            "BOLTZ2_COMPONENTS_IMAGE": self.config.base_image,
-            "NFS_SERVER": nfs_server,
-            "NFS_PATH": self.config.nfs_share,
-            "NFS_MOUNT_POINT": self.config.nfs_mount_point,
-            "NETWORK": network,
-            "BOLTZ2_CACHE_PATH": self.config.cache_path,
-            "PREDICT_MACHINE_TYPE": hardware_config.get("predict_machine", "a2-highgpu-1g"),
-            "PREDICT_ACCELERATOR_TYPE": hardware_config.get("predict_accel", "NVIDIA_TESLA_A100"),
-            "PREDICT_ACCELERATOR_COUNT": str(hardware_config.get("predict_count", 1)),
-            "DWS_MAX_WAIT_HOURS": str(hardware_config.get("dws_max_wait_hours", 168)),
-        }
-
-        return setup_compile_env_vars(env_vars, lock=self._compile_env_lock)
+        env_vars = self._build_base_compile_env(
+            hardware_config,
+            filestore_ip=filestore_ip,
+            filestore_network=filestore_network,
+        )
+        env_vars.update(
+            {
+                "BOLTZ2_COMPONENTS_IMAGE": self.config.base_image,
+                "BOLTZ2_CACHE_PATH": self.config.cache_path,
+            }
+        )
+        return self._scoped_compile_env(env_vars)
 
     @staticmethod
     def _recommend_gpu(num_tokens: int) -> str:
         """Recommend GPU type based on total input tokens.
 
         Auto-selection defaults to >=40GB A100 tiers:
-            <=2000 tokens  → A100     (40 GB VRAM)
-            >2000 tokens   → A100_80GB (80 GB VRAM)
+            <=2000 tokens -> A100     (40 GB VRAM)
+            >2000 tokens  -> A100_80GB (80 GB VRAM)
 
-        L4 (g2-standard-12, 24 GB VRAM) is never auto-selected, as larger inputs
-        can OOM without cuEquivariance kernels, though callers can request it
-        explicitly via gpu_type='L4' for smaller targets (<=1000 tokens).
-
-        Args:
-            num_tokens: Total number of tokens (residues + nucleotides + ligand atoms)
-
-        Returns:
-            Recommended GPU type: 'A100' or 'A100_80GB'
+        L4 (g2-standard-12, 24 GB VRAM) is never auto-selected, though callers
+        can request it explicitly via gpu_type='L4' for smaller targets.
         """
         if num_tokens > 2000:
             return "A100_80GB"
@@ -86,97 +71,29 @@ class BOLTZ2Tool(BaseTool):
         num_gpus: int = 1,
         num_tokens: int = 0,
     ) -> dict[str, Any]:
-        """Get hardware configuration for BOLTZ2 pipeline.
-
-        No relax phase, no MMseqs2 GPU data pipeline — simpler than AF2.
-
-        Args:
-            gpu_type: GPU type for predict phase ('auto', 'L4', 'A100', 'A100_80GB').
-                Case-insensitive; hyphenated label forms like 'a100-80gb' are normalized.
-            num_gpus: Number of GPUs (1, 2, 4, 8).
-            num_tokens: Total input tokens for auto GPU selection and L4 VRAM checks.
-
-        Returns:
-            Hardware configuration dictionary.
-        """
-        normalized = (gpu_type or "auto").strip()
-        gpu_type = (
-            "auto"
-            if not normalized or normalized.lower() == "auto"
-            else normalized.upper().replace("-", "_")
-        )
+        """Get hardware configuration for BOLTZ2 pipeline."""
+        gpu_type = self._normalize_gpu_type(gpu_type)
 
         if gpu_type == "auto":
             gpu_type = self._recommend_gpu(num_tokens)
             logger.info(f"Auto-selected GPU: {gpu_type} (num_tokens={num_tokens})")
 
-        configs = {
-            "L4": {
-                "predict_machine": "g2-standard-12",
-                "predict_accel": "NVIDIA_L4",
-                "predict_count": 1,
-            },
-            "A100": {
-                "predict_machine": "a2-highgpu-1g",
-                "predict_accel": "NVIDIA_TESLA_A100",
-                "predict_count": 1,
-            },
-            "A100_80GB": {
-                "predict_machine": "a2-ultragpu-1g",
-                "predict_accel": "NVIDIA_A100_80GB",
-                "predict_count": 1,
-            },
-        }
-
-        if gpu_type not in configs:
+        supported_types = list(self.GPU_SPECS.keys())
+        if gpu_type not in supported_types:
             raise ValueError(
-                f"Unsupported GPU type '{gpu_type}' for Boltz-2. Supported types: {list(configs.keys())}"
+                f"Unsupported GPU type '{gpu_type}' for Boltz-2. Supported types: {supported_types}"
             )
 
-        # Enforce supported GPUs logic:
-        # Never auto-downgrade >=40GB requests (auto, A100, A100_80GB) to 24GB L4.
-        # L4 is only used when explicitly requested via gpu_type == "L4".
         explicit_l4 = gpu_type == "L4"
         allowed_pool = ["L4", "A100", "A100_80GB"] if explicit_l4 else ["A100", "A100_80GB"]
-        supported = [g for g in self.config.supported_gpus if g in allowed_pool]
-        if not supported:
-            raise ValueError(
+        gpu_type = self._resolve_supported_gpu(
+            gpu_type,
+            allowed_pool=allowed_pool,
+            empty_pool_error=(
                 f"No Boltz-2 compatible GPUs are supported in this environment! "
                 f"(Supported: {self.config.supported_gpus}; >=40GB A100/A100_80GB required unless gpu_type='L4')"
-            )
-
-        if gpu_type not in supported:
-            original_type = gpu_type
-            upgrade_path = allowed_pool
-
-            try:
-                start_idx = upgrade_path.index(original_type)
-            except ValueError:
-                start_idx = 0
-
-            new_type = None
-            for candidate in upgrade_path[start_idx:]:
-                if candidate in supported:
-                    new_type = candidate
-                    break
-
-            if not new_type:
-                for candidate in reversed(upgrade_path[:start_idx]):
-                    if candidate in supported:
-                        new_type = candidate
-                        break
-
-            if new_type:
-                logger.warning(
-                    f"Requested GPU '{original_type}' not supported. Auto-selecting '{new_type}'."
-                )
-                gpu_type = new_type
-            else:
-                fallback = supported[-1]
-                logger.warning(
-                    f"Requested GPU '{original_type}' not supported. Falling back to '{fallback}'."
-                )
-                gpu_type = fallback
+            ),
+        )
 
         if gpu_type == "L4" and num_tokens > 1000:
             logger.warning(
@@ -185,15 +102,8 @@ class BOLTZ2Tool(BaseTool):
                 f"diffusion after CPU MSA completes. Consider gpu_type='A100' or 'A100_80GB'."
             )
 
-        config = configs[gpu_type].copy()
-
-        # Multi-GPU machine types
-        if num_gpus > 1 and gpu_type in ["A100", "A100_80GB"]:
-            base = "a2-highgpu" if gpu_type == "A100" else "a2-ultragpu"
-            config["predict_machine"] = f"{base}-{num_gpus}g"
-            config["predict_count"] = num_gpus
-
-        config["msa_machine"] = "c2-standard-16"
+        config = self.predict_spec_for_gpu(gpu_type)
+        self._scale_multi_gpu_machine(config, gpu_type, num_gpus)
+        config["msa_machine"] = self.DEFAULT_MSA_MACHINE
         config["dws_max_wait_hours"] = self.config.dws_max_wait_hours
-
         return config

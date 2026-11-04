@@ -14,93 +14,12 @@
 
 """AF2 Open Viewer Tool - Opens the 3D structure viewer for prediction results."""
 
-import logging
-import re
-import urllib.parse
-import webbrowser
-from typing import Any
+import webbrowser  # noqa: F401
+
+from foldrun_app.core.kfp_tools import KFPOpenViewerTool
 
 from ..base import AF2Tool
 
-logger = logging.getLogger(__name__)
 
-_JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
-
-
-class AF2OpenViewerTool(AF2Tool):
-    """Opens the FoldRun structure viewer for completed predictions."""
-
-    def __init__(self, tool_config: dict[str, Any], config: Any):
-        """Initialize the viewer tool.
-
-        Args:
-            tool_config: Tool configuration from JSON
-            config: Application configuration
-        """
-        super().__init__(tool_config, config)
-        # Cloud Run viewer service URL from config (can be overridden via AF2_VIEWER_URL env var)
-        self.viewer_base_url = config.viewer_url
-
-    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Execute the tool to open the viewer.
-
-        Args:
-            arguments: Tool arguments containing job_id and optional parameters
-
-        Returns:
-            Dict containing viewer URL and status
-        """
-        if (
-            not self.viewer_base_url
-            or not isinstance(self.viewer_base_url, str)
-            or not (
-                self.viewer_base_url.startswith("http://")
-                or self.viewer_base_url.startswith("https://")
-            )
-        ):
-            raise ValueError(
-                "Invalid viewer_base_url: must be set and start with http:// or https://"
-            )
-
-        job_id = arguments.get("job_id")
-        if not job_id:
-            raise ValueError("job_id is required")
-
-        if isinstance(job_id, str) and job_id.startswith("projects/"):
-            from foldrun_app.core.vertex_utils import extract_short_job_id
-
-            try:
-                job_id = extract_short_job_id(job_id, self.config.project_id, self.config.region)
-            except ValueError as e:
-                raise ValueError(f"Invalid job_id '{job_id}': {e}") from e
-
-        if not isinstance(job_id, str) or not _JOB_ID_PATTERN.match(job_id):
-            raise ValueError(f"Invalid job_id '{job_id}': must match ^[a-zA-Z0-9_-]+$")
-
-        open_browser = arguments.get("open_browser", False)
-
-        # Simple URL: viewer resolves all GCS paths server-side from job_id
-        encoded_job_id = urllib.parse.quote(job_id, safe="")
-        base_url = self.viewer_base_url.rstrip("/")
-        viewer_url = f"{base_url}/job/{encoded_job_id}"
-
-        # Open browser if requested
-        browser_opened = False
-        if open_browser:
-            try:
-                webbrowser.open(viewer_url)
-                browser_opened = True
-                logger.info(f"Opened viewer in browser for job {job_id}")
-            except Exception as e:
-                logger.warning(f"Failed to open browser: {e}")
-
-        return {
-            "job_id": job_id,
-            "viewer_url": viewer_url,
-            "browser_opened": browser_opened,
-            "message": (
-                "Viewer opened in your default browser"
-                if browser_opened
-                else "Copy the URL to view in your browser"
-            ),
-        }
+class AF2OpenViewerTool(KFPOpenViewerTool, AF2Tool):
+    """Opens the FoldRun structure viewer for completed AlphaFold2 predictions."""

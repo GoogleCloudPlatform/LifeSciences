@@ -136,7 +136,7 @@ class AF3GetResultsTool(AF3Tool):
                         f"No AlphaFold 3 artifacts found at {self.get_job_gcs_prefix(lookup_job_id)}. "
                         "Note: AF3 stores artifacts under the sanitized `job_name` "
                         "(e.g. `gs://.../af3_predictions/{job_name}/`). If you passed a "
-                        "`pipeline_job_id`, immediately retry `get_af3_results` with the "
+                        "`pipeline_job_id`, immediately retry `get_analysis_results` with the "
                         "human-readable `job_name`."
                     ),
                 }
@@ -171,7 +171,7 @@ class AF3GetResultsTool(AF3Tool):
                 assessment = "Metrics pending or incomplete"
 
             viewer_url = (
-                f"{self.config.viewer_url}/job/{job_id}?model=af3"
+                f"{self.config.viewer_url.rstrip('/')}/job/{job_id}?model=af3"
                 if self.config.viewer_url
                 else self.gcs_console_url(cif_uri)
             )

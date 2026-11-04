@@ -12,123 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for triggering parallel analysis of OF3 predictions via Cloud Run Jobs."""
+"""Tool for triggering parallel analysis of OpenFold3 predictions via Cloud Run Jobs."""
 
-import json
 import logging
-import os
-from datetime import UTC, datetime
 from typing import Any
 
-from google.cloud import run_v2, storage
+from google.cloud import run_v2, storage  # noqa: F401
+
+from foldrun_app.core.kfp_tools import KFPAnalyzeJobTool
+from foldrun_app.core.vertex_utils import get_pipeline_job  # noqa: F401
 
 from ..base import OF3Tool
 
 logger = logging.getLogger(__name__)
 
 
-class OF3JobAnalysisTool(OF3Tool):
+class OF3JobAnalysisTool(KFPAnalyzeJobTool, OF3Tool):
     """Triggers parallel analysis of OpenFold3 predictions via Cloud Run Jobs."""
 
-    def __init__(self, tool_config: dict[str, Any], config: Any):
-        super().__init__(tool_config, config)
-        self.job_name = os.getenv("ANALYSIS_JOB_NAME", "foldrun-analysis-job")
-
-    def _get_analysis_path(self, job: Any) -> str:
-        """Get GCS analysis path for a job."""
-        pipeline_root = None
-        if hasattr(job, "runtime_config") and job.runtime_config:
-            if (
-                hasattr(job.runtime_config, "gcs_output_directory")
-                and job.runtime_config.gcs_output_directory
-            ):
-                pipeline_root = job.runtime_config.gcs_output_directory
-
-        if not pipeline_root:
-            raise ValueError("Job does not have gcs_output_directory in runtime_config")
-
-        self._validate_gcs_uri(pipeline_root)
-
-        if not pipeline_root.endswith("/"):
-            pipeline_root += "/"
-
-        analysis_path = f"{pipeline_root}analysis/"
-        self._validate_gcs_uri(analysis_path)
-        return analysis_path
-
-    def _write_to_gcs(self, gcs_uri: str, data: dict[str, Any]) -> None:
-        """Write JSON data to GCS."""
-        bucket_name, blob_name = self._validate_gcs_uri(gcs_uri)
-
-        storage_client = storage.Client(project=self.config.project_id)
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-
-        blob.upload_from_string(json.dumps(data, indent=2), content_type="application/json")
-
-    def _check_existing_analysis(self, analysis_path: str) -> tuple[bool, dict | None]:
-        """Check if analysis already exists."""
-        bucket_name, prefix = self._validate_gcs_uri(analysis_path)
-        try:
-            storage_client = storage.Client(project=self.config.project_id)
-            bucket = storage_client.bucket(bucket_name)
-
-            summary_blob = bucket.blob(f"{prefix}summary.json")
-            if summary_blob.exists():
-                content = summary_blob.download_as_text()
-                return True, json.loads(content)
-
-            return False, None
-        except Exception as e:
-            logger.warning(f"Could not check for existing analysis: {e}")
-            return False, None
-
-    def _cleanup_stale_analysis_blobs(self, analysis_path: str) -> int:
-        """Delete stale per-prediction and summary blobs prior to re-analysis."""
-        bucket_name, prefix = self._validate_gcs_uri(analysis_path)
-        if not prefix.endswith("/"):
-            prefix += "/"
-        deleted = 0
-        try:
-            storage_client = storage.Client(project=self.config.project_id)
-            bucket = storage_client.bucket(bucket_name)
-            for blob in list(bucket.list_blobs(prefix=prefix)):
-                filename = blob.name.rsplit("/", 1)[-1]
-                is_stale = (
-                    filename in ("summary.json", "artifacts_bundle.zip", "error.json")
-                    or filename.endswith("_analysis.json")
-                    or (
-                        filename.startswith("analysis_")
-                        and filename.endswith(".json")
-                        and filename != "analysis_metadata.json"
-                    )
-                )
-                if is_stale:
-                    try:
-                        blob.delete()
-                        deleted += 1
-                    except Exception as del_err:
-                        logger.warning(f"Failed to delete stale blob {blob.name}: {del_err}")
-        except Exception as list_err:
-            logger.warning(f"Could not list stale analysis blobs under {analysis_path}: {list_err}")
-        return deleted
+    model_type = "openfold3"
+    display_label = "OF3"
+    check_existing_before_discovery = True
 
     def _discover_of3_samples(self, job: Any) -> list[dict[str, Any]]:
-        """Discover OF3 output samples by walking seed_*/sample directories in GCS.
-
-        Returns:
-            List of sample dicts with cif_uri, confidences_uri, aggregated_uri, sample_name
-        """
+        """Discover OF3 output samples by walking seed_*/sample directories in GCS."""
         pipeline_root = job.runtime_config.gcs_output_directory
         bucket_name, prefix = self._validate_gcs_uri(pipeline_root)
         if not prefix.endswith("/"):
             prefix += "/"
 
-        storage_client = storage.Client(project=self.config.project_id)
+        storage_client = self._storage_module().Client(project=self.config.project_id)
         bucket = storage_client.bucket(bucket_name)
-
-        # List all blobs under pipeline root to find OF3 output files
-        # Pattern: predict-of3_*/query_name/seed_N/*_confidences_aggregated.json
         all_blobs = list(bucket.list_blobs(prefix=prefix))
 
         samples = []
@@ -137,22 +51,14 @@ class OF3JobAnalysisTool(OF3Tool):
         for blob in all_blobs:
             name = blob.name
             if name.endswith("_confidences_aggregated.json"):
-                base = name.replace("_confidences_aggregated.json", "")
-
-                cif_name = f"{base}_model.cif"
-                confidences_name = f"{base}_confidences.json"
-
-                # Use full blob path as unique key (different predict-of3_*
-                # task directories may have same-named files)
                 if name in seen:
                     continue
                 seen.add(name)
 
-                # Sample name from filename (with patched seed values,
-                # each seed produces unique filenames like
-                # query_seed_1181241943_sample_1)
-                parts_list = name.split("/")
-                filename = parts_list[-1]
+                base = name.replace("_confidences_aggregated.json", "")
+                cif_name = f"{base}_model.cif"
+                confidences_name = f"{base}_confidences.json"
+                filename = name.rsplit("/", 1)[-1]
                 sample_name = filename.replace("_confidences_aggregated.json", "")
 
                 samples.append(
@@ -167,62 +73,17 @@ class OF3JobAnalysisTool(OF3Tool):
         logger.info(f"Discovered {len(samples)} OF3 samples")
         return samples
 
-    def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Trigger parallel analysis via Cloud Run Job.
-
-        Args:
-            arguments: {
-                'job_id': Job ID (required),
-                'overwrite': Overwrite existing analysis (default: False)
-            }
-        """
-        job_id = arguments.get("job_id")
-        overwrite = arguments.get("overwrite", False)
-
-        if not job_id:
-            raise ValueError("job_id is required")
-
-        logger.info(f"Starting OF3 parallel analysis for job {job_id}")
-
-        # Get job from Agent Platform
-        from foldrun_app.core.vertex_utils import get_pipeline_job
-
-        try:
-            job = get_pipeline_job(job_id, self.config.project_id, self.config.region)
-        except Exception as e:
-            return {"status": "error", "message": f"Could not find job {job_id}: {e!s}"}
-
-        job_res_name = getattr(job, "name", None)
-        job_id = (
-            job_res_name.rsplit("/", 1)[-1]
-            if isinstance(job_res_name, str) and job_res_name
-            else str(job_id).rsplit("/", 1)[-1]
-        )
-
-        # Determine analysis path
-        analysis_path = self._get_analysis_path(job)
-
-        # Check if analysis already exists
-        exists, existing_summary = self._check_existing_analysis(analysis_path)
-        if not overwrite and exists:
-            return {
-                "status": "already_exists",
-                "message": "Analysis already exists. Use overwrite=true to re-analyze, or use of3_get_analysis_results to retrieve.",
-                "analysis_path": analysis_path,
-                "summary_uri": f"{analysis_path}summary.json",
-                **existing_summary,
-            }
-
-        # Discover OF3 samples from GCS
+    def _discover_and_build_task_config(
+        self,
+        job: Any,
+        job_id: str,
+        analysis_path: str,
+        arguments: dict[str, Any],
+    ) -> tuple[dict[str, Any], int, dict[str, Any]] | dict[str, Any]:
         samples = self._discover_of3_samples(job)
-
         if not samples:
             return {"status": "no_predictions", "message": "No OF3 samples found for this job"}
 
-        # Remove stale artifacts from any prior incomplete or overwritten run
-        self._cleanup_stale_analysis_blobs(analysis_path)
-
-        # Build task configuration
         task_config = {
             "job_id": job_id,
             "analysis_path": analysis_path,
@@ -238,78 +99,4 @@ class OF3JobAnalysisTool(OF3Tool):
                 for i, s in enumerate(samples)
             ],
         }
-
-        task_config_path = f"{analysis_path}task_config.json"
-        self._write_to_gcs(task_config_path, task_config)
-
-        # Write metadata
-        metadata = {
-            "job_id": job_id,
-            "total_predictions": len(samples),
-            "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            "status": "running",
-            "execution_method": "cloud_run_job",
-            "model_type": "openfold3",
-        }
-        self._write_to_gcs(f"{analysis_path}analysis_metadata.json", metadata)
-
-        # Execute Cloud Run Job
-        client = run_v2.JobsClient()
-        job_path = (
-            f"projects/{self.config.project_id}/locations/{self.config.region}/jobs/{self.job_name}"
-        )
-        task_count = len(samples)
-
-        try:
-            request = run_v2.RunJobRequest(
-                name=job_path,
-                overrides=run_v2.RunJobRequest.Overrides(
-                    task_count=task_count,
-                    timeout={"seconds": 600},
-                    container_overrides=[
-                        run_v2.RunJobRequest.Overrides.ContainerOverride(
-                            env=[
-                                run_v2.EnvVar(name="ANALYSIS_PATH", value=analysis_path),
-                                run_v2.EnvVar(name="MODEL_TYPE", value="openfold3"),
-                                run_v2.EnvVar(
-                                    name="GEMINI_MODEL",
-                                    value=os.getenv("GEMINI_ANALYSIS_MODEL", "gemini-4-argon"),
-                                ),
-                            ]
-                        )
-                    ],
-                ),
-            )
-
-            operation = client.run_job(request=request)
-
-            execution_name = None
-            execution_uid = None
-            if hasattr(operation, "metadata") and operation.metadata:
-                if hasattr(operation.metadata, "name"):
-                    execution_name = operation.metadata.name
-                    execution_uid = execution_name.split("/")[-1] if execution_name else None
-
-            metadata["execution_name"] = execution_name
-            metadata["execution_uid"] = execution_uid
-            self._write_to_gcs(f"{analysis_path}analysis_metadata.json", metadata)
-
-            return {
-                "status": "started",
-                "job_id": job_id,
-                "analysis_path": analysis_path,
-                "gcs_console_url": self.gcs_console_url(analysis_path),
-                "total_predictions": len(samples),
-                "execution_name": execution_name,
-                "execution_uid": execution_uid,
-                "message": f"OF3 analysis started with {task_count} parallel tasks. Use of3_get_analysis_results to check status.",
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to execute Cloud Run Job: {e}", exc_info=True)
-            return {
-                "status": "failed",
-                "job_id": job_id,
-                "error": str(e),
-                "message": "Failed to start OF3 analysis Cloud Run Job execution",
-            }
+        return task_config, len(samples), {}

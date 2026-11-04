@@ -141,39 +141,31 @@ Tool count depends on which models are configured:
 |----------|-------|
 | Job Submission (3) | `submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_af2_batch_predictions` |
 | Job Management (5) | `check_job_status`, `list_jobs`, `get_job_details`, `delete_job`, `check_gpu_quota` |
-| Results, Analysis & Downloads (6) | `download_job_artifacts`, `get_prediction_results`, `analyze_prediction_quality`, `analyze_job_parallel`, `get_analysis_results`, `analyze_job` |
+| Results, Analysis & Downloads (6) | `download_job_artifacts`, `get_prediction_results`, `analyze_prediction_quality`, `analyze_job_parallel` *(polymorphic AF2/OF3/Boltz-2/AF3)*, `get_analysis_results` *(polymorphic AF2/OF3/Boltz-2/AF3)*, `analyze_job` |
 | Database Queries (3) | `query_alphafold_db_prediction`, `query_alphafold_db_summary`, `query_alphafold_db_annotations` |
 | Storage Management (2) | `cleanup_gcs_files`, `find_orphaned_gcs_files` |
-| Visualization (1) | `open_structure_viewer` |
+| Visualization (1) | `open_structure_viewer` *(polymorphic AF2/OF3/Boltz-2/AF3)* |
 | Cost Estimation (3) | `estimate_job_cost`, `estimate_monthly_cost`, `get_actual_job_costs` |
 
-### AlphaFold 3 Tools (7)
+### AlphaFold 3 Tools (3)
 
 | Tool | Description |
 |------|-------------|
 | `submit_af3_endpoint_prediction` | Submit single AF3 complex via 4-stage KFP PipelineJob (`msa_free=False` Full 630 GB MSA default, or `msa_free=True` zero-MSA) |
 | `submit_af3_batch_predictions` | Submit multiple AF3 targets in batch as async 4-stage KFP PipelineJobs with FIFO H100 replica slot queueing |
 | `check_af3_endpoint` | Inspect health, active deployed models, replica count, and hourly cost state of the AF3 Endpoint |
-| `get_af3_results` | Retrieve completed AF3 prediction metrics (`ranking_score`, `ptm`, `iptm`, `mean_plddt`, `mean_pae`, mmCIF URI) |
-| `open_af3_structure_viewer` | Open the FoldRun 3D viewer for an AF3 job (renders all-atom mmCIF + Gemini 4 Argon Expert Analysis) |
 
-### OpenFold 3 Tools (4)
+### OpenFold 3 Tools (1)
 
 | Tool | Description |
 |------|-------------|
-| `submit_of3_prediction` | Submit OF3 job (FASTA auto-converted to OF3 JSON; full RNA MSA via `nhmmer`) |
-| `of3_analyze_job_parallel` | Trigger parallel analysis via Cloud Run Job |
-| `of3_get_analysis_results` | Retrieve analysis results (pLDDT, PDE, ipTM, Gemini interpretation) |
-| `open_of3_structure_viewer` | Open 3D viewer for OF3 results |
+| `submit_of3_prediction` | Submit OF3 job (FASTA auto-converted to OF3 JSON; full RNA MSA via `nhmmer`; post-run analysis and 3D viewer use unified `analyze_job_parallel`, `get_analysis_results`, and `open_structure_viewer`) |
 
-### Boltz-2 Tools (4)
+### Boltz-2 Tools (1)
 
 | Tool | Description |
 |------|-------------|
-| `submit_boltz2_prediction` | Submit Boltz-2 job (FASTA auto-converted to YAML v1; supports covalent mods, glycans) |
-| `boltz2_analyze_job_parallel` | Trigger parallel analysis; includes affinity parsing if requested |
-| `boltz2_get_analysis_results` | Retrieve results (`confidence_score`, `pTM`, `ipTM`, `IC50`/`pIC50`/`ΔG` if affinity enabled) |
-| `open_boltz2_structure_viewer` | Open 3D viewer for Boltz-2 results |
+| `submit_boltz2_prediction` | Submit Boltz-2 job (FASTA auto-converted to YAML v1; supports covalent mods, glycans, and affinity; post-run analysis and 3D viewer use unified `analyze_job_parallel`, `get_analysis_results`, and `open_structure_viewer`) |
 
 ## Environment Variables
 

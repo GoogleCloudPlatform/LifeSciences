@@ -17,9 +17,10 @@
 Provides singleton Config and GPU auto-detection logic.
 """
 
-import json
 import logging
 import os
+
+from foldrun_app.core.startup_utils import auto_detect_model_gpus, load_json_tool_configs
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,7 @@ def get_tool_configs():
     """Load and cache boltz2_tools.json (read once, shared everywhere)."""
     global _tool_configs
     if _tool_configs is None:
-        with open(_TOOL_CONFIG_PATH) as f:
-            _tool_configs = json.load(f)
+        _tool_configs = load_json_tool_configs(_TOOL_CONFIG_PATH)
     return _tool_configs
 
 
@@ -60,25 +60,14 @@ def get_config():
 
 
 def _auto_detect_gpus(config):
-    """Run startup GPU quota auto-detection."""
-    from foldrun_app.core.hardware import detect_supported_gpus
+    """Run startup GPU quota auto-detection.
 
-    try:
-        logger.info("Running startup GPU quota auto-detection for BOLTZ2...")
-        ordered_support = detect_supported_gpus(config.project_id, config.region)
-
-        if ordered_support:
-            # Retain L4 alongside A100 tiers both for explicit gpu_type="L4"
-            # overrides and so L4-only projects overwrite CoreConfig's default
-            # GPU list and fail fast on auto/>=40GB requests in _get_hardware_config.
-            boltz2_supported = [g for g in ordered_support if g in ("A100", "A100_80GB", "L4")]
-            if boltz2_supported:
-                config.set_supported_gpus(boltz2_supported)
-                logger.info(f"Auto-configured BOLTZ2 supported GPUs: {boltz2_supported}")
-            else:
-                logger.warning("No A100/L4 GPUs found! Keeping defaults.")
-        else:
-            logger.warning("No GPUs found with limit > 0! Keeping defaults.")
-
-    except Exception as e:
-        logger.warning(f"Auto-detection failed (using defaults): {e}")
+    Retains L4 alongside A100 tiers both for explicit gpu_type='L4' overrides
+    and so L4-only projects overwrite CoreConfig's default GPU list and fail
+    fast on auto/>=40GB requests in _get_hardware_config.
+    """
+    auto_detect_model_gpus(
+        config,
+        model_label="BOLTZ2",
+        allowed_gpus=("A100", "A100_80GB", "L4"),
+    )

@@ -113,7 +113,7 @@ class TestSkillRegistry:
         assert "Response Guidelines" not in instruction
 
     def test_compile_tools_baseline_count(self):
-        """Compilation produces all 31 baseline tools without duplicates."""
+        """Compilation produces all 25 baseline tools without duplicates."""
         tools = skill_registry.compile_tools()
         tool_names = [
             getattr(t, "name", None)
@@ -121,7 +121,7 @@ class TestSkillRegistry:
             or str(t)
             for t in tools
         ]
-        assert len(tool_names) == 31
+        assert len(tool_names) == 25
         assert len(tool_names) == len(set(tool_names))
         assert "submit_af2_monomer_prediction" in tool_names
         assert "submit_of3_prediction" in tool_names
@@ -175,7 +175,7 @@ class TestSkillRegistry:
         assert "download_job_artifacts" in tool_names
 
     def test_conditional_af3_tools(self, monkeypatch):
-        """When AF3_VERTEX_ENDPOINT is configured, all 5 AF3 tools are registered."""
+        """When AF3_VERTEX_ENDPOINT is configured, the 3 AF3 submission/endpoint tools are registered."""
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("BOLTZ2_COMPONENTS_IMAGE", raising=False)
         monkeypatch.setenv(
@@ -190,15 +190,15 @@ class TestSkillRegistry:
             or str(t)
             for t in tools
         }
-        # 23 baseline AF2 + 5 AF3 = 28
-        assert len(tools) == 28
+        # 23 baseline AF2 + 3 AF3 submission/endpoint tools = 26
+        assert len(tools) == 26
         assert "submit_af3_endpoint_prediction" in tool_names
         assert "submit_af3_batch_predictions" in tool_names
         assert "check_af3_endpoint" in tool_names
         assert "deploy_af3_endpoint" not in tool_names
         assert "undeploy_af3_endpoint" not in tool_names
-        assert "get_af3_results" in tool_names
-        assert "open_af3_structure_viewer" in tool_names
+        assert "get_af3_results" not in tool_names
+        assert "open_af3_structure_viewer" not in tool_names
 
     def test_tool_introspection_safety_custom_class(self):
         """Tool compilation safely inspects tools lacking a func attribute."""

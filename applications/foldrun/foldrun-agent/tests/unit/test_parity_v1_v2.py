@@ -62,14 +62,8 @@ class TestCrossInstanceParity:
                 "submit_af2_batch_predictions",
                 # OF3 Pipeline
                 "submit_of3_prediction",
-                "of3_analyze_job_parallel",
-                "of3_get_analysis_results",
-                "open_of3_structure_viewer",
                 # Boltz-2 Pipeline
                 "submit_boltz2_prediction",
-                "boltz2_analyze_job_parallel",
-                "boltz2_get_analysis_results",
-                "open_boltz2_structure_viewer",
                 # Job Management & Monitoring
                 "check_job_status",
                 "list_jobs",
@@ -80,7 +74,7 @@ class TestCrossInstanceParity:
                 "estimate_job_cost",
                 "estimate_monthly_cost",
                 "get_actual_job_costs",
-                # Results & Quality Analysis
+                # Results & Quality Analysis (unified across AF2, OF3, Boltz-2, AF3)
                 "get_prediction_results",
                 "download_job_artifacts",
                 "analyze_prediction_quality",
@@ -94,11 +88,11 @@ class TestCrossInstanceParity:
                 # Storage & Governance
                 "cleanup_gcs_files",
                 "find_orphaned_gcs_files",
-                # Visualization
+                # Visualization (unified across AF2, OF3, Boltz-2, AF3)
                 "open_structure_viewer",
             }
 
-            assert len(tool_names) == 31, f"Expected exactly 31 tools, got {len(tool_names)}"
+            assert len(tool_names) == 25, f"Expected exactly 25 tools, got {len(tool_names)}"
             assert tool_names == expected_v1_tools, (
                 f"Tool set mismatch: missing={expected_v1_tools - tool_names}, "
                 f"extra={tool_names - expected_v1_tools}"
@@ -195,7 +189,7 @@ class TestCrossInstanceParity:
 
             assert agent_v1.name == "foldrun_app"
             assert agent_v2.name == "foldrun_app"
-            assert len(agent_v1.tools) == 31
+            assert len(agent_v1.tools) == 25
 
             # V2 uses native ADK SkillToolset with progressive disclosure
             assert len(agent_v2.tools) == 1

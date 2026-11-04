@@ -15,7 +15,7 @@
 """Modular instructions for visualization skill."""
 
 VISUALIZATION_INSTRUCTION = """### Visualization
-- **Visualize structures**: Use open_structure_viewer (AF2), open_of3_structure_viewer (OF3), or open_boltz2_structure_viewer (Boltz-2) for interactive 3D viewing
+- **Visualize structures**: Use `open_structure_viewer` for interactive 3D viewing of AF2, AF3, OF3, and Boltz-2 predictions (automatically dispatches by `job_id`)
 
 **IMPORTANT: After displaying analysis results, ALWAYS immediately offer to open the structure viewer:**
 - Call open_structure_viewer to get the viewer URL

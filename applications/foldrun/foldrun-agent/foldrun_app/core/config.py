@@ -16,6 +16,8 @@
 
 import logging
 import os
+from collections.abc import Callable
+from typing import ClassVar
 
 from dotenv import load_dotenv
 
@@ -24,6 +26,13 @@ logger = logging.getLogger(__name__)
 
 class CoreConfig:
     """Model-agnostic configuration class for FoldRun tools."""
+
+    _gpu_detection_cache: ClassVar[dict[tuple[Callable, str, str, bool], list[str]]] = {}
+
+    @classmethod
+    def clear_gpu_detection_cache(cls) -> None:
+        """Clear the session-level GPU quota detection cache."""
+        cls._gpu_detection_cache.clear()
 
     def __init__(self, env_path: str | None = None):
         """
@@ -124,9 +133,34 @@ class CoreConfig:
         return os.getenv("NFS_MOUNT_POINT", "/mnt/nfs/foldrun")
 
     @property
+    def viewer_url(self) -> str:
+        """Cloud Run viewer service URL."""
+        return os.getenv("FOLDRUN_VIEWER_URL", "")
+
+    @property
     def dws_max_wait_hours(self) -> int:
         """Max hours DWS FLEX_START will wait per task for GPU provisioning."""
         return int(os.getenv("DWS_MAX_WAIT_HOURS", "168"))  # 7 days default
+
+    def detect_supported_gpus_cached(self, include_h100: bool = False) -> list[str]:
+        """Detect supported GPUs once per (project_id, region, include_h100) per session."""
+        from foldrun_app.core.hardware import detect_supported_gpus
+
+        key = (detect_supported_gpus, self.project_id or "", self.region or "", bool(include_h100))
+        if key in self._gpu_detection_cache:
+            cached = list(self._gpu_detection_cache[key])
+            logger.info(
+                f"Using cached startup GPU quota detection for {self.project_id}/{self.region}: {cached}"
+            )
+            return cached
+
+        detected = (
+            detect_supported_gpus(self.project_id, self.region, include_h100=True)
+            if include_h100
+            else detect_supported_gpus(self.project_id, self.region)
+        )
+        self._gpu_detection_cache[key] = list(detected)
+        return list(detected)
 
     @property
     def supported_gpus(self) -> list:

@@ -14,33 +14,23 @@
 
 """Pipeline compilation and execution utilities for OF3."""
 
-import logging
 import os
 
 from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK  # noqa: F401
 from foldrun_app.core.pipeline_utils import (  # noqa: F401
     compile_pipeline,
+    load_kfp_inference_pipeline,
     model_pipeline_load_context,
 )
 
-logger = logging.getLogger(__name__)
-
 
 def load_vertex_pipeline(enable_flex_start: bool = False):
-    """Load OF3 pipeline from vendored copy.
-
-    Args:
-        enable_flex_start: Enable DWS FLEX_START scheduling (default: False).
-
-    Returns:
-        Pipeline function.
-    """
-    vertex_pipeline_dir = os.path.join(os.path.dirname(__file__), "..", "pipeline")
-    with model_pipeline_load_context(
+    """Load OF3 pipeline from vendored copy."""
+    return load_kfp_inference_pipeline(
         pkg_prefix="foldrun_app.models.of3.pipeline",
-        vertex_pipeline_dir=vertex_pipeline_dir,
+        vertex_pipeline_dir=os.path.join(os.path.dirname(__file__), "..", "pipeline"),
         pipeline_module_name="of3_inference_pipeline",
-    ) as pipe_mod:
-        strategy = "FLEX_START" if enable_flex_start else "STANDARD"
-        logger.info(f"Loading OF3 inference pipeline with {strategy} scheduling")
-        return pipe_mod.create_of3_inference_pipeline(strategy=strategy)
+        factory_attr="create_of3_inference_pipeline",
+        enable_flex_start=enable_flex_start,
+        model_label="OF3",
+    )

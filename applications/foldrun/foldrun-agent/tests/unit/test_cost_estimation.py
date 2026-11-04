@@ -18,11 +18,19 @@ from unittest.mock import patch
 
 import pytest
 
+from foldrun_app.core.hardware import AF3_HARDWARE_TIER_LADDER
+from foldrun_app.core.kfp_tools import KFPModelTool
+from foldrun_app.models.af2.base import AF2Tool
+from foldrun_app.models.boltz2.base import BOLTZ2Tool
+from foldrun_app.models.of3.base import OF3Tool
 from foldrun_app.skills.cost_estimation.pricing import (
     DEFAULT_PRICES,
     DURATION_ANCHORS,
+    _auto_select_gpu,
     _interpolate_durations,
     _machine_for_gpu,
+    _normalize_gpu_type,
+    _relax_gpu,
     estimate_single_job,
 )
 from foldrun_app.skills.cost_estimation.tools import estimate_job_cost
@@ -113,3 +121,43 @@ class TestOF3L4UpgradeInCostEstimation:
         assert _machine_for_gpu("L4") == "g2-standard-12"
         assert _machine_for_gpu("A100") == "a2-highgpu-1g"
         assert _machine_for_gpu("A100_80GB") == "a2-ultragpu-1g"
+        assert _machine_for_gpu("H100") == "a3-highgpu-1g"
+
+
+class TestPricingSubmissionNonDriftContract:
+    """Guarantee pricing GPU selection and machine specs stay identical to submission tools."""
+
+    @pytest.mark.parametrize(
+        "seq_len",
+        [50, 999, 1000, 1500, 1501, 2000, 2001, 2200, 2201, 3000],
+    )
+    def test_auto_select_gpu_matches_submission_tools(self, seq_len):
+        assert _auto_select_gpu("af2_monomer", seq_len) == AF2Tool._recommend_gpu(
+            seq_len, is_multimer=False
+        )
+        assert _auto_select_gpu("af2_multimer", seq_len) == AF2Tool._recommend_gpu(
+            seq_len, is_multimer=True
+        )
+        assert _auto_select_gpu("of3", seq_len) == OF3Tool._recommend_gpu(seq_len)
+        assert _auto_select_gpu("boltz2", seq_len) == BOLTZ2Tool._recommend_gpu(seq_len)
+
+        expected_af3_top = AF3_HARDWARE_TIER_LADDER[0]["tier"]
+        if expected_af3_top.startswith("H100"):
+            expected_af3_top = "H100"
+        assert _auto_select_gpu("af3", seq_len) == expected_af3_top
+
+    @pytest.mark.parametrize("gpu_tier", ["L4", "A100", "A100_80GB", "H100", "UNKNOWN"])
+    def test_relax_gpu_matches_kfp_model_tool_map(self, gpu_tier):
+        assert _relax_gpu(gpu_tier) == KFPModelTool.RELAX_GPU_MAP.get(gpu_tier, "A100")
+
+    def test_machine_for_gpu_matches_canonical_specs(self):
+        for gpu_tier, (machine_type, _, _) in KFPModelTool.GPU_SPECS.items():
+            assert _machine_for_gpu(gpu_tier) == machine_type
+        assert _machine_for_gpu("H100") == AF3_HARDWARE_TIER_LADDER[0]["machine_type"]
+
+    @pytest.mark.parametrize(
+        "raw_gpu",
+        [None, "", "auto", "AUTO", "l4", "a100-80gb", " A100 "],
+    )
+    def test_normalize_gpu_type_matches_kfp_model_tool(self, raw_gpu):
+        assert _normalize_gpu_type(raw_gpu) == KFPModelTool._normalize_gpu_type(raw_gpu)

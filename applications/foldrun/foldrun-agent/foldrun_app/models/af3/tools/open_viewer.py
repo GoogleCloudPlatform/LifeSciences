@@ -48,7 +48,7 @@ class AF3OpenViewerTool(AF3Tool):
 
         # Viewer URL with model=af3 to load mmCIF and render all-atom representation (ligands/nucleic acids)
         viewer_url = (
-            f"{viewer_base_url}/job/{job_id}?model=af3"
+            f"{viewer_base_url.rstrip('/')}/job/{job_id}?model=af3"
             if viewer_base_url
             else self.gcs_console_url(self.get_job_gcs_prefix(job_id))
         )
