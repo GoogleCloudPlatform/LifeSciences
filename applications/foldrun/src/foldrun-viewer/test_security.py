@@ -257,7 +257,7 @@ class TestArtifactDownloadEndpoints(unittest.TestCase):
                 resp.headers.get("Content-Disposition", ""),
             )
             body = resp.get_data(as_text=True)
-            self.assertIn("# FoldRun Structure & Analysis Report", body)
+            self.assertIn("# FoldRun Analysis Report:", body)
             self.assertIn("High confidence prediction.", body)
 
     def test_download_file_structure_streams_when_local_adc_cannot_sign(self):

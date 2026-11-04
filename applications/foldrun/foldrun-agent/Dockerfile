@@ -20,6 +20,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /bin/
 WORKDIR /code
 
 COPY ./pyproject.toml ./README.md ./uv.lock* ./
+COPY ./packages/foldrun-common ./packages/foldrun-common
 
 COPY ./databases.yaml /code/databases.yaml
 COPY ./foldrun_app ./foldrun_app

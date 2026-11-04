@@ -14,7 +14,7 @@
 
 steps:
 - name: 'docker:29-cli'
-  args: ['build', '-t', '${_IMAGE_PATH}', '.']
+  args: ['build', '-t', '${_IMAGE_PATH}', '-f', 'src/foldrun-analysis-job/Dockerfile', '.']
 images:
 - '${_IMAGE_PATH}'
 options:

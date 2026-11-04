@@ -959,8 +959,8 @@ def estimate_monthly(
         filestore_cap_str = (os.getenv("FILESTORE_CAPACITY_GB") or "").strip()
         filestore_iops_str = (os.getenv("FILESTORE_MAX_IOPS") or "").strip()
         for key, item in INFRASTRUCTURE_MONTHLY.items():
-            desc = item["description"]
-            cost = item["cost"]
+            desc = str(item["description"])
+            cost = float(item["cost"])
             if key in ("filestore_1tib_regional", "filestore_2_5tb_basic_ssd"):
                 eff_tier = filestore_tier or (
                     "REGIONAL" if key == "filestore_1tib_regional" else "BASIC_SSD"
@@ -988,7 +988,7 @@ def estimate_monthly(
             )
 
     # Other costs (same regardless of pricing mode)
-    other_total = sum(item["cost"] for item in OTHER_MONTHLY.values())
+    other_total = sum(float(item["cost"]) for item in OTHER_MONTHLY.values())
     other_items = [
         {"item": item["description"], "monthly_cost": item["cost"]}
         for item in OTHER_MONTHLY.values()

@@ -21,6 +21,11 @@ from google.cloud import run_v2, storage  # noqa: F401
 
 from foldrun_app.core.kfp_tools import KFPAnalyzeJobTool
 from foldrun_app.core.vertex_utils import get_pipeline_job  # noqa: F401
+from foldrun_common import (
+    build_analysis_task_config,
+    discover_boltz2_predictions,
+    resolve_boltz2_query_yaml_uri,
+)
 
 from ..base import BOLTZ2Tool
 
@@ -37,52 +42,9 @@ class BOLTZ2JobAnalysisTool(KFPAnalyzeJobTool, BOLTZ2Tool):
     def _discover_boltz2_samples(self, job: Any) -> tuple[list[dict[str, Any]], str | None]:
         """Discover BOLTZ2 output samples and optional affinity file from GCS."""
         pipeline_root = job.runtime_config.gcs_output_directory
-        bucket_name, prefix = self._validate_gcs_uri(pipeline_root)
-        if not prefix.endswith("/"):
-            prefix += "/"
-
+        self._validate_gcs_uri(pipeline_root)
         storage_client = self._storage_module().Client(project=self.config.project_id)
-        bucket = storage_client.bucket(bucket_name)
-        all_blobs = list(bucket.list_blobs(prefix=prefix))
-
-        samples = []
-        seen = set()
-        affinity_uri = None
-
-        for blob in all_blobs:
-            name = blob.name
-            if name.endswith(".json") and "/predictions/" in name:
-                parts_list = name.split("/")
-                filename = parts_list[-1]
-
-                if "/confidence_" in name:
-                    if name in seen:
-                        continue
-                    seen.add(name)
-
-                    cif_filename = filename.replace("confidence_", "", 1).replace(".json", ".cif")
-                    cif_name = "/".join([*parts_list[:-1], cif_filename])
-                    pde_filename = filename.replace("confidence_", "pde_", 1).replace(
-                        ".json", ".npz"
-                    )
-                    pde_name = "/".join([*parts_list[:-1], pde_filename])
-                    sample_name = filename.replace("confidence_", "", 1).replace(".json", "")
-
-                    samples.append(
-                        {
-                            "sample_name": sample_name,
-                            "cif_uri": f"gs://{bucket_name}/{cif_name}",
-                            "aggregated_uri": f"gs://{bucket_name}/{name}",
-                            "pde_uri": f"gs://{bucket_name}/{pde_name}",
-                        }
-                    )
-
-                elif filename.startswith("affinity_") and affinity_uri is None:
-                    affinity_uri = f"gs://{bucket_name}/{name}"
-                    logger.info(f"Found affinity results: {affinity_uri}")
-
-        logger.info(f"Discovered {len(samples)} BOLTZ2 samples")
-        return samples, affinity_uri
+        return discover_boltz2_predictions(pipeline_root, storage_client)
 
     def _discover_and_build_task_config(
         self,
@@ -98,14 +60,18 @@ class BOLTZ2JobAnalysisTool(KFPAnalyzeJobTool, BOLTZ2Tool):
         query_yaml_uri = None
         try:
             labels = dict(job.labels) if hasattr(job, "labels") and job.labels else {}
-            query_name_label = labels.get("query_name", "")
-            if query_name_label:
+            if labels.get("query_name"):
                 pipeline_root = job.runtime_config.gcs_output_directory
                 bucket, _ = self._validate_gcs_uri(pipeline_root)
-                candidate_query_uri = f"gs://{bucket}/boltz2_queries/{query_name_label}.yaml"
-                self._validate_gcs_uri(candidate_query_uri)
-                query_yaml_uri = candidate_query_uri
-                logger.info(f"Resolved query YAML URI from label: {query_yaml_uri}")
+                candidate_query_uri = resolve_boltz2_query_yaml_uri(
+                    bucket_name=bucket,
+                    labels=labels,
+                    strict_label_validation=True,
+                )
+                if candidate_query_uri:
+                    self._validate_gcs_uri(candidate_query_uri)
+                    query_yaml_uri = candidate_query_uri
+                    logger.info(f"Resolved query YAML URI from label: {query_yaml_uri}")
             else:
                 logger.warning(
                     "No 'query_name' label found on pipeline job — query YAML will not be embedded in analysis"
@@ -115,22 +81,12 @@ class BOLTZ2JobAnalysisTool(KFPAnalyzeJobTool, BOLTZ2Tool):
         except Exception as e:
             logger.warning(f"Could not resolve query YAML URI: {e}")
 
-        task_config = {
-            "job_id": job_id,
-            "analysis_path": analysis_path,
-            "affinity_uri": affinity_uri,
-            "query_yaml_uri": query_yaml_uri,
-            "predictions": [
-                {
-                    "index": i,
-                    "sample_name": s["sample_name"],
-                    "cif_uri": s["cif_uri"],
-                    "confidences_uri": "",
-                    "aggregated_uri": s["aggregated_uri"],
-                    "pde_uri": s.get("pde_uri", ""),
-                    "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
-                }
-                for i, s in enumerate(samples)
-            ],
-        }
+        task_config = build_analysis_task_config(
+            model_type=self.model_type,
+            job_id=job_id,
+            analysis_path=analysis_path,
+            raw_predictions=samples,
+            affinity_uri=affinity_uri,
+            query_yaml_uri=query_yaml_uri,
+        ).model_dump()
         return task_config, len(samples), {}

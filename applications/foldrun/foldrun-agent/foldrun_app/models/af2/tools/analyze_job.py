@@ -20,6 +20,7 @@ from typing import Any
 from google.cloud import run_v2, storage  # noqa: F401
 
 from foldrun_app.core.kfp_tools import KFPAnalyzeJobTool
+from foldrun_common import build_analysis_task_config
 
 from ..base import AF2Tool
 from ..utils.vertex_utils import get_pipeline_job, get_task_details  # noqa: F401
@@ -50,19 +51,10 @@ class AF2JobAnalysisTool(KFPAnalyzeJobTool, AF2Tool):
 
         logger.info(f"Found {len(predictions)} predictions to analyze")
         top_n = arguments.get("top_n", 10)
-        task_config = {
-            "job_id": job_id,
-            "analysis_path": analysis_path,
-            "task_config_uri": f"{analysis_path}task_config.json",
-            "predictions": [
-                {
-                    "index": i,
-                    "uri": pred["uri"],
-                    "model_name": pred["model_name"],
-                    "ranking_confidence": pred["ranking_confidence"],
-                    "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
-                }
-                for i, pred in enumerate(predictions)
-            ],
-        }
+        task_config = build_analysis_task_config(
+            model_type=self.model_type,
+            job_id=job_id,
+            analysis_path=analysis_path,
+            raw_predictions=predictions,
+        ).model_dump(exclude_none=True)
         return task_config, len(predictions), {"top_n": top_n}

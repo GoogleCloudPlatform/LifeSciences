@@ -144,7 +144,12 @@ def get_job_status(job: vertex_ai.PipelineJob) -> dict[str, Any]:
     }
 
     # Calculate duration if job is complete and start_time is not unset epoch
-    if _is_valid_proto_timestamp(end_ts) and _is_valid_proto_timestamp(start_ts):
+    if (
+        start_ts is not None
+        and end_ts is not None
+        and _is_valid_proto_timestamp(end_ts)
+        and _is_valid_proto_timestamp(start_ts)
+    ):
         duration = end_ts - start_ts
         status["duration_seconds"] = duration.total_seconds()
 
@@ -265,7 +270,7 @@ def get_task_details(job: vertex_ai.PipelineJob) -> dict[str, Any]:
                         )
 
     # Sort predictions by ranking confidence
-    predictions.sort(key=lambda x: x["ranking_confidence"], reverse=True)
+    predictions.sort(key=lambda x: float(x.get("ranking_confidence") or 0.0), reverse=True)
 
     return {
         "tasks": tasks,

@@ -5,12 +5,14 @@ description = "FoldRun Prediction Post-Processing and Scoring Analysis Service"
 readme = "README.md"
 requires-python = "~=3.13.0"
 dependencies = [
+    "foldrun-common",
     "google-cloud-storage>=3.0.0",
     "google-cloud-aiplatform>=1.85.0",
     "google-genai>=2.0.0",
     "numpy>=2.2.3",
     "matplotlib>=3.10.0",
     "seaborn>=0.13.2",
+    "pydantic>=2.0.0",
     "pyyaml>=6.0",
     "jax[cpu]==0.4.38",
     "dm-tree>=0.1.9",
@@ -50,7 +52,10 @@ select = [
 ignore = ["E501", "C901", "B006", "RUF001", "B905"] # ignore line too long, too complex, unicode characters
 
 [tool.ruff.lint.isort]
-known-first-party = ["foldrun_analysis"]
+known-first-party = ["foldrun_analysis", "foldrun_common"]
+
+[tool.uv.sources]
+foldrun-common = { path = "../../foldrun-agent/packages/foldrun-common" }
 
 [tool.ty]
 # ty is Astral's Rust-based type checker (same team as ruff/uv)

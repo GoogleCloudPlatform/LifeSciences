@@ -53,7 +53,8 @@ steps:
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" \
             --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest" \
-            src/foldrun-viewer/
+            -f src/foldrun-viewer/Dockerfile \
+            .
           docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-viewer:latest"
         else
           echo "Skipping viewer build (BUILD_TARGET=$$BUILD_TARGET)"
@@ -106,7 +107,8 @@ steps:
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" \
             --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest" \
-            src/foldrun-analysis-job/
+            -f src/foldrun-analysis-job/Dockerfile \
+            .
           docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/foldrun-analysis-job:latest"
         else
           echo "Skipping analysis build (BUILD_TARGET=$$BUILD_TARGET)"

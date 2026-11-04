@@ -14,16 +14,27 @@
 
 .git/
 .venv/
+**/.venv/
 tests/
+**/tests/
 __pycache__/
+**/__pycache__/
 *.pyc
+**/*.pyc
 *.pyo
+**/*.pyo
 .pytest_cache/
+**/.pytest_cache/
 .ruff_cache/
+**/.ruff_cache/
 .mypy_cache/
+**/.mypy_cache/
 .env
 .env.*
 dist/
+**/dist/
 build/
+**/build/
 *.egg-info/
+**/*.egg-info/
 deployment_metadata.json

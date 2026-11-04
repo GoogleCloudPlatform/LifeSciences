@@ -13,6 +13,7 @@
 # limitations under the License.
 
 # AlphaFold Structure Viewer - Cloud Run Dockerfile
+# Build context: applications/foldrun/ (docker build -f src/foldrun-viewer/Dockerfile .)
 
 # Stage 1: Build environment
 FROM python:3.13-slim AS builder
@@ -20,12 +21,14 @@ FROM python:3.13-slim AS builder
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /bin/
 
-WORKDIR /app
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+WORKDIR /build/src/foldrun-viewer
 
-# Copy config files and lock
-COPY pyproject.toml uv.lock ./
+# Copy shared foldrun-common package and viewer dependency lock
+COPY foldrun-agent/packages/foldrun-common /build/foldrun-agent/packages/foldrun-common
+COPY src/foldrun-viewer/pyproject.toml src/foldrun-viewer/uv.lock ./
 
-# Install dependencies (frozen, no-dev, no-install-project)
+# Install dependencies (frozen, no-dev, no-install-project, non-editable for Stage 2)
 RUN uv sync --frozen --no-install-project --no-dev --no-editable
 
 # Stage 2: Runtime image
@@ -38,9 +41,9 @@ COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application files
-COPY app.py .
-COPY templates/ templates/
-COPY static/ static/
+COPY src/foldrun-viewer/app.py .
+COPY src/foldrun-viewer/templates/ templates/
+COPY src/foldrun-viewer/static/ static/
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app && chmod o+w /app

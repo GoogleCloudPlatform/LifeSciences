@@ -12,76 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Boltz-2 specific prediction analyzer and consolidator."""
+"""Boltz-2 specific prediction analyzer built on BaseStructureAnalyzer."""
+
+from __future__ import annotations
 
 import io
-import json
 import logging
-import os
-import sys
-import time
-from datetime import UTC, datetime
+from typing import Any, ClassVar
 
-import matplotlib
 import numpy as np
-from google import genai
-from google.cloud import storage
-from google.genai import types
+import yaml
 
-matplotlib.use("Agg")  # Use non-interactive backend for Cloud Run
+from foldrun_common import resolve_boltz2_query_yaml_uri
 
-from .shared_utils import (
-    _sanitize_data,
-    build_and_upload_run_archive,
-    calculate_per_chain_plddt,
-    calculate_plddt_stats,
-    download_image_from_gcs,
-    download_json_from_gcs,
-    download_text_from_gcs,
-    get_job_metadata,
-    get_quality_assessment,
-    parse_cif_chains,
-    plot_error_matrix,
-    plot_iptm_matrix,
-    plot_plddt_distribution,
-    upload_to_gcs,
-    wait_for_sibling_tasks,
-)
+from . import shared_utils
+from .base_analyzer import BaseStructureAnalyzer, JobExtras, SampleMetrics
+from .shared_utils import calculate_per_chain_plddt, parse_cif_chains
 
 logger = logging.getLogger(__name__)
 
-
-def generate_gemini_expert_analysis(summary_data: dict) -> dict:
-    """Generate expert analysis using Gemini via Google GenAI SDK."""
-    try:
-        best = summary_data["best_prediction"]
-        summary = summary_data["summary"]
-        top_preds = summary_data["top_predictions"][:3]
-
-        chain_desc = ""
-        for ci in best.get("chain_info", []):
-            if ci["molecule_type"] == "ligand":
-                comps = ", ".join(ci.get("comp_ids", [])[:3])
-                chain_desc += f"- Chain {ci['chain_id']}: {ci['molecule_type']} ({comps}), {ci['atom_count']} atoms\n"
-            else:
-                chain_desc += f"- Chain {ci['chain_id']}: {ci['molecule_type']}, {ci['residue_count']} residues, {ci['atom_count']} atoms\n"
-
-        gpde_str = (
-            f"{best.get('gpde', 0):.4f}" if best.get("gpde") is not None else "N/A"
-        )
-
-        rs_str = (
-            f"{best['ranking_score']:.4f}"
-            if best.get("ranking_score") is not None
-            else "N/A"
-        )
-        ptm_str = f"{best['ptm']:.4f}" if best.get("ptm") is not None else "N/A"
-        iptm_str = f"{best['iptm']:.4f}" if best.get("iptm") is not None else "N/A"
-        plddt_str = (
-            f"{best['plddt_mean']:.2f}" if best.get("plddt_mean") is not None else "N/A"
-        )
-
-        prompt = f"""You are an expert structural biologist reviewing Boltz-2 prediction results.
+BOLTZ2_PROMPT_HEADER = """You are an expert structural biologist reviewing Boltz-2 prediction results.
 
 **Boltz-2 Reference (use to interpret results):**
 - Diffusion-based biomolecular structure prediction model (MIT, open-source). Supports proteins, RNA, DNA, ligands, covalent modifications, and glycans.
@@ -99,198 +49,15 @@ def generate_gemini_expert_analysis(summary_data: dict) -> dict:
   - High variance in ranking_score across samples → conformational flexibility or poorly defined binding site
   - Chain pTM on diagonal of ipTM matrix shows per-chain fold quality independently of interface
 
-**Prediction Summary:**
-- Model: Boltz-2
-- Job ID: {summary_data["job_id"]}
-- Total Tokens/Residues: {summary["protein_info"]["sequence_length"]}
-- Total Samples: {summary["protein_info"]["total_predictions"]}
-- Best Sample: {best["sample_name"]} (Rank #{best.get("rank", 1)})
-
-**Chain Composition:**
-{chain_desc}
-**Quality Metrics (Best Sample):**
-- Ranking Score: {rs_str}
-- pTM: {ptm_str}
-- ipTM: {iptm_str}
-- Mean pLDDT: {plddt_str}
-- GPDE: {gpde_str}
-- Has Clash: {"Yes" if best.get("has_clash") else "No"}
-- Disorder: {"Yes" if best.get("disorder") else "No"}
 """
 
-        if best.get("chain_ptm"):
-            prompt += "\n**Per-Chain pTM:**\n"
-            for chain, score in best["chain_ptm"].items():
-                score_s = f"{score:.4f}" if score is not None else "N/A"
-                prompt += f"- Chain {chain}: {score_s}\n"
 
-        if best.get("chain_pair_iptm"):
-            prompt += "\n**Chain-Pair ipTM (interface quality):**\n"
-            for pair, score in best["chain_pair_iptm"].items():
-                score_s = f"{score:.4f}" if score is not None else "N/A"
-                prompt += f"- {pair}: {score_s}\n"
-
-        if best.get("per_chain_plddt"):
-            prompt += "\n**Per-Chain pLDDT (protein vs ligand breakdown):**\n"
-            for cid, stats in best["per_chain_plddt"].items():
-                mol_type = stats.get("molecule_type", "unknown")
-                comps = ", ".join(stats.get("comp_ids", [])[:3])
-                comp_str = f" ({comps})" if mol_type == "ligand" else ""
-                mean_s = (
-                    f"{stats['mean']:.1f}" if stats.get("mean") is not None else "N/A"
-                )
-                min_s = f"{stats['min']:.1f}" if stats.get("min") is not None else "N/A"
-                max_s = f"{stats['max']:.1f}" if stats.get("max") is not None else "N/A"
-                prompt += (
-                    f"- Chain {cid} ({mol_type}{comp_str}): "
-                    f"mean pLDDT={mean_s}, "
-                    f"range=[{min_s}, {max_s}], "
-                    f"{stats['atom_count']} atoms\n"
-                )
-
-        prompt += "\n**Confidence Distribution (Best Sample):**\n"
-        if best.get("plddt_distribution"):
-            dist = best["plddt_distribution"]
-            prompt += (
-                f"- Very High (90-100): {dist.get('very_high_confidence', 0)} atoms\n"
-            )
-            prompt += f"- High (70-90): {dist.get('high_confidence', 0)} atoms\n"
-            prompt += f"- Low (50-70): {dist.get('low_confidence', 0)} atoms\n"
-            prompt += f"- Very Low (<50): {dist.get('very_low_confidence', 0)} atoms\n"
-
-        all_preds = summary_data.get("all_predictions_summary", [])
-        if len(all_preds) > 1:
-            all_scores = [
-                p["ranking_score"]
-                for p in all_preds
-                if p.get("ranking_score") is not None
-            ]
-            if all_scores:
-                prompt += f"\n**Sample Diversity (all {len(all_preds)} samples):**\n"
-                prompt += f"- Ranking score range: {min(all_scores):.4f} - {max(all_scores):.4f} (spread: {max(all_scores) - min(all_scores):.4f})\n"
-                prompt += (
-                    f"- Mean ranking score: {sum(all_scores) / len(all_scores):.4f}\n"
-                )
-
-        prompt += "\n**Top 3 Samples Comparison:**\n"
-        for i, pred in enumerate(top_preds, 1):
-            clash_str = " [CLASH]" if pred.get("has_clash") else ""
-            p_rs = (
-                f"{pred['ranking_score']:.4f}"
-                if pred.get("ranking_score") is not None
-                else "N/A"
-            )
-            p_ptm = f"{pred['ptm']:.4f}" if pred.get("ptm") is not None else "N/A"
-            p_iptm = f"{pred['iptm']:.4f}" if pred.get("iptm") is not None else "N/A"
-            prompt += f"{i}. {pred['sample_name']}: ranking_score {p_rs}, pTM {p_ptm}, ipTM {p_iptm}{clash_str}\n"
-
-        affinity = summary_data.get("summary", {}).get("affinity")
-        if affinity and affinity.get("affinity_pred_value") is not None:
-            prompt += "\n**Binding Affinity Prediction (Boltz-2 Affinity Model):**\n"
-            prompt += f"- affinity_pred_value: {affinity['affinity_pred_value']:.3f} (log10 IC50 in μM)\n"
-            prompt += f"- IC50: {affinity.get('ic50_nm', 0):.1f} nM ({affinity.get('ic50_um', 0):.4f} μM)\n"
-            prompt += f"- pIC50: {affinity.get('pic50', 0):.3f}\n"
-            prompt += f"- ΔG (estimated): {affinity.get('delta_g_kcal_mol', 0):.2f} kcal/mol\n"
-            prompt += f"- Binding probability: {affinity.get('affinity_probability_binary', 0):.3f} ({affinity.get('binding_likelihood', 'N/A')})\n"
-            prompt += f"- Binding classification: {affinity.get('binding_classification', 'N/A').replace('_', ' ').title()}\n"
-
-        if summary["protein_info"].get("fasta_sequence"):
-            fasta_seq = summary["protein_info"]["fasta_sequence"]
-            fasta_header = summary["protein_info"].get("fasta_header", "Unknown")
-            prompt += f"\n**Input Sequence:**\n>{fasta_header}\n{fasta_seq}\n"
-
-        has_affinity = (
-            affinity is not None and affinity.get("affinity_pred_value") is not None
-        )
-        prompt += f"""
-
-**Expert Analysis Request:**
-
-Provide a comprehensive assessment covering:
-
-1. **Overall Prediction Quality**: Evaluate the ranking_score, pTM, ipTM, and pLDDT. How reliable is this prediction?
-2. **Per-Chain Confidence Analysis**: Compare pLDDT across chains. For protein chains, identify well-folded vs disordered regions. For ligand chains, assess binding pose confidence — low ligand pLDDT suggests uncertain binding mode.
-3. **Ligand Binding Assessment** (if ligand present): Evaluate the protein-ligand interface quality using chain_pair_iptm and per-chain pLDDT. Is the ligand binding pose reliable?
-4. **Binding Affinity** {"(provided)" if has_affinity else "(not predicted)"}: {"Interpret the IC50, pIC50, ΔG, and binding probability. Contextualize affinity: is this drug-like (<100 nM), moderate (100 nM–1 μM), or weak (>1 μM)? Note any caveats." if has_affinity else "Affinity was not predicted in this run. Consider whether affinity prediction would add value."}
-5. **Sample Consistency**: How consistent are the top-ranked diffusion samples across seeds? High variability in ligand poses suggests the binding site is uncertain.
-6. **Interface Analysis** (if multi-chain): Interpret the chain_pair_iptm matrix. Which interfaces are confident? Which are uncertain?
-7. **Clash Assessment**: If clashes are present, what might cause them and how to address them?
-8. **Biological Insights**: What can we infer about binding specificity and mechanism from these predictions?
-9. **Limitations & Next Steps**: Key caveats and recommended follow-up (experimental validation, docking studies, additional seeds, etc.)
-
-IMPORTANT: Begin your response directly with the analysis. Do NOT include any preamble."""
-
-        logger.info("Generating Gemini expert analysis...")
-
-        content_parts = [prompt]
-
-        if best.get("plots", {}).get("plddt_plot"):
-            try:
-                img_uri = best["plots"]["plddt_plot"]
-                content_parts.append("\n\n**pLDDT Plot (Best Sample):**")
-                content_parts.append(
-                    types.Part.from_uri(file_uri=img_uri, mime_type="image/png")
-                )
-            except Exception as e:
-                logger.warning(f"Could not include pLDDT plot: {e}")
-
-        if best.get("plots", {}).get("pde_plot"):
-            try:
-                img_uri = best["plots"]["pde_plot"]
-                content_parts.append("\n\n**PDE Plot (Best Sample):**")
-                content_parts.append(
-                    types.Part.from_uri(file_uri=img_uri, mime_type="image/png")
-                )
-            except Exception as e:
-                logger.warning(f"Could not include PDE plot: {e}")
-
-        if best.get("plots", {}).get("iptm_matrix_plot"):
-            try:
-                img_uri = best["plots"]["iptm_matrix_plot"]
-                content_parts.append("\n\n**ipTM Matrix (Best Sample):**")
-                content_parts.append(
-                    types.Part.from_uri(file_uri=img_uri, mime_type="image/png")
-                )
-            except Exception as e:
-                logger.warning(f"Could not include ipTM matrix plot: {e}")
-
-        gemini_model = os.getenv("GEMINI_MODEL", "gemini-4-argon")
-
-        with genai.Client() as client:
-            response = client.models.generate_content(
-                model=gemini_model,
-                contents=content_parts,
-                config=types.GenerateContentConfig(temperature=1.0),
-            )
-
-        disclaimer = (
-            "\n\n---\n"
-            "*This analysis was generated by AI (Google Gemini) and has not been "
-            "peer-reviewed. It is intended as a starting point for interpretation, "
-            "not as expert biological advice. Predictions should be validated "
-            "experimentally by qualified scientists before use in research or "
-            "clinical decisions.*"
-        )
-
-        return {
-            "status": "success",
-            "analysis": (response.text or "") + disclaimer,
-            "model": gemini_model,
-            "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
-            "ai_generated": True,
-        }
-
-    except Exception as e:
-        logger.error(f"Error generating Gemini analysis: {e}", exc_info=True)
-        return {"status": "error", "error": str(e)}
-
-
-def parse_affinity(affinity_data: dict) -> dict:
+def parse_affinity(affinity_data: dict[str, Any]) -> dict[str, Any]:
     """Parse Boltz-2 affinity JSON and compute human-readable metrics."""
     val = affinity_data.get("affinity_pred_value")
     prob = affinity_data.get("affinity_probability_binary")
 
-    result = {
+    result: dict[str, Any] = {
         "affinity_pred_value": val,
         "affinity_probability_binary": prob,
         "affinity_pred_value1": affinity_data.get("affinity_pred_value1"),
@@ -337,6 +104,194 @@ def parse_affinity(affinity_data: dict) -> dict:
     return result
 
 
+class Boltz2StructureAnalyzer(BaseStructureAnalyzer):
+    """Boltz-2 post-processing analyzer and consolidator."""
+
+    model_type: ClassVar[str] = "boltz2"
+    display_name: ClassVar[str] = "Boltz2"
+    extract_plddt_from_cif: ClassVar[bool] = True
+
+    def _extract_sample_metrics(
+        self,
+        pred: dict[str, Any],
+        aggregated: dict[str, Any],
+        chain_info: list[dict[str, Any]],
+        cif_plddt_scores: list[float],
+    ) -> SampleMetrics:
+        ranking_score = (
+            aggregated.get("confidence_score")
+            if aggregated.get("confidence_score") is not None
+            else aggregated.get("sample_ranking_score")
+        )
+
+        raw_chain_ptm = aggregated.get("chains_ptm", {})
+        raw_pair_iptm = aggregated.get("pair_chains_iptm", {})
+
+        idx_to_letter = {str(i): ci["chain_id"] for i, ci in enumerate(chain_info)}
+        chain_ptm = {
+            idx_to_letter.get(str(k), str(k)): v for k, v in raw_chain_ptm.items()
+        }
+
+        chain_pair_iptm: dict[str, Any] = {}
+        for c1_idx, row in raw_pair_iptm.items():
+            if isinstance(row, dict):
+                for c2_idx, score in row.items():
+                    c1 = idx_to_letter.get(str(c1_idx), str(c1_idx))
+                    c2 = idx_to_letter.get(str(c2_idx), str(c2_idx))
+                    if c1 != c2:
+                        chain_pair_iptm[f"({c1}, {c2})"] = score
+            else:
+                c1 = idx_to_letter.get(str(c1_idx), str(c1_idx))
+                chain_pair_iptm[c1] = row
+
+        pde_matrix: list[Any] | None = None
+        pde_uri = pred.get("pde_uri", "")
+        if pde_uri:
+            try:
+                pde_bytes = shared_utils.download_image_from_gcs(pde_uri)
+                pde_data = np.load(io.BytesIO(pde_bytes))
+                pde_matrix = pde_data["pde"].tolist()
+            except Exception as exc:
+                logger.warning(f"Could not load PDE: {exc}")
+
+        return SampleMetrics(
+            ranking_score=ranking_score,
+            ptm=aggregated.get("ptm"),
+            iptm=aggregated.get("iptm"),
+            avg_plddt=aggregated.get("complex_plddt"),
+            gpde=aggregated.get("complex_pde"),
+            has_clash=aggregated.get("has_clash", 0),
+            disorder=aggregated.get("disorder", 0),
+            chain_ptm=chain_ptm,
+            chain_pair_iptm=chain_pair_iptm,
+            plddt_scores=cif_plddt_scores,
+            pde_matrix=pde_matrix,
+        )
+
+    def _load_job_extras(
+        self,
+        job_metadata: dict[str, Any],
+        analysis_path: str,
+        task_config: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> JobExtras:
+        cfg = task_config or {}
+        affinity_uri = kwargs.get("affinity_uri") or cfg.get("affinity_uri")
+        query_yaml_uri = kwargs.get("query_yaml_uri") or cfg.get("query_yaml_uri")
+
+        affinity_results: dict[str, Any] | None = None
+        if affinity_uri:
+            try:
+                affinity_raw = shared_utils.download_json_from_gcs(affinity_uri)
+                affinity_results = parse_affinity(affinity_raw)
+            except Exception as exc:
+                logger.warning(
+                    f"Could not load affinity results from {affinity_uri}: {exc}"
+                )
+
+        fasta_sequence: str | None = None
+        fasta_header: str | None = None
+        input_query_yaml: str | None = None
+        try:
+            query_yaml_path = query_yaml_uri
+            if not query_yaml_path:
+                bucket_name = (
+                    analysis_path[5:].split("/", 1)[0]
+                    if analysis_path.startswith("gs://")
+                    else ""
+                )
+                query_yaml_path = resolve_boltz2_query_yaml_uri(
+                    bucket_name=bucket_name,
+                    parameter_values=job_metadata.get("parameters"),
+                    labels=job_metadata.get("labels"),
+                )
+
+            if query_yaml_path:
+                raw_yaml = shared_utils.download_text_from_gcs(query_yaml_path)
+                query_data = yaml.safe_load(raw_yaml) or {}
+                input_query_yaml = raw_yaml
+
+                seqs: list[str] = []
+                for entry in query_data.get("sequences", []):
+                    if isinstance(entry, dict) and "protein" in entry:
+                        seq_id = entry["protein"].get("id", "A")
+                        if isinstance(seq_id, list):
+                            seq_id = seq_id[0]
+                        if not fasta_header:
+                            fasta_header = str(seq_id)
+                        seqs.append(entry["protein"].get("sequence", ""))
+                fasta_sequence = "/".join(seqs) if seqs else None
+        except Exception as exc:
+            logger.warning(f"Could not load input sequence: {exc}")
+
+        return JobExtras(
+            fasta_sequence=fasta_sequence,
+            fasta_header=fasta_header,
+            extra_protein_info={"input_query_yaml": input_query_yaml},
+            extra_summary_fields={"affinity": affinity_results},
+        )
+
+    def _build_expert_prompt(self, summary_data: dict[str, Any]) -> str:
+        affinity = summary_data.get("affinity") or summary_data.get("summary", {}).get(
+            "affinity"
+        )
+        affinity_section = ""
+        has_affinity = (
+            affinity is not None and affinity.get("affinity_pred_value") is not None
+        )
+        if has_affinity and affinity is not None:
+            affinity_section = (
+                "\n**Binding Affinity Prediction (Boltz-2 Affinity Model):**\n"
+                f"- affinity_pred_value: {affinity['affinity_pred_value']:.3f} (log10 IC50 in μM)\n"
+                f"- IC50: {affinity.get('ic50_nm', 0):.1f} nM ({affinity.get('ic50_um', 0):.4f} μM)\n"
+                f"- pIC50: {affinity.get('pic50', 0):.3f}\n"
+                f"- ΔG (estimated): {affinity.get('delta_g_kcal_mol', 0):.2f} kcal/mol\n"
+                f"- Binding probability: {affinity.get('affinity_probability_binary', 0):.3f} "
+                f"({affinity.get('binding_likelihood', 'N/A')})\n"
+                f"- Binding classification: "
+                f"{affinity.get('binding_classification', 'N/A').replace('_', ' ').title()}\n"
+            )
+
+        body = self.format_common_prompt_sections(
+            summary_data,
+            model_label="Boltz-2",
+            extra_section=affinity_section,
+        )
+        affinity_item = (
+            "Interpret the IC50, pIC50, ΔG, and binding probability. Contextualize affinity: "
+            "is this drug-like (<100 nM), moderate (100 nM–1 μM), or weak (>1 μM)? Note any caveats."
+            if has_affinity
+            else "Affinity was not predicted in this run. Consider whether affinity prediction would add value."
+        )
+        footer = f"""
+
+**Expert Analysis Request:**
+
+Provide a comprehensive assessment covering:
+
+1. **Overall Prediction Quality**: Evaluate the ranking_score, pTM, ipTM, and pLDDT. How reliable is this prediction?
+2. **Per-Chain Confidence Analysis**: Compare pLDDT across chains. For protein chains, identify well-folded vs disordered regions. For ligand chains, assess binding pose confidence — low ligand pLDDT suggests uncertain binding mode.
+3. **Ligand Binding Assessment** (if ligand present): Evaluate the protein-ligand interface quality using chain_pair_iptm and per-chain pLDDT. Is the ligand binding pose reliable?
+4. **Binding Affinity** {"(provided)" if has_affinity else "(not predicted)"}: {affinity_item}
+5. **Sample Consistency**: How consistent are the top-ranked diffusion samples across seeds? High variability in ligand poses suggests the binding site is uncertain.
+6. **Interface Analysis** (if multi-chain): Interpret the chain_pair_iptm matrix. Which interfaces are confident? Which are uncertain?
+7. **Clash Assessment**: If clashes are present, what might cause them and how to address them?
+8. **Biological Insights**: What can we infer about binding specificity and mechanism from these predictions?
+9. **Limitations & Next Steps**: Key caveats and recommended follow-up (experimental validation, docking studies, additional seeds, etc.)
+
+IMPORTANT: Begin your response directly with the analysis. Do NOT include any preamble."""
+
+        return f"{BOLTZ2_PROMPT_HEADER}{body}{footer}"
+
+
+ANALYZER = Boltz2StructureAnalyzer()
+
+
+def generate_gemini_expert_analysis(summary_data: dict[str, Any]) -> dict[str, Any]:
+    """Generate expert analysis using Gemini via Google GenAI SDK."""
+    return ANALYZER.generate_gemini_expert_analysis(summary_data)
+
+
 def consolidate_results(
     job_id: str,
     analysis_path: str,
@@ -344,411 +299,42 @@ def consolidate_results(
     task_count: int,
     affinity_uri: str | None = None,
     query_yaml_uri: str | None = None,
-):
-    """Consolidate per-sample analysis results into summary.json."""
-    logger.info(f"Consolidating Boltz2 results from {analysis_path}")
-    time.sleep(2)
-
-    parts = analysis_path[5:].split("/", 1)
-    prefix = parts[1] if len(parts) > 1 else ""
-
-    if prefix and not prefix.endswith("/"):
-        prefix += "/"
-    if prefix.startswith("/"):
-        prefix = prefix[1:]
-
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-
-    blobs = bucket.list_blobs(prefix=prefix)
-    completed_files = []
-
-    for blob in blobs:
-        if "prediction_" in blob.name and blob.name.endswith("_analysis.json"):
-            completed_files.append(f"gs://{bucket_name}/{blob.name}")
-
-    logger.info(f"Found {len(completed_files)} analysis files to consolidate")
-
-    all_analyses = []
-    for file_path in completed_files:
-        try:
-            analysis = download_json_from_gcs(file_path)
-            all_analyses.append(analysis)
-        except Exception as e:
-            logger.error(f"Failed to read {file_path}: {e}")
-
-    if not all_analyses:
-        logger.error("No analyses found to consolidate")
-        return
-
-    job_metadata = get_job_metadata(job_id)
-    all_labels = job_metadata.get("labels", {})
-
-    affinity_results = None
-    if affinity_uri:
-        try:
-            affinity_raw = download_json_from_gcs(affinity_uri)
-            affinity_results = parse_affinity(affinity_raw)
-        except Exception as e:
-            logger.warning(f"Could not load affinity results from {affinity_uri}: {e}")
-
-    all_analyses.sort(
-        key=lambda x: (
-            x.get("ranking_score") is not None,
-            x["ranking_score"] if x.get("ranking_score") is not None else -1e9,
-        ),
-        reverse=True,
+) -> dict[str, Any] | None:
+    """Consolidate per-sample Boltz-2 analysis results into summary.json."""
+    return ANALYZER.consolidate_results(
+        job_id=job_id,
+        analysis_path=analysis_path,
+        bucket_name=bucket_name,
+        task_count=task_count,
+        affinity_uri=affinity_uri,
+        query_yaml_uri=query_yaml_uri,
     )
-
-    for i, analysis in enumerate(all_analyses):
-        analysis["rank"] = i + 1
-
-    best = all_analyses[0]
-    ranking_scores = [
-        a["ranking_score"] for a in all_analyses if a.get("ranking_score") is not None
-    ]
-    plddt_means = [
-        a["plddt_mean"] for a in all_analyses if a.get("plddt_mean") is not None
-    ]
-
-    fasta_sequence = None
-    fasta_header = None
-    input_query_yaml = None
-    try:
-        import yaml
-
-        query_yaml_path = query_yaml_uri
-        if not query_yaml_path:
-            query_name_label = all_labels.get("query_name", "")
-            bucket_name_from_analysis = analysis_path[5:].split("/", 1)[0]
-            query_yaml_path = (
-                f"gs://{bucket_name_from_analysis}/boltz2_queries/{query_name_label}.yaml"
-                if query_name_label
-                else None
-            )
-
-        if query_yaml_path:
-            raw_yaml = download_text_from_gcs(query_yaml_path)
-            query_data = yaml.safe_load(raw_yaml)
-            input_query_yaml = raw_yaml
-
-            seqs = []
-            for entry in query_data.get("sequences", []):
-                if "protein" in entry:
-                    seq_id = entry["protein"].get("id", "A")
-                    if isinstance(seq_id, list):
-                        seq_id = seq_id[0]
-                    if not fasta_header:
-                        fasta_header = str(seq_id)
-                    seqs.append(entry["protein"].get("sequence", ""))
-            fasta_sequence = "/".join(seqs) if seqs else None
-    except Exception as e:
-        logger.warning(f"Could not load input sequence: {e}")
-
-    chain_composition = []
-    best_chain_info = best.get("chain_info", [])
-    total_residues = 0
-    for ci in best_chain_info:
-        total_residues += ci["residue_count"]
-        entry = {
-            "chain_id": ci["chain_id"],
-            "molecule_type": ci["molecule_type"],
-            "residue_count": ci["residue_count"],
-            "atom_count": ci["atom_count"],
-        }
-        if ci["molecule_type"] == "ligand":
-            entry["comp_ids"] = ci["comp_ids"]
-        chain_composition.append(entry)
-
-    summary = {
-        "protein_info": {
-            "sequence_length": total_residues
-            if total_residues > 0
-            else len(best.get("plddt_scores", [])),
-            "total_predictions": len(all_analyses),
-            "fasta_sequence": fasta_sequence,
-            "fasta_header": fasta_header,
-            "job_metadata": job_metadata,
-            "model_type": "boltz2",
-            "chain_composition": chain_composition,
-            "input_query_yaml": input_query_yaml,
-        },
-        "quality_metrics": {
-            "best_ranking_score": best["ranking_score"],
-            "best_ptm": best["ptm"],
-            "best_iptm": best["iptm"],
-            "best_plddt": best["plddt_mean"],
-            "quality_assessment": best["quality_assessment"],
-        },
-        "affinity": affinity_results,
-        "statistics": {
-            "total_predictions": len(all_analyses),
-            "analyzed_successfully": len(all_analyses),
-            "ranking_score_stats": {
-                "mean": sum(ranking_scores) / len(ranking_scores)
-                if ranking_scores
-                else None,
-                "min": min(ranking_scores) if ranking_scores else None,
-                "max": max(ranking_scores) if ranking_scores else None,
-                "range": max(ranking_scores) - min(ranking_scores)
-                if ranking_scores
-                else None,
-            },
-            "plddt_stats": {
-                "mean": sum(plddt_means) / len(plddt_means) if plddt_means else None,
-                "min": min(plddt_means) if plddt_means else None,
-                "max": max(plddt_means) if plddt_means else None,
-                "range": max(plddt_means) - min(plddt_means) if plddt_means else None,
-            },
-        },
-    }
-
-    summary_data = {
-        "job_id": job_id,
-        "model_type": "boltz2",
-        "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
-        "summary": summary,
-        "best_prediction": best,
-        "top_predictions": all_analyses[:10],
-        "all_predictions_summary": [
-            {
-                "rank": a["rank"],
-                "sample_name": a["sample_name"],
-                "ranking_score": a["ranking_score"],
-                "ptm": a["ptm"],
-                "iptm": a["iptm"],
-                "plddt_mean": a["plddt_mean"],
-                "plddt_min": a["plddt_min"],
-                "quality_assessment": a["quality_assessment"],
-                "has_clash": a.get("has_clash", 0),
-                "per_chain_plddt": a.get("per_chain_plddt", {}),
-                "chain_info": a.get("chain_info", []),
-                "cif_uri": a["cif_uri"],
-                "plots": a.get("plots", {}),
-            }
-            for a in all_analyses
-        ],
-    }
-
-    expert_analysis = generate_gemini_expert_analysis(summary_data)
-    summary_data["expert_analysis"] = expert_analysis
-
-    try:
-        archive_meta = build_and_upload_run_archive(
-            analysis_path=analysis_path,
-            bucket_name=bucket_name,
-            summary_data=summary_data,
-        )
-        summary_data.update(archive_meta)
-    except Exception as e:
-        logger.warning(f"Could not build run archive bundle: {e}")
-
-    summary_uri = f"{analysis_path}summary.json"
-    local_summary = "/tmp/summary.json"
-    summary_data = _sanitize_data(summary_data)
-
-    with open(local_summary, "w") as f:
-        json.dump(summary_data, f, indent=2, allow_nan=False)
-
-    upload_to_gcs(local_summary, summary_uri)
-    os.remove(local_summary)
-
-    logger.info(f"Consolidation complete! Summary written to {summary_uri}")
 
 
 def run_task(
     task_index: int,
     task_count: int,
-    task_config: dict,
+    task_config: dict[str, Any],
     bucket_name: str,
     analysis_path: str,
-):
-    """Execute Boltz2 predictions analysis task."""
-    predictions = task_config.get("predictions", [])
-    total_predictions = len(predictions)
-    if task_index >= total_predictions:
-        logger.error(f"Task index {task_index} out of range")
-        sys.exit(1)
+) -> None:
+    """Execute Boltz-2 predictions analysis task."""
+    ANALYZER.run_task(
+        task_index=task_index,
+        task_count=task_count,
+        task_config=task_config,
+        bucket_name=bucket_name,
+        analysis_path=analysis_path,
+    )
 
-    job_id = task_config.get("job_id")
-    affinity_uri = task_config.get("affinity_uri")
-    query_yaml_uri = task_config.get("query_yaml_uri")
-    stride = max(1, task_count)
-    assigned_indices = list(range(task_index, total_predictions, stride))
 
-    try:
-        for pred_idx in assigned_indices:
-            pred = predictions[pred_idx]
-            sample_name = pred["sample_name"]
-            cif_uri = pred["cif_uri"]
-            confidences_uri = pred["confidences_uri"]
-            aggregated_uri = pred["aggregated_uri"]
-            pde_uri = pred.get("pde_uri", "")
-            output_uri = pred["output_uri"]
-
-            logger.info(
-                f"Starting Boltz2 analysis for sample: {sample_name} (index {pred_idx})"
-            )
-
-            aggregated = download_json_from_gcs(aggregated_uri)
-            chain_info = []
-            cif_plddt_scores = []
-            try:
-                cif_text = download_text_from_gcs(cif_uri)
-                chain_info, cif_plddt_scores = parse_cif_chains(
-                    cif_text, extract_plddt=True
-                )
-            except Exception as e:
-                logger.warning(f"Could not parse CIF: {e}")
-
-            ranking_score = (
-                aggregated.get("confidence_score")
-                if aggregated.get("confidence_score") is not None
-                else aggregated.get("sample_ranking_score")
-            )
-            ptm = aggregated.get("ptm")
-            iptm = aggregated.get("iptm")
-            avg_plddt = aggregated.get("complex_plddt")
-            gpde = aggregated.get("complex_pde", None)
-            has_clash = aggregated.get("has_clash", 0)
-            disorder = aggregated.get("disorder", 0)
-
-            raw_chain_ptm = aggregated.get("chains_ptm", {})
-            raw_pair_iptm = aggregated.get("pair_chains_iptm", {})
-
-            idx_to_letter = {str(i): ci["chain_id"] for i, ci in enumerate(chain_info)}
-            chain_ptm = {
-                idx_to_letter.get(str(k), str(k)): v for k, v in raw_chain_ptm.items()
-            }
-
-            chain_pair_iptm = {}
-            for c1_idx, row in raw_pair_iptm.items():
-                if isinstance(row, dict):
-                    for c2_idx, score in row.items():
-                        c1 = idx_to_letter.get(str(c1_idx), str(c1_idx))
-                        c2 = idx_to_letter.get(str(c2_idx), str(c2_idx))
-                        if c1 != c2:
-                            chain_pair_iptm[f"({c1}, {c2})"] = score
-                else:
-                    c1 = idx_to_letter.get(str(c1_idx), str(c1_idx))
-                    chain_pair_iptm[c1] = row
-
-            plddt_scores = cif_plddt_scores
-            pde_matrix = None
-            if pde_uri:
-                try:
-                    pde_bytes = download_image_from_gcs(pde_uri)
-                    pde_data = np.load(io.BytesIO(pde_bytes))
-                    pde_matrix = pde_data["pde"].tolist()
-                except Exception as e:
-                    logger.warning(f"Could not load PDE: {e}")
-
-            plddt_stats = calculate_plddt_stats(plddt_scores)
-            if plddt_stats["mean"] is None and avg_plddt is not None:
-                plddt_stats["mean"] = avg_plddt
-                plddt_stats["median"] = avg_plddt
-
-            per_chain_plddt = {}
-            if plddt_scores and chain_info:
-                per_chain_plddt = calculate_per_chain_plddt(plddt_scores, chain_info)
-
-            quality = get_quality_assessment(plddt_stats["mean"])
-
-            # Generate plots
-            plot_files = {}
-            output_base = output_uri.rsplit("/", 1)[0]
-
-            if plddt_scores:
-                plddt_plot_path = f"/tmp/plddt_plot_{pred_idx}.png"
-                plot_plddt_distribution(
-                    plddt_scores, sample_name, plddt_plot_path, chain_info
-                )
-                plddt_plot_uri = f"{output_base}/plddt_plot_{pred_idx}.png"
-                upload_to_gcs(plddt_plot_path, plddt_plot_uri)
-                plot_files["plddt_plot"] = plddt_plot_uri
-                os.remove(plddt_plot_path)
-
-            if pde_matrix:
-                pde_plot_path = f"/tmp/pde_plot_{pred_idx}.png"
-                plot_error_matrix(
-                    pde_matrix,
-                    sample_name,
-                    "Predicted Distance Error (Å)",
-                    pde_plot_path,
-                    chain_info,
-                )
-                pde_plot_uri = f"{output_base}/pde_plot_{pred_idx}.png"
-                upload_to_gcs(pde_plot_path, pde_plot_uri)
-                plot_files["pde_plot"] = pde_plot_uri
-                os.remove(pde_plot_path)
-
-            if chain_pair_iptm and len(chain_info) > 1:
-                iptm_plot_path = f"/tmp/iptm_matrix_{pred_idx}.png"
-                plot_iptm_matrix(
-                    chain_pair_iptm,
-                    sample_name,
-                    iptm_plot_path,
-                    chain_ptm,
-                    chain_info,
-                )
-                if os.path.exists(iptm_plot_path):
-                    iptm_plot_uri = f"{output_base}/iptm_matrix_{pred_idx}.png"
-                    upload_to_gcs(iptm_plot_path, iptm_plot_uri)
-                    plot_files["iptm_matrix_plot"] = iptm_plot_uri
-                    os.remove(iptm_plot_path)
-
-            analysis = {
-                "prediction_index": pred_idx,
-                "sample_name": sample_name,
-                "rank": pred_idx + 1,
-                "ranking_score": ranking_score,
-                "ptm": ptm,
-                "iptm": iptm,
-                "avg_plddt": avg_plddt,
-                "gpde": gpde,
-                "has_clash": has_clash,
-                "disorder": disorder,
-                "chain_ptm": chain_ptm,
-                "chain_pair_iptm": chain_pair_iptm,
-                "per_chain_plddt": per_chain_plddt,
-                "chain_info": chain_info,
-                "plddt_mean": plddt_stats["mean"],
-                "plddt_median": plddt_stats["median"],
-                "plddt_min": plddt_stats["min"],
-                "plddt_max": plddt_stats["max"],
-                "plddt_std": plddt_stats["std"],
-                "plddt_distribution": plddt_stats["distribution"],
-                "plddt_scores": plddt_stats["per_residue"],
-                "quality_assessment": quality,
-                "has_pde": pde_matrix is not None,
-                "cif_uri": cif_uri,
-                "aggregated_uri": aggregated_uri,
-                "confidences_uri": confidences_uri,
-                "analyzed_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
-                "plots": plot_files,
-            }
-
-            local_json = f"/tmp/analysis_{pred_idx}.json"
-            analysis = _sanitize_data(analysis)
-            with open(local_json, "w") as f:
-                json.dump(analysis, f, indent=2, allow_nan=False)
-
-            upload_to_gcs(local_json, output_uri)
-            os.remove(local_json)
-
-        # Consolidation check
-        consolidator_task_index = min(stride, total_predictions) - 1
-        if task_index == consolidator_task_index:
-            wait_for_sibling_tasks(bucket_name, analysis_path, total_predictions)
-            consolidate_results(
-                job_id,
-                analysis_path,
-                bucket_name,
-                total_predictions,
-                affinity_uri,
-                query_yaml_uri,
-            )
-
-    except Exception as e:
-        logger.error(f"Error running Boltz2 analysis task: {e}", exc_info=True)
-        raise
+__all__ = [
+    "ANALYZER",
+    "Boltz2StructureAnalyzer",
+    "calculate_per_chain_plddt",
+    "consolidate_results",
+    "generate_gemini_expert_analysis",
+    "parse_affinity",
+    "parse_cif_chains",
+    "run_task",
+]

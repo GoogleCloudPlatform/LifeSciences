@@ -17,7 +17,6 @@
 import json
 import logging
 import os
-import re
 import sys
 import time
 import urllib.parse
@@ -36,10 +35,15 @@ from foldrun_app.core.compile_lock import (
 )
 from foldrun_app.core.download_utils import build_agent_downloads_dict
 from foldrun_app.core.vertex_utils import extract_short_job_id, get_pipeline_job
+from foldrun_common import (
+    JOB_ID_PATTERN as _JOB_ID_PATTERN,
+)
+from foldrun_common import (
+    AnalysisMetadata,
+    cleanup_stale_analysis_blobs,
+)
 
 logger = logging.getLogger(__name__)
-
-_JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 class KFPModelTool(BaseTool):
@@ -266,32 +270,13 @@ class KFPAnalyzeJobTool(KFPModelTool):
     def _cleanup_stale_analysis_blobs(self, analysis_path: str) -> int:
         """Delete stale per-prediction and summary blobs prior to re-analysis."""
         bucket_name, prefix = self._validate_gcs_uri(analysis_path)
-        if not prefix.endswith("/"):
-            prefix += "/"
-        deleted = 0
         try:
             storage_client = self._storage_module().Client(project=self.config.project_id)
             bucket = storage_client.bucket(bucket_name)
-            for blob in list(bucket.list_blobs(prefix=prefix)):
-                filename = blob.name.rsplit("/", 1)[-1]
-                is_stale = (
-                    filename in ("summary.json", "artifacts_bundle.zip", "error.json")
-                    or filename.endswith("_analysis.json")
-                    or (
-                        filename.startswith("analysis_")
-                        and filename.endswith(".json")
-                        and filename != "analysis_metadata.json"
-                    )
-                )
-                if is_stale:
-                    try:
-                        blob.delete()
-                        deleted += 1
-                    except Exception as del_err:
-                        logger.warning(f"Failed to delete stale blob {blob.name}: {del_err}")
+            return cleanup_stale_analysis_blobs(bucket, prefix)
         except Exception as list_err:
             logger.warning(f"Could not list stale analysis blobs under {analysis_path}: {list_err}")
-        return deleted
+            return 0
 
     def _discover_and_build_task_config(
         self,
@@ -373,16 +358,16 @@ class KFPAnalyzeJobTool(KFPModelTool):
         task_config_path = f"{analysis_path}task_config.json"
         self._write_to_gcs(task_config_path, task_config)
 
-        metadata: dict[str, Any] = {
-            "job_id": job_id,
-            "total_predictions": total_predictions,
-            "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            "status": "running",
-            "execution_method": "cloud_run_job",
-            "model_type": self.model_type,
-            "task_config_uri": task_config_path,
+        metadata = AnalysisMetadata(
+            job_id=job_id,
+            total_predictions=total_predictions,
+            started_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            status="running",
+            execution_method="cloud_run_job",
+            model_type=self.model_type,
+            task_config_uri=task_config_path,
             **extra_metadata,
-        }
+        ).model_dump(exclude_none=True)
         self._write_to_gcs(f"{analysis_path}analysis_metadata.json", metadata)
 
         run_mod = self._run_v2_module()

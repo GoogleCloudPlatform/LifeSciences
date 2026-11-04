@@ -150,6 +150,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             assert "Job Submission" in instruction
             assert "Job Management" in instruction
             assert "Results & Analysis" in instruction
@@ -170,6 +171,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             # Model selection table present
             assert "Model Selection" in instruction
             # All submission tools referenced
@@ -205,6 +207,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             # Both models introduced
             assert "AlphaFold2" in instruction
             assert "OpenFold3" in instruction
@@ -223,6 +226,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             assert "Getting started" in instruction
             assert (
                 "ubiquitin" in instruction.lower() or "predict the structure" in instruction.lower()
@@ -239,6 +243,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             # AF2 model variants
             assert "model_1" in instruction
             assert "multimer_v3" in instruction or "multimer" in instruction
@@ -260,6 +265,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             # JSON format knowledge
             assert "molecule_type" in instruction
             assert "chain_ids" in instruction
@@ -285,6 +291,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             assert "don't dump unprompted" in instruction
             # Both reference sections marked as internal
             assert instruction.count("internal knowledge") >= 2
@@ -300,6 +307,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             assert "Seeds" in instruction or "seeds" in instruction
             assert "diffusion" in instruction
             assert "AF3 paper" in instruction
@@ -316,6 +324,7 @@ class TestCreateAgent:
 
             agent = create_alphafold_agent()
             instruction = agent.instruction
+            assert isinstance(instruction, str)
             assert "Your Current Configuration" in instruction
             assert mock_env_vars["GCP_PROJECT_ID"] in instruction
 

@@ -99,7 +99,7 @@ class AF2SubmitMultimerTool(AF2Tool):
             bucket = self.storage_client.bucket(bucket_name)
             sequence = bucket.blob(blob_path).download_as_text()
             is_fasta_file = False
-        if is_fasta_file:
+        if is_fasta_file and isinstance(sequence, str):
             allowed_dir = os.path.realpath(tempfile.gettempdir())
             resolved_path = os.path.realpath(sequence)
             if os.path.commonpath([allowed_dir, resolved_path]) != allowed_dir:

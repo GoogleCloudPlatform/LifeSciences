@@ -134,7 +134,7 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         temp_yaml = tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, prefix=f"boltz2_{job_name}_"
         )
-        temp_yaml.write(query_yaml)
+        temp_yaml.write(query_yaml if isinstance(query_yaml, str) else str(query_yaml))
         temp_yaml.close()
 
         # Upload to GCS

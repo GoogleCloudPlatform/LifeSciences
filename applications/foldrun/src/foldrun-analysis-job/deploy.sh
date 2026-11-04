@@ -49,12 +49,14 @@ if [ -z "$PROJECT_ID" ]; then
     exit 1
 fi
 
-# Navigate to current directory
-cd "$(dirname "$0")"
+# Navigate to applications/foldrun root so shared foldrun-common is in context
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FOLDRUN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "${FOLDRUN_ROOT}"
 
 echo "Step 1: Building container image..."
 gcloud builds submit \
-    --config cloudbuild.yaml \
+    --config src/foldrun-analysis-job/cloudbuild.yaml \
     --project $PROJECT_ID \
     --service-account="projects/${PROJECT_ID}/serviceAccounts/foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
     --substitutions=_IMAGE_PATH=${IMAGE_PATH} \

@@ -63,7 +63,9 @@ echo ""
 
 if [ "$BUILD" = true ]; then
   echo "Building image from local source (no cache)..."
-  docker build --no-cache -t "$LOCAL_IMAGE" "$(dirname "$0")"
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  FOLDRUN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  docker build --no-cache -t "$LOCAL_IMAGE" -f "${SCRIPT_DIR}/Dockerfile" "${FOLDRUN_ROOT}"
   IMAGE="$LOCAL_IMAGE"
 else
   echo "Configuring Docker for Artifact Registry..."

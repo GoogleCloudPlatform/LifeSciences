@@ -49,9 +49,10 @@ fi
 echo "✅ Authenticated"
 echo ""
 
-# Navigate to current directory
-
-cd "$(dirname "$0")"
+# Navigate to applications/foldrun root so shared foldrun-common is in context
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FOLDRUN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "${FOLDRUN_ROOT}"
 
 # Build and push container
 echo "Building and pushing container image..."
@@ -59,7 +60,7 @@ echo "This may take a few minutes..."
 echo ""
 
 gcloud builds submit \
-    --config cloudbuild.yaml \
+    --config src/foldrun-viewer/cloudbuild.yaml \
     --timeout=10m \
     --service-account="projects/${PROJECT_ID}/serviceAccounts/foldrun-build-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
     --substitutions=_IMAGE_PATH=${IMAGE_PATH} \

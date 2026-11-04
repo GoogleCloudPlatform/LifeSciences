@@ -30,6 +30,7 @@ build
 .env.*
 test_*.py
 *_test.py
+tests/
 compose.yml
 deploy.sh
 run-local.sh

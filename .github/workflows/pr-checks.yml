@@ -78,6 +78,36 @@ jobs:
           done
           exit $exit_code
 
+  ty-typecheck:
+    name: Type Check (ty)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv & Python 3.13
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Run ty check across configured Python applications
+        run: |
+          set -u
+          exit_code=0
+          for cfg in $(find applications -name pyproject.toml -not -path '*/node_modules/*' -not -path '*/.*' -not -path '*/.venv/*'); do
+            if grep -q '^\[tool\.ty\]' "$cfg"; then
+              dir=$(dirname "$cfg")
+              echo "Running ty check in $dir..."
+              (
+                cd "$dir" || exit 1
+                uvx ty check --exit-zero-on-warning . || exit 1
+              ) || exit_code=1
+            fi
+          done
+          exit $exit_code
+
   node-lint-fmt:
     name: Node Lint & Format
     runs-on: ubuntu-latest

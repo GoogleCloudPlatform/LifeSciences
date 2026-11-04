@@ -135,6 +135,7 @@ def get_filestore_instance(client, project_id: str, filestore_id: str, locations
         except gexc.NotFound as e:
             logger.debug(f"Filestore {filestore_id} not found in {loc}")
             last_error = e
+    assert last_error is not None
     raise last_error
 
 

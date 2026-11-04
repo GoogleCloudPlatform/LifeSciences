@@ -17,17 +17,12 @@ FoldRun Structure Viewer
 Cloud Run web application for viewing AlphaFold2, AlphaFold 3, OpenFold3, and Boltz-2 predictions
 """
 
-import io
 import json
 import logging
-import math
 import os
 import re
-import tempfile
 import urllib.parse
-import zipfile
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import google.auth
 import google.auth.exceptions
@@ -44,6 +39,44 @@ from flask import (
 )
 from google.auth.compute_engine import credentials as compute_engine_credentials
 from google.cloud import storage
+
+from foldrun_common import (
+    JOB_ID_PATTERN,
+    MAX_DECOMPRESSED_ZST_BYTES,
+    AnalysisMetadata,
+    build_analysis_task_config,
+    discover_af2_predictions_in_gcs,
+    discover_af3_predictions,
+    discover_boltz2_predictions,
+    discover_of3_predictions,
+    ensure_run_archive_in_gcs,
+    resolve_boltz2_query_yaml_uri,
+    validate_gcs_uri,
+)
+from foldrun_common import (
+    SUPPORTED_MODEL_TYPES as _SUPPORTED_MODEL_TYPES,
+)
+from foldrun_common import (
+    build_expert_analysis_markdown as _common_build_expert_analysis_markdown,
+)
+from foldrun_common import (
+    cleanup_stale_analysis_blobs as _common_cleanup_stale_analysis_blobs,
+)
+from foldrun_common import (
+    decompress_zst_bytes as _common_decompress_zst_bytes,
+)
+from foldrun_common import (
+    infer_model_type_from_display_name as _infer_model_type_from_display_name,
+)
+from foldrun_common import (
+    normalize_model_type as _normalize_model_type,
+)
+from foldrun_common import (
+    sanitize_filename as _common_sanitize_filename,
+)
+from foldrun_common import (
+    sanitize_json_floats as _sanitize_data,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -71,92 +104,20 @@ storage_client = storage.Client(project=PROJECT_ID, credentials=_creds)
 
 
 ALLOWED_GCS_PREFIXES = ("pipeline_runs/", "af3_predictions/")
-JOB_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 SIGNED_URL_EXPIRATION_SECONDS = int(
     os.environ.get("SIGNED_URL_EXPIRATION_SECONDS", "3600")
 )
-MAX_DECOMPRESSED_ZST_BYTES = 512 * 1024 * 1024  # 512 MB cap for .zst decompression
-
-_MODEL_TYPE_ALIASES = {
-    "af2": "alphafold2",
-    "alphafold": "alphafold2",
-    "alphafold2": "alphafold2",
-    "af3": "alphafold3",
-    "alphafold3": "alphafold3",
-    "of3": "openfold3",
-    "openfold3": "openfold3",
-    "boltz": "boltz2",
-    "boltz-2": "boltz2",
-    "boltz2": "boltz2",
-}
-_SUPPORTED_MODEL_TYPES = frozenset(_MODEL_TYPE_ALIASES.values())
 _NONFINITE_TOKEN_RE = re.compile(r"^[+-]?(?:nan|inf|infinity)$", re.IGNORECASE)
-
-
-def _normalize_model_type(raw: str | None) -> str:
-    """Normalize raw model_type labels/params to canonical FoldRun identifiers."""
-    if not raw:
-        return ""
-    cleaned = str(raw).strip().lower()
-    return _MODEL_TYPE_ALIASES.get(cleaned, cleaned)
-
-
-def _infer_model_type_from_display_name(display_name: str) -> str:
-    """Infer canonical model_type from PipelineJob displayName when label is absent."""
-    lower = (display_name or "").lower()
-    if "af3" in lower or "alphafold3" in lower or "alphafold-3" in lower:
-        return "alphafold3"
-    if "of3" in lower or "openfold3" in lower or "openfold" in lower:
-        return "openfold3"
-    if "boltz" in lower:
-        return "boltz2"
-    return "alphafold2"
 
 
 def parse_gcs_uri(uri, allowed_extensions=None):
     """Parse and validate gs://bucket/path URI into bucket and path components."""
-    if not uri or not uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {uri}")
-
-    uri_body = uri[5:]  # Remove 'gs://'
-    parts = uri_body.split("/", 1)
-    bucket_name = parts[0]
-    blob_path = parts[1] if len(parts) > 1 else ""
-
-    if bucket_name != BUCKET_NAME:
-        raise ValueError(
-            f"Access denied: bucket '{bucket_name}' does not match configured BUCKET_NAME"
-        )
-
-    if ".." in blob_path.split("/") or ".." in blob_path or blob_path.startswith("/"):
-        raise ValueError(f"Invalid GCS path: path traversal detected in '{blob_path}'")
-
-    if not blob_path or not any(
-        blob_path.startswith(prefix) for prefix in ALLOWED_GCS_PREFIXES
-    ):
-        raise ValueError(
-            f"Invalid GCS path: '{blob_path}' must start with an allowed prefix {ALLOWED_GCS_PREFIXES}"
-        )
-
-    if allowed_extensions and not blob_path.lower().endswith(allowed_extensions):
-        raise ValueError(
-            f"Invalid GCS path: '{blob_path}' must end with one of {allowed_extensions}"
-        )
-
-    return bucket_name, blob_path
-
-
-def _sanitize_data(obj, key=None):
-    """Recursively replace NaN/Infinity floats with None (strict RFC 8259 JSON, never fabricated scores)."""
-    if isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
-            return None
-        return obj
-    if isinstance(obj, dict):
-        return {k: _sanitize_data(v, key=k) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_sanitize_data(v, key=key) for v in obj]
-    return obj
+    return validate_gcs_uri(
+        uri,
+        expected_bucket=BUCKET_NAME,
+        allowed_prefixes=ALLOWED_GCS_PREFIXES,
+        allowed_extensions=allowed_extensions,
+    )
 
 
 _sanitize_json_floats = _sanitize_data
@@ -166,23 +127,7 @@ def _decompress_zst_bytes(
     raw_bytes: bytes, max_bytes: int = MAX_DECOMPRESSED_ZST_BYTES
 ) -> bytes:
     """Decompress zstandard-compressed bytes with a strict size limit."""
-    import zstandard as zstd
-
-    dctx = zstd.ZstdDecompressor()
-    chunks: list[bytes] = []
-    total = 0
-    with dctx.stream_reader(io.BytesIO(raw_bytes)) as reader:
-        while True:
-            chunk = reader.read(65536)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > max_bytes:
-                raise ValueError(
-                    f"Decompressed .zst payload exceeds safety limit of {max_bytes} bytes"
-                )
-            chunks.append(chunk)
-    return b"".join(chunks)
+    return _common_decompress_zst_bytes(raw_bytes, max_bytes=max_bytes)
 
 
 def _sanitize_structure_bfactors(content: str, fmt: str | None = None) -> str:
@@ -515,89 +460,34 @@ def _scan_analysis_state():
 
 def _discover_af2_predictions(pipeline_root: str) -> list:
     """Scan GCS for AF2 raw_prediction.pkl files under pipeline_root."""
-    bucket_name, prefix = parse_gcs_uri(pipeline_root)
-    if not prefix.endswith("/"):
-        prefix += "/"
-    bucket = storage_client.bucket(bucket_name)
-    predictions = []
-    for blob in bucket.list_blobs(prefix=prefix):
-        if blob.name.endswith("/raw_prediction.pkl"):
-            uri = f"gs://{bucket_name}/{blob.name}"
-            # Best-effort model name from parent directory
-            parent = blob.name.split("/")[-2]
-            predictions.append(
-                {"uri": uri, "model_name": parent, "ranking_confidence": 0}
-            )
-    return predictions
+    return discover_af2_predictions_in_gcs(
+        pipeline_root,
+        storage_client,
+        expected_bucket=BUCKET_NAME,
+        allowed_prefixes=ALLOWED_GCS_PREFIXES,
+    )
 
 
 def _discover_of3_predictions(pipeline_root: str) -> list:
     """Scan GCS for OF3 *_confidences_aggregated.json files under pipeline_root."""
-    bucket_name, prefix = parse_gcs_uri(pipeline_root)
-    if not prefix.endswith("/"):
-        prefix += "/"
-    bucket = storage_client.bucket(bucket_name)
-    predictions = []
-    seen = set()
-    for blob in bucket.list_blobs(prefix=prefix):
-        name = blob.name
-        if name.endswith("_confidences_aggregated.json") and name not in seen:
-            seen.add(name)
-            base = name.replace("_confidences_aggregated.json", "")
-            sample_name = name.split("/")[-1].replace(
-                "_confidences_aggregated.json", ""
-            )
-            predictions.append(
-                {
-                    "cif_uri": f"gs://{bucket_name}/{base}_model.cif",
-                    "confidences_uri": f"gs://{bucket_name}/{base}_confidences.json",
-                    "aggregated_uri": f"gs://{bucket_name}/{name}",
-                    "sample_name": sample_name,
-                }
-            )
-    return predictions
+    return discover_of3_predictions(
+        pipeline_root,
+        storage_client,
+        expected_bucket=BUCKET_NAME,
+        allowed_prefixes=ALLOWED_GCS_PREFIXES,
+    )
 
 
 def _discover_boltz2_predictions_and_affinity(
     pipeline_root: str,
 ) -> tuple[list, str | None]:
     """Scan GCS for Boltz-2 confidence_*.json and optional affinity_*.json files."""
-    bucket_name, prefix = parse_gcs_uri(pipeline_root)
-    if not prefix.endswith("/"):
-        prefix += "/"
-    bucket = storage_client.bucket(bucket_name)
-    predictions = []
-    seen = set()
-    affinity_uri = None
-    for blob in bucket.list_blobs(prefix=prefix):
-        name = blob.name
-        if "/predictions/" not in name or not name.endswith(".json"):
-            continue
-        parts_list = name.split("/")
-        filename = parts_list[-1]
-        if "/confidence_" in name and name not in seen:
-            seen.add(name)
-            cif_filename = filename.replace("confidence_", "", 1).replace(
-                ".json", ".cif"
-            )
-            cif_name = "/".join([*parts_list[:-1], cif_filename])
-            pde_filename = filename.replace("confidence_", "pde_", 1).replace(
-                ".json", ".npz"
-            )
-            pde_name = "/".join([*parts_list[:-1], pde_filename])
-            sample_name = filename.replace("confidence_", "", 1).replace(".json", "")
-            predictions.append(
-                {
-                    "sample_name": sample_name,
-                    "cif_uri": f"gs://{bucket_name}/{cif_name}",
-                    "confidences_uri": "",
-                    "aggregated_uri": f"gs://{bucket_name}/{name}",
-                    "pde_uri": f"gs://{bucket_name}/{pde_name}",
-                }
-            )
-        elif filename.startswith("affinity_") and affinity_uri is None:
-            affinity_uri = f"gs://{bucket_name}/{name}"
-    return predictions, affinity_uri
+    return discover_boltz2_predictions(
+        pipeline_root,
+        storage_client,
+        expected_bucket=BUCKET_NAME,
+        allowed_prefixes=ALLOWED_GCS_PREFIXES,
+    )
 
 
 def _discover_boltz2_predictions(pipeline_root: str) -> list:
@@ -608,68 +498,17 @@ def _discover_boltz2_predictions(pipeline_root: str) -> list:
 
 def _resolve_boltz2_query_yaml_uri(pj: dict) -> str | None:
     """Resolve and validate the Boltz-2 input YAML URI within BUCKET_NAME."""
-    expected_prefix = f"gs://{BUCKET_NAME}/boltz2_queries/"
-    param_vals = (pj.get("runtimeConfig") or {}).get("parameterValues") or {}
-    raw_query_uri = param_vals.get("query_json_path")
-    if isinstance(raw_query_uri, str) and raw_query_uri.startswith(expected_prefix):
-        rel = raw_query_uri[len(expected_prefix) :]
-        segments = [seg for seg in rel.split("/") if seg]
-        if (
-            segments
-            and ".." not in segments
-            and "." not in segments
-            and rel.lower().endswith((".yaml", ".yml"))
-        ):
-            return raw_query_uri
-
-    labels = pj.get("labels") or {}
-    query_name = labels.get("query_name") or pj.get("displayName") or ""
-    if (
-        isinstance(query_name, str)
-        and query_name
-        and "/" not in query_name
-        and ".." not in query_name
-        and JOB_ID_PATTERN.fullmatch(query_name)
-    ):
-        return f"{expected_prefix}{query_name}.yaml"
-    return None
-
-
-def _is_stale_analysis_blob(filename: str) -> bool:
-    """Return True if filename is an artifact from a previous analysis run."""
-    if filename in ("summary.json", "artifacts_bundle.zip", "error.json"):
-        return True
-    if filename.endswith("_analysis.json"):
-        return True
-    if (
-        filename.startswith("analysis_")
-        and filename.endswith(".json")
-        and filename != "analysis_metadata.json"
-    ):
-        return True
-    return False
+    return resolve_boltz2_query_yaml_uri(
+        bucket_name=BUCKET_NAME,
+        parameter_values=(pj.get("runtimeConfig") or {}).get("parameterValues"),
+        labels=pj.get("labels"),
+        display_name=pj.get("displayName"),
+    )
 
 
 def _cleanup_stale_analysis_blobs(bucket, analysis_prefix: str) -> int:
     """Delete stale per-prediction and consolidated blobs prior to re-analysis."""
-    prefix = analysis_prefix if analysis_prefix.endswith("/") else f"{analysis_prefix}/"
-    deleted = 0
-    try:
-        for blob in list(bucket.list_blobs(prefix=prefix)):
-            filename = blob.name.rsplit("/", 1)[-1]
-            if _is_stale_analysis_blob(filename):
-                try:
-                    blob.delete()
-                    deleted += 1
-                except Exception as del_err:
-                    logger.warning(
-                        f"Failed to delete stale blob {blob.name}: {del_err}"
-                    )
-    except Exception as list_err:
-        logger.warning(
-            f"Could not list stale analysis blobs under {prefix}: {list_err}"
-        )
-    return deleted
+    return _common_cleanup_stale_analysis_blobs(bucket, analysis_prefix)
 
 
 def _validate_job_id(job_id: str) -> str:
@@ -1094,78 +933,13 @@ def job_quality(job_id):
 
 def _discover_af3_predictions(job_prefix: str) -> list:
     """Scan GCS for AF3 seed-*_sample-* outputs (.cif/.cif.zst and .json/.json.zst)."""
-    if job_prefix.startswith("gs://"):
-        bucket_name, parsed_prefix = parse_gcs_uri(job_prefix)
-        base_prefix = f"{parsed_prefix.strip('/')}/"
-    else:
-        bucket_name = BUCKET_NAME
-        base_prefix = f"{job_prefix.strip('/')}/"
-
-    bucket = storage_client.bucket(bucket_name)
-    sample_blobs: dict[str, dict] = {}
-    top_cif = None
-    top_sum = None
-    top_conf = None
-    for b in bucket.list_blobs(prefix=base_prefix):
-        bname = b.name
-        if "/analysis/" in bname:
-            continue
-        m_seed = re.search(r"/(seed-\d+_sample-\d+)/", bname)
-        if m_seed:
-            s_key = m_seed.group(1)
-            s_entry = sample_blobs.setdefault(s_key, {})
-            if bname.endswith(
-                ("_model.cif", "/model.cif", "_model.cif.zst", "/model.cif.zst")
-            ):
-                s_entry["cif_uri"] = f"gs://{bucket_name}/{bname}"
-            elif bname.endswith(
-                (
-                    "_summary_confidences.json",
-                    "/summary_confidences.json",
-                    "_summary_confidences.json.zst",
-                    "/summary_confidences.json.zst",
-                )
-            ):
-                s_entry["summary_uri"] = f"gs://{bucket_name}/{bname}"
-            elif bname.endswith(
-                (
-                    "_confidences.json",
-                    "/confidences.json",
-                    "_confidences.json.zst",
-                    "/confidences.json.zst",
-                )
-            ):
-                s_entry["confidences_uri"] = f"gs://{bucket_name}/{bname}"
-            continue
-        if bname.endswith(("_model.cif", "_model.cif.zst")):
-            top_cif = f"gs://{bucket_name}/{bname}"
-        elif bname.endswith(
-            ("_summary_confidences.json", "_summary_confidences.json.zst")
-        ):
-            top_sum = f"gs://{bucket_name}/{bname}"
-        elif bname.endswith(("_confidences.json", "_confidences.json.zst")):
-            top_conf = f"gs://{bucket_name}/{bname}"
-
-    predictions = [
-        {
-            "sample_name": k.replace("-", "_"),
-            "cif_uri": v["cif_uri"],
-            "summary_uri": v["summary_uri"],
-            "confidences_uri": v.get("confidences_uri"),
-        }
-        for k, v in sorted(sample_blobs.items())
-        if v.get("cif_uri") and v.get("summary_uri")
-    ]
-    if not predictions and top_cif and top_sum:
-        predictions = [
-            {
-                "sample_name": "seed_1_sample_0",
-                "cif_uri": top_cif,
-                "summary_uri": top_sum,
-                "confidences_uri": top_conf,
-            }
-        ]
-    return predictions
+    return discover_af3_predictions(
+        job_prefix,
+        storage_client,
+        default_bucket=BUCKET_NAME,
+        expected_bucket=BUCKET_NAME,
+        allowed_prefixes=ALLOWED_GCS_PREFIXES,
+    )
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -1287,65 +1061,15 @@ def trigger_analysis():
         if not raw_predictions:
             return jsonify({"error": "No prediction outputs found for this job"}), 404
 
-        # Build task_config.json in the same format the Cloud Run job expects
-        if model_type == "alphafold2":
-            predictions_cfg = [
-                {
-                    "index": i,
-                    "uri": p["uri"],
-                    "model_name": p["model_name"],
-                    "ranking_confidence": p["ranking_confidence"],
-                    "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
-                }
-                for i, p in enumerate(raw_predictions)
-            ]
-        elif model_type == "alphafold3":
-            predictions_cfg = [
-                {
-                    "index": i,
-                    "sample_name": p["sample_name"],
-                    "cif_uri": p["cif_uri"],
-                    "summary_uri": p["summary_uri"],
-                    "confidences_uri": p.get("confidences_uri"),
-                    "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
-                }
-                for i, p in enumerate(raw_predictions)
-            ]
-        elif model_type == "openfold3":
-            predictions_cfg = [
-                {
-                    "index": i,
-                    "cif_uri": p["cif_uri"],
-                    "confidences_uri": p["confidences_uri"],
-                    "aggregated_uri": p["aggregated_uri"],
-                    "sample_name": p["sample_name"],
-                    "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
-                }
-                for i, p in enumerate(raw_predictions)
-            ]
-        else:  # boltz2
-            predictions_cfg = [
-                {
-                    "index": i,
-                    "sample_name": p["sample_name"],
-                    "cif_uri": p["cif_uri"],
-                    "confidences_uri": p.get("confidences_uri", ""),
-                    "aggregated_uri": p["aggregated_uri"],
-                    "pde_uri": p.get("pde_uri", ""),
-                    "output_uri": f"{analysis_path}prediction_{i}_analysis.json",
-                }
-                for i, p in enumerate(raw_predictions)
-            ]
-
-        task_config = {
-            "model_type": model_type,
-            "job_id": job_id,
-            "analysis_path": analysis_path,
-            "task_config_uri": f"{analysis_path}task_config.json",
-            "predictions": predictions_cfg,
-            **boltz2_extra_cfg,
-            **af3_extra_cfg,
-        }
+        task_config = build_analysis_task_config(
+            model_type=model_type,
+            job_id=str(job_id),
+            analysis_path=analysis_path,
+            raw_predictions=raw_predictions,
+            affinity_uri=boltz2_extra_cfg.get("affinity_uri"),
+            query_yaml_uri=boltz2_extra_cfg.get("query_yaml_uri"),
+            extra_fields=af3_extra_cfg or None,
+        ).model_dump()
 
         # Clear any stale analysis artifacts before writing task_config.json so
         # sibling tasks do not prematurely consolidate against old outputs.
@@ -1384,21 +1108,19 @@ def trigger_analysis():
 
         # Write analysis_metadata.json only after Cloud Run Job trigger succeeds
         # so a failed API call never leaves the job stuck in "Analyzing…" state
+        metadata_payload = AnalysisMetadata(
+            job_id=str(job_id),
+            total_predictions=len(raw_predictions),
+            started_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            status="running",
+            model_type=model_type,
+            execution_method="cloud_run_job",
+            triggered_by="foldrun-viewer",
+        ).model_dump(exclude_none=True)
         tc_bucket.blob(
             tc_blob_path.replace("task_config.json", "analysis_metadata.json")
         ).upload_from_string(
-            json.dumps(
-                {
-                    "job_id": job_id,
-                    "total_predictions": len(raw_predictions),
-                    "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                    "status": "running",
-                    "model_type": model_type,
-                    "execution_method": "cloud_run_job",
-                    "triggered_by": "foldrun-viewer",
-                },
-                indent=2,
-            ),
+            json.dumps(metadata_payload, indent=2),
             content_type="application/json",
         )
 
@@ -1423,210 +1145,27 @@ def trigger_analysis():
 
 def _sanitize_filename(value: str) -> str:
     """Sanitize a string for safe use in Content-Disposition filenames."""
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", (value or "").strip())
-    return cleaned.strip("_") or "foldrun"
+    return _common_sanitize_filename(value, fallback="foldrun")
 
 
 def _build_expert_analysis_markdown(summary: dict) -> str:
     """Format standalone Markdown report from summary.json."""
-    job_id = summary.get("job_id", "unknown")
-    model_type = summary.get("model_type", "alphafold2")
-    expert = summary.get("expert_analysis") or {}
-    analysis_text = (expert.get("analysis") or "").strip()
-    qm = summary.get("summary", {}).get("quality_metrics", {})
-
-    lines = [
-        "# FoldRun Structure & Analysis Report",
-        "",
-        f"- **Job ID**: `{job_id}`",
-        f"- **Model Type**: `{model_type}`",
-        f"- **Generated At**: `{summary.get('analyzed_at', '')}`",
-    ]
-    if qm:
-        lines.extend(
-            [
-                "",
-                "## Summary Metrics",
-                "",
-                f"- **Quality Assessment**: `{qm.get('quality_assessment', 'N/A')}`",
-                f"- **Best Model**: `{qm.get('best_model', 'N/A')}`",
-                f"- **Best Mean pLDDT**: `{qm.get('best_model_plddt', 'N/A')}`",
-            ]
-        )
-        if qm.get("best_ranking_score") is not None:
-            lines.append(f"- **Best Ranking Score**: `{qm.get('best_ranking_score')}`")
-        if qm.get("best_ptm") is not None:
-            lines.append(f"- **Best pTM**: `{qm.get('best_ptm')}`")
-        if qm.get("best_iptm") is not None:
-            lines.append(f"- **Best ipTM**: `{qm.get('best_iptm')}`")
-
-    lines.extend(["", "## Expert Analysis", ""])
-    if analysis_text:
-        lines.append(analysis_text)
-    else:
-        lines.append("_No Gemini expert analysis text available for this job._")
-    lines.append("")
-    return "\n".join(lines)
+    return _common_build_expert_analysis_markdown(summary)
 
 
 def _ensure_bundle_in_gcs(summary: dict, summary_uri: str) -> str:
     """Ensure compact artifacts_bundle.zip exists in GCS for the given summary, building on-demand if missing."""
     analysis_path = summary_uri.rsplit("/", 1)[0] + "/"
-    bundle_uri = (
-        summary.get("artifacts_bundle_uri") or f"{analysis_path}artifacts_bundle.zip"
+    bundle_uri = ensure_run_archive_in_gcs(
+        analysis_path=analysis_path,
+        summary_data=summary,
+        storage_client=storage_client,
+        expected_bucket=BUCKET_NAME,
+        allowed_prefixes=ALLOWED_GCS_PREFIXES,
+        raise_on_error=True,
     )
-    bucket_name, bundle_blob_path = parse_gcs_uri(
-        bundle_uri, allowed_extensions=(".zip",)
-    )
-    bucket = storage_client.bucket(bucket_name)
-    bundle_blob = bucket.blob(bundle_blob_path)
-    if bundle_blob.exists():
-        return bundle_uri
-
-    job_id = summary.get("job_id", "foldrun_job")
-    model_type = summary.get("model_type", "alphafold2")
-    predictions = summary.get("all_predictions_summary") or summary.get(
-        "top_predictions", []
-    )
-    protein_info = summary.get("summary", {}).get("protein_info", {})
-
-    with tempfile.TemporaryDirectory(prefix="foldrun_viewer_zip_") as tmp_dir:
-        zip_path = Path(tmp_dir) / "artifacts_bundle.zip"
-        seen_arcnames: set[str] = set()
-
-        with zipfile.ZipFile(
-            zip_path, mode="w", compression=zipfile.ZIP_DEFLATED
-        ) as zf:
-            zf.writestr(
-                "metrics/summary.json",
-                json.dumps(
-                    _sanitize_data(summary), indent=2, default=str, allow_nan=False
-                ),
-            )
-            seen_arcnames.add("metrics/summary.json")
-
-            zf.writestr(
-                "report/expert_analysis.md",
-                _build_expert_analysis_markdown(summary),
-            )
-            seen_arcnames.add("report/expert_analysis.md")
-
-            affinity = summary.get("summary", {}).get("affinity")
-            if affinity:
-                zf.writestr(
-                    "metrics/affinity.json",
-                    json.dumps(
-                        _sanitize_data(affinity),
-                        indent=2,
-                        default=str,
-                        allow_nan=False,
-                    ),
-                )
-                seen_arcnames.add("metrics/affinity.json")
-
-            if protein_info.get("fasta_sequence"):
-                header = protein_info.get("fasta_header") or job_id
-                zf.writestr(
-                    "input/input.fasta",
-                    f">{header}\n{protein_info['fasta_sequence']}\n",
-                )
-                seen_arcnames.add("input/input.fasta")
-            elif protein_info.get("input_query_yaml"):
-                yaml_val = protein_info["input_query_yaml"]
-                yaml_str = (
-                    yaml_val
-                    if isinstance(yaml_val, str)
-                    else json.dumps(yaml_val, indent=2)
-                )
-                zf.writestr("input/query.yaml", yaml_str)
-                seen_arcnames.add("input/query.yaml")
-            elif protein_info.get("input_query_json"):
-                json_val = protein_info["input_query_json"]
-                json_str = (
-                    json.dumps(json_val, indent=2)
-                    if isinstance(json_val, (dict, list))
-                    else str(json_val)
-                )
-                zf.writestr("input/query.json", json_str)
-                seen_arcnames.add("input/query.json")
-
-            for idx, pred in enumerate(predictions, 1):
-                rank = pred.get("rank", idx)
-                sample_label = _sanitize_filename(
-                    pred.get("sample_name") or pred.get("model_name") or f"model_{idx}"
-                )
-                struct_uri = (
-                    pred.get("cif_uri") or pred.get("pdb_uri") or pred.get("uri") or ""
-                )
-                if struct_uri.endswith("/raw_prediction.pkl"):
-                    struct_uri = struct_uri.replace(
-                        "/raw_prediction.pkl", "/unrelaxed_protein.pdb"
-                    )
-                if struct_uri and struct_uri.startswith("gs://"):
-                    try:
-                        _, s_blob_path = parse_gcs_uri(
-                            struct_uri,
-                            allowed_extensions=(
-                                ".pdb",
-                                ".cif",
-                                ".cif.zst",
-                                ".pdb.zst",
-                            ),
-                        )
-                        s_blob = bucket.blob(s_blob_path)
-                        if s_blob.exists():
-                            s_lower = s_blob_path.lower()
-                            ext = (
-                                ".cif"
-                                if s_lower.endswith(".cif")
-                                or s_lower.endswith(".cif.zst")
-                                else ".pdb"
-                            )
-                            arc = f"structures/rank_{rank:02d}_{sample_label}{ext}"
-                            if arc not in seen_arcnames:
-                                raw_bytes = s_blob.download_as_bytes()
-                                if s_lower.endswith(".zst"):
-                                    raw_bytes = _decompress_zst_bytes(raw_bytes)
-                                zf.writestr(arc, raw_bytes)
-                                seen_arcnames.add(arc)
-                    except Exception as exc:
-                        logger.warning(f"Skipping structure {struct_uri} in zip: {exc}")
-
-                plots = pred.get("plots") or {}
-                for plot_key, plot_uri in plots.items():
-                    if not plot_uri or not plot_uri.startswith("gs://"):
-                        continue
-                    try:
-                        _, p_blob_path = parse_gcs_uri(
-                            plot_uri, allowed_extensions=(".png", ".jpg", ".jpeg")
-                        )
-                        p_blob = bucket.blob(p_blob_path)
-                        if p_blob.exists():
-                            arc = (
-                                f"plots/rank_{rank:02d}_{_sanitize_filename(plot_key)}.png"
-                                if plot_key != "iptm_matrix_plot"
-                                else "plots/iptm_matrix.png"
-                            )
-                            if arc not in seen_arcnames:
-                                zf.writestr(arc, p_blob.download_as_bytes())
-                                seen_arcnames.add(arc)
-                    except Exception as exc:
-                        logger.warning(f"Skipping plot {plot_uri} in zip: {exc}")
-
-            readme_lines = [
-                "# FoldRun Prediction Artifacts Bundle",
-                "",
-                f"- **Job ID**: `{job_id}`",
-                f"- **Model Type**: `{model_type}`",
-                f"- **Files Included**: `{len(seen_arcnames) + 1}`",
-                "",
-                "Generated by FoldRun Viewer.",
-                "",
-            ]
-            zf.writestr("README.md", "\n".join(readme_lines))
-
-        bundle_blob.upload_from_filename(str(zip_path), content_type="application/zip")
-
+    if not bundle_uri:
+        raise ValueError("Could not resolve or build artifacts_bundle.zip")
     return bundle_uri
 
 

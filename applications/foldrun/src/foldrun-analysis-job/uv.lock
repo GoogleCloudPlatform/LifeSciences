@@ -259,12 +259,14 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dm-tree" },
+    { name = "foldrun-common" },
     { name = "google-cloud-aiplatform" },
     { name = "google-cloud-storage" },
     { name = "google-genai" },
     { name = "jax" },
     { name = "matplotlib" },
     { name = "numpy" },
+    { name = "pydantic" },
     { name = "pyyaml" },
     { name = "seaborn" },
     { name = "zstandard" },
@@ -285,12 +287,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dm-tree", specifier = ">=0.1.9" },
+    { name = "foldrun-common", directory = "../../foldrun-agent/packages/foldrun-common" },
     { name = "google-cloud-aiplatform", specifier = ">=1.85.0" },
     { name = "google-cloud-storage", specifier = ">=3.0.0" },
     { name = "google-genai", specifier = ">=2.0.0" },
     { name = "jax", extras = ["cpu"], specifier = "==0.4.38" },
     { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "numpy", specifier = ">=2.2.3" },
+    { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'lint'", specifier = ">=0.4.6,<1.0.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
@@ -304,6 +308,29 @@ dev = [
     { name = "pytest", specifier = ">=9.0.0" },
     { name = "pytest-mock", specifier = ">=3.10.0" },
 ]
+
+[[package]]
+name = "foldrun-common"
+version = "0.1.0"
+source = { directory = "../../foldrun-agent/packages/foldrun-common" }
+dependencies = [
+    { name = "google-cloud-storage" },
+    { name = "pydantic" },
+    { name = "zstandard" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-storage", specifier = ">=2.18.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "ruff", marker = "extra == 'lint'", specifier = ">=0.4.6,<1.0.0" },
+    { name = "ty", marker = "extra == 'lint'", specifier = ">=0.0.1a0" },
+    { name = "zstandard", specifier = ">=0.23.0" },
+]
+provides-extras = ["lint"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0.0" }]
 
 [[package]]
 name = "fonttools"

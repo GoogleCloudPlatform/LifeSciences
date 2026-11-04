@@ -13,24 +13,27 @@
 # limitations under the License.
 
 # FoldRun Unified Analysis Job - Cloud Run Job Dockerfile
+# Build context: applications/foldrun/ (docker build -f src/foldrun-analysis-job/Dockerfile .)
 
 # Stage 1: Build environment
 FROM python:3.13-slim AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /uvx /bin/
 
-WORKDIR /app
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+WORKDIR /build/src/foldrun-analysis-job
 
 # Install build dependencies (apt)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy config and source
-COPY pyproject.toml uv.lock README.md ./
-COPY foldrun_analysis/ ./foldrun_analysis/
+# Copy shared foldrun-common package, config, and source
+COPY foldrun-agent/packages/foldrun-common /build/foldrun-agent/packages/foldrun-common
+COPY src/foldrun-analysis-job/pyproject.toml src/foldrun-analysis-job/uv.lock src/foldrun-analysis-job/README.md ./
+COPY src/foldrun-analysis-job/foldrun_analysis/ ./foldrun_analysis/
 
-# Install the package and its dependencies
+# Install the package and its dependencies into /app/.venv
 RUN uv sync --frozen --no-dev --no-editable
 
 # Stage 2: Runtime image

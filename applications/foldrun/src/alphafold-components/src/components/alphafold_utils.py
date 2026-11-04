@@ -52,7 +52,7 @@ HHSEARCH_BINARY_PATH = shutil.which("hhsearch")
 HMMSEARCH_BINARY_PATH = shutil.which("hmmsearch")
 KALIGN_BINARY_PATH = shutil.which("kalign")
 HMMBUILD_BINARY_PATH = shutil.which("hmmbuild")
-MMSEQS2_BINARY_PATH = shutil.which("mmseqs")
+MMSEQS2_BINARY_PATH: str = shutil.which("mmseqs") or "mmseqs"
 
 MAX_TEMPLATE_HITS = 20
 
@@ -229,6 +229,8 @@ def _assemble_multimer_features(
     pair_and_merge_fn = getattr(fp_mod, "pair_and_merge", None) or getattr(
         pipeline_multimer, "_pair_and_merge", None
     )
+    if pair_and_merge_fn is None:
+        raise RuntimeError("pair_and_merge function not found on pipeline_multimer")
     np_example = pair_and_merge_fn(all_chain_features=all_chain_features)
     pad_msa_fn = getattr(pipeline_multimer, "pad_msa", None)
     if pad_msa_fn is not None:

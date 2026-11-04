@@ -61,7 +61,7 @@ def provision_and_queue_af3_endpoint_task(
     pipeline_job_id: str,
     job_prefix: str,
     timeout_seconds: int = 1800,
-) -> NamedTuple(
+) -> NamedTuple(  # ty: ignore[invalid-type-form]
     "AF3QueueOutputs",
     [
         ("slot_blob_path", str),
@@ -449,7 +449,7 @@ def run_af3_inference_task(
     msa_free: bool = False,
     num_diffusion_samples: int = 5,
     timeout_seconds: int = 1800,
-) -> NamedTuple(
+) -> NamedTuple(  # ty: ignore[invalid-type-form]
     "AF3InferenceOutputs",
     [
         ("raw_output_gcs_uri", str),
@@ -898,7 +898,7 @@ def report_af3_endpoint_available_task(
     queue_wait_seconds: float,
     inference_seconds: float,
     slot_released: bool,
-) -> NamedTuple(
+) -> NamedTuple(  # ty: ignore[invalid-type-form]
     "AF3EndpointAvailableOutputs",
     [
         ("endpoint_status", str),
@@ -1057,7 +1057,7 @@ def process_af3_results_task(
     inference_seconds: float,
     endpoint_status: str,
     msa_free: bool = False,
-) -> NamedTuple(
+) -> NamedTuple(  # ty: ignore[invalid-type-form]
     "AF3PredictOutputs",
     [
         ("cif_uri", str),
@@ -1073,6 +1073,7 @@ def process_af3_results_task(
     import time
     from collections import namedtuple
     from datetime import UTC, datetime
+    from typing import Any
 
     import numpy as np
     from google.cloud import storage
@@ -1367,7 +1368,7 @@ def process_af3_results_task(
         )
 
     # 3. Fallback: Parse CIF & summary_confidences in-process and sort by ranking_score descending
-    parsed_samples = []
+    parsed_samples: list[dict[str, Any]] = []
     for s_key, s_files in valid_samples.items():
         s_cif_b = s_files["cif"]
         s_sum_b = s_files["summary"]
@@ -1474,7 +1475,7 @@ def process_af3_results_task(
     conf_filename = f"{job_name}_summary_confidences.json"
     cif_uri = f"gs://{bucket_name}/{job_prefix_clean}/{cif_filename}"
 
-    ranked_predictions = []
+    ranked_predictions: list[dict[str, Any]] = []
     best_plddt_png = None
     best_pae_png = None
     best_pae_matrix = None

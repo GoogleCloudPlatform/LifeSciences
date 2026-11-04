@@ -444,6 +444,7 @@ dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
     { name = "aiohttp" },
     { name = "biopython" },
+    { name = "foldrun-common" },
     { name = "gcsfs" },
     { name = "google-adk", extra = ["bigquery-analytics", "gcp", "otel-gcp"] },
     { name = "google-cloud-aiplatform", extra = ["agent-engines", "evaluation"] },
@@ -495,6 +496,7 @@ requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], specifier = ">=1.0,<2" },
     { name = "aiohttp", specifier = ">=3.13.4" },
     { name = "biopython", specifier = ">=1.81" },
+    { name = "foldrun-common", directory = "packages/foldrun-common" },
     { name = "gcsfs", specifier = ">=2026.10.0" },
     { name = "google-adk", extras = ["eval"], marker = "extra == 'eval'", specifier = ">=2.9.2,<3.0.0" },
     { name = "google-adk", extras = ["gcp", "otel-gcp", "bigquery-analytics"], specifier = ">=2.9.2,<3.0.0" },
@@ -533,6 +535,29 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "pytest-mock", specifier = ">=3.15.1" },
 ]
+
+[[package]]
+name = "foldrun-common"
+version = "0.1.0"
+source = { directory = "packages/foldrun-common" }
+dependencies = [
+    { name = "google-cloud-storage" },
+    { name = "pydantic" },
+    { name = "zstandard" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-storage", specifier = ">=2.18.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "ruff", marker = "extra == 'lint'", specifier = ">=0.4.6,<1.0.0" },
+    { name = "ty", marker = "extra == 'lint'", specifier = ">=0.0.1a0" },
+    { name = "zstandard", specifier = ">=0.23.0" },
+]
+provides-extras = ["lint"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0.0" }]
 
 [[package]]
 name = "frozenlist"

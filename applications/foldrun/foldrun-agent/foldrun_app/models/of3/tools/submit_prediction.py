@@ -110,7 +110,7 @@ class OF3SubmitPredictionTool(OF3Tool):
             bucket_name, blob_path = self._validate_gcs_uri(input_data)
             bucket = self.storage_client.bucket(bucket_name)
             content = bucket.blob(blob_path).download_as_text()
-        elif is_file:
+        elif is_file and isinstance(input_data, str):
             allowed_dir = getattr(self.config, "allowed_input_dir", None) or os.environ.get(
                 "FOLDRUN_ALLOWED_INPUT_DIR"
             )

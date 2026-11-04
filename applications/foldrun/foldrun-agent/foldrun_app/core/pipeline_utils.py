@@ -155,7 +155,7 @@ def get_configure_seeds_component():
     def configure_seeds(
         num_model_seeds: int,
         base_seed: int,
-    ) -> NamedTuple(
+    ) -> NamedTuple(  # ty: ignore[invalid-type-form]
         "ConfigureSeedsOutputs",
         [
             ("seed_configs", list),

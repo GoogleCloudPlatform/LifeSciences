@@ -27,9 +27,9 @@ def configure_run(
     sequence_path: str,
     model_preset: str,
     sequence: Output[Artifact],
-    random_seed: int = None,  # noqa: RUF013
+    random_seed: int = None,  # noqa: RUF013  # ty: ignore[invalid-parameter-default]
     num_multimer_predictions_per_model: int = 5,
-) -> NamedTuple(
+) -> NamedTuple(  # ty: ignore[invalid-type-form]
     "ConfigureRunOutputs",
     [
         ("model_runners", list),

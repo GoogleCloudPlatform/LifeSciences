@@ -307,10 +307,10 @@ class AF2ListJobsTool(AF2Tool):
         # Summary statistics
         summary = {
             "total_jobs": len(job_list),
-            "running": sum(1 for j in job_list if "Running" in j["status"]),
-            "failed": sum(1 for j in job_list if "Failed" in j["status"]),
-            "succeeded": sum(1 for j in job_list if "Succeeded" in j["status"]),
-            "pending": sum(1 for j in job_list if "Pending" in j["status"]),
+            "running": sum(1 for j in job_list if "Running" in str(j.get("status", ""))),
+            "failed": sum(1 for j in job_list if "Failed" in str(j.get("status", ""))),
+            "succeeded": sum(1 for j in job_list if "Succeeded" in str(j.get("status", ""))),
+            "pending": sum(1 for j in job_list if "Pending" in str(j.get("status", ""))),
         }
 
         return {

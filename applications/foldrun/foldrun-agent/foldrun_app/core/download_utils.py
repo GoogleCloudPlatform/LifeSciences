@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 import datetime
 import json
 import logging
@@ -31,56 +30,44 @@ from google.auth import transport as auth_transport
 from google.auth.transport import requests as auth_requests
 from google.cloud import storage
 
+from foldrun_common import (
+    MAX_DECOMPRESSED_ZST_BYTES,
+)
+from foldrun_common import (
+    build_expert_analysis_markdown as _common_build_expert_analysis_markdown,
+)
+from foldrun_common import (
+    ensure_run_archive_in_gcs as _common_ensure_run_archive_in_gcs,
+)
+from foldrun_common import (
+    maybe_decompress_zst as _common_maybe_decompress_zst,
+)
+from foldrun_common import (
+    sanitize_filename as _common_sanitize_filename,
+)
+from foldrun_common import (
+    validate_gcs_uri as _common_validate_gcs_uri,
+)
+
 logger = logging.getLogger(__name__)
 
 SIGNED_URL_EXPIRATION_SECONDS = int(os.getenv("SIGNED_URL_EXPIRATION_SECONDS", "3600"))
-MAX_ZST_DECOMPRESSED_BYTES = 512 * 1024 * 1024
+MAX_ZST_DECOMPRESSED_BYTES = MAX_DECOMPRESSED_ZST_BYTES
 
 
 def _maybe_decompress_zst(arc_path: str, raw_bytes: bytes) -> tuple[str, bytes]:
     """Decompress .zst bytes into plain text when zstandard is available; otherwise preserve .zst extension."""
-    if not arc_path.lower().endswith(".zst"):
-        return arc_path, raw_bytes
-    try:
-        import io
-
-        import zstandard as zstd
-
-        dctx = zstd.ZstdDecompressor()
-        chunks: list[bytes] = []
-        total = 0
-        with dctx.stream_reader(io.BytesIO(raw_bytes)) as reader:
-            while True:
-                chunk = reader.read(65536)
-                if not chunk:
-                    break
-                total += len(chunk)
-                if total > MAX_ZST_DECOMPRESSED_BYTES:
-                    raise ValueError(
-                        f"Decompressed .zst payload exceeds safety limit of {MAX_ZST_DECOMPRESSED_BYTES} bytes"
-                    )
-                chunks.append(chunk)
-        return arc_path[:-4], b"".join(chunks)
-    except ImportError:
-        return arc_path, raw_bytes
+    return _common_maybe_decompress_zst(arc_path, raw_bytes, max_bytes=MAX_ZST_DECOMPRESSED_BYTES)
 
 
 def _sanitize_filename(name: str, fallback: str = "artifact") -> str:
     """Sanitize a filename for safe use in Content-Disposition headers and ZIP paths."""
-    cleaned = re.sub(r"[^a-zA-Z0-9._-]", "_", str(name or fallback)).strip("._-")
-    return cleaned or fallback
+    return _common_sanitize_filename(name, fallback=fallback)
 
 
 def parse_gcs_uri(gcs_uri: str) -> tuple[str, str]:
     """Split a gs://bucket/path URI into (bucket_name, blob_name)."""
-    if not isinstance(gcs_uri, str) or not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri!r}")
-    parts = gcs_uri[5:].split("/", 1)
-    bucket_name = parts[0]
-    blob_name = parts[1] if len(parts) > 1 else ""
-    if not bucket_name or not blob_name or ".." in blob_name.split("/"):
-        raise ValueError(f"Invalid GCS URI path: {gcs_uri!r}")
-    return bucket_name, blob_name
+    return _common_validate_gcs_uri(gcs_uri)
 
 
 def prepare_signing_context(
@@ -167,51 +154,7 @@ def generate_signed_download_url(
 
 def build_expert_analysis_markdown(summary_data: dict[str, Any]) -> str:
     """Build a standalone Markdown report from summary.json."""
-    job_id = summary_data.get("job_id", "unknown")
-    model_type = summary_data.get("model_type", "unknown")
-    analyzed_at = summary_data.get("analyzed_at", "")
-    protein_info = summary_data.get("summary", {}).get("protein_info", {})
-    job_meta = protein_info.get("job_metadata", {})
-    display_name = job_meta.get("display_name") or job_id
-
-    lines = [
-        f"# FoldRun Analysis Report: {display_name}",
-        "",
-        f"- **Job ID**: `{job_id}`",
-        f"- **Model**: `{model_type}`",
-        f"- **Analyzed At**: `{analyzed_at}`",
-    ]
-    if protein_info.get("sequence_length"):
-        lines.append(f"- **Sequence / Token Length**: `{protein_info['sequence_length']}`")
-    if job_meta.get("duration_formatted"):
-        lines.append(f"- **Pipeline Duration**: `{job_meta['duration_formatted']}`")
-
-    best = summary_data.get("best_prediction") or {}
-    if best:
-        lines.extend(["", "## Top-Ranked Prediction Summary", ""])
-        name = best.get("sample_name") or best.get("model_name") or "Rank 1"
-        lines.append(f"- **Prediction**: `{name}`")
-        if best.get("plddt_mean") is not None:
-            lines.append(f"- **Mean pLDDT**: `{best['plddt_mean']:.2f}`")
-        if best.get("ranking_score") is not None:
-            lines.append(f"- **Ranking Score**: `{best['ranking_score']:.4f}`")
-        if best.get("ranking_confidence") is not None:
-            lines.append(f"- **Ranking Confidence**: `{best['ranking_confidence']:.4f}`")
-        if best.get("ptm") is not None:
-            lines.append(f"- **pTM**: `{best['ptm']:.4f}`")
-        if best.get("iptm") is not None:
-            lines.append(f"- **ipTM**: `{best['iptm']:.4f}`")
-        if best.get("pae_mean") is not None:
-            lines.append(f"- **Mean PAE**: `{best['pae_mean']:.2f} Å`")
-        if best.get("quality_assessment"):
-            lines.append(f"- **Quality Assessment**: `{best['quality_assessment']}`")
-
-    expert = summary_data.get("expert_analysis") or {}
-    expert_text = expert.get("analysis") if isinstance(expert, dict) else None
-    if expert_text:
-        lines.extend(["", "## Gemini Expert Analysis", "", str(expert_text).strip(), ""])
-
-    return "\n".join(lines) + "\n"
+    return _common_build_expert_analysis_markdown(summary_data)
 
 
 def ensure_run_archive_in_gcs(
@@ -220,140 +163,13 @@ def ensure_run_archive_in_gcs(
     project_id: str | None = None,
 ) -> str | None:
     """Return the GCS URI of the job's compact ZIP archive, creating it on-demand if missing."""
-    if not analysis_path.endswith("/"):
-        analysis_path += "/"
-
-    bundle_uri = summary_data.get("artifacts_bundle_uri") or (
-        f"{analysis_path}artifacts_bundle.zip"
+    client = storage.Client(project=project_id)
+    return _common_ensure_run_archive_in_gcs(
+        analysis_path=analysis_path,
+        summary_data=summary_data,
+        project_id=project_id,
+        storage_client=client,
     )
-    try:
-        bucket_name, bundle_blob_name = parse_gcs_uri(bundle_uri)
-        storage_client = storage.Client(project=project_id)
-        bucket = storage_client.bucket(bucket_name)
-        bundle_blob = bucket.blob(bundle_blob_name)
-        if bundle_blob.exists():
-            return bundle_uri
-
-        logger.info(f"Archive bundle not yet present at {bundle_uri}; building on-demand...")
-        download_tasks: list[tuple[str, str]] = []
-        all_preds = list(summary_data.get("all_predictions_summary", []))
-        all_preds.sort(key=lambda p: p.get("plddt_rank") or p.get("rank") or 999)
-
-        for idx, pred in enumerate(all_preds):
-            rank = int(pred.get("plddt_rank") or pred.get("rank") or (idx + 1))
-            label = _sanitize_filename(
-                pred.get("sample_name") or pred.get("model_name") or f"model_{rank}"
-            )
-            rank_prefix = f"rank_{rank:02d}_{label}"
-
-            if pred.get("cif_uri"):
-                cif_uri = str(pred["cif_uri"])
-                cif_ext = ".cif.zst" if cif_uri.lower().endswith(".cif.zst") else ".cif"
-                download_tasks.append((f"structures/{rank_prefix}{cif_ext}", cif_uri))
-            elif pred.get("pdb_uri") or pred.get("uri"):
-                raw_uri = str(pred.get("pdb_uri") or pred.get("uri"))
-                if raw_uri.endswith("/raw_prediction.pkl"):
-                    download_tasks.append(
-                        (
-                            f"structures/{rank_prefix}_unrelaxed.pdb",
-                            raw_uri.replace("/raw_prediction.pkl", "/unrelaxed_protein.pdb"),
-                        )
-                    )
-                    download_tasks.append(
-                        (
-                            f"structures/{rank_prefix}_relaxed.pdb",
-                            raw_uri.replace("/raw_prediction.pkl", "/relaxed_protein.pdb"),
-                        )
-                    )
-                elif raw_uri.endswith(".pdb"):
-                    download_tasks.append((f"structures/{rank_prefix}.pdb", raw_uri))
-
-            plots = pred.get("plots") or {}
-            for plot_key, plot_uri in plots.items():
-                if not plot_uri:
-                    continue
-                clean_key = _sanitize_filename(plot_key.replace("_plot", ""))
-                download_tasks.append((f"plots/{rank_prefix}_{clean_key}.png", plot_uri))
-
-        def _fetch_member(item: tuple[str, str]) -> tuple[str, bytes | None]:
-            arc_path, uri = item
-            try:
-                b_name, bl_name = parse_gcs_uri(uri)
-                if b_name != bucket_name:
-                    return arc_path, None
-                bl = bucket.blob(bl_name)
-                if not bl.exists():
-                    return arc_path, None
-                raw_bytes = bl.download_as_bytes()
-                if arc_path.lower().endswith(".zst"):
-                    arc_path, raw_bytes = _maybe_decompress_zst(arc_path, raw_bytes)
-                return arc_path, raw_bytes
-            except Exception:
-                return arc_path, None
-
-        fetched_items: list[tuple[str, bytes]] = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            for arc_path, data in pool.map(_fetch_member, download_tasks):
-                if data is not None:
-                    fetched_items.append((arc_path, data))
-
-        protein_info = summary_data.get("summary", {}).get("protein_info", {})
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_zip:
-            tmp_zip_path = tmp_zip.name
-
-        try:
-            with zipfile.ZipFile(tmp_zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-                report_md = build_expert_analysis_markdown(summary_data)
-                zf.writestr("report/expert_analysis.md", report_md.encode("utf-8"))
-
-                fasta_seq = protein_info.get("fasta_sequence")
-                if fasta_seq:
-                    header = protein_info.get("fasta_header") or summary_data.get(
-                        "job_id", "sequence"
-                    )
-                    zf.writestr(
-                        "input/sequence.fasta",
-                        f">{header}\n{fasta_seq}\n".encode(),
-                    )
-
-                if protein_info.get("input_query_json"):
-                    zf.writestr(
-                        "input/query.json",
-                        json.dumps(protein_info["input_query_json"], indent=2).encode("utf-8"),
-                    )
-
-                if protein_info.get("input_query_yaml"):
-                    yaml_val = protein_info["input_query_yaml"]
-                    yaml_str = (
-                        yaml_val if isinstance(yaml_val, str) else json.dumps(yaml_val, indent=2)
-                    )
-                    zf.writestr("input/query.yaml", yaml_str.encode("utf-8"))
-
-                affinity = summary_data.get("summary", {}).get("affinity")
-                if affinity:
-                    zf.writestr(
-                        "metrics/affinity.json",
-                        json.dumps(affinity, indent=2).encode("utf-8"),
-                    )
-
-                for arc_path, content_bytes in fetched_items:
-                    zf.writestr(arc_path, content_bytes)
-
-                summary_copy = dict(summary_data)
-                summary_copy["artifacts_bundle_uri"] = bundle_uri
-                zf.writestr(
-                    "metrics/summary.json",
-                    json.dumps(summary_copy, indent=2).encode("utf-8"),
-                )
-
-            bundle_blob.upload_from_filename(tmp_zip_path, content_type="application/zip")
-            return bundle_uri
-        finally:
-            if os.path.exists(tmp_zip_path):
-                os.remove(tmp_zip_path)
-    except Exception as e:
-        logger.warning(f"Failed to ensure archive bundle at {bundle_uri}: {e}")
-        return None
 
 
 def build_agent_downloads_dict(

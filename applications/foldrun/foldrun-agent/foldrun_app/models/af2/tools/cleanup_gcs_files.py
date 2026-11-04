@@ -231,7 +231,7 @@ class AF2CleanupGCSFilesTool(AF2Tool):
                 blob = bucket.blob(file_info["blob_name"])
                 blob.delete()
                 deleted_files.append(file_info["path"])
-                total_deleted_size += file_info["size_bytes"]
+                total_deleted_size += int(file_info["size_bytes"])
             except Exception as e:
                 failed_files.append({"path": file_info["path"], "error": str(e)})
 

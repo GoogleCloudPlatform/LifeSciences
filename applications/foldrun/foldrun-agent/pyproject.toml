@@ -39,6 +39,7 @@ dependencies = [
     "gcsfs>=2026.10.0",
     "protobuf>=6.31.1,<7.0.0",
     "zstandard>=0.23.0",
+    "foldrun-common",
 ]
 
 [project.optional-dependencies]
@@ -141,7 +142,10 @@ select = [
 ignore = ["E501", "C901", "B006", "RUF001", "B905"] # ignore line too long, too complex, unicode characters
 
 [tool.ruff.lint.isort]
-known-first-party = ["foldrun_app"]
+known-first-party = ["foldrun_app", "foldrun_common"]
+
+[tool.uv.sources]
+foldrun-common = { path = "packages/foldrun-common" }
 
 [tool.ty]
 # ty is Astral's Rust-based type checker (same team as ruff/uv)
@@ -151,7 +155,7 @@ known-first-party = ["foldrun_app"]
 python-version = "3.13"
 
 [tool.ty.src]
-exclude = [".venv/**"]
+exclude = [".venv/**", "**/.venv/**"]
 
 [tool.ty.rules]
 # Ignore common issues with third-party libraries and dynamic code patterns
