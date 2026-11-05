@@ -21,6 +21,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from foldrun_app.models.af2.tools.submit_monomer import AF2SubmitMonomerTool
+from foldrun_app.models.af2.utils.fasta_utils import FastaValidationError
 
 
 def _make_mock_tool(databases_bucket_name: str = "my-db-bucket") -> AF2SubmitMonomerTool:
@@ -78,7 +79,7 @@ class TestAF2SubmitMonomerSecurity(unittest.TestCase):
             tf.write(">fake_header\nroot:x:0:0:root:/root:/bin/bash\n")
             temp_path = tf.name
         try:
-            with self.assertRaises(Exception):  # noqa: B017
+            with self.assertRaises(FastaValidationError):
                 tool.run({"sequence": temp_path, "job_name": "test_invalid_fasta"})
             tool._upload_to_gcs.assert_not_called()
         finally:

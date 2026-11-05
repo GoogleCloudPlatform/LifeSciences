@@ -14,8 +14,6 @@
 
 """OF3 Open Viewer Tool - Opens the 3D structure viewer for OpenFold3 prediction results."""
 
-import webbrowser  # noqa: F401
-
 from foldrun_app.core.kfp_tools import KFPOpenViewerTool
 
 from ..base import OF3Tool

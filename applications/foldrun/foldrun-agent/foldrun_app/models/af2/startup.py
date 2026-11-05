@@ -18,32 +18,16 @@ Provides singleton Config and GPU auto-detection logic.
 """
 
 import logging
-import os
 
-from foldrun_app.core.startup_utils import auto_detect_model_gpus, load_json_tool_configs
+from foldrun_app.core.startup_utils import auto_detect_model_gpus
 
 logger = logging.getLogger(__name__)
 
 _config = None
-_tool_configs = None
-
-_TOOL_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "data", "alphafold_tools.json")
-
-
-def get_tool_configs():
-    """Load and cache alphafold_tools.json (read once, shared everywhere)."""
-    global _tool_configs
-    if _tool_configs is None:
-        _tool_configs = load_json_tool_configs(_TOOL_CONFIG_PATH)
-    return _tool_configs
 
 
 def get_config():
-    """Get or create the singleton Config instance with GPU auto-detection.
-
-    Returns:
-        Initialized Config instance with supported GPUs auto-configured.
-    """
+    """Get or create the singleton Config instance with GPU auto-detection."""
     global _config
     if _config is not None:
         return _config
@@ -51,18 +35,11 @@ def get_config():
     from .config import Config
 
     config = Config()
-
-    # Run GPU auto-detection
     _auto_detect_gpus(config)
-
     _config = config
     return _config
 
 
 def _auto_detect_gpus(config):
-    """Run startup GPU quota auto-detection.
-
-    Args:
-        config: Config instance to update with detected GPUs.
-    """
+    """Run startup GPU quota auto-detection."""
     auto_detect_model_gpus(config)

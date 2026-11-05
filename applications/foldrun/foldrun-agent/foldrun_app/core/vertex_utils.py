@@ -12,16 +12,67 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared Agent Platform utilities used across all model plugins (AF2, OF3, Boltz-2)."""
+"""Shared Agent Platform utilities used across all model plugins and platform tools."""
 
+import json
+import logging
 import re
+from typing import Any
 
 from google.api_core import exceptions as google_exceptions
 from google.cloud import aiplatform_v1 as vertex_ai
 
+logger = logging.getLogger(__name__)
+
 _JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _FULL_RESOURCE_PATTERN = re.compile(r"^projects/([^/]+)/locations/([^/]+)/pipelineJobs/(.*)$")
 _PROJECT_NUMBERS: dict[str, str] = {}
+
+
+def _is_valid_proto_timestamp(dt: Any) -> bool:
+    """Return True if dt is a non-null timestamp after the unset protobuf epoch (year > 1970)."""
+    if not dt:
+        return False
+    year = getattr(dt, "year", None)
+    if isinstance(year, int) and year <= 1970:
+        return False
+    return True
+
+
+def _format_proto_timestamp(dt: Any) -> str | None:
+    """Format a protobuf/datetime timestamp as ISO-8601, ignoring unset epoch (<= 1970)."""
+    if not _is_valid_proto_timestamp(dt):
+        return None
+    return dt.isoformat()
+
+
+def _convert_proto_to_dict(obj: Any) -> Any:
+    """Recursively convert protobuf objects to native Python types for JSON serialization."""
+    if obj is None:
+        return None
+
+    if isinstance(obj, (str, int, float, bool)):
+        return obj
+
+    if isinstance(obj, (list, tuple)):
+        return [_convert_proto_to_dict(item) for item in obj]
+
+    if isinstance(obj, dict) or hasattr(obj, "items"):
+        return {str(key): _convert_proto_to_dict(value) for key, value in obj.items()}
+
+    if hasattr(obj, "__iter__") and not isinstance(obj, (str, bytes)):
+        try:
+            return [_convert_proto_to_dict(item) for item in obj]
+        except TypeError:
+            pass
+
+    if hasattr(obj, "to_dict"):
+        return obj.to_dict()
+
+    try:
+        return str(obj)
+    except Exception:
+        return None
 
 
 def _resolve_pipeline_job_target(
@@ -147,3 +198,179 @@ def get_pipeline_job(job_id: str, project_id: str, region: str) -> vertex_ai.Pip
         except Exception:
             pass
         raise orig_exc
+
+
+def list_pipeline_jobs(
+    project_id: str, region: str, filter_str: str | None = None, page_size: int = 100
+) -> list[vertex_ai.PipelineJob]:
+    """List pipeline jobs with optional filter."""
+    client = vertex_ai.PipelineServiceClient(
+        client_options={"api_endpoint": f"{region}-aiplatform.googleapis.com"}
+    )
+
+    request = vertex_ai.ListPipelineJobsRequest(
+        parent=f"projects/{project_id}/locations/{region}", filter=filter_str, page_size=page_size
+    )
+
+    jobs = list(client.list_pipeline_jobs(request=request))
+    logger.info(f"Found {len(jobs)} pipeline jobs")
+    return jobs
+
+
+def get_job_status(job: vertex_ai.PipelineJob) -> dict[str, Any]:
+    """Extract status information from pipeline job."""
+    create_ts = getattr(job, "create_time", None)
+    start_ts = getattr(job, "start_time", None)
+    end_ts = getattr(job, "end_time", None)
+
+    status = {
+        "job_id": job.name,
+        "display_name": job.display_name,
+        "state": job.state.name,
+        "create_time": _format_proto_timestamp(create_ts),
+        "start_time": _format_proto_timestamp(start_ts),
+        "end_time": _format_proto_timestamp(end_ts),
+        "labels": dict(job.labels) if job.labels else {},
+        "pipeline_spec": job.pipeline_spec.get("pipelineInfo", {}).get("name", "unknown")
+        if job.pipeline_spec
+        else "unknown",
+    }
+
+    if (
+        start_ts is not None
+        and end_ts is not None
+        and _is_valid_proto_timestamp(end_ts)
+        and _is_valid_proto_timestamp(start_ts)
+    ):
+        duration = end_ts - start_ts
+        status["duration_seconds"] = duration.total_seconds()
+
+    if hasattr(job, "error") and job.error:
+        status["error_message"] = job.error.message
+
+    return status
+
+
+def get_task_details(job: vertex_ai.PipelineJob) -> dict[str, Any]:
+    """Extract task execution details from pipeline job."""
+    if not hasattr(job, "job_detail") or not job.job_detail:
+        return {"tasks": {}, "task_list": [], "predictions": []}
+
+    tasks = {}
+    task_list = []
+    predictions = []
+    job_display_name = getattr(job, "display_name", "") or ""
+
+    for task in job.job_detail.task_details:
+        task_info = {
+            "task_id": task.task_id,
+            "task_name": task.task_name,
+            "state": task.state.name if hasattr(task, "state") else "UNKNOWN",
+            "create_time": _format_proto_timestamp(getattr(task, "create_time", None)),
+            "start_time": _format_proto_timestamp(getattr(task, "start_time", None)),
+            "end_time": _format_proto_timestamp(getattr(task, "end_time", None)),
+        }
+
+        custom_job_name = None
+        if hasattr(task, "executor_detail") and task.executor_detail:
+            cjd = getattr(task.executor_detail, "custom_job_detail", None)
+            if cjd and getattr(cjd, "job", ""):
+                custom_job_name = str(cjd.job)
+            if not custom_job_name:
+                cd = getattr(task.executor_detail, "container_detail", None)
+                if cd and getattr(cd, "main_job", ""):
+                    custom_job_name = str(cd.main_job)
+
+        if hasattr(task, "execution") and task.execution:
+            execution_metadata = {}
+            if hasattr(task.execution, "metadata") and task.execution.metadata:
+                execution_metadata = _convert_proto_to_dict(task.execution.metadata)
+            task_info["execution_metadata"] = execution_metadata
+            if not custom_job_name and "main_job" in execution_metadata:
+                custom_job_name = str(execution_metadata["main_job"])
+            elif not custom_job_name:
+                gcp_res_raw = execution_metadata.get(
+                    "output:gcp_resources"
+                ) or execution_metadata.get("gcp_resources")
+                if gcp_res_raw:
+                    try:
+                        resources = json.loads(gcp_res_raw)
+                        for res in resources.get("resources", []):
+                            if res.get("resourceType") == "CustomJob":
+                                custom_job_name = res.get("resourceUri")
+                                break
+                    except Exception:
+                        pass
+
+        if custom_job_name:
+            task_info["custom_job_name"] = custom_job_name
+            task_info["custom_job_id"] = custom_job_name.split("/")[-1]
+
+        if hasattr(task, "error") and task.error:
+            task_info["error"] = {
+                "message": task.error.message if hasattr(task.error, "message") else None,
+                "code": task.error.code if hasattr(task.error, "code") else None,
+            }
+
+        tasks[task.task_name] = task_info
+
+        tname = task.task_name
+        is_wrapper = (
+            tname.startswith("for-loop-")
+            or tname.startswith("condition-")
+            or (job_display_name and tname == job_display_name)
+            or "-gw-" in tname
+            or "-inference-pipeline" in tname
+        )
+        if not is_wrapper:
+            task_list.append(task_info)
+
+        if task.task_name == "predict" and hasattr(task, "outputs"):
+            if "raw_prediction" in task.outputs:
+                raw_pred = task.outputs["raw_prediction"]
+                if hasattr(raw_pred, "artifacts") and len(raw_pred.artifacts) > 0:
+                    artifact = raw_pred.artifacts[0]
+                    if hasattr(artifact, "metadata"):
+                        predictions.append(
+                            {
+                                "task_id": task.task_id,
+                                "model_name": task.execution.metadata.get(
+                                    "input:model_name", "unknown"
+                                )
+                                if hasattr(task, "execution")
+                                else "unknown",
+                                "ranking_confidence": artifact.metadata.get(
+                                    "ranking_confidence", 0
+                                ),
+                                "uri": artifact.uri if hasattr(artifact, "uri") else None,
+                            }
+                        )
+
+    predictions.sort(key=lambda x: float(x.get("ranking_confidence") or 0.0), reverse=True)
+
+    return {
+        "tasks": tasks,
+        "task_list": task_list,
+        "predictions": predictions,
+        "best_prediction": predictions[0] if predictions else None,
+    }
+
+
+def list_artifacts(
+    project_id: str, region: str, pipeline_context: str, artifact_filter: str | None = None
+) -> list[vertex_ai.Artifact]:
+    """List artifacts from a pipeline run."""
+    client = vertex_ai.MetadataServiceClient(
+        client_options={"api_endpoint": f"{region}-aiplatform.googleapis.com"}
+    )
+
+    parent = f"projects/{project_id}/locations/{region}/metadataStores/default"
+    filter_str = f'in_context("{pipeline_context}")'
+    if artifact_filter:
+        filter_str += f" AND {artifact_filter}"
+
+    request = vertex_ai.ListArtifactsRequest(parent=parent, filter=filter_str)
+
+    artifacts = list(client.list_artifacts(request=request))
+    logger.info(f"Found {len(artifacts)} artifacts")
+    return artifacts

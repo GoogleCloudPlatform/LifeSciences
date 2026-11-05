@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for deleting AlphaFold2 pipeline jobs."""
+"""Tool for deleting FoldRun pipeline jobs."""
 
 import logging
 import time
@@ -20,8 +20,8 @@ from typing import Any
 
 from google.cloud import aiplatform as vertex_ai
 
-from ..base import AF2Tool
-from ..utils.vertex_utils import get_pipeline_job
+from foldrun_app.core.base_tool import BaseTool
+from foldrun_app.core.vertex_utils import get_pipeline_job
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ _CANCEL_TIMEOUT_SECONDS = 120
 _CANCEL_POLL_INTERVAL = 5
 
 
-class AF2DeleteJobTool(AF2Tool):
-    """Tool for deleting AlphaFold2 pipeline jobs."""
+class DeleteJobTool(BaseTool):
+    """Tool for deleting FoldRun pipeline jobs."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """

@@ -55,17 +55,17 @@ def _make_mock_job(display_name: str, gcs_output_directory: str | None = None):
     return job
 
 
-class TestAF2FindOrphanedGCSFilesTool:
-    """Tests for AF2FindOrphanedGCSFilesTool FASTA filename parsing."""
+class TestFindOrphanedGCSFilesTool:
+    """Tests for FindOrphanedGCSFilesTool FASTA filename parsing."""
 
     def test_fasta_filename_with_inner_fasta_or_prefix_not_flagged_as_orphaned(self):
-        from foldrun_app.models.af2.config import Config
-        from foldrun_app.models.af2.tools.find_orphaned_gcs_files import (
-            AF2FindOrphanedGCSFilesTool,
+        from foldrun_app.core.config import CoreConfig
+        from foldrun_app.core.tools.find_orphaned_gcs_files import (
+            FindOrphanedGCSFilesTool,
         )
 
-        config = Config()
-        tool = AF2FindOrphanedGCSFilesTool(
+        config = CoreConfig()
+        tool = FindOrphanedGCSFilesTool(
             tool_config={"name": "find_orphaned_gcs_files"}, config=config
         )
 
@@ -101,11 +101,11 @@ class TestAF2FindOrphanedGCSFilesTool:
 
         with (
             patch(
-                "foldrun_app.models.af2.tools.find_orphaned_gcs_files.list_pipeline_jobs",
+                "foldrun_app.core.tools.find_orphaned_gcs_files.list_pipeline_jobs",
                 return_value=active_jobs,
             ),
             patch(
-                "foldrun_app.models.af2.tools.find_orphaned_gcs_files.storage.Client",
+                "foldrun_app.core.tools.find_orphaned_gcs_files.storage.Client",
                 return_value=mock_storage_client,
             ),
         ):
@@ -115,13 +115,13 @@ class TestAF2FindOrphanedGCSFilesTool:
         assert orphaned_job_names == ["truly-orphaned"]
 
     def test_detects_orphaned_of3_and_boltz2_query_files(self):
-        from foldrun_app.models.af2.config import Config
-        from foldrun_app.models.af2.tools.find_orphaned_gcs_files import (
-            AF2FindOrphanedGCSFilesTool,
+        from foldrun_app.core.config import CoreConfig
+        from foldrun_app.core.tools.find_orphaned_gcs_files import (
+            FindOrphanedGCSFilesTool,
         )
 
-        config = Config()
-        tool = AF2FindOrphanedGCSFilesTool(
+        config = CoreConfig()
+        tool = FindOrphanedGCSFilesTool(
             tool_config={"name": "find_orphaned_gcs_files"}, config=config
         )
 
@@ -160,11 +160,11 @@ class TestAF2FindOrphanedGCSFilesTool:
 
         with (
             patch(
-                "foldrun_app.models.af2.tools.find_orphaned_gcs_files.list_pipeline_jobs",
+                "foldrun_app.core.tools.find_orphaned_gcs_files.list_pipeline_jobs",
                 return_value=[active_of3, active_boltz],
             ),
             patch(
-                "foldrun_app.models.af2.tools.find_orphaned_gcs_files.storage.Client",
+                "foldrun_app.core.tools.find_orphaned_gcs_files.storage.Client",
                 return_value=mock_storage_client,
             ),
         ):

@@ -19,7 +19,7 @@ from foldrun_app.skills._tool_registry import get_tool
 
 def check_job_status(job_id: str) -> dict:
     """Check status and progress of an AlphaFold2 prediction job."""
-    return get_tool("af2_check_job_status").run({"job_id": job_id})
+    return get_tool("check_job_status").run({"job_id": job_id})
 
 
 def list_jobs(
@@ -58,7 +58,7 @@ def list_jobs(
 
     Returns comprehensive job information including duration, timestamps, labels, and console URLs.
     """
-    return get_tool("af2_list_jobs").run(
+    return get_tool("list_jobs").run(
         {
             "filter": filter,
             "label_filter": label_filter,
@@ -82,7 +82,7 @@ def get_job_details(job_id: str) -> dict:
     settings (e.g., different GPU type). Returns complete job configuration, timing info,
     and resubmission-ready parameters.
     """
-    return get_tool("af2_get_job_details").run({"job_id": job_id})
+    return get_tool("get_job_details").run({"job_id": job_id})
 
 
 def delete_job(job_id: str, confirm: bool = False) -> dict:
@@ -99,7 +99,7 @@ def delete_job(job_id: str, confirm: bool = False) -> dict:
         job_id: Job ID to delete
         confirm: Must be True to proceed with deletion (safety check)
     """
-    return get_tool("af2_delete_job").run({"job_id": job_id, "confirm": confirm})
+    return get_tool("delete_job").run({"job_id": job_id, "confirm": confirm})
 
 
 def check_gpu_quota(region: str | None = None) -> dict:
@@ -115,7 +115,7 @@ def check_gpu_quota(region: str | None = None) -> dict:
 
     Returns quota limits, current usage, available capacity, and recommendations.
     """
-    return get_tool("af2_check_gpu_quota").run({"region": region} if region else {})
+    return get_tool("check_gpu_quota").run({"region": region} if region else {})
 
 
 def check_af3_endpoint(endpoint_id: str | None = None) -> dict:

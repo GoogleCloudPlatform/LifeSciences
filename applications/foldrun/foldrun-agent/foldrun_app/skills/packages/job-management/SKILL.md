@@ -95,12 +95,15 @@ When inspecting an endpoint deployment via `check_af3_endpoint`, interpret the s
   - Tell the user: "I can retry your failed job — completed steps will be cached so only the failed tasks re-run"
   - If the failure was a transient provisioning error, the retry will likely succeed (tasks now auto-retry 2x with backoff)
   - If the failure was a code/data error, suggest checking get_job_details with detail_level='detailed' first
-- **CRITICAL: Job Deletion Safety**
-  - NEVER delete a job without explicit user confirmation
-  - When asked to delete a job, first explain what will be deleted and what won't (GCS files remain)
-  - Always warn that deletion is permanent and cannot be undone
-  - Ask the user to confirm before proceeding with deletion
-  - Only call delete_job with confirm=true after receiving explicit user approval
+- **Delete jobs**: Use `delete_job` to remove pipeline jobs from Agent Platform
+  - **CRITICAL - Human-in-the-Loop (HITL) Confirmation Policy**:
+    1. NEVER invoke `delete_job(..., confirm=true)` without obtaining explicit user approval first.
+    2. Before deleting any job, clearly explain what will be deleted (the target job ID and its pipeline metadata/history in Agent Platform, while noting GCS files remain).
+    3. Explicitly warn the user that deletion is permanent and cannot be undone.
+    4. Ask the user for explicit confirmation and wait for their approval before calling `delete_job(..., confirm=true)`.
+  - Requires `confirm=true` as a safety check
+  - Only deletes job metadata from Agent Platform, NOT the GCS output files
+  - Use this to clean up failed or unnecessary jobs
 - **AMBER Relaxation Fallback**: If a relax task completed successfully but logs show "RELAX_FALLBACK", it means AMBER minimization failed on a disordered structure and the unrelaxed PDB was used instead. The job did NOT fail — results are still valid. When presenting results for such a job, clearly inform the user: "Note: AMBER relaxation failed for [N] structure(s) due to highly disordered regions. Unrelaxed structures were used instead — pLDDT and PAE confidence scores are unaffected. The structures are still suitable for downstream analysis."
 
 ## CRITICAL: Job Status Verification

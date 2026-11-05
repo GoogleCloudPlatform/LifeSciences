@@ -789,10 +789,12 @@ class TestPipelineLoadingMMseqs2:
         if vp_dir not in sys.path:
             sys.path.insert(0, vp_dir)
 
-        # Trigger the import
-        import foldrun_app.models.af2.pipeline.pipelines.alphafold_inference_pipeline  # noqa: F401
+        import importlib
 
-        # Get the actual module (not the shadowed GraphComponent)
+        # Trigger the import and return the actual module (not the shadowed GraphComponent)
+        importlib.import_module(
+            "foldrun_app.models.af2.pipeline.pipelines.alphafold_inference_pipeline"
+        )
         return sys.modules["foldrun_app.models.af2.pipeline.pipelines.alphafold_inference_pipeline"]
 
     def test_load_pipeline_passes_msa_method(self, mock_env_vars):

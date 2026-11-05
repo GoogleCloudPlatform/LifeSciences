@@ -11,7 +11,7 @@ metadata:
     - analyze_job
 ---
 
-# Results Analysis & Quality Assessment
+# Results & Analysis — Quality Assessment
 
 - **Download artifacts & ZIP bundle**: Use `download_job_artifacts` to generate 60-minute GCS V4 Signed URLs for the complete job archive (`artifacts_bundle.zip`, containing ranked structures, plots, Gemini expert report `.md`, inputs, and `summary.json`) as well as individual structures and plots. Always present signed HTTPS URLs (`artifacts_bundle_signed_url`, `best_structure_signed_url`) instead of raw `gs://` or GCS Console links so isolated end users can download directly in their browser.
 - **Download results**: Use get_prediction_results to retrieve AF2 PDB files

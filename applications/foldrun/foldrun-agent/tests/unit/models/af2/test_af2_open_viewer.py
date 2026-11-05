@@ -42,7 +42,7 @@ class TestAF2OpenViewerSecurity:
 
     def test_valid_url_and_job_id_defaults_open_browser_false(self):
         tool = _make_tool("https://viewer.example.com")
-        with patch("foldrun_app.models.af2.tools.open_viewer.webbrowser.open") as mock_open:
+        with patch("foldrun_app.core.kfp_tools.webbrowser.open") as mock_open:
             result = tool.run({"job_id": "af2-job_123"})
             assert result["viewer_url"] == "https://viewer.example.com/job/af2-job_123"
             assert result["browser_opened"] is False
@@ -50,7 +50,7 @@ class TestAF2OpenViewerSecurity:
 
     def test_explicit_open_browser_true(self):
         tool = _make_tool("https://viewer.example.com")
-        with patch("foldrun_app.models.af2.tools.open_viewer.webbrowser.open") as mock_open:
+        with patch("foldrun_app.core.kfp_tools.webbrowser.open") as mock_open:
             result = tool.run({"job_id": "af2-job_123", "open_browser": True})
             assert result["viewer_url"] == "https://viewer.example.com/job/af2-job_123"
             assert result["browser_opened"] is True
@@ -69,7 +69,7 @@ class TestAF2OpenViewerSecurity:
     )
     def test_rejects_invalid_viewer_base_url(self, bad_base_url):
         tool = _make_tool(bad_base_url)
-        with patch("foldrun_app.models.af2.tools.open_viewer.webbrowser.open") as mock_open:
+        with patch("foldrun_app.core.kfp_tools.webbrowser.open") as mock_open:
             with pytest.raises(ValueError, match="viewer_base_url"):
                 tool.run({"job_id": "valid_job_123", "open_browser": True})
             mock_open.assert_not_called()
@@ -87,7 +87,7 @@ class TestAF2OpenViewerSecurity:
     )
     def test_rejects_traversal_and_invalid_job_id(self, bad_job_id):
         tool = _make_tool("https://viewer.example.com")
-        with patch("foldrun_app.models.af2.tools.open_viewer.webbrowser.open") as mock_open:
+        with patch("foldrun_app.core.kfp_tools.webbrowser.open") as mock_open:
             with pytest.raises(ValueError, match="Invalid job_id"):
                 tool.run({"job_id": bad_job_id, "open_browser": True})
             mock_open.assert_not_called()

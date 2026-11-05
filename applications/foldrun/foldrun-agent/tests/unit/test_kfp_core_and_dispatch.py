@@ -186,27 +186,19 @@ class TestSharedKFPPostSubmissionTools:
         assert "0/5 samples analyzed" in res["message"]
 
     @pytest.mark.parametrize(
-        "tool_cls,cfg_cls,module_patch_target",
+        "tool_cls,cfg_cls",
         [
-            (
-                OF3OpenViewerTool,
-                OF3Config,
-                "foldrun_app.models.of3.tools.open_viewer.webbrowser.open",
-            ),
-            (
-                BOLTZ2OpenViewerTool,
-                BOLTZ2Config,
-                "foldrun_app.models.boltz2.tools.open_viewer.webbrowser.open",
-            ),
+            (OF3OpenViewerTool, OF3Config),
+            (BOLTZ2OpenViewerTool, BOLTZ2Config),
         ],
     )
     def test_kfp_open_viewer_strips_trailing_slash_and_extracts_short_id(
-        self, isolated_env, tool_cls, cfg_cls, module_patch_target
+        self, isolated_env, tool_cls, cfg_cls
     ):
         tool = tool_cls({"name": "open_viewer"}, cfg_cls())
         full_resource = "projects/test-project/locations/us-central1/pipelineJobs/run-abc-123"
 
-        with patch(module_patch_target) as mock_open:
+        with patch("foldrun_app.core.kfp_tools.webbrowser.open") as mock_open:
             res = tool.run({"job_id": full_resource, "open_browser": True})
 
         assert res["job_id"] == "run-abc-123"
@@ -318,12 +310,10 @@ class TestPolymorphicDispatch:
             patch(
                 "foldrun_app.core.dispatch.get_pipeline_job", return_value=fake_job
             ) as mock_disp_gpj,
-            patch(
-                "foldrun_app.models.of3.tools.get_analysis_results.get_pipeline_job"
-            ) as mock_backend_gpj,
+            patch("foldrun_app.core.kfp_tools.get_pipeline_job") as mock_backend_gpj,
             patch("google.cloud.storage.Client", return_value=mock_storage_client),
             patch(
-                "foldrun_app.models.of3.tools.get_analysis_results.build_agent_downloads_dict",
+                "foldrun_app.core.kfp_tools.build_agent_downloads_dict",
                 return_value={},
             ),
         ):

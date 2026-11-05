@@ -20,10 +20,7 @@ import threading
 from typing import Any
 
 from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
-from foldrun_app.core.pipeline_utils import (  # noqa: F401
-    compile_pipeline,
-    model_pipeline_load_context,
-)
+from foldrun_app.core.pipeline_utils import model_pipeline_load_context
 
 logger = logging.getLogger(__name__)
 

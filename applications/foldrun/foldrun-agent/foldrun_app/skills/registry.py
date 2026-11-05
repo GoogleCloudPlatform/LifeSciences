@@ -17,25 +17,23 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from google.adk.skills import load_skills_from_dir
 from google.adk.skills.models import Skill as AdkSkill
 from google.adk.tools import FunctionTool
 from google.adk.tools.skill_toolset import SkillToolset
 
 from foldrun_app.skills.base import Skill
-from foldrun_app.skills.cost_estimation.instruction import COST_ESTIMATION_INSTRUCTION
 from foldrun_app.skills.cost_estimation.tools import (
     estimate_job_cost,
     estimate_monthly_cost,
     get_actual_job_costs,
 )
-from foldrun_app.skills.database_queries.instruction import DATABASE_QUERIES_INSTRUCTION
 from foldrun_app.skills.database_queries.tools import (
     query_alphafold_db_annotations,
     query_alphafold_db_prediction,
     query_alphafold_db_summary,
 )
-from foldrun_app.skills.job_management.instruction import JOB_MANAGEMENT_INSTRUCTION
 from foldrun_app.skills.job_management.tools import (
     check_af3_endpoint,
     check_gpu_quota,
@@ -44,7 +42,6 @@ from foldrun_app.skills.job_management.tools import (
     get_job_details,
     list_jobs,
 )
-from foldrun_app.skills.job_submission.instruction import JOB_SUBMISSION_INSTRUCTION
 from foldrun_app.skills.job_submission.tools import (
     submit_af2_batch_predictions,
     submit_af2_monomer_prediction,
@@ -54,7 +51,6 @@ from foldrun_app.skills.job_submission.tools import (
     submit_boltz2_prediction,
     submit_of3_prediction,
 )
-from foldrun_app.skills.results_analysis.instruction import RESULTS_ANALYSIS_INSTRUCTION
 from foldrun_app.skills.results_analysis.tools import (
     analyze_job,
     analyze_job_parallel,
@@ -63,12 +59,10 @@ from foldrun_app.skills.results_analysis.tools import (
     get_analysis_results,
     get_prediction_results,
 )
-from foldrun_app.skills.storage_management.instruction import STORAGE_MANAGEMENT_INSTRUCTION
 from foldrun_app.skills.storage_management.tools import (
     cleanup_gcs_files,
     find_orphaned_gcs_files,
 )
-from foldrun_app.skills.visualization.instruction import VISUALIZATION_INSTRUCTION
 from foldrun_app.skills.visualization.tools import (
     open_structure_viewer,
 )
@@ -155,13 +149,17 @@ class SkillRegistry:
             or os.getenv("AF3_VERTEX_ENDPOINT")
         )
 
-        # Load instruction bodies from packages/ if available to keep SKILL.md as single source of truth
+        # Load instruction bodies strictly from packages/*/SKILL.md (single source of truth)
         adk_skills = {s.name.replace("-", "_"): s for s in self.load_adk_skills()}
 
-        def _get_instruction(name: str, fallback: str) -> str:
-            if name in adk_skills and getattr(adk_skills[name], "instructions", None):
-                return adk_skills[name].instructions
-            return fallback
+        def _get_instruction(name: str) -> str:
+            skill_obj = adk_skills.get(name)
+            body = getattr(skill_obj, "instructions", None) if skill_obj is not None else None
+            if not body:
+                raise RuntimeError(
+                    f"Missing SKILL.md instruction body for built-in skill '{name}' under skills/packages/."
+                )
+            return body
 
         # 1. Job Submission
         submission_tools = [
@@ -180,7 +178,7 @@ class SkillRegistry:
             Skill(
                 name="job_submission",
                 description="Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2",
-                instruction=_get_instruction("job_submission", JOB_SUBMISSION_INSTRUCTION),
+                instruction=_get_instruction("job_submission"),
                 tool_functions=submission_tools,
             )
         )
@@ -199,7 +197,7 @@ class SkillRegistry:
             Skill(
                 name="job_management",
                 description="Job monitoring, GPU quota inspection, AF3 endpoint status, retry with caching, and job deletion",
-                instruction=_get_instruction("job_management", JOB_MANAGEMENT_INSTRUCTION),
+                instruction=_get_instruction("job_management"),
                 tool_functions=management_tools,
             )
         )
@@ -207,7 +205,7 @@ class SkillRegistry:
             Skill(
                 name="storage_management",
                 description="GCS bucket hygiene, identifying orphaned prediction outputs, and safe two-step file cleanup",
-                instruction=_get_instruction("storage_management", STORAGE_MANAGEMENT_INSTRUCTION),
+                instruction=_get_instruction("storage_management"),
                 tool_functions=[
                     find_orphaned_gcs_files,
                     cleanup_gcs_files,
@@ -229,7 +227,7 @@ class SkillRegistry:
             Skill(
                 name="results_analysis",
                 description="Quality assessment (pLDDT, PAE, PDE, ipTM, pTM), AF3 confidence metrics, parallel batch analysis via Cloud Run, and troubleshooting",
-                instruction=_get_instruction("results_analysis", RESULTS_ANALYSIS_INSTRUCTION),
+                instruction=_get_instruction("results_analysis"),
                 tool_functions=analysis_tools,
             )
         )
@@ -243,7 +241,7 @@ class SkillRegistry:
             Skill(
                 name="visualization",
                 description="Interactive 3D structure visualization URLs with Mol* for AF2, AF3, OF3, and Boltz-2",
-                instruction=_get_instruction("visualization", VISUALIZATION_INSTRUCTION),
+                instruction=_get_instruction("visualization"),
                 tool_functions=vis_tools,
             )
         )
@@ -251,7 +249,7 @@ class SkillRegistry:
             Skill(
                 name="cost_estimation",
                 description="Per-job and monthly infrastructure cost modeling with DWS FLEX_START spot vs on-demand comparison",
-                instruction=_get_instruction("cost_estimation", COST_ESTIMATION_INSTRUCTION),
+                instruction=_get_instruction("cost_estimation"),
                 tool_functions=[
                     estimate_job_cost,
                     estimate_monthly_cost,
@@ -263,7 +261,7 @@ class SkillRegistry:
             Skill(
                 name="database_queries",
                 description="AlphaFold DB structure lookups, annotations, and variant summary checks",
-                instruction=_get_instruction("database_queries", DATABASE_QUERIES_INSTRUCTION),
+                instruction=_get_instruction("database_queries"),
                 tool_functions=[
                     query_alphafold_db_summary,
                     query_alphafold_db_prediction,
@@ -304,12 +302,25 @@ class SkillRegistry:
         additional_tools = self.compile_tools()
         return SkillToolset(skills=skills, additional_tools=additional_tools)
 
+    def _load_skill_references(self, skill_name: str) -> list[str]:
+        """Load any Markdown files under packages/<skill-dir>/references/*.md for static compilation."""
+        pkg_dir = Path(__file__).parent / "packages" / skill_name.replace("_", "-") / "references"
+        if not pkg_dir.is_dir():
+            return []
+        refs: list[str] = []
+        for md_file in sorted(pkg_dir.glob("*.md")):
+            text = md_file.read_text(encoding="utf-8").strip()
+            if text:
+                refs.append(text)
+        return refs
+
     def compile_instruction(
         self,
         skill_names: list[str] | None = None,
         include_header: bool = True,
         include_guidelines: bool = True,
         progressive: bool = False,
+        include_references: bool = False,
     ) -> str:
         """Compile modular instructions for the requested skills.
 
@@ -319,6 +330,8 @@ class SkillRegistry:
             include_guidelines: Whether to append the response guidelines.
             progressive: If True, uses progressive disclosure by generating a concise
                 skills overview manifest instead of concatenating full instruction bodies.
+            include_references: If True (and progressive=False), appends packages/<skill>/references/*.md
+                beneath each skill's body for static v1 prompt compilation.
         """
         selected_names = skill_names or list(self._skills.keys())
 
@@ -336,6 +349,8 @@ class SkillRegistry:
             for name in selected_names:
                 skill = self.get_skill(name)
                 sections.append(skill.instruction.strip())
+                if include_references:
+                    sections.extend(self._load_skill_references(skill.name))
 
         if include_guidelines:
             sections.append(RESPONSE_GUIDELINES.strip())
@@ -362,5 +377,8 @@ class SkillRegistry:
         return tools
 
 
-# Global registry instance
+# Global registry instance (ensure agent .env is loaded before evaluating tool flags)
+_agent_env = Path(__file__).resolve().parents[2] / ".env"
+if _agent_env.is_file():
+    load_dotenv(_agent_env, override=False)
 skill_registry = SkillRegistry()

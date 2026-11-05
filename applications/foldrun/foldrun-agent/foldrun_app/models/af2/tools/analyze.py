@@ -22,8 +22,9 @@ from typing import Any
 
 import numpy as np
 
+from foldrun_app.core.vertex_utils import get_pipeline_job, get_task_details
+
 from ..base import AF2Tool
-from ..utils.vertex_utils import get_pipeline_job, get_task_details
 
 logger = logging.getLogger(__name__)
 

@@ -19,13 +19,13 @@ from typing import Any
 
 from google.cloud import storage
 
-from ..base import AF2Tool
-from ..utils.vertex_utils import list_pipeline_jobs
+from foldrun_app.core.base_tool import BaseTool
+from foldrun_app.core.vertex_utils import list_pipeline_jobs
 
 logger = logging.getLogger(__name__)
 
 
-class AF2FindOrphanedGCSFilesTool(AF2Tool):
+class FindOrphanedGCSFilesTool(BaseTool):
     """Tool for finding GCS files without corresponding Agent Platform jobs."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:

@@ -27,8 +27,20 @@ logger = logging.getLogger(__name__)
 class BOLTZ2Tool(KFPModelTool):
     """Base class for Boltz2 tools following ToolUniverse pattern."""
 
-    def __init__(self, tool_config: dict[str, Any], config: BOLTZ2Config | None = None):
-        super().__init__(tool_config, config or BOLTZ2Config())
+    def __init__(
+        self,
+        tool_config: dict[str, Any] | None = None,
+        config: BOLTZ2Config | None = None,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(
+            tool_config=tool_config,
+            config=config or BOLTZ2Config(),
+            name=name,
+            description=description,
+        )
 
     def _setup_compile_env(
         self,

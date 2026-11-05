@@ -24,11 +24,11 @@ Based on ToolUniverse AlphaFold tools implementation.
 
 from typing import Any
 
-from ..base import AF2Tool
-from ..utils.alphafold_db import AlphaFoldDBClient
+from foldrun_app.core.alphafold_db import AlphaFoldDBClient
+from foldrun_app.core.base_tool import BaseTool
 
 
-class AlphaFoldDBGetPrediction(AF2Tool):
+class AlphaFoldDBGetPrediction(BaseTool):
     """Query AlphaFold DB for full prediction data."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -102,7 +102,7 @@ class AlphaFoldDBGetPrediction(AF2Tool):
         return result
 
 
-class AlphaFoldDBGetSummary(AF2Tool):
+class AlphaFoldDBGetSummary(BaseTool):
     """Query AlphaFold DB for summary information."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -170,7 +170,7 @@ class AlphaFoldDBGetSummary(AF2Tool):
         return result
 
 
-class AlphaFoldDBGetAnnotations(AF2Tool):
+class AlphaFoldDBGetAnnotations(BaseTool):
     """Query AlphaFold DB for variant annotations."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:

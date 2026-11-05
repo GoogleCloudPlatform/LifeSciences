@@ -14,13 +14,9 @@
 
 """Tool for retrieving and aggregating AlphaFold2 analysis results from GCS."""
 
-from google.cloud import run_v2, storage  # noqa: F401
-
-from foldrun_app.core.download_utils import build_agent_downloads_dict  # noqa: F401
 from foldrun_app.core.kfp_tools import KFPGetAnalysisResultsTool
 
 from ..base import AF2Tool
-from ..utils.vertex_utils import get_pipeline_job  # noqa: F401
 
 
 class AF2GetAnalysisResultsTool(KFPGetAnalysisResultsTool, AF2Tool):

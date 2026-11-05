@@ -59,7 +59,7 @@ def cleanup_gcs_files(
         args["job_id"] = job_id
     if gcs_paths is not None:
         args["gcs_paths"] = gcs_paths
-    return get_tool("af2_cleanup_gcs_files").run(args)
+    return get_tool("cleanup_gcs_files").run(args)
 
 
 def find_orphaned_gcs_files(
@@ -86,7 +86,7 @@ def find_orphaned_gcs_files(
     Returns:
         List of orphaned directories and files with sizes and cleanup instructions
     """
-    return get_tool("af2_find_orphaned_files").run(
+    return get_tool("find_orphaned_files").run(
         {
             "check_fasta": check_fasta,
             "max_jobs_to_check": max_jobs_to_check,

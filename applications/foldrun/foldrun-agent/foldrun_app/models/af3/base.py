@@ -35,8 +35,20 @@ JOB_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 class AF3Tool(BaseTool):
     """Base class for AlphaFold 3 tools invoking Agent Platform Prediction Endpoint."""
 
-    def __init__(self, tool_config: dict[str, Any], config: AF3Config | None = None):
-        super().__init__(tool_config, config or AF3Config())
+    def __init__(
+        self,
+        tool_config: dict[str, Any] | None = None,
+        config: AF3Config | None = None,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(
+            tool_config=tool_config,
+            config=config or AF3Config(),
+            name=name,
+            description=description,
+        )
 
     def get_endpoint(self, endpoint_id: str | None = None) -> vertex_ai.Endpoint:
         """Resolve and instantiate an Agent Platform Endpoint object.

@@ -70,17 +70,20 @@ foldrun-agent/
 │   ├── core/                       # Shared infrastructure (model-agnostic)
 │   │   ├── base_tool.py            # BaseTool: GCS, Agent Platform, NFS helpers
 │   │   ├── config.py               # CoreConfig: project, region, NFS, GCS
-│   │   ├── download_artifacts.py   # V4 Signed URL & ZIP bundle generator (all 4 models)
+│   │   ├── dispatch.py             # Polymorphic job_id dispatch across all 4 models
+│   │   ├── download_utils.py       # V4 Signed URL & ZIP bundle generator (all 4 models)
 │   │   ├── hardware.py             # GPU quota + GCE reservation detection & tier fallback
-│   │   ├── model_registry.py       # Plugin registry (register_model / list_models)
-│   │   └── pipeline_utils.py       # Shared KFP compilation utilities
+│   │   ├── kfp_tools.py            # Shared KFP base tool classes (AF2, OF3, Boltz-2)
+│   │   ├── model_registry.py       # Typed ModelDescriptor plugin registry
+│   │   ├── pipeline_utils.py       # Shared KFP compilation utilities
+│   │   └── tools/                  # 11 cross-model platform tools (status, list, details, delete, quota, GCS cleanup, AlphaFold DB)
 │   ├── models/
 │   │   ├── af2/                    # AlphaFold2 plugin
 │   │   │   ├── config.py           # AF2Config (L4/A100/A100_80GB tiers, relax)
 │   │   │   ├── base.py             # AF2Tool base class
 │   │   │   ├── startup.py          # Singleton config + GPU detection
 │   │   │   ├── pipeline/           # KFP: Configure → Data → Predict → Relax
-│   │   │   ├── tools/              # 19 JSON-defined + 1 dynamic tool (af2_analyze_job_deep)
+│   │   │   ├── tools/              # 8 AF2 tools: submit (monomer/multimer/batch), analyze, get_results, viewer
 │   │   │   └── utils/              # FASTA validation, pipeline utils
 │   │   ├── af3/                    # AlphaFold 3 plugin (4-stage KFP + Managed H100 Endpoint)
 │   │   │   ├── config.py           # AF3Config (endpoint ID, H100/A100/L4 auto-fallback, reservations)

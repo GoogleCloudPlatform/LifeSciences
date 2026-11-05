@@ -16,27 +16,13 @@
 
 import os
 import pickle
-import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-# Mock Google Cloud dependencies if not installed in test environment
-for mod_name in [
-    "google",
-    "google.cloud",
-    "google.cloud.aiplatform",
-    "google.cloud.storage",
-    "google.cloud.filestore_v1",
-    "google.cloud.resourcemanager_v3",
-    "dotenv",
-]:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = MagicMock()
-
-from foldrun_app.models.af2.tools.analyze import (  # noqa: E402
+from foldrun_app.models.af2.tools.analyze import (
     AF2AnalysisTool,
     load_raw_prediction,
 )

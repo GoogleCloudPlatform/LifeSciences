@@ -14,11 +14,7 @@
 
 """Tool for retrieving OpenFold3 analysis results from GCS."""
 
-from google.cloud import run_v2, storage  # noqa: F401
-
-from foldrun_app.core.download_utils import build_agent_downloads_dict  # noqa: F401
 from foldrun_app.core.kfp_tools import KFPGetAnalysisResultsTool
-from foldrun_app.core.vertex_utils import get_pipeline_job  # noqa: F401
 
 from ..base import OF3Tool
 

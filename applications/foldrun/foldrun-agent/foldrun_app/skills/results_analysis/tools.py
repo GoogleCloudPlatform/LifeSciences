@@ -159,7 +159,7 @@ def analyze_job(job_id: str, detail_level: str = "summary") -> dict:
     Returns:
         Job analysis tailored to the job's current state and detail level
     """
-    return get_tool("af2_analyze_job_deep").run(
+    return get_tool("analyze_job_deep").run(
         {
             "job_id": job_id,
             "detail_level": detail_level,
@@ -191,9 +191,9 @@ def download_job_artifacts(
         `best_structure_signed_url`, `summary_json_signed_url`, and `top_predictions`.
     """
     from foldrun_app.core.download_utils import download_job_artifacts_for_job
-    from foldrun_app.models.af2.startup import get_config
+    from foldrun_app.core.startup_utils import get_core_config
 
-    cfg = get_config()
+    cfg = get_core_config()
     return download_job_artifacts_for_job(
         job_id=job_id,
         project_id=cfg.project_id,

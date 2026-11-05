@@ -284,7 +284,7 @@ class TestAF2AnalysisGcsValidation:
         with pytest.raises(ValueError, match="Path traversal detected"):
             tool.run({"job_id": "job-123", "overwrite": True})
 
-    @patch("foldrun_app.models.af2.tools.analyze_job.storage.Client")
+    @patch("foldrun_app.core.kfp_tools.storage.Client")
     def test_af2_check_existing_analysis_uses_download_as_text(
         self, mock_storage_client_cls, analyze_job_tool
     ):
@@ -304,7 +304,7 @@ class TestAF2AnalysisGcsValidation:
         mock_blob.download_as_text.assert_called_once_with()
         mock_blob.download_as_string.assert_not_called()
 
-    @patch("foldrun_app.models.boltz2.tools.analyze_job.storage.Client")
+    @patch("foldrun_app.core.kfp_tools.storage.Client")
     def test_boltz2_check_existing_analysis_uses_download_as_text(
         self, mock_storage_client_cls, mock_config
     ):
@@ -331,3 +331,53 @@ class TestAF2AnalysisGcsValidation:
         assert data == {"status": "completed", "num_samples": 4}
         mock_blob.download_as_text.assert_called_once_with()
         mock_blob.download_as_string.assert_not_called()
+
+
+class TestGetJobDetailsGcsValidation:
+    """Tests for GCS bucket validation and path traversal prevention in GetJobDetailsTool."""
+
+    @patch("foldrun_app.core.tools.get_job_details.get_pipeline_job")
+    def test_get_job_details_rejects_unauthorized_bucket(self, mock_get_job, mock_config):
+        from foldrun_app.core.tools.get_job_details import GetJobDetailsTool
+
+        with patch("foldrun_app.core.base_tool._ensure_clients"):
+            tool = GetJobDetailsTool(
+                tool_config={"name": "get_job_details", "description": "test"},
+                config=mock_config,
+            )
+
+        mock_job = MagicMock()
+        mock_job.labels = {"model_type": "alphafold2"}
+        mock_job.runtime_config.parameter_values = {
+            "sequence_path": "gs://evil-bucket/fasta/seq.fasta"
+        }
+        mock_get_job.return_value = mock_job
+
+        with pytest.raises(ValueError, match="Unauthorized GCS bucket"):
+            tool.run({"job_id": "job-123"})
+
+    @pytest.mark.parametrize(
+        "traversal_uri",
+        [
+            "gs://authorized-pipeline-bucket/fasta/../secrets.txt",
+            "gs://authorized-pipeline-bucket/./secrets.txt",
+            "gs://authorized-pipeline-bucket/fasta/\x00seq.fasta",
+        ],
+    )
+    @patch("foldrun_app.core.tools.get_job_details.get_pipeline_job")
+    def test_get_job_details_rejects_path_traversal(self, mock_get_job, mock_config, traversal_uri):
+        from foldrun_app.core.tools.get_job_details import GetJobDetailsTool
+
+        with patch("foldrun_app.core.base_tool._ensure_clients"):
+            tool = GetJobDetailsTool(
+                tool_config={"name": "get_job_details", "description": "test"},
+                config=mock_config,
+            )
+
+        mock_job = MagicMock()
+        mock_job.labels = {"model_type": "openfold3"}
+        mock_job.runtime_config.parameter_values = {"query_json_path": traversal_uri}
+        mock_get_job.return_value = mock_job
+
+        with pytest.raises(ValueError):
+            tool.run({"job_id": "job-123"})

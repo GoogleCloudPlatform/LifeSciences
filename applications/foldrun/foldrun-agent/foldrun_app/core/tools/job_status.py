@@ -12,19 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for checking AlphaFold2 job status."""
+"""Tool for checking FoldRun job status."""
 
 import logging
 from typing import Any
 
-from ..base import AF2Tool
-from ..utils.vertex_utils import get_job_status, get_pipeline_job, get_task_details
+from foldrun_app.core.base_tool import BaseTool
+from foldrun_app.core.vertex_utils import get_job_status, get_pipeline_job, get_task_details
 
 logger = logging.getLogger(__name__)
 
 
-class AF2JobStatusTool(AF2Tool):
-    """Tool for checking status of AlphaFold2 prediction jobs."""
+class JobStatusTool(BaseTool):
+    """Tool for checking status of FoldRun prediction jobs."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """

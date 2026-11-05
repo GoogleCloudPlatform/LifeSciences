@@ -38,7 +38,7 @@ def test_check_existing_analysis_uses_download_as_text():
     mock_client = MagicMock()
     mock_client.bucket.return_value = mock_bucket
 
-    with patch("foldrun_app.models.of3.tools.analyze_job.storage.Client", return_value=mock_client):
+    with patch("foldrun_app.core.kfp_tools.storage.Client", return_value=mock_client):
         exists, data = tool._check_existing_analysis("gs://test-bucket/pipeline-root/analysis/")
 
     assert exists is True

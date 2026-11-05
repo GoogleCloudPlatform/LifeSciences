@@ -27,7 +27,7 @@ from google.adk.apps import App
 from google.adk.flows.llm_flows.base_llm_flow import LlmResponse
 from google.genai import types
 
-# Import all skill wrapper functions
+from foldrun_app.skills import skill_registry
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +35,10 @@ logger = logging.getLogger(__name__)
 agent_env = os.path.join(os.path.dirname(__file__), "../.env")
 if os.path.exists(agent_env):
     load_dotenv(agent_env, override=False)
+    skill_registry._register_defaults()
 
-from foldrun_app.skills import skill_registry  # noqa: E402
-from foldrun_app.v1_instruction import V1_AGENT_INSTRUCTION  # noqa: E402
-
-# Monolithic v1 instructions retained for fallback / rollback path
-AGENT_INSTRUCTION = V1_AGENT_INSTRUCTION
+# Static v1 fallback instructions compiled directly from skills/packages/*/SKILL.md + references/*.md
+AGENT_INSTRUCTION = skill_registry.compile_instruction(include_references=True)
 
 # Modular v2 coordinator instructions for native ADK skills
 FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction and macromolecular modeling assistant.

@@ -12,23 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AF2 Tools."""
+"""AlphaFold2-specific prediction and analysis tools."""
 
-from .alphafold_db_tools import (
-    AlphaFoldDBGetAnnotations,
-    AlphaFoldDBGetPrediction,
-    AlphaFoldDBGetSummary,
-)
 from .analyze import AF2AnalysisTool
-from .analyze_job_deep import AF2AnalyzeJobDeepTool
-from .check_gpu_quota import AF2CheckGPUQuotaTool
-from .cleanup_gcs_files import AF2CleanupGCSFilesTool
-from .delete_job import AF2DeleteJobTool
-from .find_orphaned_gcs_files import AF2FindOrphanedGCSFilesTool
-from .get_job_details import AF2GetJobDetailsTool
+from .analyze_job import AF2JobAnalysisTool
+from .get_analysis_results import AF2GetAnalysisResultsTool
 from .get_results import AF2GetResultsTool
-from .job_status import AF2JobStatusTool
-from .list_jobs import AF2ListJobsTool
 from .open_viewer import AF2OpenViewerTool
 from .submit_batch import AF2BatchSubmitTool
 from .submit_monomer import AF2SubmitMonomerTool
@@ -36,20 +25,11 @@ from .submit_multimer import AF2SubmitMultimerTool
 
 __all__ = [
     "AF2AnalysisTool",
-    "AF2AnalyzeJobDeepTool",
     "AF2BatchSubmitTool",
-    "AF2CheckGPUQuotaTool",
-    "AF2CleanupGCSFilesTool",
-    "AF2DeleteJobTool",
-    "AF2FindOrphanedGCSFilesTool",
-    "AF2GetJobDetailsTool",
+    "AF2GetAnalysisResultsTool",
     "AF2GetResultsTool",
-    "AF2JobStatusTool",
-    "AF2ListJobsTool",
+    "AF2JobAnalysisTool",
     "AF2OpenViewerTool",
     "AF2SubmitMonomerTool",
     "AF2SubmitMultimerTool",
-    "AlphaFoldDBGetAnnotations",
-    "AlphaFoldDBGetPrediction",
-    "AlphaFoldDBGetSummary",
 ]

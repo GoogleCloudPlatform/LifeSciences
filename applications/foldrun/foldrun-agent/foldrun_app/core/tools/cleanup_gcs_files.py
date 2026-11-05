@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for finding and cleaning up GCS files for AlphaFold2 jobs."""
+"""Tool for finding and cleaning up GCS files for FoldRun jobs."""
 
 import os
 import re
@@ -20,8 +20,8 @@ from typing import Any
 
 from google.cloud import storage
 
-from ..base import AF2Tool
-from ..utils.vertex_utils import get_pipeline_job
+from foldrun_app.core.base_tool import BaseTool
+from foldrun_app.core.vertex_utils import get_pipeline_job
 
 ALLOWED_BASE_PREFIXES = (
     "pipeline_runs/",
@@ -69,7 +69,7 @@ _PIPELINE_TIMESTAMP_PREFIXES = (
 )
 
 
-class AF2CleanupGCSFilesTool(AF2Tool):
+class CleanupGCSFilesTool(BaseTool):
     """Tool for finding and optionally deleting GCS files associated with a job."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -366,6 +366,40 @@ class AF2CleanupGCSFilesTool(AF2Tool):
             except Exception as e:
                 found_files["timestamped_search_error"] = str(e)
 
+        # Strategy 2b: Search AF3 predictions directory (af3_predictions/<job_name>/)
+        af3_candidate_names = []
+        for candidate_name in (job_name, candidate_id):
+            if (
+                candidate_name
+                and JOB_ID_PATTERN.fullmatch(candidate_name)
+                and candidate_name.lower() not in DISALLOWED_JOB_IDS
+                and candidate_name not in af3_candidate_names
+            ):
+                af3_candidate_names.append(candidate_name)
+
+        for af3_name in af3_candidate_names:
+            af3_prefix = f"af3_predictions/{af3_name}/"
+            try:
+                dir_blobs = bucket.list_blobs(prefix=af3_prefix)
+                for blob in dir_blobs:
+                    if not isinstance(getattr(blob, "name", None), str) or not blob.name.startswith(
+                        af3_prefix
+                    ):
+                        continue
+                    blob_path = f"gs://{self.config.bucket_name}/{blob.name}"
+                    if not any(f["path"] == blob_path for f in found_files["pipeline_runs"]):
+                        found_files["pipeline_runs"].append(
+                            {
+                                "path": blob_path,
+                                "size_bytes": blob.size,
+                                "size_mb": round(blob.size / (1024 * 1024), 2),
+                                "updated": blob.updated.isoformat() if blob.updated else None,
+                            }
+                        )
+                        found_files["total_size_bytes"] += blob.size
+            except Exception as e:
+                found_files["af3_predictions_search_error"] = str(e)
+
         # Strategy 3: Fallback - search all timestamped directories for job name match
         if not found_files["pipeline_runs"]:  # Only if we haven't found anything yet
             timestamped_prefix = "pipeline_runs/"
@@ -414,11 +448,14 @@ class AF2CleanupGCSFilesTool(AF2Tool):
 
         try:
             for input_blob_path in candidate_input_paths:
+                full_input_path = f"gs://{self.config.bucket_name}/{input_blob_path}"
+                if any(f["path"] == full_input_path for f in found_files["pipeline_runs"]):
+                    continue
                 input_blob = bucket.blob(input_blob_path)
                 if input_blob.exists():
                     found_files["fasta"].append(
                         {
-                            "path": f"gs://{self.config.bucket_name}/{input_blob_path}",
+                            "path": full_input_path,
                             "size_bytes": input_blob.size,
                             "size_mb": round(input_blob.size / (1024 * 1024), 2),
                             "updated": input_blob.updated.isoformat()

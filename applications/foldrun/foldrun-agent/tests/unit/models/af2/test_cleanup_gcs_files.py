@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for AF2CleanupGCSFilesTool security validations."""
+"""Unit tests for CleanupGCSFilesTool security validations."""
 
 import importlib.util
 import sys
@@ -23,58 +23,54 @@ from unittest.mock import MagicMock, patch
 
 
 def _load_cleanup_tool_class():
-    """Load AF2CleanupGCSFilesTool with lightweight stubs if run outside full venv."""
+    """Load CleanupGCSFilesTool with lightweight stubs if run outside full venv."""
     try:
-        from foldrun_app.models.af2.tools.cleanup_gcs_files import AF2CleanupGCSFilesTool
+        from foldrun_app.core.tools.cleanup_gcs_files import CleanupGCSFilesTool
 
-        return AF2CleanupGCSFilesTool
+        return CleanupGCSFilesTool
     except ImportError:
-        # Provide minimal stubs for google.cloud.storage, base tool, and vertex_utils
         for mod_name in [
             "google",
             "google.cloud",
             "google.cloud.storage",
             "foldrun_app",
-            "foldrun_app.models",
-            "foldrun_app.models.af2",
-            "foldrun_app.models.af2.base",
-            "foldrun_app.models.af2.utils",
-            "foldrun_app.models.af2.utils.vertex_utils",
-            "foldrun_app.models.af2.tools",
+            "foldrun_app.core",
+            "foldrun_app.core.base_tool",
+            "foldrun_app.core.vertex_utils",
+            "foldrun_app.core.tools",
         ]:
             if mod_name not in sys.modules:
                 sys.modules[mod_name] = types.ModuleType(mod_name)
 
-        class _StubAF2Tool:
-            def __init__(self, tool_config=None, config=None):
+        class _StubBaseTool:
+            def __init__(self, tool_config=None, config=None, *, name=None, description=None):
                 self.config = config
 
         sys.modules["google.cloud"].storage = sys.modules["google.cloud.storage"]
         sys.modules["google.cloud.storage"].Client = MagicMock()
-        sys.modules["foldrun_app.models.af2.base"].AF2Tool = _StubAF2Tool
-        sys.modules["foldrun_app.models.af2.utils.vertex_utils"].get_pipeline_job = MagicMock()
+        sys.modules["foldrun_app.core.base_tool"].BaseTool = _StubBaseTool
+        sys.modules["foldrun_app.core.vertex_utils"].get_pipeline_job = MagicMock()
 
         src_path = (
             Path(__file__).resolve().parents[4]
             / "foldrun_app"
-            / "models"
-            / "af2"
+            / "core"
             / "tools"
             / "cleanup_gcs_files.py"
         )
         spec = importlib.util.spec_from_file_location(
-            "foldrun_app.models.af2.tools.cleanup_gcs_files", src_path
+            "foldrun_app.core.tools.cleanup_gcs_files", src_path
         )
         mod = importlib.util.module_from_spec(spec)
-        sys.modules["foldrun_app.models.af2.tools.cleanup_gcs_files"] = mod
+        sys.modules["foldrun_app.core.tools.cleanup_gcs_files"] = mod
         spec.loader.exec_module(mod)
-        return mod.AF2CleanupGCSFilesTool
+        return mod.CleanupGCSFilesTool
 
 
-AF2CleanupGCSFilesTool = _load_cleanup_tool_class()
+CleanupGCSFilesTool = _load_cleanup_tool_class()
 
 
-class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
+class TestCleanupGCSFilesSecurity(unittest.TestCase):
     """Tests for CWE-284 (_delete_paths) and CWE-20 (_cleanup_job) remediations."""
 
     def setUp(self):
@@ -83,11 +79,11 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
         self.mock_config.region = "us-central1"
         self.mock_config.bucket_name = "test-af2-bucket"
         with patch("foldrun_app.core.base_tool._ensure_clients"):
-            self.tool = AF2CleanupGCSFilesTool(
+            self.tool = CleanupGCSFilesTool(
                 tool_config={"name": "cleanup_gcs_files"}, config=self.mock_config
             )
 
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
     def test_delete_paths_rejects_mismatched_bucket(self, mock_storage_client):
         """Finding 3.2/4.16: Reject GCS paths targeting a different bucket."""
         with self.assertRaises(ValueError):
@@ -97,7 +93,7 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
                 confirm_delete=False,
             )
 
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
     def test_delete_paths_rejects_empty_prefix_or_root_bucket(self, mock_storage_client):
         """Finding 3.2/4.16: Reject root bucket paths that expand to empty prefix."""
         for root_path in [
@@ -112,7 +108,7 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
                     confirm_delete=False,
                 )
 
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
     def test_delete_paths_enforces_base_prefix_allowlist(self, mock_storage_client):
         """Finding 3.2/4.16: Reject paths outside allowlisted prefixes or root base dirs."""
         for disallowed_path in [
@@ -129,7 +125,7 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
                     confirm_delete=False,
                 )
 
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
     def test_delete_paths_allows_valid_pipeline_runs_and_fasta_paths(self, mock_storage_client):
         """Valid paths under pipeline_runs/ and fasta/ succeed."""
         mock_bucket = MagicMock()
@@ -147,8 +143,8 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
         )
         self.assertEqual(result["files_found"], 1)
 
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.get_pipeline_job")
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.get_pipeline_job")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
     def test_cleanup_job_rejects_generic_and_short_job_ids(self, mock_storage_client, mock_get_job):
         """Finding 4.17: Reject generic/short job_ids like 'pipeline', 'runs', '/', '_'."""
         mock_get_job.side_effect = RuntimeError("Not found")
@@ -161,8 +157,8 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
                     include_fasta=False,
                 )
 
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.get_pipeline_job")
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.get_pipeline_job")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
     def test_cleanup_job_matches_path_segments_not_unanchored_substring(
         self, mock_storage_client, mock_get_job
     ):
@@ -206,7 +202,7 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
             ["gs://test-af2-bucket/pipeline_runs/20260101_120000/job_alpha/output.pdb"],
         )
 
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
     def test_delete_paths_allows_of3_and_boltz2_query_files(self, mock_storage_client):
         """Allow cleanup of of3_queries/ and boltz2_queries/ subpaths."""
         mock_bucket = MagicMock()
@@ -233,8 +229,8 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.tool._delete_paths([root_prefix], search_only=True, confirm_delete=False)
 
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.get_pipeline_job")
-    @patch("foldrun_app.models.af2.tools.cleanup_gcs_files.storage.Client")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.get_pipeline_job")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
     def test_cleanup_job_discovers_boltz2_timestamp_and_query_yaml(
         self, mock_storage_client, mock_get_job
     ):
@@ -271,6 +267,62 @@ class TestAF2CleanupGCSFilesSecurity(unittest.TestCase):
             result["files_found"]["fasta"][0]["path"].endswith(
                 "boltz2_queries/boltz2-inference-pipeline-20260203141516.yaml"
             )
+        )
+
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.get_pipeline_job")
+    @patch("foldrun_app.core.tools.cleanup_gcs_files.storage.Client")
+    def test_cleanup_job_discovers_and_deletes_af3_predictions_directory(
+        self, mock_storage_client, mock_get_job
+    ):
+        """Mode 1 (job_id=...) discovers and deletes synchronous AF3 af3_predictions/<job_name>/."""
+        mock_get_job.side_effect = RuntimeError("Sync AF3 job not in Vertex Pipelines")
+        mock_bucket = MagicMock()
+        mock_storage_client.return_value.bucket.return_value = mock_bucket
+
+        af3_input_blob = MagicMock()
+        af3_input_blob.name = "af3_predictions/af3-sync-hemoglobin-1/input.json"
+        af3_input_blob.size = 1024
+        af3_input_blob.updated = None
+
+        af3_cif_blob = MagicMock()
+        af3_cif_blob.name = "af3_predictions/af3-sync-hemoglobin-1/seed-1_sample-0/model.cif"
+        af3_cif_blob.size = 8192
+        af3_cif_blob.updated = None
+
+        def list_blobs_side_effect(prefix=None, delimiter=None):
+            if prefix == "af3_predictions/af3-sync-hemoglobin-1/":
+                return [af3_input_blob, af3_cif_blob]
+            return []
+
+        mock_bucket.list_blobs.side_effect = list_blobs_side_effect
+
+        deleted_blob_names = []
+
+        def blob_side_effect(blob_path: str):
+            b = MagicMock()
+            b.name = blob_path
+            b.size = 0
+            b.updated = None
+            b.exists.return_value = False
+            b.delete.side_effect = lambda: deleted_blob_names.append(blob_path)
+            return b
+
+        mock_bucket.blob.side_effect = blob_side_effect
+
+        result = self.tool._cleanup_job(
+            job_id="af3-sync-hemoglobin-1",
+            search_only=False,
+            confirm_delete=True,
+            include_fasta=False,
+        )
+        self.assertEqual(result["summary"]["pipeline_files"], 2)
+        self.assertEqual(result["deletion"]["deleted_count"], 2)
+        self.assertEqual(
+            deleted_blob_names,
+            [
+                "af3_predictions/af3-sync-hemoglobin-1/input.json",
+                "af3_predictions/af3-sync-hemoglobin-1/seed-1_sample-0/model.cif",
+            ],
         )
 
 

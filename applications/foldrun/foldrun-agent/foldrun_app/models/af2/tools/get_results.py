@@ -20,8 +20,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from foldrun_app.core.vertex_utils import get_pipeline_job, get_task_details, list_artifacts
+
 from ..base import AF2Tool
-from ..utils.vertex_utils import get_pipeline_job, get_task_details, list_artifacts
 
 logger = logging.getLogger(__name__)
 

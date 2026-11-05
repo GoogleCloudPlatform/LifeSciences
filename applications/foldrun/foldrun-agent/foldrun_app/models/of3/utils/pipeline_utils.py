@@ -16,12 +16,7 @@
 
 import os
 
-from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK  # noqa: F401
-from foldrun_app.core.pipeline_utils import (  # noqa: F401
-    compile_pipeline,
-    load_kfp_inference_pipeline,
-    model_pipeline_load_context,
-)
+from foldrun_app.core.pipeline_utils import load_kfp_inference_pipeline
 
 
 def load_vertex_pipeline(enable_flex_start: bool = False):

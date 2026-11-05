@@ -18,12 +18,12 @@ from typing import Any
 
 from google.cloud import storage
 
-from ..base import AF2Tool
-from ..utils.vertex_utils import get_pipeline_job
+from foldrun_app.core.base_tool import BaseTool
+from foldrun_app.core.vertex_utils import get_pipeline_job
 
 
-class AF2GetJobDetailsTool(AF2Tool):
-    """Tool for retrieving detailed job information including original FASTA sequence."""
+class GetJobDetailsTool(BaseTool):
+    """Tool for retrieving detailed job information including original input sequence/query."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """
@@ -101,10 +101,7 @@ class AF2GetJobDetailsTool(AF2Tool):
         fasta_sequence = None
 
         if input_path.startswith("gs://"):
-            # Parse GCS path: gs://bucket_name/path/to/file
-            path_parts = input_path[5:].split("/", 1)  # Remove 'gs://' and split
-            bucket_name = path_parts[0]
-            blob_path = path_parts[1]
+            bucket_name, blob_path = self._validate_gcs_uri(input_path)
 
             try:
                 # Download input from GCS

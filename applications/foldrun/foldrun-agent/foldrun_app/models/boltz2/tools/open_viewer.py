@@ -14,8 +14,6 @@
 
 """BOLTZ2 Open Viewer Tool - Opens the 3D structure viewer for Boltz-2 prediction results."""
 
-import webbrowser  # noqa: F401
-
 from foldrun_app.core.kfp_tools import KFPOpenViewerTool
 
 from ..base import BOLTZ2Tool

@@ -64,10 +64,10 @@ class TestListJobsMultiModelSupport:
     """Verify list_jobs supports query_name, num_tokens, and model-specific experiment labels."""
 
     def test_filters_and_labels_of3_boltz2_and_af3_jobs(self):
-        from foldrun_app.models.af2.config import Config
-        from foldrun_app.models.af2.tools.list_jobs import AF2ListJobsTool
+        from foldrun_app.core.config import CoreConfig
+        from foldrun_app.core.tools.list_jobs import ListJobsTool
 
-        tool = AF2ListJobsTool(tool_config={"name": "list_jobs"}, config=Config())
+        tool = ListJobsTool(tool_config={"name": "list_jobs"}, config=CoreConfig())
         jobs = [
             _make_job(
                 "af2-1",
@@ -124,11 +124,11 @@ class TestListJobsMultiModelSupport:
 
         with (
             patch(
-                "foldrun_app.models.af2.tools.list_jobs.list_pipeline_jobs",
+                "foldrun_app.core.tools.list_jobs.list_pipeline_jobs",
                 return_value=jobs,
             ),
             patch(
-                "foldrun_app.models.af2.tools.list_jobs.get_job_status",
+                "foldrun_app.core.tools.list_jobs.get_job_status",
                 side_effect=fake_status,
             ),
         ):
@@ -185,10 +185,10 @@ class TestGetJobDetailsMultiModelInputs:
     def test_non_af2_query_formats_not_mislabeled_as_of3(
         self, labels, params, raw_text, expected_header, expected_fmt, expected_model
     ):
-        from foldrun_app.models.af2.config import Config
-        from foldrun_app.models.af2.tools.get_job_details import AF2GetJobDetailsTool
+        from foldrun_app.core.config import CoreConfig
+        from foldrun_app.core.tools.get_job_details import GetJobDetailsTool
 
-        tool = AF2GetJobDetailsTool(tool_config={"name": "get_job_details"}, config=Config())
+        tool = GetJobDetailsTool(tool_config={"name": "get_job_details"}, config=CoreConfig())
         job = _make_job("job-1", "test-job", labels=labels, params=params)
 
         mock_storage = MagicMock()
@@ -196,11 +196,11 @@ class TestGetJobDetailsMultiModelInputs:
 
         with (
             patch(
-                "foldrun_app.models.af2.tools.get_job_details.get_pipeline_job",
+                "foldrun_app.core.tools.get_job_details.get_pipeline_job",
                 return_value=job,
             ),
             patch(
-                "foldrun_app.models.af2.tools.get_job_details.storage.Client",
+                "foldrun_app.core.tools.get_job_details.storage.Client",
                 return_value=mock_storage,
             ),
         ):
@@ -254,7 +254,7 @@ class TestAnalyzeJobStaleBlobCleanup:
 
         with (
             patch(
-                "foldrun_app.models.af2.tools.analyze_job.get_pipeline_job",
+                "foldrun_app.core.kfp_tools.get_pipeline_job",
                 return_value=job,
             ),
             patch(
@@ -270,11 +270,11 @@ class TestAnalyzeJobStaleBlobCleanup:
                 },
             ),
             patch(
-                "foldrun_app.models.af2.tools.analyze_job.storage.Client",
+                "foldrun_app.core.kfp_tools.storage.Client",
                 return_value=mock_storage,
             ),
             patch(
-                "foldrun_app.models.af2.tools.analyze_job.run_v2.JobsClient",
+                "foldrun_app.core.kfp_tools.run_v2.JobsClient",
                 mock_jobs_client,
             ),
         ):
@@ -298,14 +298,14 @@ class TestAnalyzeJobStaleBlobCleanup:
         from foldrun_app.models.of3.tools.analyze_job import OF3JobAnalysisTool
 
         prefix = "pipeline_runs/20260301_120000/analysis/"
-        for tool_cls, cfg_cls, mod_path in [
-            (OF3JobAnalysisTool, OF3Config, "foldrun_app.models.of3.tools.analyze_job"),
-            (BOLTZ2JobAnalysisTool, BOLTZ2Config, "foldrun_app.models.boltz2.tools.analyze_job"),
+        for tool_cls, cfg_cls in [
+            (OF3JobAnalysisTool, OF3Config),
+            (BOLTZ2JobAnalysisTool, BOLTZ2Config),
         ]:
             tool = tool_cls(tool_config={"name": "analyze"}, config=cfg_cls())
             blobs = self._make_stale_blobs(prefix)
             mock_storage = MagicMock()
             mock_storage.bucket.return_value.list_blobs.return_value = blobs
-            with patch(f"{mod_path}.storage.Client", return_value=mock_storage):
+            with patch("foldrun_app.core.kfp_tools.storage.Client", return_value=mock_storage):
                 deleted = tool._cleanup_stale_analysis_blobs(f"gs://test-bucket/{prefix}")
             assert deleted == 5

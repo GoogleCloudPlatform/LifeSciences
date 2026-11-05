@@ -265,7 +265,7 @@ class TestJobManagementSkills:
     """Tests for job_management skill wrappers."""
 
     def test_list_jobs_calls_correct_tool(self):
-        """list_jobs calls af2_list_jobs tool."""
+        """list_jobs calls list_jobs tool."""
         mock = _mock_tool({"jobs": [], "total": 0})
 
         with _patch_get_tool(mock, _JOB_MANAGEMENT) as mock_get:
@@ -273,12 +273,12 @@ class TestJobManagementSkills:
 
             list_jobs(state="running")
 
-            mock_get.assert_called_with("af2_list_jobs")
+            mock_get.assert_called_with("list_jobs")
             args = mock.run.call_args[0][0]
             assert args["state"] == "running"
 
     def test_check_job_status_calls_correct_tool(self):
-        """check_job_status calls af2_check_job_status tool."""
+        """check_job_status calls check_job_status tool."""
         mock = _mock_tool({"state": "RUNNING", "progress": 50})
 
         with _patch_get_tool(mock, _JOB_MANAGEMENT) as mock_get:
@@ -286,12 +286,12 @@ class TestJobManagementSkills:
 
             check_job_status(job_id="pipeline-123")
 
-            mock_get.assert_called_with("af2_check_job_status")
+            mock_get.assert_called_with("check_job_status")
             args = mock.run.call_args[0][0]
             assert args["job_id"] == "pipeline-123"
 
     def test_get_job_details_calls_correct_tool(self):
-        """get_job_details calls af2_get_job_details tool."""
+        """get_job_details calls get_job_details tool."""
         mock = _mock_tool({"job_id": "pipeline-123", "sequence": ">test\nMKT"})
 
         with _patch_get_tool(mock, _JOB_MANAGEMENT) as mock_get:
@@ -299,12 +299,12 @@ class TestJobManagementSkills:
 
             get_job_details(job_id="pipeline-123")
 
-            mock_get.assert_called_with("af2_get_job_details")
+            mock_get.assert_called_with("get_job_details")
             args = mock.run.call_args[0][0]
             assert args["job_id"] == "pipeline-123"
 
     def test_delete_job_calls_correct_tool(self):
-        """delete_job calls af2_delete_job tool with confirm flag."""
+        """delete_job calls delete_job tool with confirm flag."""
         mock = _mock_tool({"status": "deleted"})
 
         with _patch_get_tool(mock, _JOB_MANAGEMENT) as mock_get:
@@ -312,13 +312,13 @@ class TestJobManagementSkills:
 
             delete_job(job_id="pipeline-123", confirm=True)
 
-            mock_get.assert_called_with("af2_delete_job")
+            mock_get.assert_called_with("delete_job")
             args = mock.run.call_args[0][0]
             assert args["job_id"] == "pipeline-123"
             assert args["confirm"] is True
 
     def test_check_gpu_quota_calls_correct_tool(self):
-        """check_gpu_quota calls af2_check_gpu_quota tool."""
+        """check_gpu_quota calls check_gpu_quota tool."""
         mock = _mock_tool({"gpus": {"L4": {"available": 8}}})
 
         with _patch_get_tool(mock, _JOB_MANAGEMENT) as mock_get:
@@ -326,13 +326,13 @@ class TestJobManagementSkills:
 
             check_gpu_quota()
 
-            mock_get.assert_called_with("af2_check_gpu_quota")
+            mock_get.assert_called_with("check_gpu_quota")
 
     def test_job_management_instruction_enforces_hitl_deletion_policy(self):
-        """JOB_MANAGEMENT_INSTRUCTION explicitly enforces HITL user confirmation before delete_job."""
-        from foldrun_app.skills.job_management.instruction import JOB_MANAGEMENT_INSTRUCTION
+        """job_management skill instruction (from SKILL.md) explicitly enforces HITL user confirmation before delete_job."""
+        from foldrun_app.skills.registry import skill_registry
 
-        instruction_lower = JOB_MANAGEMENT_INSTRUCTION.lower()
+        instruction_lower = skill_registry.get_skill("job_management").instruction.lower()
         assert "human-in-the-loop" in instruction_lower
         assert "what will be deleted" in instruction_lower
         assert "permanent" in instruction_lower
@@ -410,7 +410,7 @@ class TestResultsAnalysisSkills:
             assert args["wait"] is True
 
     def test_analyze_job_calls_correct_tool(self):
-        """analyze_job calls af2_analyze_job_deep tool."""
+        """analyze_job calls analyze_job_deep tool."""
         mock = _mock_tool({"state": "FAILED", "error": "GPU timeout"})
 
         with _patch_get_tool(mock, _RESULTS_ANALYSIS) as mock_get:
@@ -418,7 +418,7 @@ class TestResultsAnalysisSkills:
 
             analyze_job(job_id="pipeline-123", detail_level="detailed")
 
-            mock_get.assert_called_with("af2_analyze_job_deep")
+            mock_get.assert_called_with("analyze_job_deep")
             args = mock.run.call_args[0][0]
             assert args["job_id"] == "pipeline-123"
             assert args["detail_level"] == "detailed"
@@ -472,7 +472,7 @@ class TestStorageManagementSkills:
     """Tests for storage_management skill wrappers."""
 
     def test_cleanup_gcs_files_calls_correct_tool(self):
-        """cleanup_gcs_files calls af2_cleanup_gcs_files tool."""
+        """cleanup_gcs_files calls cleanup_gcs_files tool."""
         mock = _mock_tool({"files_found": 5, "total_size_mb": 34.5})
 
         with _patch_get_tool(mock, _STORAGE_MANAGEMENT) as mock_get:
@@ -480,7 +480,7 @@ class TestStorageManagementSkills:
 
             cleanup_gcs_files(job_id="pipeline-123", search_only=True)
 
-            mock_get.assert_called_with("af2_cleanup_gcs_files")
+            mock_get.assert_called_with("cleanup_gcs_files")
             args = mock.run.call_args[0][0]
             assert args["job_id"] == "pipeline-123"
             assert args["search_only"] is True
@@ -501,7 +501,7 @@ class TestStorageManagementSkills:
             assert args["search_only"] is False
 
     def test_find_orphaned_gcs_files_calls_correct_tool(self):
-        """find_orphaned_gcs_files calls af2_find_orphaned_files tool."""
+        """find_orphaned_gcs_files calls find_orphaned_files tool."""
         mock = _mock_tool({"orphaned_count": 2})
 
         with _patch_get_tool(mock, _STORAGE_MANAGEMENT) as mock_get:
@@ -509,7 +509,7 @@ class TestStorageManagementSkills:
 
             find_orphaned_gcs_files(check_fasta=True, max_jobs_to_check=500)
 
-            mock_get.assert_called_with("af2_find_orphaned_files")
+            mock_get.assert_called_with("find_orphaned_files")
             args = mock.run.call_args[0][0]
             assert args["check_fasta"] is True
             assert args["max_jobs_to_check"] == 500

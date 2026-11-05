@@ -15,32 +15,14 @@
 """Startup initialization for AlphaFold 3 Vertex AI Endpoint tools."""
 
 import logging
-import os
-
-from foldrun_app.core.startup_utils import load_json_tool_configs
 
 logger = logging.getLogger(__name__)
 
 _config = None
-_tool_configs = None
-
-_TOOL_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "data", "alphafold3_tools.json")
-
-
-def get_tool_configs():
-    """Load and cache alphafold3_tools.json."""
-    global _tool_configs
-    if _tool_configs is None:
-        _tool_configs = load_json_tool_configs(_TOOL_CONFIG_PATH)
-    return _tool_configs
 
 
 def get_config():
-    """Get or create the singleton AF3Config instance.
-
-    Returns:
-        Initialized AF3Config instance.
-    """
+    """Get or create the singleton AF3Config instance."""
     global _config
     if _config is not None:
         return _config

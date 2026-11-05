@@ -12,21 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared model plugin startup helpers (JSON tool config loading and cached GPU detection)."""
+"""Shared model plugin startup helpers (singleton CoreConfig and cached GPU detection)."""
 
-import json
 import logging
-from typing import Any
 
 from foldrun_app.core.config import CoreConfig
 
 logger = logging.getLogger(__name__)
 
+_core_config: CoreConfig | None = None
 
-def load_json_tool_configs(config_path: str) -> list[dict[str, Any]]:
-    """Load tool definitions from a model's JSON manifest."""
-    with open(config_path, encoding="utf-8") as f:
-        return json.load(f)
+
+def get_core_config() -> CoreConfig:
+    """Get or create the shared model-agnostic CoreConfig singleton."""
+    global _core_config
+    if _core_config is None:
+        _core_config = CoreConfig()
+    return _core_config
+
+
+def reset_core_config() -> None:
+    """Reset the shared CoreConfig singleton (for testing)."""
+    global _core_config
+    _core_config = None
+    CoreConfig.clear_gpu_detection_cache()
 
 
 def auto_detect_model_gpus(

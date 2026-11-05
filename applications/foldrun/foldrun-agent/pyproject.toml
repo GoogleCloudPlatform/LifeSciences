@@ -68,6 +68,7 @@ packages = [
     "foldrun_app",
     "foldrun_app.app_utils",
     "foldrun_app.core",
+    "foldrun_app.core.tools",
     "foldrun_app.models",
     "foldrun_app.models.af2",
     "foldrun_app.models.af2.tools",
@@ -102,12 +103,11 @@ packages = [
 ]
 
 [tool.setuptools.package-data]
-"foldrun_app.models.af2" = ["data/*.json"]
-"foldrun_app.models.af3" = ["data/*.json"]
-"foldrun_app.models.boltz2" = ["data/*.json"]
-"foldrun_app.models.of3" = ["data/*.json"]
+"foldrun_app.skills" = ["packages/*/SKILL.md", "packages/*/references/*.md"]
 
 [tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]

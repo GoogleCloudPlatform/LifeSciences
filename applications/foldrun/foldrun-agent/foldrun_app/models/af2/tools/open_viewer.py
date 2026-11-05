@@ -14,8 +14,6 @@
 
 """AF2 Open Viewer Tool - Opens the 3D structure viewer for prediction results."""
 
-import webbrowser  # noqa: F401
-
 from foldrun_app.core.kfp_tools import KFPOpenViewerTool
 
 from ..base import AF2Tool

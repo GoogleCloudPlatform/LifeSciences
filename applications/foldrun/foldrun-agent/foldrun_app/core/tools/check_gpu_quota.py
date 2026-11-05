@@ -17,14 +17,13 @@
 import logging
 from typing import Any
 
+from foldrun_app.core.base_tool import BaseTool
 from foldrun_app.core.hardware import check_gpu_quota
-
-from ..base import AF2Tool
 
 logger = logging.getLogger(__name__)
 
 
-class AF2CheckGPUQuotaTool(AF2Tool):
+class CheckGPUQuotaTool(BaseTool):
     """Tool for checking GPU quota limits and current usage in a region."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:

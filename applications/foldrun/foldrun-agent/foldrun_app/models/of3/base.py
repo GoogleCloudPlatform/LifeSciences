@@ -27,8 +27,20 @@ logger = logging.getLogger(__name__)
 class OF3Tool(KFPModelTool):
     """Base class for OpenFold3 tools following ToolUniverse pattern."""
 
-    def __init__(self, tool_config: dict[str, Any], config: OF3Config | None = None):
-        super().__init__(tool_config, config or OF3Config())
+    def __init__(
+        self,
+        tool_config: dict[str, Any] | None = None,
+        config: OF3Config | None = None,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(
+            tool_config=tool_config,
+            config=config or OF3Config(),
+            name=name,
+            description=description,
+        )
 
     def _setup_compile_env(
         self,

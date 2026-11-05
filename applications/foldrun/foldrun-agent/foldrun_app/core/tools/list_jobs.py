@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for listing AlphaFold2 jobs."""
+"""Tool for listing FoldRun prediction jobs."""
 
 import logging
 from datetime import datetime
 from typing import Any
 
-from ..base import AF2Tool
-from ..utils.vertex_utils import get_job_status, list_pipeline_jobs
+from foldrun_app.core.base_tool import BaseTool
+from foldrun_app.core.vertex_utils import get_job_status, list_pipeline_jobs
 
 logger = logging.getLogger(__name__)
 
 
-class AF2ListJobsTool(AF2Tool):
-    """Tool for listing AlphaFold2 prediction jobs."""
+class ListJobsTool(BaseTool):
+    """Tool for listing FoldRun prediction jobs."""
 
     def _format_duration(self, seconds: float | None) -> str:
         """Format duration in human-readable format."""

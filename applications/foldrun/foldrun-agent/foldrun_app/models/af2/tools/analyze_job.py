@@ -17,13 +17,11 @@
 import logging
 from typing import Any
 
-from google.cloud import run_v2, storage  # noqa: F401
-
 from foldrun_app.core.kfp_tools import KFPAnalyzeJobTool
+from foldrun_app.core.vertex_utils import get_task_details
 from foldrun_common import build_analysis_task_config
 
 from ..base import AF2Tool
-from ..utils.vertex_utils import get_pipeline_job, get_task_details  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

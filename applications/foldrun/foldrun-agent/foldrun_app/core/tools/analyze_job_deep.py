@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tool for deep analysis of AlphaFold jobs (any state)."""
+"""Tool for deep analysis of FoldRun pipeline jobs (any state)."""
 
 import logging
 import re
@@ -21,13 +21,13 @@ from typing import Any
 from google.cloud import aiplatform
 from google.cloud import logging as cloud_logging
 
-from ..base import AF2Tool
+from foldrun_app.core.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
 
 
-class AF2AnalyzeJobDeepTool(AF2Tool):
-    """Tool for comprehensive deep analysis of AlphaFold jobs in any state."""
+class AnalyzeJobDeepTool(BaseTool):
+    """Tool for comprehensive deep analysis of FoldRun jobs in any state."""
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Perform analysis of a specific job with configurable detail level.

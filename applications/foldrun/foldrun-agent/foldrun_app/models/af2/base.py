@@ -37,9 +37,21 @@ _CompileEnvContext = CompileEnvContext
 class AF2Tool(KFPModelTool):
     """Base class for AlphaFold2 tools following ToolUniverse pattern."""
 
-    def __init__(self, tool_config: dict[str, Any], config: Config | None = None):
+    def __init__(
+        self,
+        tool_config: dict[str, Any] | None = None,
+        config: Config | None = None,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ):
         """Initialize AF2 tool with configuration."""
-        super().__init__(tool_config, config or Config())
+        super().__init__(
+            tool_config=tool_config,
+            config=config or Config(),
+            name=name,
+            description=description,
+        )
 
     def _setup_compile_env(
         self,

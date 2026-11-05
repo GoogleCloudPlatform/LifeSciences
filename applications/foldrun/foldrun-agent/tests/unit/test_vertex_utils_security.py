@@ -249,7 +249,7 @@ class TestVertexTaskDetailsAndEpochGuard:
     def test_unset_epoch_start_time_ignored(self):
         from datetime import UTC, datetime
 
-        from foldrun_app.models.af2.utils.vertex_utils import get_job_status, get_task_details
+        from foldrun_app.core.vertex_utils import get_job_status, get_task_details
 
         job = MagicMock()
         job.name = "projects/my-project/locations/us-central1/pipelineJobs/job-1"

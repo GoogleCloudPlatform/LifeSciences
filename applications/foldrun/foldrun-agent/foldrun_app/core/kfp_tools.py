@@ -232,8 +232,20 @@ class KFPAnalyzeJobTool(KFPModelTool):
     display_label: ClassVar[str] = ""
     check_existing_before_discovery: ClassVar[bool] = True
 
-    def __init__(self, tool_config: dict[str, Any], config: Any = None):
-        super().__init__(tool_config, config)
+    def __init__(
+        self,
+        tool_config: dict[str, Any] | None = None,
+        config: Any = None,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(
+            tool_config=tool_config,
+            config=config,
+            name=name,
+            description=description,
+        )
         self.job_name = os.getenv("ANALYSIS_JOB_NAME", "foldrun-analysis-job")
 
     def _storage_module(self) -> Any:
@@ -753,8 +765,20 @@ class KFPGetAnalysisResultsTool(KFPModelTool):
 class KFPOpenViewerTool(KFPModelTool):
     """Shared base class for opening the FoldRun 3D structure viewer for a KFP job."""
 
-    def __init__(self, tool_config: dict[str, Any], config: Any = None):
-        super().__init__(tool_config, config)
+    def __init__(
+        self,
+        tool_config: dict[str, Any] | None = None,
+        config: Any = None,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ):
+        super().__init__(
+            tool_config=tool_config,
+            config=config,
+            name=name,
+            description=description,
+        )
         self.viewer_base_url = self.config.viewer_url
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:

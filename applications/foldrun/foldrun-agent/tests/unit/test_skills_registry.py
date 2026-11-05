@@ -14,6 +14,8 @@
 
 """Unit tests for FoldRun modular Skill and SkillRegistry architecture."""
 
+from pathlib import Path
+
 import pytest
 from google.adk.tools import FunctionTool
 from google.adk.tools.skill_toolset import SkillToolset
@@ -296,3 +298,36 @@ class TestSkillRegistry:
         skill_names = {s.frontmatter.name for s in toolset._skills.values()}
         assert "job-submission" in skill_names
         assert "submit_af2_monomer_prediction" in toolset._provided_tools_by_name
+
+    def test_compile_instruction_includes_references(self):
+        """compile_instruction(include_references=True) embeds package references/*.md."""
+        import re
+
+        without_refs = skill_registry.compile_instruction(include_references=False)
+        with_refs = skill_registry.compile_instruction(include_references=True)
+
+        assert len(with_refs) > len(without_refs)
+        # Verify both results-analysis/references/of3-metrics.md and af3-metrics.md are embedded
+        assert "summary_confidences.json" in with_refs
+        assert "chain_pair_pae_min" in with_refs
+        assert "has_clash" in with_refs
+
+        # Guard against bare {identifier} substrings that ADK inject_session_state
+        # would treat as required session state context variables at runtime.
+        bare_vars = [
+            m.group()
+            for m in re.finditer(r"\{+[^{}]*\}+", with_refs)
+            if m.group().lstrip("{").rstrip("}").strip().isidentifier()
+        ]
+        assert bare_vars == [], (
+            f"Found unescaped ADK template variables in instruction: {bare_vars}"
+        )
+
+    def test_single_source_prompt_and_tool_registry_hygiene(self):
+        """Verify legacy duplicate prompt modules and unconsumed *_tools.json files are retired."""
+        app_root = Path(__file__).resolve().parents[2] / "foldrun_app"
+        assert not (app_root / "v1_instruction.py").exists()
+        assert list((app_root / "skills").glob("*/instruction.py")) == []
+        assert list((app_root / "models").glob("*/data/*_tools.json")) == []
+        assert not (app_root / "models" / "af2" / "utils" / "vertex_utils.py").exists()
+        assert not (app_root / "models" / "af2" / "utils" / "alphafold_db.py").exists()

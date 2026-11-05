@@ -19,7 +19,6 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-import numpy as np  # noqa: F401
 import pytest
 
 

@@ -52,22 +52,40 @@ def _ensure_clients(config: CoreConfig):
 class BaseTool:
     """Model-agnostic base class for FoldRun tools."""
 
-    def __init__(self, tool_config: dict[str, Any], config: CoreConfig):
+    def __init__(
+        self,
+        tool_config: dict[str, Any] | None = None,
+        config: CoreConfig | None = None,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ):
         """
         Initialize base tool with configuration.
 
         Args:
-            tool_config: Tool configuration dictionary
+            tool_config: Optional legacy tool configuration dictionary
             config: Global configuration object
+            name: Optional tool name override
+            description: Optional tool description override
         """
-        self.tool_config = tool_config
-        self.name = tool_config.get("name")
-        self.description = tool_config.get("description")
+        cfg_dict = dict(tool_config) if isinstance(tool_config, dict) else {}
+        if name is not None:
+            cfg_dict.setdefault("name", name)
+        if description is not None:
+            cfg_dict.setdefault("description", description)
+
+        self.tool_config = cfg_dict
+        self.name = cfg_dict.get("name") or name
+        self.description = (
+            cfg_dict.get("description") or description or (self.__doc__ or "").strip()
+        )
 
         self.config = config
 
-        # Initialize shared clients (no-op after first call)
-        _ensure_clients(self.config)
+        if self.config is not None:
+            # Initialize shared clients (no-op after first call)
+            _ensure_clients(self.config)
 
         # Use the shared GCS client
         self.storage_client = _shared_storage_client
