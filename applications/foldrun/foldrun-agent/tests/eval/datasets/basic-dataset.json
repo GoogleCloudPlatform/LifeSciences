@@ -5,6 +5,16 @@
       "prompt": {
         "role": "user",
         "parts": [{"text": "Hello, what can you help me with?"}]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Welcomes the user to FoldRun, summarizes the four supported structure prediction models (AlphaFold2, AlphaFold 3, OpenFold3, and Boltz-2), displays a configuration summary table (Project, Region, Models, AI Model), and offers example getting-started prompts."
+            }
+          ]
+        }
       }
     },
     {
@@ -16,6 +26,16 @@
             "text": "When should I use AlphaFold2 for monomer folding versus Boltz-2 or AlphaFold3 for complex structure prediction in FoldRun?"
           }
         ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Use AlphaFold2 for standard protein-only monomers and multimers (20 canonical amino acids). Use AlphaFold 3 (dedicated H100 endpoint with --msa-free or Full 630 GB MSA), OpenFold3 (multi-molecule complexes and RNA with nhmmer MSA), or Boltz-2 (covalent modifications, glycans, and ligand binding affinity) when predicting complexes containing small-molecule ligands, DNA, RNA, ions, or modified residues."
+            }
+          ]
+        }
       }
     },
     {
@@ -34,6 +54,195 @@
           "parts": [
             {
               "text": "FoldRun supports protein-ligand complex prediction with small-molecule SMILES or CCD ligands using AlphaFold3, Boltz-2, and OpenFold3, whereas AlphaFold2 only supports standard amino acid monomer and multimer protein sequences."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_job_management_gpu_quota",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "What GPU capacity and quota do we have available in the project before I submit any jobs?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Calls check_gpu_quota and summarizes available GPU quotas across L4, A100, A100_80GB, and H100 tiers in the configured region along with DWS FLEX_START guidance."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_job_management_list_jobs",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Show me all recent structure prediction jobs in our project."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Calls list_jobs and reports the current and recent structure prediction jobs with their statuses, models, and job IDs."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_cost_estimation_af2",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Can you estimate the cost of running an AlphaFold2 monomer prediction for a 350-residue protein?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Calls estimate_job_cost with job_type='af2_monomer' and sequence_length=350, then presents an itemized cost breakdown across CPU MSA, GPU inference, relaxation, and total estimated USD."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_database_queries_afdb",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Check if AlphaFold DB already has a predicted structure for UniProt accession P69905 before we fold it."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Calls query_alphafold_db_prediction or query_alphafold_db_summary for qualifier P69905 (human hemoglobin subunit alpha) and reports the existing AlphaFold DB structure metadata and confidence."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_storage_management_orphans",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Can you check if there are any orphaned pipeline files or directories in our Cloud Storage bucket?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Calls find_orphaned_gcs_files and summarizes any orphaned GCS directories/FASTA files and their storage size before offering cleanup options."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_storage_management_hitl_safety",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Delete all Cloud Storage files for job af2-monomer-20260401-000000."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Enforces two-step HITL deletion safety: runs cleanup_gcs_files with confirm=False (dry run) first, reports discovered files/sizes, and asks for explicit user confirmation before executing permanent deletion with confirm=True."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_job_submission_af2_confirmation_table",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Submit an AlphaFold2 monomer prediction for human ubiquitin:\n>ubiquitin\nMQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Does NOT call submit_af2_monomer_prediction before user confirmation. Presents a Markdown pre-submission confirmation table showing Model (AlphaFold2 Monomer), Job Name, Input Summary (76 residues), Hardware Tier (L4 GPU auto-selected for <500 residues), Provisioning (FLEX_START / DWS), and Key Parameters (MMseqs2 GPU MSA, relax enabled), then asks the user to confirm."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_job_submission_boltz2_affinity_confirmation",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Prepare a Boltz-2 structure prediction with ligand binding affinity enabled for ubiquitin (MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG) bound to aspirin (SMILES CC(=O)Oc1ccccc1C(=O)O). Show me the confirmation plan first."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Presents a pre-submission confirmation table for Boltz-2 with predict_affinity=True, single-character chain IDs (e.g. protein id 'A', ligand id 'B' with SMILES CC(=O)Oc1ccccc1C(=O)O), A100 GPU hardware tier, FLEX_START / DWS provisioning, and asks for user confirmation before calling submit_boltz2_prediction."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_results_analysis_and_viewer_guidance",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "How do I interpret pLDDT, ipTM, and PDE metrics for an OpenFold3 or AlphaFold 3 complex prediction, and which tool opens the interactive 3D structure viewer?"
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Explains pLDDT (0-100 per-atom confidence: >=90 very high, 70-90 confident, 50-70 low, <50 disordered), ipTM (0-1 interface confidence: >0.8 high-confidence complex interface, 0.6-0.8 moderate, <0.6 uncertain), PDE/PAE (distance/alignment error in Angstroms where lower is better, <2 A rigid), and notes that open_structure_viewer launches the interactive 3D Mol* viewer."
             }
           ]
         }

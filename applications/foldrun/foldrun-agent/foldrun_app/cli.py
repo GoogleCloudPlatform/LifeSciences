@@ -1,17 +1,3 @@
-# Copyright 2026 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 #!/usr/bin/env python3
 # Copyright 2026 Google LLC
 #
@@ -27,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""FoldRun ADK Agent - AI Agent for protein structure prediction (AlphaFold2 + OpenFold3) using native FunctionTools."""
+"""FoldRun ADK Agent CLI - Interactive and single-query runner for FoldRun structure prediction."""
 
 import asyncio
 import logging
@@ -44,7 +30,16 @@ from google.genai.errors import ClientError, ServerError
 from rich.console import Console
 from rich.panel import Panel
 
-from foldrun_app.agent import create_alphafold_agent as create_base_agent
+from foldrun_app.agent import create_alphafold_agent, create_foldrun_agent
+from foldrun_common import ALLOWED_GEMINI_AGENT_MODELS, DEFAULT_GEMINI_AGENT_MODEL
+
+
+def create_base_agent(model: str | None = None) -> LlmAgent:
+    """Create the FoldRun agent honoring the FOLDRUN_V2 feature flag (default: true)."""
+    if os.getenv("FOLDRUN_V2", "true").lower() in ("true", "1", "yes"):
+        return create_foldrun_agent(model=model)
+    return create_alphafold_agent(model=model)
+
 
 # Initialize console for rich output
 console = Console()
@@ -130,7 +125,7 @@ async def create_pretty_agent():
     region = os.getenv("GCP_REGION", "Not configured")
     gcs_bucket = os.getenv("GCS_BUCKET_NAME", "Not configured")
     viewer_base_url = os.getenv("FOLDRUN_VIEWER_URL", "Not configured")
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    gemini_model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_AGENT_MODEL)
 
     config_info = f"""[bold cyan]FoldRun Agent Configuration[/bold cyan]
 
@@ -337,8 +332,8 @@ async def main():
         "--model",
         type=str,
         default=None,
-        choices=["gemini-3.8-flash", "gemini-4-argon"],
-        help="Gemini model to use (default: from .env or gemini-3.8-flash)",
+        choices=list(ALLOWED_GEMINI_AGENT_MODELS),
+        help=f"Gemini model to use (default: from .env or {DEFAULT_GEMINI_AGENT_MODEL})",
     )
 
     args = parser.parse_args()

@@ -18,7 +18,7 @@ from foldrun_app.skills._tool_registry import get_tool
 
 
 def check_job_status(job_id: str) -> dict:
-    """Check status and progress of an AlphaFold2 prediction job."""
+    """Check status and progress of a FoldRun structure prediction job (AF2, OF3, Boltz-2, or AF3)."""
     return get_tool("check_job_status").run({"job_id": job_id})
 
 
@@ -34,29 +34,18 @@ def list_jobs(
     limit: int = 20,
     check_analysis: bool = True,
 ) -> dict:
-    """
-    List AlphaFold2 prediction jobs with detailed metadata similar to Agent Platform console.
+    """List FoldRun prediction jobs (AF2, OF3, Boltz-2, AF3) with metadata and console URLs.
 
-    IMPORTANT: Use simple lowercase values for the state parameter:
-    - state: Use "running", "failed", "succeeded", "pending", or "cancelled" (lowercase, simple words)
-      DO NOT use PIPELINE_STATE_* format or snake_case. Just use the simple word.
-
-    Other filters:
-    - job_type: Use "monomer" or "multimer"
-    - gpu_type: Use "l4", "a100", or "a100-80gb"
-    - seq_name: Partial match on sequence name (case-insensitive)
-    - min_seq_length: Minimum sequence length in residues (e.g., 100)
-    - max_seq_length: Maximum sequence length in residues (e.g., 500)
-    - limit: Maximum number of jobs to return (default: 20)
-    - check_analysis: Check if analysis exists for succeeded jobs (default: True)
-    - label_filter: Advanced custom label filters (dict format)
-
-    Examples:
-    - list_jobs(state="succeeded") - List all succeeded jobs
-    - list_jobs(state="failed", limit=10) - List 10 most recent failed jobs
-    - list_jobs(job_type="multimer", gpu_type="a100") - List multimer jobs on A100 GPUs
-
-    Returns comprehensive job information including duration, timestamps, labels, and console URLs.
+    Args:
+        state: Simple lowercase word: "running", "failed", "succeeded", "pending", or "cancelled" (never PIPELINE_STATE_*).
+        job_type: "monomer" or "multimer".
+        gpu_type: "l4", "a100", or "a100-80gb".
+        seq_name: Case-insensitive partial sequence name filter.
+        min_seq_length: Minimum sequence length in residues.
+        max_seq_length: Maximum sequence length in residues.
+        limit: Max jobs to return (default 20).
+        check_analysis: Check if analysis exists for succeeded jobs (default True).
+        label_filter: Custom label filter dict.
     """
     return get_tool("list_jobs").run(
         {
@@ -75,46 +64,22 @@ def list_jobs(
 
 
 def get_job_details(job_id: str) -> dict:
-    """
-    Get detailed job information including original FASTA sequence and all submission parameters.
-
-    Use this to retrieve job metadata for failed jobs that you want to resubmit with different
-    settings (e.g., different GPU type). Returns complete job configuration, timing info,
-    and resubmission-ready parameters.
-    """
+    """Get original FASTA sequence, submission parameters, and timing metadata for a job."""
     return get_tool("get_job_details").run({"job_id": job_id})
 
 
 def delete_job(job_id: str, confirm: bool = False) -> dict:
-    """
-    Delete a pipeline job from Agent Platform.
-
-    This removes the job metadata and history from Agent Platform Pipelines.
-    WARNING: This action cannot be undone.
-
-    Note: This does NOT delete the output files in GCS - those must be deleted separately
-    using the GCS console or gcloud storage commands.
+    """Permanently delete a pipeline job from Agent Platform (does not delete GCS files).
 
     Args:
-        job_id: Job ID to delete
-        confirm: Must be True to proceed with deletion (safety check)
+        job_id: Job ID to delete.
+        confirm: Must be True after explicit user approval.
     """
     return get_tool("delete_job").run({"job_id": job_id, "confirm": confirm})
 
 
 def check_gpu_quota(region: str | None = None) -> dict:
-    """
-    Check GPU quota limits and current usage in the configured region.
-
-    Shows available capacity for L4, A100 (40GB), and A100 (80GB) GPUs,
-    both on-demand and preemptible/spot instances. Use this before submitting
-    jobs to understand GPU availability and whether FLEX_START is needed.
-
-    Args:
-        region: Region to check quotas for (default: configured region)
-
-    Returns quota limits, current usage, available capacity, and recommendations.
-    """
+    """Check GPU quota limits and availability for L4, A100 (40GB/80GB), and H100 GPUs in the region."""
     return get_tool("check_gpu_quota").run({"region": region} if region else {})
 
 

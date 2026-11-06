@@ -1,6 +1,6 @@
 ---
 name: cost-estimation
-description: Job cost forecasting, on-demand vs DWS spot pricing comparison, and spending analysis
+description: Forecasts per-job and monthly GCP compute and infrastructure costs across on-demand and DWS FLEX_START spot pricing, and calculates actual spend for completed jobs. Use when the user asks how much a prediction or monthly workload will cost, asks about past job spend, or during pre-submission confirmation.
 metadata:
   adk_additional_tools:
     - estimate_job_cost
@@ -10,21 +10,10 @@ metadata:
 
 # Cost Estimation
 
-- **Per-job cost**: Use estimate_job_cost to show users the expected cost before submitting a prediction
-  - Supports AF2 monomer, AF2 multimer, and OF3 job types
-  - Returns per-phase breakdown (MSA, predict, relax) with both **on-demand** and **DWS FLEX_START** (spot) pricing side by side
-  - GPU auto-selection matches the submission tools (L4 for small proteins, A100 for larger)
-  - **IMPORTANT**: Always present both pricing columns so users can compare. FoldRun defaults to FLEX_START.
-  - **Proactive use**: When showing the pre-submission confirmation table, include cost estimate
-- **Monthly projection**: Use estimate_monthly_cost for budget planning and TCO analysis
-  - Input monthly job volumes by type (AF2 monomer, multimer, OF3)
-  - Returns compute + infrastructure + other costs with monthly and annual totals for both pricing modes
-  - Infrastructure includes: Filestore, GCS, Artifact Registry, Agent Runtime, Cloud Run, VPC/NAT
-  - Use include_infrastructure=False to see compute-only costs
-- **Actual costs**: Use get_actual_job_costs to retrieve costs for completed prediction jobs
-  - Calculates costs from actual Agent Platform job runtimes and machine specs
-  - Groups costs by pipeline run with per-phase breakdown (MSA, predict, relax)
-  - Shows estimate vs actual comparison with accuracy percentage
-  - Provide a pipeline_job_id for a specific run, or omit to see all recent jobs
-  - Use this when users ask "how much did that job cost?" or "show me my spending"
-- **IMPORTANT disclaimer**: These tools return estimates based on Google Cloud **list pricing**. Always remind users that actual costs depend on their organization's pricing agreement with Google Cloud (negotiated rates, CUDs, enterprise discounts). The disclaimer is included in every tool response — surface it to the user.
+- **Per-Job Cost Forecast (`estimate_job_cost`)**: Estimates compute cost before submitting a prediction (`af2_monomer`, `af2_multimer`, `of3`, or `boltz2`).
+  - Returns per-phase breakdown (MSA, predict, relax) with both **on-demand** and **DWS FLEX_START** (spot) pricing side by side.
+  - GPU auto-selection matches the submission tools (`A100` 40GB default, `A100_80GB` for large sequences, or explicit `L4` override).
+  - Always present both pricing columns so users can compare (FoldRun defaults to `DWS FLEX_START`).
+- **Monthly Budget Projection (`estimate_monthly_cost`)**: Models monthly and annual TCO from expected job volumes plus shared infrastructure (Filestore, GCS, Artifact Registry, Agent Runtime, Cloud Run, VPC/NAT; pass `include_infrastructure=False` for compute-only).
+- **Actual Job Spend (`get_actual_job_costs`)**: Calculates actual costs from completed PipelineJob task runtimes and machine specs, including estimate-vs-actual accuracy. Pass `pipeline_job_id` for a single run or omit for recent jobs.
+- **Pricing Disclaimer**: Always remind users that estimates use Google Cloud **list pricing** and actual spend depends on their organization's negotiated rates, CUDs, or enterprise discounts.

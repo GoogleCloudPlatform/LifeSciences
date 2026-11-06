@@ -16,11 +16,9 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
-import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -313,18 +311,7 @@ class BaseStructureAnalyzer(ABC):
         render_fn: Callable[[str], None],
     ) -> str | None:
         """Render a plot to a temporary PNG file, upload to GCS, and clean up."""
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_f:
-            local_plot_path = tmp_f.name
-
-        try:
-            render_fn(local_plot_path)
-            if os.path.exists(local_plot_path) and os.path.getsize(local_plot_path) > 0:
-                shared_utils.upload_to_gcs(local_plot_path, plot_uri)
-                return plot_uri
-            return None
-        finally:
-            if os.path.exists(local_plot_path):
-                os.remove(local_plot_path)
+        return shared_utils.render_and_upload_plot(plot_uri, render_fn)
 
     def analyze_sample(self, pred_idx: int, pred: dict[str, Any]) -> dict[str, Any]:
         """Analyze a single predicted sample, render plots, and return validated dict."""
@@ -636,19 +623,11 @@ class BaseStructureAnalyzer(ABC):
 
         AnalysisSummary.model_validate(summary_data)
         summary_uri = f"{analysis_path}summary.json"
-        summary_data = shared_utils._sanitize_data(summary_data)
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as tmp_f:
-            local_summary = tmp_f.name
-            json.dump(summary_data, tmp_f, indent=2, allow_nan=False)
-
-        try:
-            shared_utils.upload_to_gcs(local_summary, summary_uri)
-        finally:
-            if os.path.exists(local_summary):
-                os.remove(local_summary)
+        summary_data = shared_utils.upload_json_to_gcs(
+            summary_data,
+            summary_uri,
+            prefix="foldrun_summary_",
+        )
 
         logger.info(f"Consolidation complete! Summary written to {summary_uri}")
         return summary_data
@@ -677,21 +656,11 @@ class BaseStructureAnalyzer(ABC):
             for pred_idx in assigned_indices:
                 pred = predictions[pred_idx]
                 output_uri = pred["output_uri"]
-                analysis = shared_utils._sanitize_data(
-                    self.analyze_sample(pred_idx, pred)
+                shared_utils.upload_json_to_gcs(
+                    self.analyze_sample(pred_idx, pred),
+                    output_uri,
+                    prefix=f"foldrun_sample_{pred_idx}_",
                 )
-
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".json", delete=False
-                ) as tmp_f:
-                    local_json = tmp_f.name
-                    json.dump(analysis, tmp_f, indent=2, allow_nan=False)
-
-                try:
-                    shared_utils.upload_to_gcs(local_json, output_uri)
-                finally:
-                    if os.path.exists(local_json):
-                        os.remove(local_json)
 
             consolidator_task_index = min(stride, total_predictions) - 1
             if task_index == consolidator_task_index:

@@ -35,6 +35,8 @@ from .gcs import (
     validate_gcs_uri,
 )
 from .models import (
+    ALLOWED_GEMINI_AGENT_MODELS,
+    DEFAULT_GEMINI_AGENT_MODEL,
     MODEL_TYPE_ALIASES,
     SUPPORTED_MODEL_TYPES,
     AF2PredictionTask,
@@ -60,6 +62,8 @@ from .models import (
 from .report import build_archive_readme, build_expert_analysis_markdown
 
 __all__ = [
+    "ALLOWED_GEMINI_AGENT_MODELS",
+    "DEFAULT_GEMINI_AGENT_MODEL",
     "JOB_ID_PATTERN",
     "MAX_DECOMPRESSED_ZST_BYTES",
     "MODEL_TYPE_ALIASES",

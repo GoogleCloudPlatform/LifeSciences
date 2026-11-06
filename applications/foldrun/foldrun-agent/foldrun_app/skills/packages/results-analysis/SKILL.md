@@ -1,6 +1,6 @@
 ---
 name: results-analysis
-description: Quality assessment, confidence scoring (pLDDT, PAE, ipTM), and parallel evaluation of predicted protein structures
+description: Evaluates predicted structures using pLDDT, PAE, PDE, pTM, ipTM, and binding affinity metrics, triggers parallel Cloud Run analysis jobs, and generates signed download URLs for structure archives. Use when the user asks to analyze a completed job, interpret confidence or affinity scores, troubleshoot a failed run, or download PDB/CIF/ZIP artifacts.
 metadata:
   adk_additional_tools:
     - get_prediction_results
@@ -13,109 +13,38 @@ metadata:
 
 # Results & Analysis — Quality Assessment
 
-- **Download artifacts & ZIP bundle**: Use `download_job_artifacts` to generate 60-minute GCS V4 Signed URLs for the complete job archive (`artifacts_bundle.zip`, containing ranked structures, plots, Gemini expert report `.md`, inputs, and `summary.json`) as well as individual structures and plots. Always present signed HTTPS URLs (`artifacts_bundle_signed_url`, `best_structure_signed_url`) instead of raw `gs://` or GCS Console links so isolated end users can download directly in their browser.
-- **Download results**: Use get_prediction_results to retrieve AF2 PDB files
-- **Analyze quality**: Use analyze_prediction_quality for pLDDT and PAE metrics
+## Analysis & Download Tools
+- **Trigger Parallel Analysis (`analyze_job_parallel`)**: Dispatches parallel Cloud Run analysis across AF2, OF3, Boltz-2, and AF3 (`job_id`) to generate pLDDT plots, PAE/PDE heatmaps, ipTM matrices, and Gemini Expert Analysis.
+  - **IMPORTANT**: After starting `analyze_job_parallel`, DO NOT poll in a loop. Tell the user: *"Analysis started (takes 1–2 minutes). Ask me to check results in a few minutes."*
+- **Retrieve Analysis Results (`get_analysis_results`)**: Fetches completed `summary.json` metrics and expert analysis across AF2, OF3, Boltz-2, and AF3.
+  - Only call when the user asks to check/retrieve analysis results.
+  - If `status` is `'failed'` or `'likely_failed'`, stop retrying and explain `error_hint` / `error_details`.
+  - **AF3 Lookup Rule**: AF3 stores artifacts under the sanitized `job_name` (`gs://.../af3_predictions/<job_name>/`). If `get_analysis_results(pipeline_job_id)` returns `not_found`, retry once with the human-readable `job_name`.
+- **Download Artifacts & ZIP Bundle (`download_job_artifacts`)**: Generates 60-minute GCS V4 Signed HTTPS URLs (`artifacts_bundle_signed_url` for `artifacts_bundle.zip`, `best_structure_signed_url`, and plot URLs). Always present signed HTTPS URLs instead of raw `gs://` URIs.
+- **AF2 Direct Helpers**: `get_prediction_results` (AF2 PDB files) and `analyze_prediction_quality` (direct pLDDT/PAE stats).
+- **Job Troubleshooting (`analyze_job`)**: Analyzes failed or completed jobs (`detail_level='summary'` default; `detail_level='detailed'` fetches top Cloud Logging ERROR entries per failed task).
 
-### Rule: AF3 Results Lookup Resolution
-When calling `get_analysis_results` for AlphaFold 3 jobs:
-- AF3 stores artifacts under the sanitized `job_name` (e.g. `gs://.../af3_predictions/<job_name>/`).
-- If `get_analysis_results(pipeline_job_id)` returns `not_found`, immediately retry with the human-readable `job_name` before reporting an artifact error to the user.
+## Confidence & Affinity Metrics Summary
+- **pLDDT (0–100, per-residue/atom)**: `>90` very high confidence (sidechains reliable, drug-design quality); `70–90` confident backbone; `50–70` low confidence / flexible loops; `<50` likely intrinsically disordered regions (IDRs — real biology, not failure).
+- **PAE / PDE (Å)**: Predicted position/distance error between residue pairs. `<5 Å` within/between domains indicates rigid packing; `>15 Å` off-diagonal indicates uncertain relative domain or chain orientation.
+- **pTM & ipTM (0–1)**: Global fold (`pTM > 0.8` high confidence) and interface quality (`ipTM > 0.75` reliable complex interface; `<0.6` uncertain binding pose).
+- **Ranking Confidence / Score**:
+  - **AF2**: Average `pLDDT` (monomer) or `0.8 * ipTM + 0.2 * pTM` (multimer).
+  - **OF3 & AF3**: `0.8 * ipTM + 0.2 * pTM + 0.5 * fraction_disordered - 100 * has_clash` (consult references below for full details).
+- **Boltz-2 Binding Affinity (`affinity` object in `summary.json`)**:
+  - `affinity_pred_value`: Predicted `log10(IC50 uM)` (lower/more negative = stronger binding; e.g., `-2.0` corresponds to `IC50 ~ 10 nM`, `0.0` corresponds to `1 uM`).
+  - `affinity_probability_binary` (`0–1`): Probability the ligand is an active binder (`>0.7` strong binder candidate).
 
-### Rule: Idle Endpoint Scale-to-Zero Awareness
-When the last job in an active AF3 queue finishes:
-- Check `check_af3_endpoint`. If `active_slots_in_use: 0` and `queued_jobs_waiting: 0`:
-  - Inform the user:
-    "All jobs in this batch are complete. The endpoint will automatically scale down to 0 replicas ($0.00/hr) after 20 minutes of inactivity."
-- **Parallel analysis**: Use `analyze_job_parallel` for fast batch analysis across AF2, OF3, Boltz-2, and AF3 (automatically dispatches by `job_id` to generate pLDDT plots, PAE/PDE heatmaps, ipTM matrices, and Gemini expert analysis)
-  - **IMPORTANT**: After starting analysis, DO NOT automatically check for results
-  - Tell the user: "Analysis started. This will take 1-2 minutes. Ask me to check results in a few minutes."
-  - Wait for the user to explicitly ask for results before checking
-- **Get analysis results**: Use `get_analysis_results` to retrieve completed analyses and confidence metrics across AF2, OF3, Boltz-2, and AF3
-  - Only call this when the user explicitly asks to check/get analysis results
-  - Check the 'status' field in response: 'complete', 'running', 'failed', 'likely_failed', 'incomplete'
-  - If status is 'failed' or 'likely_failed', STOP retrying and explain the error to the user with error_hint/error_details
-  - DO NOT repeatedly call get_analysis_results if it returns 'failed' status - the analysis has permanently failed
-  - Common failure: Cloud Run can't find prediction files (usually means the prediction job hasn't completed yet)
-  - If status is 'running', you may check again ONCE after a brief wait, but not in a loop
-- **Job analysis**: Use analyze_job for comprehensive analysis of any job (failed, successful, or running)
-  - Use detail_level='summary' for quick overview without log fetching (default, recommended for initial checks)
-  - Use detail_level='detailed' for deep troubleshooting with Cloud Logging error logs (fetches top 5 ERROR logs per failed task)
-
-### AF2 Quality Metrics
-**pLDDT (per-residue, 0-100)**:
-- >90: Very high confidence — backbone and sidechain positions reliable. Drug design quality.
-- 70-90: Good confidence — backbone reliable, some sidechain uncertainty. Suitable for most analyses.
-- 50-70: Low confidence — often loops, disordered regions, or poorly sampled conformations.
-- <50: Very low — likely intrinsically disordered regions (IDRs). These are real biology, not prediction failures.
-
-**PAE (Predicted Aligned Error, Angstroms)**:
-- Measures predicted error in position of residue X relative to residue Y
-- Low PAE (<5Å) within a domain = well-defined fold
-- Low PAE between domains = reliable domain arrangement
-- High PAE between domains = domains may be correct individually but relative orientation is uncertain
-- Critical for multimer interface quality — low inter-chain PAE = confident interface
-
-**ranking_confidence**:
-- Monomer: average pLDDT (higher is better)
-- Multimer: 0.8 × ipTM + 0.2 × pTM (higher is better)
-- Use this to pick the best model from the 5 (or 25) predictions
-
-### When AF2 Struggles (help users understand)
-- **Disordered regions**: Low pLDDT (<50) in known IDRs is correct — these regions are genuinely flexible
-- **Multi-domain proteins with flexible linkers**: Individual domains may be well-predicted but relative orientation uncertain (high inter-domain PAE)
-- **Membrane proteins**: Often good in transmembrane regions, uncertain in flexible loops
-- **Novel folds**: If the protein has no homologs in training data, confidence will be lower
-- **Multimer interfaces**: Some interfaces are poorly predicted even with high individual chain pLDDT
-
-### OpenFold3 (OF3) Metrics Reference
-For deep metric interpretations, consult the attached reference: `references/of3-metrics.md`.
-Includes details on `sample_ranking_score`, `ptm`, `iptm`, `gpde`, `chain_pair_iptm`, and analysis plot interpretation.
-
-### AlphaFold 3 (AF3) Metrics Reference
-For deep metric interpretations, consult the attached reference: `references/af3-metrics.md`.
-Includes details on `ranking_score` (0.8·ipTM + 0.2·pTM), `ptm`, `iptm`, `mean_plddt`, `has_clash`, `fraction_disordered`, and mmCIF all-atom interpretation.
+## Deep Metric References (Load Only for Edge Cases)
+The **Confidence & Affinity Metrics Summary** above is sufficient for standard `pLDDT`, `PAE`, `PDE`, `pTM`, `ipTM`, and Boltz-2 affinity interpretation—do **not** call `load_skill_resource` for general metric questions. Load these only when the user asks about model-specific edge cases:
+- **OpenFold3 Metrics & Plots**: `load_skill_resource(skill_name="results-analysis", file_path="references/of3-metrics.md")` — `sample_ranking_score`, `gpde`, `chain_pair_iptm`, per-chain ligand pLDDT breakdown, and heatmap interpretation.
+- **AlphaFold 3 Metrics & Benchmarks**: `load_skill_resource(skill_name="results-analysis", file_path="references/af3-metrics.md")` — `ranking_score` (>1.0 behavior with disordered tails), short-chain RNA `pTM` scaling caveats (`<50 nt`), `chain_pair_pae_min`, and H100 benchmarks.
 
 ## Smart Retry Guidance for Failed Jobs
-When a job fails, analyze the error and suggest targeted fixes — don't just resubmit blindly.
-
-### Data Pipeline Failures
-**Template parser errors** (e.g., `ValueError: Could not parse description`):
-- This is a known AF2 bug where hmmsearch finds a PDB template with an unusual description format
-- **Fix**: Resubmit with an earlier `max_template_date` (e.g., `2020-01-01`) to avoid the problematic PDB entry
-- Tell the user: "The template search found a PDB entry with a format AF2 can't parse. I can resubmit with an earlier template date to skip it — prediction quality will still be good."
-
-**Sequence parsing errors** (e.g., invalid FASTA, empty sequences):
-- Check if the FASTA was malformed (missing newlines, merged headers)
-- The agent auto-repairs common copy-paste issues, but if it still fails, show the user what was submitted and ask them to verify
-- **Fix**: Reformat the sequence and resubmit
-
-**Database not found errors** (e.g., missing uniref90, BFD):
-- NFS databases may not be fully downloaded yet
-- **Fix**: Check database download status, wait for completion, then resubmit
-
-**Out of memory / OOM in data pipeline**:
-- Rare, but can happen with very large sequences and full BFD
-- **Fix**: Resubmit with `use_small_bfd=True`
-
-### Predict Task Failures
-**GPU OOM** (e.g., CUDA out of memory):
-- Sequence too large for the selected GPU
-- **Fix**: Upgrade GPU tier (L4 -> A100, A100 -> A100_80GB)
-
-**GPU provisioning timeout** (e.g., max wait duration reached):
-- No GPUs available in the region within the DWS timeout
-- **Fix**: Resubmit (transient), or try a different GPU tier that has quota available
-- Check quotas first with check_gpu_quota
-
-### Relax Task Failures
-**Relax OOM or timeout**:
-- AMBER relaxation is less demanding — usually an L4 is sufficient
-- **Fix**: If relax failed on L4, try with `relax_gpu_type='A100'`
-- Alternative: Resubmit with `run_relaxation=False` (unrelaxed structures are still useful)
-
-### General Retry Rules
-1. Always use `get_job_details` first to retrieve the original sequence and parameters
-2. Pipeline caching (`enable_caching=True`, the default) skips completed tasks — only failed tasks re-run
-3. Tell the user: "Completed steps will be cached so only the failed task re-runs"
-4. If the same error repeats after retry, escalate — don't retry the same thing more than twice
+When `analyze_job(detail_level='detailed')` reveals a task failure, recommend the targeted fix (using `get_job_details` + pipeline caching so completed steps are skipped; do not retry the same error more than twice):
+- **Template parser error (`ValueError: Could not parse description`)**: Known AF2 hmmsearch PDB header issue → resubmit with an earlier `max_template_date` (e.g., `'2020-01-01'`).
+- **Data pipeline OOM**: Large sequence with full BFD → resubmit with `use_small_bfd=True`.
+- **Database not found**: NFS dataset download still running → check database status and wait before resubmitting.
+- **Predict GPU OOM (`CUDA out of memory`)**: Sequence too large for GPU VRAM → upgrade `gpu_type` (`L4` → `A100` → `A100_80GB`).
+- **GPU provisioning timeout (`max wait duration reached`)**: Regional GPU contention → check `check_gpu_quota` and resubmit or switch GPU tier.
+- **Relax OOM or timeout**: Resubmit with `relax_gpu_type='A100'` or `run_relaxation=False`.

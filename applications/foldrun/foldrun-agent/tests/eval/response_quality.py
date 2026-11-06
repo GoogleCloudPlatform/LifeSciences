@@ -14,8 +14,10 @@
 
 """Local LLM-as-judge for `custom_response_quality` (see eval_config.yaml)."""
 
+import os
 import threading
 
+import google.auth
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
@@ -39,8 +41,23 @@ def _client() -> genai.Client:
     """
     client = getattr(_local, "client", None)
     if client is None:
-        # AI Studio (GEMINI_API_KEY) or Gemini platform (ADC).
-        client = _local.client = genai.Client()
+        if os.getenv("GEMINI_API_KEY"):
+            client = _local.client = genai.Client()
+        else:
+            project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT_ID")
+            if not project:
+                _, project = google.auth.default()
+            if not project:
+                raise ValueError(
+                    "Set GOOGLE_CLOUD_PROJECT, GCP_PROJECT_ID, or GEMINI_API_KEY, "
+                    "or configure a default project via Application Default Credentials."
+                )
+            location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+            client = _local.client = genai.Client(
+                vertexai=True,
+                project=project,
+                location=location,
+            )
     return client
 
 

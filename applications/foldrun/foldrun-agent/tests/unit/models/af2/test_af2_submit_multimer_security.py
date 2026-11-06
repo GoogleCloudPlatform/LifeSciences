@@ -114,3 +114,18 @@ class TestAF2SubmitMultimerSecurity:
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+    def test_sanitizes_job_name_preventing_gcs_and_tempfile_traversal(self):
+        """Passing path traversal in job_name must be sanitized before GCS upload."""
+        tool = _make_tool()
+        with pytest.raises(_UploadReached):
+            tool.run(
+                {
+                    "sequence": ">chainA\nACDEFGHIKLMNPQRSTVWY\n>chainB\nACDEFGHIKLMNPQRSTVWY\n",
+                    "job_name": "../../evil/job name!",
+                }
+            )
+        uploaded_local, uploaded_gcs = tool._upload_to_gcs.call_args[0]
+        assert uploaded_gcs == "gs://test-bucket/fasta/evil_job_name.fasta"
+        # Ensure the temporary FASTA file was cleaned up when _UploadReached raised
+        assert not os.path.exists(uploaded_local)

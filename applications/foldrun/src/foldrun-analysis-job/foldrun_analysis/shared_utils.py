@@ -20,6 +20,7 @@ import math
 import os
 import tempfile
 import time
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -132,6 +133,62 @@ def upload_to_gcs(
     else:
         blob.upload_from_filename(local_path)
     logger.info(f"Uploaded {local_path} to {gcs_uri}")
+
+
+def upload_json_to_gcs(
+    data: dict[str, Any],
+    gcs_uri: str,
+    *,
+    prefix: str = "foldrun_analysis_",
+    upload_fn: Callable[[str, str], None] | None = None,
+) -> dict[str, Any]:
+    """Sanitize NaN/Inf floats, serialize ``data`` to a unique temp JSON file, upload to GCS, and clean up."""
+    sanitized = _sanitize_data(data)
+    with tempfile.NamedTemporaryFile(
+        mode="w", prefix=prefix, suffix=".json", delete=False, encoding="utf-8"
+    ) as tmp_f:
+        local_path = tmp_f.name
+        json.dump(sanitized, tmp_f, indent=2, allow_nan=False)
+
+    uploader = upload_fn or upload_to_gcs
+    try:
+        uploader(local_path, gcs_uri)
+        return sanitized
+    finally:
+        if os.path.exists(local_path):
+            os.remove(local_path)
+
+
+def render_and_upload_plot(
+    plot_uri: str,
+    render_fn: Callable[[str], None],
+    *,
+    prefix: str = "foldrun_plot_",
+    upload_fn: Callable[[str, str], None] | None = None,
+    require_nonempty: bool = True,
+    on_rendered: Callable[[str], None] | None = None,
+) -> str | None:
+    """Render a plot to a temporary PNG file, upload to GCS, and clean up in ``finally``."""
+    with tempfile.NamedTemporaryFile(
+        prefix=prefix, suffix=".png", delete=False
+    ) as tmp_f:
+        local_plot_path = tmp_f.name
+
+    uploader = upload_fn or upload_to_gcs
+    try:
+        render_fn(local_plot_path)
+        has_file = os.path.exists(local_plot_path) and (
+            os.path.getsize(local_plot_path) > 0 if require_nonempty else True
+        )
+        if has_file:
+            uploader(local_plot_path, plot_uri)
+            if on_rendered is not None and os.path.exists(local_plot_path):
+                on_rendered(local_plot_path)
+            return plot_uri
+        return None
+    finally:
+        if os.path.exists(local_plot_path):
+            os.remove(local_plot_path)
 
 
 def download_json_from_gcs(

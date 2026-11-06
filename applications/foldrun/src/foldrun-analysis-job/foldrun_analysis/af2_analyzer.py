@@ -41,7 +41,9 @@ from .shared_utils import (
     get_quality_assessment,
     plot_error_matrix,
     plot_plddt_distribution,
+    upload_json_to_gcs,
     upload_to_gcs,
+    validate_gcs_uri_in_bucket,
     wait_for_sibling_tasks,
 )
 
@@ -123,23 +125,7 @@ class _RestrictedPredictionUnpickler(pickle.Unpickler):
 
 def _validate_task_gcs_uri(gcs_uri: str, expected_bucket: str | None = None) -> None:
     """Validate that a task GCS URI targets the expected bucket and contains no path traversal."""
-    if not gcs_uri or "\x00" in gcs_uri or not gcs_uri.startswith("gs://"):
-        raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-
-    parts = gcs_uri[5:].split("/", 1)
-    bucket = parts[0]
-    blob_path = parts[1] if len(parts) > 1 else ""
-
-    if not bucket or not blob_path:
-        raise ValueError(f"Invalid GCS URI (missing bucket or object path): {gcs_uri}")
-
-    if ".." in blob_path.split("/"):
-        raise ValueError(f"Path traversal detected in GCS URI: {gcs_uri}")
-
-    if expected_bucket and bucket != expected_bucket:
-        raise ValueError(
-            f"Unauthorized GCS bucket '{bucket}'. Expected '{expected_bucket}'."
-        )
+    validate_gcs_uri_in_bucket(gcs_uri, expected_bucket=expected_bucket)
 
 
 def load_raw_prediction(pickle_path: str) -> dict:
@@ -508,13 +494,12 @@ def consolidate_results(
         logger.warning(f"Could not build run archive bundle: {e}")
 
     summary_uri = f"{analysis_path}summary.json"
-    local_summary = "/tmp/summary.json"
-
-    with open(local_summary, "w") as f:
-        json.dump(_sanitize_data(summary_data), f, indent=2, allow_nan=False)
-
-    upload_to_gcs(local_summary, summary_uri)
-    os.remove(local_summary)
+    upload_json_to_gcs(
+        summary_data,
+        summary_uri,
+        prefix="af2_summary_",
+        upload_fn=upload_to_gcs,
+    )
 
     logger.info(f"✅ Consolidation complete! Summary written to {summary_uri}")
 

@@ -42,6 +42,8 @@ from .shared_utils import (
     plot_error_matrix,
     plot_iptm_matrix,
     plot_plddt_distribution,
+    render_and_upload_plot,
+    upload_json_to_gcs,
     upload_to_gcs,
     wait_for_sibling_tasks,
 )
@@ -663,12 +665,12 @@ def consolidate_results(
         logger.warning(f"Could not build AF3 run archive bundle: {e}")
 
     summary_uri = f"{analysis_path}summary.json"
-    local_summary = "/tmp/af3_summary.json"
-    summary_data = _sanitize_data(summary_data)
-    with open(local_summary, "w") as f:
-        json.dump(summary_data, f, indent=2, allow_nan=False)
-    upload_to_gcs(local_summary, summary_uri)
-    os.remove(local_summary)
+    summary_data = upload_json_to_gcs(
+        summary_data,
+        summary_uri,
+        prefix="af3_summary_",
+        upload_fn=upload_to_gcs,
+    )
 
     # Also mirror summary.json to pipeline_root_prefix/analysis/summary.json so Viewer lookups by KFP job_id succeed
     if pipeline_root_prefix:
@@ -796,58 +798,93 @@ def run_task(
             output_base = output_uri.rsplit("/", 1)[0]
 
             if effective_plddts:
-                plddt_plot_path = f"/tmp/plddt_plot_{pred_idx}.png"
-                plot_plddt_distribution(
-                    effective_plddts, sample_name, plddt_plot_path, chain_info=None
+                plddt_blob_name = (
+                    f"{pipeline_root_prefix}/analysis/plddt_plot_{pred_idx}.png"
                 )
-                plddt_plot_uri = f"{output_base}/plddt_plot_{pred_idx}.png"
-                upload_to_gcs(plddt_plot_path, plddt_plot_uri)
-                if pipeline_root_prefix and os.path.exists(plddt_plot_path):
-                    bucket.blob(
-                        f"{pipeline_root_prefix}/analysis/plddt_plot_{pred_idx}.png"
-                    ).upload_from_filename(plddt_plot_path, content_type="image/png")
-                plot_files["plddt_plot"] = plddt_plot_uri
-                if os.path.exists(plddt_plot_path):
-                    os.remove(plddt_plot_path)
+                plddt_plot_uri = render_and_upload_plot(
+                    f"{output_base}/plddt_plot_{pred_idx}.png",
+                    lambda path, plddts=effective_plddts, name=sample_name: (
+                        plot_plddt_distribution(plddts, name, path, chain_info=None)
+                    ),
+                    prefix=f"af3_plddt_plot_{pred_idx}_",
+                    upload_fn=upload_to_gcs,
+                    require_nonempty=False,
+                    on_rendered=(
+                        (
+                            lambda path, b_name=plddt_blob_name: bucket.blob(
+                                b_name
+                            ).upload_from_filename(path, content_type="image/png")
+                        )
+                        if pipeline_root_prefix
+                        else None
+                    ),
+                )
+                if plddt_plot_uri:
+                    plot_files["plddt_plot"] = plddt_plot_uri
 
             if pae_matrix and len(pae_matrix) > 0:
-                pae_plot_path = f"/tmp/pae_plot_{pred_idx}.png"
-                plot_error_matrix(
-                    pae_matrix,
-                    sample_name,
-                    "Expected Position Error (Å)",
-                    pae_plot_path,
-                    chain_info=chain_info,
-                    max_value=31.75,
+                pae_blob_name = (
+                    f"{pipeline_root_prefix}/analysis/pae_plot_{pred_idx}.png"
                 )
-                pae_plot_uri = f"{output_base}/pae_plot_{pred_idx}.png"
-                upload_to_gcs(pae_plot_path, pae_plot_uri)
-                if pipeline_root_prefix and os.path.exists(pae_plot_path):
-                    bucket.blob(
-                        f"{pipeline_root_prefix}/analysis/pae_plot_{pred_idx}.png"
-                    ).upload_from_filename(pae_plot_path, content_type="image/png")
-                plot_files["pae_plot"] = pae_plot_uri
-                if os.path.exists(pae_plot_path):
-                    os.remove(pae_plot_path)
+                pae_plot_uri = render_and_upload_plot(
+                    f"{output_base}/pae_plot_{pred_idx}.png",
+                    lambda path, pae=pae_matrix, name=sample_name, chains=chain_info: (
+                        plot_error_matrix(
+                            pae,
+                            name,
+                            "Expected Position Error (Å)",
+                            path,
+                            chain_info=chains,
+                            max_value=31.75,
+                        )
+                    ),
+                    prefix=f"af3_pae_plot_{pred_idx}_",
+                    upload_fn=upload_to_gcs,
+                    require_nonempty=False,
+                    on_rendered=(
+                        (
+                            lambda path, b_name=pae_blob_name: bucket.blob(
+                                b_name
+                            ).upload_from_filename(path, content_type="image/png")
+                        )
+                        if pipeline_root_prefix
+                        else None
+                    ),
+                )
+                if pae_plot_uri:
+                    plot_files["pae_plot"] = pae_plot_uri
 
             if isinstance(chain_pair_iptm, dict) and len(chain_info) > 1:
-                iptm_plot_path = f"/tmp/iptm_matrix_{pred_idx}.png"
-                plot_iptm_matrix(
-                    chain_pair_iptm,
-                    sample_name,
-                    iptm_plot_path,
-                    chain_ptm if isinstance(chain_ptm, dict) else None,
-                    chain_info,
+                iptm_blob_name = (
+                    f"{pipeline_root_prefix}/analysis/iptm_matrix_{pred_idx}.png"
                 )
-                if os.path.exists(iptm_plot_path):
-                    iptm_plot_uri = f"{output_base}/iptm_matrix_{pred_idx}.png"
-                    upload_to_gcs(iptm_plot_path, iptm_plot_uri)
-                    if pipeline_root_prefix:
-                        bucket.blob(
-                            f"{pipeline_root_prefix}/analysis/iptm_matrix_{pred_idx}.png"
-                        ).upload_from_filename(iptm_plot_path, content_type="image/png")
+                chain_ptm_dict = chain_ptm if isinstance(chain_ptm, dict) else None
+                iptm_plot_uri = render_and_upload_plot(
+                    f"{output_base}/iptm_matrix_{pred_idx}.png",
+                    lambda path, iptm=chain_pair_iptm, name=sample_name, ptm=chain_ptm_dict, chains=chain_info: (
+                        plot_iptm_matrix(
+                            iptm,
+                            name,
+                            path,
+                            ptm,
+                            chains,
+                        )
+                    ),
+                    prefix=f"af3_iptm_matrix_{pred_idx}_",
+                    upload_fn=upload_to_gcs,
+                    require_nonempty=True,
+                    on_rendered=(
+                        (
+                            lambda path, b_name=iptm_blob_name: bucket.blob(
+                                b_name
+                            ).upload_from_filename(path, content_type="image/png")
+                        )
+                        if pipeline_root_prefix
+                        else None
+                    ),
+                )
+                if iptm_plot_uri:
                     plot_files["iptm_matrix_plot"] = iptm_plot_uri
-                    os.remove(iptm_plot_path)
 
             analysis = {
                 "prediction_index": pred_idx,
@@ -890,12 +927,12 @@ def run_task(
                 "plots": plot_files,
             }
 
-            local_json = f"/tmp/af3_analysis_{pred_idx}.json"
-            analysis = _sanitize_data(analysis)
-            with open(local_json, "w") as f:
-                json.dump(analysis, f, indent=2, allow_nan=False)
-            upload_to_gcs(local_json, output_uri)
-            os.remove(local_json)
+            upload_json_to_gcs(
+                analysis,
+                output_uri,
+                prefix=f"af3_analysis_{pred_idx}_",
+                upload_fn=upload_to_gcs,
+            )
 
         consolidator_task_index = min(stride, total_predictions) - 1
         if task_index == consolidator_task_index:

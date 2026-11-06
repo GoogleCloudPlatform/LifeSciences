@@ -206,8 +206,8 @@ class TestOF3Config:
         assert "/etc/ld.so.conf.d/nvidia.conf" in content
         assert "libtorch_cuda.so" in content
 
-    def test_dockerfile_uses_locked_pixi_install_and_registered_osv_lockfile(self):
-        """Ensure openfold3-components uses locked Pixi installs and registers requirements.lock in OSV CI."""
+    def test_dockerfile_uses_locked_pixi_install_and_hashed_lockfile(self):
+        """Ensure openfold3-components uses locked Pixi installs and exports SHA-256 hashes in requirements.lock."""
         repo_root = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "..", "..", "..")
         )
@@ -216,17 +216,8 @@ class TestOF3Config:
             dockerfile = f.read()
         with open(os.path.join(of3_dir, "requirements.lock"), encoding="utf-8") as f:
             req_lock = f.read()
-        with open(
-            os.path.join(repo_root, "security", "cloudbuild-security.yaml"),
-            encoding="utf-8",
-        ) as f:
-            sec_yaml = f.read()
 
         assert "pixi update" not in dockerfile
         assert "pixi install" in dockerfile
         assert "--locked" in dockerfile
         assert "--hash=sha256:" in req_lock
-        assert (
-            "--lockfile=requirements.txt:applications/foldrun/src/openfold3-components/requirements.lock"
-            in sec_yaml
-        )

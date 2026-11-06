@@ -34,92 +34,23 @@ AlphaFold 3 input JSON schema (dialect='alphafold3', version=1):
 import json
 import re
 
-# Standard nucleotide alphabet (RNA)
-_RNA_NT = set("ACGU")
-# Standard nucleotide alphabet (DNA)
-_DNA_NT = set("ACGT")
-# Standard + extended amino acids
-_PROTEIN_AA = set("ACDEFGHIKLMNPQRSTVWYBJOUXZ")
+from foldrun_app.core.fasta import (
+    detect_molecule_type_with_warning,
+)
+from foldrun_app.core.fasta import (
+    next_chain_id as _next_chain_id,
+)
+from foldrun_app.core.fasta import (
+    validate_sequence_chars as _validate_sequence_chars,
+)
+
 # Supported molecule keys in AF3 entity dicts
 _VALID_ENTITY_KEYS = {"protein", "rna", "dna", "ligand", "ion"}
 
 
-def _validate_sequence_chars(sequence: str, mol_type: str) -> list[str]:
-    """Return a list of error strings for invalid characters in a sequence."""
-    errors = []
-    if mol_type == "protein":
-        invalid = sorted(set(sequence.upper()) - _PROTEIN_AA)
-        if invalid:
-            errors.append(
-                f"Protein sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected standard amino acids (ACDEFGHIKLMNPQRSTVWY) plus ambiguity codes."
-            )
-    elif mol_type == "rna":
-        invalid = sorted(set(sequence.upper()) - _RNA_NT)
-        if invalid:
-            errors.append(
-                f"RNA sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected A, C, G, U only."
-            )
-    elif mol_type == "dna":
-        invalid = sorted(set(sequence.upper()) - _DNA_NT)
-        if invalid:
-            errors.append(
-                f"DNA sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected A, C, G, T only."
-            )
-    return errors
-
-
 def _detect_molecule_type(sequence: str, header: str = "") -> tuple[str, str | None]:
-    """Detect whether a sequence is protein, rna, or dna.
-
-    Checks explicit FASTA header hints (e.g., '>seq|dna', 'type=dna') first.
-    If no hint is present, inspects nucleotide and amino acid character sets.
-
-    Args:
-        sequence: The sequence string (uppercase).
-        header: Optional FASTA header line.
-
-    Returns:
-        tuple of (molecule_type, optional_warning)
-    """
-    warning = None
-    header_lower = header.lower()
-
-    # Explicit header hints
-    if any(h in header_lower for h in ("type=dna", "|dna", " dna", "_dna", "-dna", "dna_")):
-        return "dna", None
-    if any(h in header_lower for h in ("type=rna", "|rna", " rna", "_rna", "-rna", "rna_")):
-        return "rna", None
-    if any(
-        h in header_lower for h in ("type=protein", "|protein", " protein", "_protein", "peptide")
-    ):
-        return "protein", None
-
-    chars = set(sequence.upper())
-    if "U" in chars and chars <= _RNA_NT:
-        return "rna", None
-    if chars <= _DNA_NT:
-        if len(sequence) > 30:
-            return "dna", None
-        # Short sequence consisting strictly of A, C, G, T
-        warning = (
-            f"Short sequence of length {len(sequence)} ({sequence}) contains only A, C, G, T. "
-            "Classified as DNA; specify '>header|protein' or '>header|dna' to disambiguate."
-        )
-        return "dna", warning
-
-    return "protein", None
-
-
-def _next_chain_id(index: int) -> str:
-    """Generate chain identifiers A..Z, AA..ZZ."""
-    if index < 26:
-        return chr(ord("A") + index)
-    first = chr(ord("A") + (index // 26) - 1)
-    second = chr(ord("A") + (index % 26))
-    return f"{first}{second}"
+    """Detect whether a sequence is protein, rna, or dna (with short-ACGT DNA warning)."""
+    return detect_molecule_type_with_warning(sequence, header=header, short_acgt_is_dna=True)
 
 
 def is_af3_json(content: str | dict) -> bool:

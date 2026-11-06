@@ -14,7 +14,6 @@
 
 """Tool for submitting OpenFold3 structure predictions."""
 
-import contextlib
 import json
 import logging
 import os
@@ -22,9 +21,7 @@ import tempfile
 from datetime import datetime
 from typing import Any
 
-from google.cloud import aiplatform as vertex_ai
-
-from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
+from google.cloud import aiplatform as vertex_ai  # noqa: F401
 
 from ..base import OF3Tool
 from ..utils.input_converter import count_tokens, fasta_to_of3_json, is_of3_json, validate_of3_json
@@ -83,7 +80,8 @@ class OF3SubmitPredictionTool(OF3Tool):
             }
 
         input_data = arguments.get("input")
-        job_name = arguments.get("job_name", f"of3_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        default_job_name = f"of3_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        job_name = self.sanitize_job_name(arguments.get("job_name"), default_job_name)
         num_model_seeds = arguments.get("num_model_seeds", 1)
         num_diffusion_samples = arguments.get("num_diffusion_samples", 5)
         gpu_type = arguments.get("gpu_type") or "auto"
@@ -111,23 +109,8 @@ class OF3SubmitPredictionTool(OF3Tool):
             bucket = self.storage_client.bucket(bucket_name)
             content = bucket.blob(blob_path).download_as_text()
         elif is_file and isinstance(input_data, str):
-            allowed_dir = getattr(self.config, "allowed_input_dir", None) or os.environ.get(
-                "FOLDRUN_ALLOWED_INPUT_DIR"
-            )
-            if not allowed_dir:
-                raise ValueError(
-                    "Local file path inputs require an explicitly authorized directory (FOLDRUN_ALLOWED_INPUT_DIR)."
-                )
-            real_allowed = os.path.realpath(allowed_dir)
-            real_path = os.path.realpath(input_data)
-            if (
-                os.path.commonpath([real_allowed, real_path]) != real_allowed
-                or real_path == real_allowed
-            ):
-                raise ValueError(
-                    f"Local file path '{input_data}' is outside the authorized directory."
-                )
-            with open(real_path) as f:
+            real_path = self.resolve_local_input_path(input_data, allow_temp_dir=False)
+            with open(real_path, encoding="utf-8") as f:
                 content = f.read()
         else:
             content = input_data
@@ -156,100 +139,86 @@ class OF3SubmitPredictionTool(OF3Tool):
         json.dump(query_json, temp_json, indent=2)
         temp_json.close()
 
-        # Upload to GCS
-        gcs_query_path = f"gs://{self.config.bucket_name}/of3_queries/{job_name}.json"
-        self._upload_to_gcs(temp_json.name, gcs_query_path)
-
-        # Get Filestore info
-        if not self.config.filestore_ip:
-            filestore_ip, filestore_network = self._get_filestore_info()
-        else:
-            filestore_ip = self.config.filestore_ip
-            filestore_network = self.config.filestore_network
-
-        # Setup hardware configuration
-        hardware_config = self._get_hardware_config(
-            gpu_type,
-            num_tokens=num_tokens,
-        )
-
-        resolved_gpu = hardware_config["predict_accel"]
-        accel_to_label = {
-            "NVIDIA_TESLA_A100": "a100",
-            "NVIDIA_A100_80GB": "a100-80gb",
-        }
-
         pipeline_path = os.path.join(tempfile.gettempdir(), f"of3_pipeline_{job_name}.json")
-        with (
-            GLOBAL_COMPILE_LOCK,
-            self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
-            or contextlib.nullcontext(),
-        ):
-            # Load and compile pipeline
-            from ..utils.pipeline_utils import load_vertex_pipeline
+        try:
+            # Upload to GCS
+            gcs_query_path = f"gs://{self.config.bucket_name}/of3_queries/{job_name}.json"
+            self._upload_to_gcs(temp_json.name, gcs_query_path)
 
-            pipeline = load_vertex_pipeline(enable_flex_start=enable_flex_start)
+            filestore_ip, filestore_network = self._ensure_filestore_config()
 
-            from kfp import compiler
-
-            compiler.Compiler().compile(
-                pipeline_func=pipeline,
-                package_path=pipeline_path,
+            # Setup hardware configuration
+            hardware_config = self._get_hardware_config(
+                gpu_type,
+                num_tokens=num_tokens,
             )
 
-        # Prepare labels — extract first query name from the queries dict
-        query_names = list(query_json.get("queries", {}).keys())
-        query_name = query_names[0] if query_names else job_name
-        _all_chains = [
-            c for q in query_json.get("queries", {}).values() for c in q.get("chains", [])
-        ]
-        _num_chains = sum(
-            len(c.get("chain_ids", ["?"])) if isinstance(c.get("chain_ids"), list) else 1
-            for c in _all_chains
-        )
-        labels = {
-            "model_type": "openfold3",
-            "job_type": "monomer" if _num_chains <= 1 else "complex",
-            "query_name": self._clean_label(query_name),
-            "num_tokens": str(num_tokens),
-            "num_chains": str(_num_chains),
-            "num_seeds": str(num_model_seeds),
-            "gpu_type": accel_to_label.get(resolved_gpu, gpu_type.lower().replace("_", "-")),
-            "msa_method": "jackhmmer",
-            "submitted_by": "foldrun-agent",
-            "use_cueq": str(use_cueq_triangle_kernels).lower(),
-        }
+            resolved_gpu = hardware_config["predict_accel"]
 
-        # Submit pipeline job
-        pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            # Prepare labels — extract first query name from the queries dict
+            query_names = list(query_json.get("queries", {}).keys())
+            query_name = query_names[0] if query_names else job_name
+            _all_chains = [
+                c for q in query_json.get("queries", {}).values() for c in q.get("chains", [])
+            ]
+            _num_chains = sum(
+                len(c.get("chain_ids", ["?"])) if isinstance(c.get("chain_ids"), list) else 1
+                for c in _all_chains
+            )
+            labels = {
+                "model_type": "openfold3",
+                "job_type": "monomer" if _num_chains <= 1 else "complex",
+                "query_name": self._clean_label(query_name),
+                "num_tokens": str(num_tokens),
+                "num_chains": str(_num_chains),
+                "num_seeds": str(num_model_seeds),
+                "gpu_type": self.ACCEL_TO_LABEL.get(
+                    resolved_gpu, gpu_type.lower().replace("_", "-")
+                ),
+                "msa_method": "jackhmmer",
+                "submitted_by": "foldrun-agent",
+                "use_cueq": str(use_cueq_triangle_kernels).lower(),
+            }
 
-        job_kwargs = {
-            "display_name": job_name,
-            "template_path": pipeline_path,
-            "pipeline_root": pipeline_root,
-            "parameter_values": {
-                "query_json_path": gcs_query_path,
-                "project": self.config.project_id,
-                "region": self.config.region,
-                "nfs_params_path": f"{self.config.nfs_mount_point}/{self.config.params_path}",
-                "num_model_seeds": num_model_seeds,
-                "num_diffusion_samples": num_diffusion_samples,
-                "use_templates": use_templates,
-                "base_seed": base_seed,
-                "use_cueq_triangle_kernels": use_cueq_triangle_kernels,
-            },
-            "enable_caching": enable_caching,
-            "labels": labels,
-        }
+            # Submit pipeline job
+            pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        pipeline_job = vertex_ai.PipelineJob(**job_kwargs)
-        pipeline_job.submit(
-            network=filestore_network, service_account=self.config.pipelines_sa_email
-        )
+            job_kwargs = {
+                "display_name": job_name,
+                "template_path": pipeline_path,
+                "pipeline_root": pipeline_root,
+                "parameter_values": {
+                    "query_json_path": gcs_query_path,
+                    "project": self.config.project_id,
+                    "region": self.config.region,
+                    "nfs_params_path": f"{self.config.nfs_mount_point}/{self.config.params_path}",
+                    "num_model_seeds": num_model_seeds,
+                    "num_diffusion_samples": num_diffusion_samples,
+                    "use_templates": use_templates,
+                    "base_seed": base_seed,
+                    "use_cueq_triangle_kernels": use_cueq_triangle_kernels,
+                },
+                "enable_caching": enable_caching,
+                "labels": labels,
+            }
 
-        # Clean up temp files
-        os.remove(pipeline_path)
-        os.remove(temp_json.name)
+            from ..utils.pipeline_utils import load_vertex_pipeline
+
+            pipeline_job = self._compile_and_submit_kfp_pipeline(
+                pipeline_loader=lambda: load_vertex_pipeline(enable_flex_start=enable_flex_start),
+                package_path=pipeline_path,
+                hardware_config=hardware_config,
+                filestore_ip=filestore_ip,
+                filestore_network=filestore_network,
+                job_kwargs=job_kwargs,
+                service_account=self.config.pipelines_sa_email,
+                extra_temp_paths=[temp_json.name],
+            )
+        except Exception:
+            for path in (pipeline_path, temp_json.name):
+                if path and os.path.exists(path):
+                    os.remove(path)
+            raise
 
         # Chain info from queries dict
         mol_types = {}

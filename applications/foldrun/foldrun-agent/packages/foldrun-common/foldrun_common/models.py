@@ -37,6 +37,13 @@ MODEL_TYPE_ALIASES: dict[str, ModelType] = {
 
 SUPPORTED_MODEL_TYPES: frozenset[str] = frozenset(MODEL_TYPE_ALIASES.values())
 
+DEFAULT_GEMINI_AGENT_MODEL = "gemini-3.8-flash"
+ALLOWED_GEMINI_AGENT_MODELS: tuple[str, ...] = (
+    "gemini-3.8-flash",
+    "gemini-3.5-flash",
+    "gemini-4-argon",
+)
+
 
 def normalize_model_type(raw: str | None) -> str:
     """Normalize raw model_type labels or parameters to canonical FoldRun identifiers."""

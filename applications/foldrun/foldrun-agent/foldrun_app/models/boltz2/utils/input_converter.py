@@ -14,116 +14,29 @@
 
 """Convert FASTA sequences to BOLTZ2 query YAML format."""
 
-import re
+from foldrun_app.core.fasta import (
+    detect_molecule_type as _detect_molecule_type,  # noqa: F401
+)
+from foldrun_app.core.fasta import (
+    parse_multimolecule_fasta_records,
+)
+from foldrun_app.core.fasta import (
+    validate_sequence_chars as _validate_sequence_chars,
+)
 
-# Standard nucleotide alphabet (RNA)
-_RNA_NT = set("ACGU")
-# Standard nucleotide alphabet (DNA)
-_DNA_NT = set("ACGT")
-# Standard + extended amino acids (includes B/Z ambiguity codes, X unknown, U selenocysteine, O pyrrolysine)
-_PROTEIN_AA = set("ACDEFGHIKLMNPQRSTVWYBJOUXZ")
 # Valid top-level sequence type keys in a Boltz-2 YAML
 _VALID_SEQ_TYPES = {"protein", "rna", "dna", "smiles", "ccd", "ligand"}
 
 
-def _detect_molecule_type(sequence: str) -> str:
-    """Detect whether a sequence is protein, rna, or dna."""
-    chars = set(sequence.upper())
-    if "U" in chars and chars <= _RNA_NT:
-        return "rna"
-    if chars <= _DNA_NT and len(sequence) > 30:
-        return "dna"
-    return "protein"
-
-
-def _validate_sequence_chars(sequence: str, mol_type: str) -> list[str]:
-    """Return a list of error strings for invalid characters in a sequence.
-
-    Args:
-        sequence: Uppercase sequence string.
-        mol_type: 'protein', 'rna', or 'dna'.
-
-    Returns:
-        List of error strings (empty if valid).
-    """
-    errors = []
-    if mol_type == "protein":
-        invalid = sorted(set(sequence.upper()) - _PROTEIN_AA)
-        if invalid:
-            errors.append(
-                f"Protein sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected standard amino acids (ACDEFGHIKLMNPQRSTVWY) plus ambiguity codes (BXZ) and U/O."
-            )
-    elif mol_type == "rna":
-        invalid = sorted(set(sequence.upper()) - _RNA_NT)
-        if invalid:
-            errors.append(
-                f"RNA sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected A, C, G, U only."
-            )
-    elif mol_type == "dna":
-        invalid = sorted(set(sequence.upper()) - _DNA_NT)
-        if invalid:
-            errors.append(
-                f"DNA sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected A, C, G, T only."
-            )
-    return errors
-
-
 def fasta_to_boltz2_yaml(fasta_content: str, job_name: str | None = None) -> str:
     """Convert FASTA content (or raw sequence) to BOLTZ2 query YAML format."""
-    content = fasta_content.strip()
-    if not content.startswith(">"):
-        content = f">sequence\n{content}"
-
-    parsed = []
-    current_id = None
-    current_seq_lines = []
-
-    for line in content.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith(">"):
-            if current_id is not None and current_seq_lines:
-                seq = "".join(current_seq_lines).upper()
-                parsed.append((current_id, seq))
-            header = line[1:].strip()
-            parts = header.split(None, 1)
-            current_id = parts[0] if parts else f"seq_{len(parsed)}"
-            current_seq_lines = []
-        else:
-            cleaned = re.sub(r"[^A-Za-z]", "", line)
-            current_seq_lines.append(cleaned)
-
-    if current_id is not None and current_seq_lines:
-        seq = "".join(current_seq_lines).upper()
-        parsed.append((current_id, seq))
-
-    if not parsed:
-        raise ValueError("No valid sequences found in FASTA input")
-
-    errors = []
-    for seq_id, sequence in parsed:
-        if not sequence:
-            errors.append(f"Sequence '{seq_id}' is empty after stripping non-alphabetic characters")
-            continue
-        if len(sequence) < 5:
-            errors.append(f"Sequence '{seq_id}' is too short ({len(sequence)} residues, minimum 5)")
-        mol_type = _detect_molecule_type(sequence)
-        errors.extend(_validate_sequence_chars(sequence, mol_type))
-
-    if errors:
-        raise ValueError("FASTA validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
+    parsed_chains = parse_multimolecule_fasta_records(fasta_content, min_length=5)
 
     yaml_lines = ["version: 1", "sequences:"]
-    for i, (_seq_id, sequence) in enumerate(parsed):
-        chain_id = chr(65 + i) if i < 26 else f"chain_{i}"
-        mol_type = _detect_molecule_type(sequence)
-        yaml_lines.append(f"  - {mol_type}:")
-        yaml_lines.append(f"      id: {chain_id}")
-        yaml_lines.append(f"      sequence: {sequence}")
+    for rec in parsed_chains:
+        yaml_lines.append(f"  - {rec.molecule_type}:")
+        yaml_lines.append(f"      id: {rec.chain_id}")
+        yaml_lines.append(f"      sequence: {rec.sequence}")
 
     return "\n".join(yaml_lines)
 

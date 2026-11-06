@@ -4,7 +4,9 @@ This directory contains evaluation datasets for testing agent behavior.
 
 ## Running Evaluations
 
-### Default Dataset
+### Default Dataset (`basic-dataset.json`)
+`basic-dataset.json` covers all 7 FoldRun domain skills (`job-submission`, `job-management`, `cost-estimation`, `database-queries`, `storage-management`, `results-analysis`, `visualization`), progressive-disclosure reference files (`references/*.md`), pre-submission hardware/DWS confirmation tables, and HITL deletion safety gates.
+
 ```bash
 # Run the agent over the default dataset and grade the traces
 agents-cli eval run

@@ -14,17 +14,22 @@
 
 """Shared KFP model plugin base classes and post-submission tools."""
 
+import contextlib
 import json
 import logging
 import os
+import re
 import sys
+import tempfile
 import time
 import urllib.parse
 import webbrowser
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 from urllib.parse import quote_plus
 
+from google.cloud import aiplatform as vertex_ai
 from google.cloud import run_v2, storage
 
 from foldrun_app.core.base_tool import BaseTool
@@ -67,6 +72,103 @@ class KFPModelTool(BaseTool):
     }
 
     DEFAULT_MSA_MACHINE: ClassVar[str] = "c2-standard-16"
+
+    ACCEL_TO_LABEL: ClassVar[dict[str, str]] = {
+        "NVIDIA_L4": "l4",
+        "NVIDIA_TESLA_A100": "a100",
+        "NVIDIA_A100_80GB": "a100-80gb",
+    }
+
+    @staticmethod
+    def sanitize_job_name(job_name: str | None, default_name: str) -> str:
+        """Sanitize ``job_name`` for safe use in temp file paths, GCS object names, and Vertex display names."""
+        raw = str(job_name).strip() if job_name is not None else ""
+        if not raw:
+            return default_name
+        cleaned = re.sub(r"[^A-Za-z0-9_.-]", "_", raw).strip("._-")
+        return cleaned or default_name
+
+    def resolve_local_input_path(self, file_path: str, *, allow_temp_dir: bool = False) -> str:
+        """Validate that a local file path resides within an authorized directory.
+
+        Resolves symlinks and relative segments via ``os.path.realpath`` before
+        verifying directory containment with ``os.path.commonpath``.
+        """
+        cfg_allowed = getattr(self.config, "allowed_input_dir", None)
+        allowed_dir = (
+            cfg_allowed.strip()
+            if isinstance(cfg_allowed, str) and cfg_allowed.strip()
+            else os.environ.get("FOLDRUN_ALLOWED_INPUT_DIR", "").strip()
+            or os.environ.get("FOLDRUN_STAGING_DIR", "").strip()
+        )
+        if not allowed_dir:
+            if allow_temp_dir:
+                allowed_dir = tempfile.gettempdir()
+            else:
+                raise ValueError(
+                    "Local file input is not allowed unless FOLDRUN_ALLOWED_INPUT_DIR is explicitly configured "
+                    "(authorized directory required). Provide inline content or a gs:// URI instead."
+                )
+
+        real_allowed = os.path.realpath(allowed_dir)
+        real_path = os.path.realpath(file_path)
+
+        if (
+            os.path.commonpath([real_allowed, real_path]) != real_allowed
+            or real_path == real_allowed
+        ):
+            raise ValueError(
+                f"Local file path must be within the authorized directory and not outside the authorized directory ({real_allowed}): {file_path}"
+            )
+        if not os.path.isfile(real_path):
+            raise ValueError(
+                f"Local file path must be within the authorized directory ({real_allowed}) and exist as a file: {file_path}"
+            )
+
+        return real_path
+
+    def _ensure_filestore_config(self) -> tuple[str, str]:
+        """Return ``(filestore_ip, filestore_network)``, looking up Filestore if not yet cached."""
+        if not self.config.filestore_ip:
+            return self._get_filestore_info()
+        return self.config.filestore_ip, self.config.filestore_network
+
+    def _compile_and_submit_kfp_pipeline(
+        self,
+        *,
+        pipeline_loader: Callable[[], Any],
+        package_path: str,
+        hardware_config: dict[str, Any],
+        filestore_ip: str | None,
+        filestore_network: str | None,
+        job_kwargs: dict[str, Any],
+        service_account: str | None = None,
+        extra_temp_paths: list[str] | None = None,
+    ) -> Any:
+        """Compile a KFP pipeline under ``GLOBAL_COMPILE_LOCK``, submit the Vertex ``PipelineJob``, and clean up temp files."""
+        from kfp import compiler
+
+        try:
+            with (
+                GLOBAL_COMPILE_LOCK,
+                self._setup_compile_env(hardware_config, filestore_ip, filestore_network)  # type: ignore[attr-defined]
+                or contextlib.nullcontext(),
+            ):
+                pipeline = pipeline_loader()
+                compiler.Compiler().compile(pipeline_func=pipeline, package_path=package_path)
+
+            vertex_ai_mod = self._resolve_module_attr("vertex_ai", vertex_ai)
+            pipeline_job = vertex_ai_mod.PipelineJob(**job_kwargs)
+            pipeline_job.submit(
+                network=filestore_network,
+                service_account=service_account or self.config.pipelines_sa_email,
+            )
+            return pipeline_job
+        finally:
+            for path in [package_path, *(extra_temp_paths or [])]:
+                if path and os.path.exists(path):
+                    with contextlib.suppress(OSError):
+                        os.remove(path)
 
     @staticmethod
     def _normalize_gpu_type(gpu_type: str | None) -> str:

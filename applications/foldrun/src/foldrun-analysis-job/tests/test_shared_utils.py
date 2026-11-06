@@ -400,3 +400,41 @@ class TestSharedUtilsFixes:
                 str(out_png),
             )
             mock_plt.savefig.assert_not_called()
+
+    def test_upload_json_to_gcs_and_render_and_upload_plot_cleanup_on_failure(self):
+        import json
+
+        import pytest
+
+        seen_paths: list[str] = []
+
+        def _capture_json_upload(local_path: str, gcs_uri: str) -> None:
+            seen_paths.append(local_path)
+            with open(local_path, encoding="utf-8") as fh:
+                payload = json.load(fh)
+            assert payload["score"] is None
+            assert payload["valid"] == 0.91
+
+        sanitized = shared_utils.upload_json_to_gcs(
+            {"score": float("nan"), "valid": 0.91},
+            "gs://bucket/analysis/summary.json",
+            upload_fn=_capture_json_upload,
+        )
+        assert sanitized == {"score": None, "valid": 0.91}
+        assert len(seen_paths) == 1
+        assert not os.path.exists(seen_paths[0])
+
+        failed_paths: list[str] = []
+
+        def _failing_upload(local_path: str, gcs_uri: str) -> None:
+            failed_paths.append(local_path)
+            raise RuntimeError("upload boom")
+
+        with pytest.raises(RuntimeError, match="upload boom"):
+            shared_utils.upload_json_to_gcs(
+                {"a": 1},
+                "gs://bucket/analysis/summary.json",
+                upload_fn=_failing_upload,
+            )
+        assert len(failed_paths) == 1
+        assert not os.path.exists(failed_paths[0])

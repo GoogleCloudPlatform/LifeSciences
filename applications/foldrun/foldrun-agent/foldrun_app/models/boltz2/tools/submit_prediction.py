@@ -14,7 +14,6 @@
 
 """Tool for submitting Boltz2 structure predictions."""
 
-import contextlib
 import logging
 import os
 import tempfile
@@ -22,9 +21,7 @@ from datetime import datetime
 from typing import Any
 
 import yaml
-from google.cloud import aiplatform as vertex_ai
-
-from foldrun_app.core.compile_lock import GLOBAL_COMPILE_LOCK
+from google.cloud import aiplatform as vertex_ai  # noqa: F401
 
 from ..base import BOLTZ2Tool
 from ..utils.input_converter import (
@@ -40,32 +37,9 @@ logger = logging.getLogger(__name__)
 class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
     """Tool for submitting Boltz2 structure predictions."""
 
-    @staticmethod
-    def _validate_local_file_path(file_path: str) -> str:
-        """Validate that a local file path resides within an explicitly authorized directory.
-
-        Uses ``os.path.realpath`` to resolve symlinks and relative segments before
-        verifying directory containment via ``os.path.commonpath``.
-        """
-        allowed_dir = os.environ.get("FOLDRUN_ALLOWED_INPUT_DIR", "").strip()
-        if not allowed_dir:
-            raise ValueError(
-                "Local file input is not allowed unless FOLDRUN_ALLOWED_INPUT_DIR is explicitly configured. "
-                "Provide inline FASTA/YAML content or a gs:// URI instead."
-            )
-
-        real_allowed = os.path.realpath(allowed_dir)
-        real_path = os.path.realpath(file_path)
-
-        if (
-            os.path.commonpath([real_allowed, real_path]) != real_allowed
-            or real_path == real_allowed
-        ):
-            raise ValueError(
-                f"Local file path '{file_path}' is outside the authorized directory '{real_allowed}'."
-            )
-
-        return real_path
+    def _validate_local_file_path(self, file_path: str) -> str:
+        """Validate that a local file path resides within an explicitly authorized directory."""
+        return self.resolve_local_input_path(file_path, allow_temp_dir=False)
 
     def run(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Submit BOLTZ2 prediction job.
@@ -83,7 +57,8 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             Job submission details.
         """
         input_data = arguments.get("input")
-        job_name = arguments.get("job_name", f"boltz2_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        default_job_name = f"boltz2_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        job_name = self.sanitize_job_name(arguments.get("job_name"), default_job_name)
         num_model_seeds = arguments.get("num_model_seeds", 1)
         num_diffusion_samples = arguments.get("num_diffusion_samples", 5)
         gpu_type = arguments.get("gpu_type") or "auto"
@@ -105,9 +80,9 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
             bucket_name, blob_path = self._validate_gcs_uri(input_data)
             bucket = self.storage_client.bucket(bucket_name)
             content = bucket.blob(blob_path).download_as_text()
-        elif is_file:
+        elif is_file and isinstance(input_data, str):
             validated_path = self._validate_local_file_path(input_data)
-            with open(validated_path) as f:
+            with open(validated_path, encoding="utf-8") as f:
                 content = f.read()
         else:
             content = input_data
@@ -137,104 +112,88 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
         temp_yaml.write(query_yaml if isinstance(query_yaml, str) else str(query_yaml))
         temp_yaml.close()
 
-        # Upload to GCS
-        gcs_query_path = f"gs://{self.config.bucket_name}/boltz2_queries/{job_name}.yaml"
-        self._upload_to_gcs(temp_yaml.name, gcs_query_path)
-
-        # Get Filestore info
-        if not self.config.filestore_ip:
-            filestore_ip, filestore_network = self._get_filestore_info()
-        else:
-            filestore_ip = self.config.filestore_ip
-            filestore_network = self.config.filestore_network
-
-        # Setup hardware configuration
-        hardware_config = self._get_hardware_config(
-            gpu_type,
-            num_tokens=num_tokens,
-        )
-
-        resolved_gpu = hardware_config["predict_accel"]
-        accel_to_label = {
-            "NVIDIA_L4": "l4",
-            "NVIDIA_TESLA_A100": "a100",
-            "NVIDIA_A100_80GB": "a100-80gb",
-        }
-
         pipeline_path = os.path.join(tempfile.gettempdir(), f"boltz2_pipeline_{job_name}.yaml")
-        with (
-            GLOBAL_COMPILE_LOCK,
-            self._setup_compile_env(hardware_config, filestore_ip, filestore_network)
-            or contextlib.nullcontext(),
-        ):
-            # Load and compile pipeline
+        try:
+            # Upload to GCS
+            gcs_query_path = f"gs://{self.config.bucket_name}/boltz2_queries/{job_name}.yaml"
+            self._upload_to_gcs(temp_yaml.name, gcs_query_path)
+
+            filestore_ip, filestore_network = self._ensure_filestore_config()
+
+            # Setup hardware configuration
+            hardware_config = self._get_hardware_config(
+                gpu_type,
+                num_tokens=num_tokens,
+            )
+
+            resolved_gpu = hardware_config["predict_accel"]
+
+            # Prepare labels — parse chain count from YAML for job_type
+            _parsed = yaml.safe_load(query_yaml) if isinstance(query_yaml, str) else {}
+            _seqs = _parsed.get("sequences", []) if _parsed else []
+            _num_chains = (
+                sum(
+                    len(s[next(iter(s.keys()))].get("id", ["?"]))
+                    if isinstance(s[next(iter(s.keys()))].get("id"), list)
+                    else 1
+                    for s in _seqs
+                    if s
+                )
+                if _seqs
+                else 1
+            )
+            query_name = job_name
+            labels = {
+                "model_type": "boltz2",
+                "job_type": "monomer" if _num_chains <= 1 else "complex",
+                "query_name": self._clean_label(query_name),
+                "num_tokens": str(num_tokens),
+                "num_chains": str(_num_chains),
+                "num_seeds": str(num_model_seeds),
+                "gpu_type": self.ACCEL_TO_LABEL.get(
+                    resolved_gpu, gpu_type.lower().replace("_", "-")
+                ),
+                "msa_method": "jackhmmer",
+                "submitted_by": "foldrun-agent",
+            }
+
+            # Submit pipeline job
+            pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+            job_kwargs = {
+                "display_name": job_name,
+                "template_path": pipeline_path,
+                "pipeline_root": pipeline_root,
+                "parameter_values": {
+                    "query_json_path": gcs_query_path,
+                    "project": self.config.project_id,
+                    "region": self.config.region,
+                    "nfs_cache_path": f"{self.config.nfs_mount_point}/{self.config.cache_path}",
+                    "num_model_seeds": num_model_seeds,
+                    "num_diffusion_samples": num_diffusion_samples,
+                    "base_seed": base_seed,
+                },
+                "enable_caching": True,
+                "labels": labels,
+            }
+
             from ..utils.pipeline_utils import load_vertex_pipeline
 
-            pipeline = load_vertex_pipeline(enable_flex_start=enable_flex_start)
-
-            from kfp import compiler
-
-            compiler.Compiler().compile(
-                pipeline_func=pipeline,
+            pipeline_job = self._compile_and_submit_kfp_pipeline(
+                pipeline_loader=lambda: load_vertex_pipeline(enable_flex_start=enable_flex_start),
                 package_path=pipeline_path,
+                hardware_config=hardware_config,
+                filestore_ip=filestore_ip,
+                filestore_network=filestore_network,
+                job_kwargs=job_kwargs,
+                service_account=self.config.pipelines_sa_email,
+                extra_temp_paths=[temp_yaml.name],
             )
-        # Prepare labels — parse chain count from YAML for job_type
-        import yaml as _yaml
-
-        _parsed = _yaml.safe_load(query_yaml) if isinstance(query_yaml, str) else {}
-        _seqs = _parsed.get("sequences", []) if _parsed else []
-        _num_chains = (
-            sum(
-                len(s[next(iter(s.keys()))].get("id", ["?"]))
-                if isinstance(s[next(iter(s.keys()))].get("id"), list)
-                else 1
-                for s in _seqs
-                if s
-            )
-            if _seqs
-            else 1
-        )
-        query_name = job_name
-        labels = {
-            "model_type": "boltz2",
-            "job_type": "monomer" if _num_chains <= 1 else "complex",
-            "query_name": self._clean_label(query_name),
-            "num_tokens": str(num_tokens),
-            "num_chains": str(_num_chains),
-            "num_seeds": str(num_model_seeds),
-            "gpu_type": accel_to_label.get(resolved_gpu, gpu_type.lower().replace("_", "-")),
-            "msa_method": "jackhmmer",
-            "submitted_by": "foldrun-agent",
-        }
-
-        # Submit pipeline job
-        pipeline_root = f"gs://{self.config.bucket_name}/pipeline_runs/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-        job_kwargs = {
-            "display_name": job_name,
-            "template_path": pipeline_path,
-            "pipeline_root": pipeline_root,
-            "parameter_values": {
-                "query_json_path": gcs_query_path,
-                "project": self.config.project_id,
-                "region": self.config.region,
-                "nfs_cache_path": f"{self.config.nfs_mount_point}/{self.config.cache_path}",
-                "num_model_seeds": num_model_seeds,
-                "num_diffusion_samples": num_diffusion_samples,
-                "base_seed": base_seed,
-            },
-            "enable_caching": True,
-            "labels": labels,
-        }
-
-        pipeline_job = vertex_ai.PipelineJob(**job_kwargs)
-        pipeline_job.submit(
-            network=filestore_network, service_account=self.config.pipelines_sa_email
-        )
-
-        # Clean up temp files
-        os.remove(pipeline_path)
-        os.remove(temp_yaml.name)
+        except Exception:
+            for path in (pipeline_path, temp_yaml.name):
+                if path and os.path.exists(path):
+                    os.remove(path)
+            raise
 
         # Chain info from yaml dict
         mol_types = {}

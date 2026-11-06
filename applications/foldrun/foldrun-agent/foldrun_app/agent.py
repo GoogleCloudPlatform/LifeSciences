@@ -14,54 +14,50 @@
 
 """FoldRun Agent - Main agent logic.
 
-Multi-model protein structure prediction agent supporting AlphaFold2 and
-OpenFold3. Deployed to Agent Runtime or run locally via ADK.
+Multi-model protein structure prediction agent supporting AlphaFold2,
+AlphaFold 3, OpenFold3, and Boltz-2. Deployed to Agent Runtime or run locally via ADK.
 """
 
 import logging
 import os
 
-from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
 from google.adk.apps import App
 from google.adk.flows.llm_flows.base_llm_flow import LlmResponse
 from google.genai import types
 
 from foldrun_app.skills import skill_registry
+from foldrun_common import ALLOWED_GEMINI_AGENT_MODELS, DEFAULT_GEMINI_AGENT_MODEL
 
 logger = logging.getLogger(__name__)
 
-# Load environment variables from agent's .env
-agent_env = os.path.join(os.path.dirname(__file__), "../.env")
-if os.path.exists(agent_env):
-    load_dotenv(agent_env, override=False)
-    skill_registry._register_defaults()
+# Modular v2 coordinator instructions for native ADK skills (used with SkillDiscoveryMode.EAGER)
+FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction and macromolecular modeling assistant supporting four models:
+- **AlphaFold2** (`submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_af2_batch_predictions`): Specialized for protein-only monomers and multimers (check AlphaFold DB first by UniProt ID before running GPU jobs).
+- **AlphaFold 3** (`submit_af3_endpoint_prediction`, `submit_af3_batch_predictions`): Dedicated H100 80 GB all-atom endpoint supporting Full 630 GB MSA + PDB templates (`msa_free=False`, default) and fast zero-MSA mode (`msa_free=True`) for proteins, RNA, DNA, ligands, and ions.
+- **OpenFold3** (`submit_of3_prediction`): Multi-molecule complexes (proteins, RNA, DNA, CCD/SMILES ligands); **preferred for RNA** because its MSA pipeline runs automated `nhmmer` RNA alignment against Rfam + RNAcentral.
+- **Boltz-2** (`submit_boltz2_prediction`): Biomolecular complexes, covalent modifications, glycans, and **ligand binding affinity prediction** (`properties: [{affinity: {binder: <chain_id>}}]`), outputting `affinity_pred_value` (`log10(IC50 uM)`, more negative = stronger binding) and `affinity_probability_binary` (`0–1` active binder probability).
 
-# Static v1 fallback instructions compiled directly from skills/packages/*/SKILL.md + references/*.md
-AGENT_INSTRUCTION = skill_registry.compile_instruction(include_references=True)
+## Confidence Metrics & Post-Job Analysis Summary
+- **pLDDT (`0–100`)**: Per-residue/atom local confidence (`>90` very high / reliable sidechains; `70–90` confident backbone; `50–70` flexible loops; `<50` intrinsically disordered regions).
+- **PAE / PDE (`Å`)**: Pairwise positional/distance error (`<5 Å` rigid domain/interface packing; `>15 Å` uncertain relative domain/chain orientation).
+- **pTM & ipTM (`0–1`)**: Global fold (`pTM > 0.8`) and complex interface confidence (`ipTM > 0.75` reliable binding pose; `<0.6` uncertain interface; ranking score `0.8 * ipTM + 0.2 * pTM`).
+- **Post-job workflow**: Run `analyze_job_parallel(job_id)` to launch Cloud Run analysis, `get_analysis_results(job_id)` to fetch `summary.json` metrics and Gemini expert analysis, `open_structure_viewer(job_id)` to open the interactive 3D Mol* viewer, and `download_job_artifacts(job_id)` for signed HTTPS download links (`artifacts_bundle.zip`).
 
-# Modular v2 coordinator instructions for native ADK skills
-FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction and macromolecular modeling assistant.
-You support AlphaFold2 (proteins), AlphaFold 3 (interactive all-atom endpoint with `--msa-free` and Full 630 GB MSA modes), OpenFold3 (complexes, RNA with nhmmer MSA, DNA, ligands), and Boltz-2 (covalent mods, glycans).
-
-You operate via modular ADK skills (agentskills.io standard). Use progressive disclosure to perform tasks:
-1. Call `list_skills` to discover available specialized domain skills when needed.
-2. Call `load_skill` to load instructions and activate domain-specific tools for the task at hand:
-   - `job-submission`: Pre-submission confirmation table, hardware rules, and submitting AF2, AF3, OF3, or Boltz-2 jobs.
-   - `job-management`: Checking job status, AF3 endpoint lifecycle & replica scaling, quota inspection, task failure analysis, and safe job deletion.
-   - `results-analysis`: Confidence metric evaluation (pLDDT, PAE, ipTM, ranking scores) and Cloud Run parallel analysis.
-   - `visualization`: Interactive 3D Mol* structure viewer links.
-   - `cost-estimation`: Per-job and monthly GCP infrastructure pricing with DWS FLEX_START spot comparisons.
-   - `database-queries`: AlphaFold DB structure and annotation lookups.
-   - `storage-management`: Safe two-step GCS hygiene and orphan output cleanup.
-3. Call `load_skill_resource` to read deep domain references (e.g., `references/of3-metrics.md`) when analyzing metrics.
-4. Execute activated domain tools to perform operations.
+## Progressive Disclosure & Tool Routing Rules
+1. **Direct Q&A (Zero Tool Calls)**: Answer general questions about model selection, ligand/affinity capabilities, confidence metric interpretation (`pLDDT`, `ipTM`, `PAE`, `PDE`), and workflow guidance **directly from these instructions** without calling `load_skill`.
+2. **When to Call `load_skill`**: Call `load_skill` ONLY when you need to execute a domain tool (e.g., checking GPU quota, listing/managing jobs, estimating costs, querying AlphaFold DB, cleaning up storage, or preparing a pre-submission confirmation table for a user-provided sequence/complex). **CRITICAL**: Domain tools (`check_gpu_quota`, `list_jobs`, `cleanup_gcs_files`, etc.) are NOT registered until AFTER `load_skill` returns—NEVER call a domain tool in the same turn as `load_skill`.
+3. **Batch Parallel Lookups**: If a request genuinely requires multiple skills or multiple `load_skill_resource` files, call them **in parallel in a single turn** rather than sequentially across turns.
 
 ## Response Guidelines
 - Always verify job status with `check_job_status` (or `check_af3_endpoint` for AF3 endpoint state) before reporting results. NEVER hallucinate job completion or status.
-- Present required pre-submission confirmation tables and safety warnings as specified by the relevant skill.
+- Present required pre-submission confirmation tables and safety warnings before calling any submission or deletion tool.
 - After every response, suggest 2-3 contextual next actions as numbered choices.
 """
+
+_root_agent: LlmAgent | None = None
+_app: App | None = None
+_lazy_initialized: bool = False
 
 
 def _retry_on_resource_exhausted(callback_context, llm_request, error):
@@ -88,10 +84,35 @@ def _retry_on_resource_exhausted(callback_context, llm_request, error):
     )
 
 
+def _ensure_root_agent() -> tuple[LlmAgent | None, App | None]:
+    """Lazily initialize root_agent and ADK App on first access."""
+    global _root_agent, _app, _lazy_initialized
+    if not _lazy_initialized:
+        _lazy_initialized = True
+        try:
+            if os.getenv("FOLDRUN_V2", "true").lower() in ("true", "1", "yes"):
+                _root_agent = create_foldrun_agent()
+            else:
+                _root_agent = create_alphafold_agent()
+            _app = App(root_agent=_root_agent, name="foldrun_app")
+        except Exception:
+            _root_agent = None
+            _app = None
+    return _root_agent, _app
+
+
 def __getattr__(name: str):
-    """Lazy module attribute getter to avoid import-time tool compilation side effects."""
+    """Lazy module attribute getter to avoid import-time tool compilation and GCP calls."""
     if name == "all_tools":
         return skill_registry.compile_tools()
+    if name == "AGENT_INSTRUCTION":
+        return skill_registry.compile_instruction(include_references=True)
+    if name == "root_agent":
+        agent, _ = _ensure_root_agent()
+        return agent
+    if name == "app":
+        _, adk_app = _ensure_root_agent()
+        return adk_app
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -114,119 +135,46 @@ def _get_agent_config_context(gemini_model: str) -> str:
     )
     viewer_base_url = os.getenv("FOLDRUN_VIEWER_URL") or "Not configured"
 
-    return f"""
-## Your Current Configuration
+    return f"""## Your Current Configuration
+- Project ID: {project_id} | Region: {region} | GCS Bucket: gs://{gcs_bucket}/
+- Analysis Viewer: {viewer_base_url} | AI Model: {gemini_model}
 
-**Google Cloud Environment:**
-- Project ID: {project_id}
-- Region: {region}
-- GCS Bucket: gs://{gcs_bucket}/
-- AI Model: {gemini_model}
-
-**Services:**
-- Analysis Viewer: {viewer_base_url}
-
-**IMPORTANT: Initial Greeting**
-When starting a new conversation (first message from user), show the following:
-
-1. A brief welcome and capabilities overview:
-
-"Welcome to FoldRun! I can help you predict 3D structures of proteins, RNA, DNA, and small molecule complexes using four models:
-
-**AlphaFold2** — protein-only predictions (monomer or multimer on KFP)
-- Best for: single proteins, protein-protein complexes
-- Input: FASTA sequence
-- Output: PDB structure + pLDDT/PAE confidence scores
-
-**AlphaFold 3** — interactive all-atom predictions on a dedicated Vertex AI Endpoint
-- Best for: rapid `--msa-free` screening (~58s/structure for de novo / bicycle peptides) or Full 630 GB MSA complexes (~4.6m/structure on H100 + local NVMe SSD)
-- Supports dynamic replica scaling (`min_replica_count` / `max_replica_count`) and zero-cost pause (`$0/hr` when undeployed)
-- Output: CIF structure + ranking_score/ipTM/pTM/pLDDT/PAE plots
-
-**OpenFold3** — multi-molecule predictions with full RNA MSA support (KFP)
-- Best for: drug-target complexes, RNA structures, anything with non-protein components
-- Runs nhmmer RNA MSA (Rfam + RNAcentral) for best RNA accuracy
-- Input: FASTA (auto-converted) or OF3 JSON (for ligands via SMILES/CCD codes)
-- Output: CIF structure + ranking_score/ipTM/pTM confidence scores
-
-**Boltz-2** — multi-molecule predictions with covalent modification and glycan support (KFP)
-- Best for: covalently modified ligands, glycoproteins, or when explicitly requested
-- Note: handles RNA/DNA/ligands but without external RNA MSA — OF3 is preferred for RNA
-- Input: FASTA (auto-converted to YAML) or native Boltz-2 YAML
-- Output: CIF structure + confidence_score/ipTM/pTM confidence scores
-
-**Getting started — try one of these:**
-- 'Predict the structure of ubiquitin with AlphaFold 3 (--msa-free vs full MSA)'
-- 'Fold this protein with ATP' (OF3 or AF3, protein + ligand)
-- 'Predict a glycoprotein complex' (Boltz-2, glycan support)
-- 'What's the structure of P69905?' (check AlphaFold DB first)
-
-I handle the full lifecycle: submit → monitor → analyze → visualize."
-
-2. Then show the environment:
-
-| Component | Value |
-|-----------|-------|
-| Project | {project_id} |
-| Region | {region} |
-| Models | AlphaFold2, AlphaFold 3, OpenFold3, Boltz-2 |
-| AI Model | {gemini_model} |
-
-**When users explicitly ask about configuration:**
-Show full details including GCS bucket, viewer URL. If any value shows "Not configured", explain that the environment variable isn't set
+**Initial Greeting (First User Message Only)**:
+Welcome the user to FoldRun, summarize the four supported models—**AlphaFold2** (protein-only monomers/multimers), **AlphaFold 3** (all-atom H100 endpoint with `--msa-free` and Full 630 GB MSA), **OpenFold3** (multi-molecule complexes, ligands, and RNA with nhmmer MSA), and **Boltz-2** (covalent modifications, glycans, and ligand binding affinity)—show a compact environment table (`Project`, `Region`, `Models`, `AI Model`), and offer Getting started example prompts (e.g., *"Predict the structure of ubiquitin with AlphaFold 3"*, *"Fold this protein with ATP ligand"*, *"What's the structure of P69905?"*). When asked about configuration, include the GCS bucket and viewer URL.
 """
 
 
 def _initialize_backends():
-    """Trigger eager backend initialization and auto-detection."""
-    from foldrun_app.models.af2.startup import get_config
-
-    get_config()
-
-    try:
-        from foldrun_app.models.of3.startup import get_config as get_of3_config
-
-        get_of3_config()
-    except Exception:
-        pass
-
-    try:
-        from foldrun_app.models.boltz2.startup import get_config as get_boltz2_config
-
-        get_boltz2_config()
-    except Exception:
-        pass
-
+    """Trigger backend initialization and GPU auto-detection for enabled models."""
     from foldrun_app.skills._tool_registry import ensure_initialized
 
     ensure_initialized()
 
 
+def _resolve_validated_gemini_model(model: str | None) -> str:
+    """Resolve and validate the Gemini model identifier against the GA allowlist."""
+    gemini_model = model or os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_AGENT_MODEL)
+    if gemini_model not in ALLOWED_GEMINI_AGENT_MODELS:
+        raise ValueError(
+            f"Model '{gemini_model}' not supported. Use one of: {', '.join(ALLOWED_GEMINI_AGENT_MODELS)}"
+        )
+    return gemini_model
+
+
 def create_alphafold_agent(model: str | None = None) -> LlmAgent:
-    """Create and configure the baseline v1 FoldRun agent (AF2 + OF3 + Boltz-2) with static tools.
+    """Create and configure the baseline v1 FoldRun agent with static tools.
 
     Retained as the rollback/fallback path and for backward compatibility.
     """
-    gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-
-    # Validate model choice
-    allowed_models = [
-        "gemini-3.8-flash",
-        "gemini-3.5-flash",
-        "gemini-4-argon",
-    ]
-    if gemini_model not in allowed_models:
-        raise ValueError(
-            f"Model '{gemini_model}' not supported. Use one of: {', '.join(allowed_models)}"
-        )
-
+    gemini_model = _resolve_validated_gemini_model(model)
     _initialize_backends()
 
     config_context = _get_agent_config_context(gemini_model)
-    full_instruction = AGENT_INSTRUCTION + "\n\n" + config_context
+    base_instruction = skill_registry.compile_instruction(include_references=True)
+    full_instruction = base_instruction + "\n\n" + config_context
     tools = skill_registry.compile_tools()
 
-    agent = LlmAgent(
+    return LlmAgent(
         model=gemini_model,
         name="foldrun_app",
         description="Expert AI assistant for FoldRun (AlphaFold2 + OpenFold3) protein structure prediction, job management, and results analysis",
@@ -235,35 +183,20 @@ def create_alphafold_agent(model: str | None = None) -> LlmAgent:
         on_model_error_callback=_retry_on_resource_exhausted,
     )
 
-    return agent
-
 
 def create_foldrun_agent(model: str | None = None) -> LlmAgent:
     """Create and configure the FoldRun v2 agent using native ADK skills and SkillToolset.
 
-    Activated when FOLDRUN_V2=true. Uses progressive disclosure and dynamic additional tools.
+    Activated when FOLDRUN_V2=true. Uses EAGER skill discovery and dynamic additional tools.
     """
-    gemini_model = model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-
-    # Validate model choice
-    allowed_models = [
-        "gemini-3.8-flash",
-        "gemini-3.5-flash",
-        "gemini-4-argon",
-    ]
-    if gemini_model not in allowed_models:
-        raise ValueError(
-            f"Model '{gemini_model}' not supported. Use one of: {', '.join(allowed_models)}"
-        )
-
+    gemini_model = _resolve_validated_gemini_model(model)
     _initialize_backends()
 
     config_context = _get_agent_config_context(gemini_model)
     full_instruction = FOLDRUN_V2_INSTRUCTION.strip() + "\n\n" + config_context
-
     skill_toolset = skill_registry.get_skill_toolset()
 
-    agent = LlmAgent(
+    return LlmAgent(
         model=gemini_model,
         name="foldrun_app",
         description="Expert AI assistant for FoldRun 2.0 with modular skills architecture",
@@ -271,16 +204,3 @@ def create_foldrun_agent(model: str | None = None) -> LlmAgent:
         tools=[skill_toolset],
         on_model_error_callback=_retry_on_resource_exhausted,
     )
-
-    return agent
-
-
-try:
-    if os.getenv("FOLDRUN_V2", "false").lower() in ("true", "1", "yes"):
-        root_agent = create_foldrun_agent()
-    else:
-        root_agent = create_alphafold_agent()
-    app = App(root_agent=root_agent, name="foldrun_app")
-except Exception:
-    root_agent = None
-    app = None

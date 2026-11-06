@@ -291,13 +291,65 @@ class TestSkillRegistry:
         assert "af2_analyze_job_parallel" not in ra_tools
         assert "af2_get_analysis_results" not in ra_tools
 
-    def test_get_skill_toolset(self):
-        """get_skill_toolset returns a SkillToolset with loaded skills and candidate tools."""
+    @pytest.mark.asyncio
+    async def test_get_skill_toolset(self):
+        """get_skill_toolset exposes only load_skill/load_skill_resource initially and activates domain tools on load."""
+        from types import SimpleNamespace
+
+        from google.adk.tools.skill_toolset import SkillDiscoveryMode
+
         toolset = skill_registry.get_skill_toolset()
         assert isinstance(toolset, SkillToolset)
+        assert toolset._discovery_mode == SkillDiscoveryMode.EAGER
+        assert "load_skill" in toolset.tool_filter
+        assert "load_skill_resource" in toolset.tool_filter
+        assert "run_skill_script" not in toolset.tool_filter
         skill_names = {s.frontmatter.name for s in toolset._skills.values()}
         assert "job-submission" in skill_names
         assert "submit_af2_monomer_prediction" in toolset._provided_tools_by_name
+
+        # Verify job-submission has all 4 per-model submission references loaded
+        js_refs = set(toolset._skills["job-submission"].resources.references.keys())
+        assert {
+            "af2-submission.md",
+            "of3-submission.md",
+            "boltz2-submission.md",
+            "af3-submission.md",
+        }.issubset(js_refs)
+
+        # Before skill activation: only load_skill and load_skill_resource are exposed
+        ctx_initial = SimpleNamespace(
+            state={},
+            agent_name="foldrun_app",
+            invocation_id="inv-1",
+            _invocation_context=None,
+        )
+        initial_tools = [t.name for t in await toolset.get_tools(ctx_initial)]
+        assert initial_tools == ["load_skill", "load_skill_resource"]
+
+        # After activating job-management: domain tools (e.g. check_gpu_quota, list_jobs) are exposed
+        ctx_activated = SimpleNamespace(
+            state={"_adk_activated_skill_foldrun_app": ["job-management"]},
+            agent_name="foldrun_app",
+            invocation_id="inv-1",
+            _invocation_context=None,
+        )
+        active_tools = {t.name for t in await toolset.get_tools(ctx_activated)}
+        assert {"load_skill", "load_skill_resource", "check_gpu_quota", "list_jobs"}.issubset(
+            active_tools
+        )
+
+    def test_skill_descriptions_match_frontmatter_and_include_triggers(self):
+        """All 7 skills use third-person descriptions with 'Use when' triggers and match SKILL.md frontmatter."""
+        adk_by_name = {
+            s.frontmatter.name.replace("-", "_"): s.frontmatter.description
+            for s in skill_registry.load_adk_skills()
+        }
+        for skill in skill_registry.list_skills():
+            if skill.name in adk_by_name:
+                assert skill.description == adk_by_name[skill.name]
+                assert "Use when" in skill.description or "Use before" in skill.description
+                assert len(skill.instruction.splitlines()) < 120
 
     def test_compile_instruction_includes_references(self):
         """compile_instruction(include_references=True) embeds package references/*.md."""

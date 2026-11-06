@@ -14,14 +14,26 @@
 
 metrics_to_run:
   - custom_response_quality
+  - skill_and_tool_adherence
+  - agent_turn_count
+  - agent_event_count
 
 custom_metrics:
   # Default: local LLM-as-judge (see response_quality.py). Runs in-process via
   # google-genai on Gemini platform (ADC) or Google AI Studio (GEMINI_API_KEY).
   - name: custom_response_quality
     custom_function_file: response_quality.py
+  # Deterministic skill, tool-routing, and safety-gate adherence check.
+  - name: skill_and_tool_adherence
+    custom_function_file: skill_adherence.py
   - name: agent_turn_count
     custom_function: |
       def evaluate(instance):
           turns = (instance.get("agent_data") or {}).get("turns", [])
           return {'score': len(turns)}
+  - name: agent_event_count
+    custom_function: |
+      def evaluate(instance):
+          turns = (instance.get("agent_data") or {}).get("turns", [])
+          events = sum(len(t.get("events") or []) for t in turns if isinstance(t, dict))
+          return {'score': events}

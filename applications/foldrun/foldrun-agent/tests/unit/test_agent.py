@@ -342,6 +342,31 @@ class TestCreateAgent:
             with pytest.raises(ValueError, match="not supported"):
                 create_foldrun_agent(model="gemini-3.1-pro-preview")
 
+    def test_lazy_agent_instruction_and_dynamic_skill_registration(self, mock_env_vars):
+        """AGENT_INSTRUCTION is resolved lazily via __getattr__ and create_alphafold_agent reflects registered skills."""
+        with (
+            _mock_startup(),
+            patch("google.cloud.aiplatform.init"),
+            patch("google.cloud.storage.Client"),
+        ):
+            import foldrun_app.agent as agent_mod
+            from foldrun_app.skills import Skill, skill_registry
+
+            assert "Job Submission" in agent_mod.AGENT_INSTRUCTION
+
+            custom_skill = Skill(
+                name="dynamic_test_skill",
+                description="Dynamic test skill. Use when testing dynamic registration.",
+                instruction="## Dynamic Test Skill Section",
+                tool_functions=[],
+            )
+            skill_registry.register(custom_skill)
+            try:
+                agent = agent_mod.create_alphafold_agent()
+                assert "## Dynamic Test Skill Section" in agent.instruction
+            finally:
+                skill_registry._skills.pop("dynamic_test_skill", None)
+
     def test_af2_submission_tools_exclude_deprecated_vertex_repo_path(self):
         """AF2 submission skill wrappers do not expose deprecated vertex_repo_path."""
         import inspect

@@ -1,6 +1,6 @@
 ---
 name: job-submission
-description: Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2
+description: Submits protein, RNA, DNA, ligand, and multimer structure prediction jobs using AlphaFold2, AlphaFold3, OpenFold3, or Boltz-2. Use when the user provides a FASTA sequence, JSON/YAML query, SMILES/CCD ligand, or asks to fold, predict, or batch-submit biomolecular structures.
 metadata:
   adk_additional_tools:
     - submit_af2_monomer_prediction
@@ -12,391 +12,56 @@ metadata:
     - submit_af3_batch_predictions
 ---
 
-# Job Submission — Model Selection
+# Job Submission — Model Selection & Workflow
 
-Four models are available. Choose based on the input:
+## Model Selection Matrix
 
 | Model | Tool | Use When |
 |-------|------|----------|
-| **AlphaFold2** | `submit_af2_monomer_prediction` | Single-chain protein (monomer) |
-| **AlphaFold2** | `submit_af2_multimer_prediction` | Protein-only complex (multimer) |
+| **AlphaFold2** | `submit_af2_monomer_prediction` | Single-chain protein (monomer, >=10 aa) |
+| **AlphaFold2** | `submit_af2_multimer_prediction` | Protein-only complex (multimer, 2+ chains) |
 | **AlphaFold2** | `submit_af2_batch_predictions` | Multiple AF2 jobs at once |
-| **AlphaFold3** | `submit_af3_endpoint_prediction` | Single all-atom complex (protein, RNA, DNA, ligands, ions); Full 630 GB MSA (`msa_free=False`, default) or fast zero-MSA (`msa_free=True`) via KFP + Vertex AI Endpoint |
-| **AlphaFold3** | `submit_af3_batch_predictions` | Multiple AF3 jobs at once — submits each target as an async KFP `PipelineJob` (`alphafold3-inference-pipeline-...`) queued across the warm H100 replica(s) |
-| **OpenFold3** | `submit_of3_prediction` | Protein + RNA, DNA, or ligands; preferred for RNA (has full RNA MSA via nhmmer) |
-| **Boltz-2** | `submit_boltz2_prediction` | Covalent modifications, glycans, or when user explicitly requests it; can do RNA/DNA/ligands but **no RNA MSA** |
+| **AlphaFold3** | `submit_af3_endpoint_prediction` | Single all-atom complex (protein, RNA, DNA, ligands, ions) on dedicated H100 endpoint (`msa_free=False` Full 630 GB MSA default, or `msa_free=True` fast screening) |
+| **AlphaFold3** | `submit_af3_batch_predictions` | 2+ AF3 targets queued across warm H100 replica(s) (always prefer over calling `submit_af3_endpoint_prediction` in a loop) |
+| **OpenFold3** | `submit_of3_prediction` | Multi-molecule complexes (protein + RNA, DNA, or ligands); **preferred for RNA** (runs nhmmer RNA MSA against Rfam + RNAcentral) |
+| **Boltz-2** | `submit_boltz2_prediction` | Covalent modifications, glycans, **binding affinity prediction** (`IC50` / binder probability), or when explicitly requested (no external RNA MSA) |
 
-**Decision rule**:
-- Protein-only → AlphaFold2 (monomer or multimer) or AlphaFold 3 (if requested or comparing)
-- Single AF3 job → **AlphaFold 3** (`submit_af3_endpoint_prediction`)
-- Multiple AF3 jobs (2+ targets) → **AlphaFold 3 Batch** (`submit_af3_batch_predictions` — always prefer batch over calling `submit_af3_endpoint_prediction` in a loop)
-- Contains RNA, DNA, or ligands with OpenFold3 pipeline → **OpenFold3** (preferred: runs nhmmer RNA MSA for better RNA accuracy)
-- Contains covalent modifications or glycans → **Boltz-2** (only model that supports these)
-- User explicitly requests Boltz-2 or AlphaFold 3 → use requested model
-- RNA + covalent mod/glycan → Boltz-2 (no choice), but note RNA accuracy may be lower without MSA
+**Decision rules**:
+- Protein-only → **AlphaFold2** (monomer/multimer) or **AlphaFold 3** (if requested or comparing).
+- Contains RNA, DNA, or ligands → **OpenFold3** (preferred for RNA accuracy) or **AlphaFold 3** (if H100 endpoint is enabled/requested).
+- Contains covalent modifications, glycans, or requires ligand binding affinity (`properties: [{affinity: ...}]`) → **Boltz-2**.
+- Multiple jobs (2+ targets) → Use `submit_af2_batch_predictions` (AF2) or `submit_af3_batch_predictions` (AF3).
 
-Boltz-2 natively uses YAML input. `submit_boltz2_prediction` will automatically convert FASTA to Boltz-2 YAML.
+## Default Hardware, Provisioning & Input Summary
 
-**Data Handling Notice**
-When a user submits their FIRST prediction in a session, include this note in the confirmation:
-"Your protein sequence will be stored in your project's Cloud Storage bucket, processed by Agent Platform Pipelines, and analyzed by Gemini — all within your GCP project. No data is sent outside Google Cloud. Results persist until you delete them."
-Do NOT repeat this notice on subsequent submissions in the same session.
+| Model | Data / MSA Phase | Predict Hardware (`gpu_type="auto"`) | Relax Phase | Default Seeds × Samples | Provisioning |
+|-------|------------------|--------------------------------------|-------------|-------------------------|--------------|
+| **AlphaFold2** | `c2-standard-16` CPU (`jackhmmer`, `use_small_bfd=True`) or GPU `mmseqs2` | `<500` aa: `L4` (`g2-standard-12`, 24 GB) or `A100` (`a2-highgpu-1g`, 40 GB); `500–1500` aa: `A100` 40 GB; `>1500` aa: `A100_80GB` (`a2-ultragpu-1g`, 80 GB) | `L4` / `A100` (`run_relaxation=True`) | Monomer: `5 × 1 = 5`; Multimer: `5 × 5 = 25` | `DWS FLEX_START` |
+| **OpenFold3** | `c2-standard-16` CPU (`jackhmmer` + `nhmmer` RNA MSA + PDB templates) | `<=2200` tokens: `A100` 40 GB (`a2-highgpu-1g`); `>2200` tokens: `A100_80GB` 80 GB (`a2-ultragpu-1g`) | None | `1 × 5 = 5` (or `5 × 5 = 25` AF3 protocol) | `DWS FLEX_START` |
+| **Boltz-2** | `c2-standard-16` CPU (`jackhmmer` protein MSA) | `<=2000` tokens: `A100` 40 GB (`a2-highgpu-1g`); `>2000` tokens: `A100_80GB` 80 GB (or `L4` for `<=1000` tokens) | None | `1 × 5 = 5` (or `5 × 5 = 25`) | `DWS FLEX_START` |
+| **AlphaFold 3** | H100 local NVMe SSD (`msa_free=False` Full 630 GB MSA default, or `msa_free=True`) | `H100` 80 GB (`a3-highgpu-1g` Dedicated Endpoint) | None | Monomer/`msa_free`: `1 × 5 = 5`; Full-MSA complex: `5 × 5 = 25` | `DWS FLEX_START` |
 
-**CRITICAL: Pre-Submission Confirmation Required for Vertex AI Pipelines**
-NEVER submit a Vertex AI Pipeline job (`submit_af2_*`, `submit_of3_*`, `submit_boltz2_*`) without first showing the user a detailed hardware breakdown and getting explicit confirmation.
-Before calling any pipeline submit function, ALWAYS present the following table and ask for confirmation:
+- **Boltz-2 Binding Affinity (`submit_boltz2_prediction`)**: Use Boltz-2 YAML (`version: 1`) with `sequences:` (`protein` chain `A`, `ligand` chain `B` via `ccd: ATP` or `smiles: '...'`) and `properties: [{affinity: {binder: B}}]`. Outputs `affinity_pred_value` (`log10(IC50 uM)`) and `affinity_probability_binary` (`0–1` active binder probability).
+
+## Pre-Submission Confirmation Required (Plan → Validate → Confirm → Submit)
+
+**CRITICAL GUARDRAIL**: NEVER call `submit_af2_*`, `submit_of3_*`, `submit_boltz2_*`, or `submit_af3_*` without first presenting the hardware breakdown table and receiving explicit user approval (e.g., `"yes"`, `"submit"`, `"go ahead"`).
+
+**FAST CONFIRMATION RULE**: Use the **Default Hardware, Provisioning & Input Summary** table above to render the pre-submission confirmation table immediately—do **NOT** call `load_skill_resource` on Turn 1 just to build a standard confirmation table. Only call `load_skill_resource` when the user asks for advanced schema syntax (covalent modifications, glycans, dsDNA reverse complements, H100 runtime benchmarks) or when constructing complex multi-chain JSON/YAML payloads after confirmation:
+- **AlphaFold2**: `references/af2-submission.md`
+- **OpenFold3**: `references/of3-submission.md`
+- **Boltz-2**: `references/boltz2-submission.md`
+- **AlphaFold 3**: `references/af3-submission.md`
+
+### Standard Pre-Submission Hardware Breakdown Table
+Always show the **resolved** GPU (not `'auto'`), MSA method, scheduling strategy (`DWS FLEX_START` default), and template/relaxation settings:
 
 | Pipeline Phase | Machine Type | GPU | Count | Strategy |
 |----------------|-------------|-----|-------|----------|
-| Data Pipeline  | c2-standard-16 | None (CPU, Jackhmmer) | - | DWS FLEX_START |
-| Predict        | (machine type) | (GPU type — auto-selected or user override) | (count) | DWS FLEX_START |
-| Relax          | (machine type) | (GPU type — auto-downgraded) | (count) | DWS FLEX_START |
+| Data / MSA Pipeline | c2-standard-16 | None (CPU, Jackhmmer) | - | DWS FLEX_START / STANDARD |
+| Predict | a2-highgpu-1g (or g2-standard-12 / a3-highgpu-1g) | L4 / A100 40GB / A100 80GB / H100 80GB | 1 | DWS FLEX_START |
+| Relax (AF2 only; None for OF3/Boltz-2/AF3) | a2-highgpu-1g (or g2-standard-12) | L4 / A100 40GB | 1 | DWS FLEX_START |
 
-Include:
-- The sequence name, length, and type (monomer/multimer)
-- The **resolved** GPU and MSA method (show what was auto-selected, note if user can override)
-- The MSA method (default: Jackhmmer CPU; optional: MMseqs2 GPU if indexes are built)
-- Scheduling strategy: DWS FLEX_START (default) or ON_DEMAND
-- Whether relaxation is enabled
-- **Template date**: always show the `max_template_date` value (default: 2030-01-01 = all PDB templates enabled)
-
-**Per-Phase GPU Allocation Rules (defaults):**
-- **Data Pipeline**: Always CPU-only (c2-standard-16), no GPU
-- **Predict**: Uses the user-requested GPU (default: A100 40GB)
-- **Relax**: Matches the predict tier (AMBER runs on the same machine, no downgrade):
-  - If predict uses A100_80GB → relax uses A100 (40GB)
-  - If predict uses A100 → relax uses A100 (40GB)
-  - If predict uses L4 (explicit override only) → relax uses L4
-- **Relax GPU Override**: The user can override the relax GPU by specifying `relax_gpu_type`.
-  Always show the default relax GPU in the plan, and if the user wants to change it, use the `relax_gpu_type` parameter.
-
-Example confirmation message:
-```
-## Submission Plan for T1031 (95 residues, monomer)
-
-| Phase | Machine | GPU | Strategy |
-|-------|---------|-----|----------|
-| Data Pipeline | c2-standard-16 | None (Jackhmmer, CPU) | DWS FLEX_START |
-| Predict | a2-highgpu-1g | A100 40GB × 1 | DWS FLEX_START |
-| Relax | a2-highgpu-1g | A100 40GB × 1 | DWS FLEX_START |
-
-- GPU: A100 40GB (auto-selected — provisions faster than L4 under DWS FLEX_START)
-- MSA Method: Jackhmmer (default, CPU) — set msa_method='mmseqs2' for GPU-accelerated search (requires MMseqs2 index conversion)
-- Database: Small BFD (faster)
-- Templates: enabled (max_template_date=2030-01-01, all PDB templates included) — set an earlier date to restrict
-- Scheduling: DWS FLEX_START (spot/preemptible, queues when GPUs unavailable)
-- Relaxation: Enabled
-
-Shall I submit this job?
-```
-
-Wait for explicit user confirmation (e.g., "yes", "submit", "go ahead") before calling the submit function. DO NOT submit automatically.
-
-## FASTA Sequence Format
-
-When submitting sequences, ensure they follow proper FASTA format:
-
-### Valid Format Examples
-
-**Monomer (single chain):**
-```
->protein_name
-MKTIALSYIFCLVFADYKDDDDKGSAATTDSTNGEEEEE
-```
-
-**Multimer (multiple chains):**
-```
->chain_A
-MKTIALSYIFCLVFADYKDDDDKGSAATTDSTNGEEEEE
->chain_B
-ACDEFGHIKLMNPQRSTVWY
-```
-
-### Sequence Requirements
-- **Minimum length**: 10 residues per chain
-- **Valid amino acids**: ACDEFGHIKLMNPQRSTVWY (standard 20)
-- **No numbers or special characters** in sequence
-- **No empty sequences** - each chain must have actual residues
-- **Uppercase recommended** but lowercase will be auto-converted
-- **No whitespace** in sequences (spaces/tabs/newlines within sequence will be removed)
-
-### Common Errors to Avoid
-❌ Empty sequence after header: `>protein\n` (missing sequence!)
-❌ Too short: `>protein\nMKT` (only 3 residues, need ≥10)
-❌ Invalid characters: `>protein\nMKT123ALSYIF` (numbers not allowed)
-❌ Multiple chains for monomer job (use multimer submission instead)
-
-### Validation
-The system automatically validates all sequences before submission and will provide clear error messages if format is incorrect.
-
-## Best Practices
-
-### Hardware Selection
-- **gpu_type: 'auto'** (default): Automatically selects GPU based on sequence length. L4 is no longer auto-selected — A100 provisions faster under DWS FLEX_START.
-  - Monomer <=1500 residues → A100 40GB (relax: A100 40GB)
-  - Monomer >1500 residues → A100 80GB (relax: A100 40GB)
-  - Multimer <1000 total residues → A100 40GB (relax: A100 40GB)
-  - Multimer >=1000 total residues → A100 80GB (relax: A100 40GB)
-- **Explicit override**: Users can set gpu_type to 'L4', 'A100', or 'A100_80GB'. If a user requests L4, note that L4 quota is often limited and may queue longer than A100 under DWS FLEX_START.
-- **DWS FLEX_START is enabled by default** — jobs queue via Dynamic Workload Scheduler when GPUs are unavailable (avoids provisioning failures, uses spot/preemptible pricing)
-- **Check quotas first**: Use check_gpu_quota before submitting to see available capacity and avoid failures
-- When showing the confirmation table, always show the **resolved** GPU (not 'auto') and note it was auto-selected
-
-### MSA Method (msa_method)
-- **msa_method: 'auto'** (default): Always selects **Jackhmmer** (CPU-based). Works out of the box with downloaded FASTA databases. No extra setup required.
-- **msa_method: 'jackhmmer'**: Explicit CPU-based MSA search. Uses Jackhmmer (UniRef90, MGnify) and HHblits (UniRef30, BFD). Works with all database configurations.
-- **msa_method: 'mmseqs2'**: GPU-accelerated MSA search (optional, 177x faster). **Requires**:
-  1. `use_small_bfd=True` (FASTA databases only)
-  2. Pre-built MMseqs2 indexes on Filestore (built via `./deploy-all.sh <PROJECT_ID> <REGION> --steps convert`)
-  - If the user requests mmseqs2 but indexes haven't been built, remind them to run the `--steps convert` deployment step first. The conversion is a one-time step that takes ~3-4 hours on n1-highmem-32 with local SSDs.
-
-### Database Options
-- **use_small_bfd: true**: Faster, recommended for most cases (15-30 min for small proteins). Compatible with both jackhmmer and mmseqs2 MSA methods.
-- **use_small_bfd: false**: Full BFD database, slower but more thorough (30-60 min+). Only compatible with jackhmmer MSA method.
-
-### Dynamic Workload Scheduler (DWS)
-- **enable_flex_start: true** (default): Job queues via DWS when GPUs are unavailable (spot/preemptible pricing)
-- **enable_flex_start: false**: Job fails immediately if no GPU capacity (on-demand pricing)
-
-## AF2 Reference (internal knowledge — use when helping users, don't dump unprompted)
-
-### AF2 Model Variants
-AF2 runs 5 neural network architectures per prediction (not seeds — these are distinct trained models):
-- **Monomer**: model_1 through model_5 (monomer preset), each produces 1 prediction = 5 total
-- **Monomer with templates**: model_1_ptm through model_5_ptm, includes pTM head for quality scoring
-- **Multimer**: model_1_multimer_v3 through model_5_multimer_v3, 5 predictions per model × 5 seeds = 25 total
-- The best model is selected by ranking_confidence (pLDDT for monomers, 0.8*ipTM + 0.2*pTM for multimers)
-
-## OpenFold3 (OF3) Predictions
-
-### When to Use OF3 vs AF2
-- **OF3**: Multi-molecule complexes (protein + RNA + DNA + ligands), single proteins with ligands, RNA structures, DNA-binding proteins. **Preferred for RNA** — runs nhmmer MSA against Rfam + RNAcentral for better RNA accuracy.
-- **Boltz-2**: Like OF3, but adds covalent modifications and glycans. **No external RNA MSA** — uses model priors only for RNA chains (less accurate for RNA than OF3).
-- **AF2**: Single-chain proteins (monomer) or protein-only complexes (multimer)
-- **Decision rule**: RNA/DNA/ligands → OF3 (better RNA). Covalent mods/glycans → Boltz-2. Protein-only → AF2.
-- **Proactive suggestion**: If a user asks about drug binding, RNA interactions, or multi-molecule structures, suggest OF3. Only suggest Boltz-2 proactively if they mention glycans, covalent bonds to ligands, or explicitly ask for it.
-
-### OF3 Input Formats
-OF3 accepts two input formats via `submit_of3_prediction`:
-
-**1. FASTA (auto-converted to OF3 JSON)**:
-Good for protein-only or simple RNA inputs. The agent auto-detects molecule types:
-- Sequences with standard amino acids → protein
-- Sequences containing U (ACGU) → RNA
-- Long sequences of only ACGT → DNA
-
-**2. Native OF3 JSON (for ligands and complex inputs)**:
-Required when the input includes ligands (SMILES or CCD codes). Guide users to provide:
-```json
-{
-  "queries": {
-    "my_complex": {
-      "chains": [
-        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": "MKTI..."},
-        {"molecule_type": "ligand", "chain_ids": ["B"], "smiles": "CC(=O)OC1..."},
-        {"molecule_type": "rna", "chain_ids": ["C"], "sequence": "AGCUAGCU"}
-      ]
-    }
-  }
-}
-```
-
-### OF3 Job Parameters — Seeds vs Samples
-OF3 uses diffusion-based prediction with two levels of diversity:
-- **Seeds** (`num_model_seeds`): Different random weight initializations → **independently folded structures** (potentially very different conformations). Scale-out unit for parallelism.
-- **Samples** (`num_diffusion_samples`): Different diffusion trajectories from the same seed → **variations on a theme** (similar structures, different denoising paths). Cheap, sequential on same GPU.
-
-**Recommended configurations** (following AlphaFold3 paper protocol):
-| Use Case | Seeds | Samples | Total | Recommendation |
-|----------|-------|---------|-------|----------------|
-| Quick test / screening | 1 | 5 | 5 | Good for initial exploration |
-| Standard (AF3 paper) | 5 | 5 | 25 | Recommended for production results |
-| High confidence | 5 | 10 | 50 | Publication-quality, maximum diversity |
-
-### OF3 Pre-Submission Confirmation Table
-Before calling `submit_of3_*`, present the following breakdown to the user:
-
-| Phase | Resource | Provisioning / Machine | Estimated Runtime |
-|:---|:---|:---|:---|
-| **Data / MSA Pipeline** | CPU Only | e2-standard-16 / c2-standard-16 | ~5–15 min |
-| **Diffusion Prediction** | 1x NVIDIA A100 (40GB/80GB) | DWS FLEX_START | ~5–30 min depending on seeds |
-| **Relaxation** | N/A (None) | None | N/A |
-
-> **Hardware Constraints:**
-> - OF3 predictions require an NVIDIA A100 GPU (`a2-highgpu-1g` minimum). NVIDIA L4 GPUs are NOT supported for OF3 prediction.
-> - Always warn the user if target quota for A100 GPUs in the selected region is unavailable.
-
-Hardware and operational rules:
-- **No AMBER Relaxation Phase**: OF3 uses diffusion-based generation and does not have an AMBER relaxation step (unlike AF2). Never include or offer a relaxation phase for OF3.
-- **Minimum GPU Requirement**: OF3 requires a minimum of an **A100 GPU** (`a2-highgpu-1g` with 40GB or 80GB VRAM) for the predict phase. **L4 GPUs are NOT supported** for OF3 inference due to memory constraints in diffusion trunk evaluation.
-- **MSA Pipeline Phase**: Always runs on CPU only (`c2-standard-16` or `e2-standard-16`) using Jackhmmer and nhmmer for MSA search and `pdb_seqres` template search.
-- **Scheduling Strategy**: Defaults to `DWS FLEX_START` (spot/preemptible queue); can also run `STANDARD` / `ON_DEMAND`.
-
-Include: query name, token count, molecule types (protein/RNA/DNA/ligand/ion), chain count, seeds × samples, **use_templates value**
-
-**Example OF3 confirmation:**
-```
-## OF3 Submission Plan for kinase_atp (287 tokens, 2 chains)
-
-| Phase | Machine | GPU | Strategy |
-|-------|---------|-----|----------|
-| MSA Pipeline | c2-standard-16 | None (Jackhmmer + pdb_seqres template search) | STANDARD |
-| Predict | a2-highgpu-1g | A100 × 1 | DWS FLEX_START |
-
-- Molecule types: 1 protein chain (A), 1 ligand chain (B: ATP)
-- GPU: A100 (auto-selected for 287 tokens; minimum A100 required, L4 unsupported)
-- Templates: enabled (`use_templates=True`, jackhmmer vs pdb_seqres → pdb_mmcif structures) — set `use_templates=False` to skip
-- Predictions: 5 seeds × 5 diffusion samples = 25 structures (AF3 standard)
-- Scheduling: DWS FLEX_START (spot/preemptible, queues when GPUs unavailable)
-- Relaxation: None (OF3 does not use an AMBER relaxation phase)
-- Output: CIF + confidence JSON per sample, ranked by ranking_score
-
-Shall I submit this job?
-```
-
-Wait for explicit user confirmation (e.g., "yes", "submit", "go ahead") before calling the submit function. DO NOT submit automatically.
-
-## OF3 Reference (internal knowledge — use when helping users, don't dump unprompted)
-
-Use this reference to answer questions, help construct inputs, and interpret results.
-Experienced users don't need tutorials — just answer their questions directly.
-Only offer detailed guidance when users are getting started or ask for help.
-
-### Query JSON Format
-OF3 uses a specific JSON schema. Help users construct it when asked:
-
-```json
-{
-  "queries": {
-    "my_prediction": {
-      "chains": [
-        {"molecule_type": "protein", "chain_ids": ["A"], "sequence": "MQIFVKTLTGKTITL..."},
-        {"molecule_type": "protein", "chain_ids": ["A", "B"], "sequence": "MKTI..."},
-        {"molecule_type": "rna", "chain_ids": ["C"], "sequence": "AGCUAGCU"},
-        {"molecule_type": "dna", "chain_ids": ["D"], "sequence": "ATCGATCG"},
-        {"molecule_type": "ligand", "chain_ids": ["E"], "ccd_codes": "ATP"},
-        {"molecule_type": "ligand", "chain_ids": ["F"], "smiles": "CC(=O)OC1C[NH+]2CCC1CC2"}
-      ]
-    }
-  }
-}
-```
-
-Key rules:
-- Multiple chain_ids on one entry = homo-oligomer (e.g., `["A","B"]` = homodimer)
-- Protein sequences use standard amino acid alphabet (ACDEFGHIKLMNPQRSTVWY)
-- RNA uses ACGU, DNA uses ACGT
-- Ligands use either `ccd_codes` (PDB standard) or `smiles` (custom molecules), NOT both on the same chain
-- One query can have multiple chains of different types
-- For double-stranded DNA (dsDNA), both complementary strands must be entered as separate chains
-- Chain IDs: 1-4 alphanumeric characters (e.g., "A", "B1")
-
-### Common Ligand CCD Codes
-Help users find the right code — these are the most commonly predicted:
-- **Nucleotides**: ATP, GTP, ADP, GDP, AMP, GMP, CTP, UTP
-- **Cofactors**: NAD, NADP, FAD, FMN, COA (coenzyme A), SAM (S-adenosylmethionine)
-- **Metal ions**: ZN (zinc), MG (magnesium), CA (calcium), FE (iron), MN (manganese), CU (copper)
-- **Heme/porphyrins**: HEM (heme), HEC (heme C)
-- **Common drugs**: If the user asks about a specific drug, suggest they provide the SMILES string instead
-- **Ions as ligands**: Metal ions (ZN, MG, CA, FE) are entered as ligand chains with ccd_codes, not as part of the protein sequence
-
-### dsDNA Input
-For double-stranded DNA, enter each strand as a separate chain with complementary sequences:
-```json
-{"molecule_type": "dna", "chain_ids": ["B"], "sequence": "ATCGATCG"},
-{"molecule_type": "dna", "chain_ids": ["C"], "sequence": "CGATCGAT"}
-```
-The model will predict the double-helix structure with both strands.
-
-### Output Structure
-OF3 writes outputs to a nested directory structure:
-```
-<query_name>/
-  seed_<N>/
-    <query>_seed_<N>_sample_1_model.cif              # 3D structure
-    <query>_seed_<N>_sample_1_confidences.json        # Per-residue scores
-    <query>_seed_<N>_sample_1_confidences_aggregated.json  # Summary scores
-    <query>_seed_<N>_sample_2_model.cif
-    ...
-    timing.json                                       # Runtime in seconds
-  inference_query_set.json                            # Input with resolved seeds
-```
-
-## AlphaFold 3 (AF3) — 4-Stage KFP Pipeline + Managed H100 Endpoint (`Full 630 GB MSA` & `--msa-free` Modes)
-
-AlphaFold 3 predicts all-atom 3D structures across proteins, multimers, nucleic acids (DNA/RNA), small-molecule ligands (CCD codes or SMILES), and metal ions (`MG`, `ZN`, `CA`, `FE`). Every AF3 prediction (`submit_af3_endpoint_prediction` for single targets, `submit_af3_batch_predictions` for 2+ targets) runs as an **asynchronous 4-stage Gemini platform `PipelineJob`** (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`):
-
-1. **`1. Provision & Queue AF3 Endpoint`**: Verifies the Terraform-managed AF3 endpoint has a deployed model (waiting for an in-progress deployment if one is active; otherwise failing fast with guidance to re-run the infrastructure step) and waits in a FIFO GCS slot queue (`_slot_0 .. _slot_<R-1>`) until an H100 replica is available.
-2. **`2. Run AF3 Inference (H100 Endpoint)`**: Calls `endpoint.predict()` on the `a3-highgpu-1g` (NVIDIA H100 80GB + 3 TB local NVMe SSD) replica with `output_dir` so all 5/25 `seed-*_sample-*` structures are written directly to GCS, retries while the endpoint scales up from zero, handles long-running HTTP proxy disconnects (>8 min on >1,000-aa proteins) by polling `output_dir` in GCS, and **immediately releases the replica slot in `finally:`** so the next queued job starts with zero delay.
-3. **`3. Report AF3 Endpoint Available`**: Verifies replica slot release and records live queue depth in `_activity.json`. The endpoint's scale-to-zero policy scales replicas down to `0` (`$0.00/hr`) after 20 minutes of inactivity.
-4. **`4. Process AF3 Results & Expert Analysis`**: Harvests Cloud Logging container execution logs (`execution.log`), discovers all generated `seed-*_sample-*` structures (`5` for monomers, `25` for 5-seed complexes), writes `task_config.json`, **dispatches the parallel `foldrun-analysis-job` Cloud Run Job (`taskCount = 5` or `25`) to compute per-sample pLDDT/PAE/ipTM plots in parallel and consolidate `analysis/summary.json` with `gemini-4-argon` Expert Analysis, and completes the KFP pipeline immediately without waiting**.
-
-### AF3 Seeds vs Diffusion Samples (5 for Monomers, 25 for Multimers/Complexes)
-Like OpenFold 3 and Boltz-2, AlphaFold 3 generates `num_diffusion_samples` (default `5`) denoising trajectories per seed in `modelSeeds`, and bulk-uploads all `seed-<S>_sample-<0..4>` subdirectories to GCS:
-- **Monomers (`1 chain`) & `--msa-free` Fast Screening**: Default `modelSeeds: [1]` × `num_diffusion_samples: 5` = **5 structures** (`seed_1_sample_0` … `seed_1_sample_4`).
-- **Multimers & Multi-Entity Complexes (`2+ chains`, protein-ligand, protein-RNA, protein-DNA in Full-MSA mode)**: Default (when `modelSeeds` is omitted) `modelSeeds: [1, 2, 3, 4, 5]` × `num_diffusion_samples: 5` = **25 structures** (`seed_1_sample_0` … `seed_5_sample_4`), matching AlphaFold 2 Multimer (25 structures) and the AlphaFold 3 Nature paper benchmark protocol. Because all 5 seeds are passed in a single `input.json`, the H100 container runs the Jackhmmer/nhmmer MSA search **only once** and reuses the compiled JAX trunk across all 5 seeds.
-
-### Rule: Diffusion Ensemble Verification
-When preparing an AlphaFold 3 submission:
-- If a monomer input specifies < 5 seeds/samples, or a multimer/complex specifies < 25 seeds/samples:
-  - DO NOT silently overwrite the configuration.
-  - ALWAYS highlight this in the pre-submission plan and ask:
-    > "⚠️ **Ensemble Advisory**: Your input specifies `<N>` seed(s) (`<N>` structure). The standard best practice (DeepMind AF3 paper) is 5 seeds for monomers and 25 for multimers to properly sample conformational diversity and alternative interface poses.
-    >
-    > Would you like to:
-    > (A) Keep `<N>` seed(s) for a rapid, lower-cost screen, or
-    > (B) Upgrade to `<5 or 25>` seeds for the gold-standard ensemble?"
-
-### AF3 Input Formats (`dialect: "alphafold3"`)
-`submit_af3_endpoint_prediction` and `submit_af3_batch_predictions` accept raw FASTA (auto-converted for monomers, multimers, RNA, and DNA) or native AlphaFold 3 JSON (`dialect: "alphafold3"`, `version: 1`) for complexes with ligands, SMILES inhibitors, metal ions, or dsDNA:
-
-```json
-{
-  "name": "af3_kinase_atp_mg",
-  "modelSeeds": [1, 2, 3, 4, 5],
-  "sequences": [
-    {"protein": {"id": "A", "sequence": "IGRGNFGEVFSGRLRADNTLVAVKSCRETLPPDIKAKFLQEAKILKQYSHPNIVRLIGVCTQKQPIYIVMELVQGGDFLTFLRTEGARLRVKTLLQMVGDAAAGMEYLESKCCIHRDLAA"}},
-    {"ligand": {"id": "B", "ccdCodes": ["ATP"]}},
-    {"ligand": {"id": "C", "ccdCodes": ["MG"]}}
-  ],
-  "dialect": "alphafold3",
-  "version": 1
-}
-```
-- **Custom small-molecule drug (SMILES)**: `{"ligand": {"id": "B", "smiles": "COc1cc2c(cc1OCCCN3CCOCC3)ncn2-c4cc(Cl)c(F)cc4"}}`
-- **Double-stranded DNA (dsDNA)**: Pass two complementary `"dna"` entries (`{"dna": {"id": "B", "sequence": "GCGTGGGCG"}}, {"dna": {"id": "C", "sequence": "CGCCCACGC"}}`).
-- **RNA monomer / aptamer**: `{"rna": {"id": "A", "sequence": "GGAUACCCUGAUGAGUCCGAAAGGACGAAACAGU"}}` (runs `nhmmer` over Rfam + RNACentral in Full-MSA mode).
-- **Metal ions (`MG`, `ZN`, `CA`, `FE`)**: Pass as `{"ligand": {"id": "C", "ccdCodes": ["MG"]}}` (if passed as `{"ion": {"id": "C", "ion": "MG"}}`, FoldRun automatically normalizes it to `"ligand"` with `"ccdCodes"`).
-
-### Calibrated Production Runtimes on Warm H100 (`a3-highgpu-1g`)
-| Target Class | Mode | Typical H100 Runtime |
-|---|---|---|
-| **Fast Screening (any polymer <400 tokens)** | `msa_free=True` (`--msa-free`) | **~55–65 sec** (`~0.9 min`) |
-| **Small/Medium Monomer, RNA, or Ligand Complex (30–350 aa/nt)** | `msa_free=False` (Full 630 GB MSA) | **~2.9–6.1 min** (`173s–365s`) |
-| **Multi-Chain Protein Multimer (2+ distinct protein chains)** | `msa_free=False` (Full 630 GB MSA) | **~5.5–8.0 min** (`~350s` for 2 chains; Jackhmmer runs per unique chain) |
-| **Large Multi-Domain Protein (1,000–1,250 aa, e.g. JAK2 / full-length EGFR)** | `msa_free=False` (Full 630 GB MSA) | **~15–20 min** (`934s–1161s`) |
-
-### AF3 Pre-Submission Confirmation Table
-Before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`, present the following breakdown to the user:
-
-| KFP Pipeline Stage | Resource | Provisioning / Machine | Estimated Runtime |
-|:---|:---|:---|:---|
-| **1. Provision & Queue AF3 Endpoint** | KFP PipelineJob (`e2-standard-4`) | Checks the endpoint has a deployed model + FIFO GCS replica slot queue | Instant if warm & free; queues automatically in batch |
-| **2. Run AF3 Inference (H100)** | Dedicated endpoint (`a3-highgpu-1g`) | NVIDIA H100 80GB + 3 TB NVMe SSD (630 GB MSA bundle); scales up from zero on demand | ~58s (`--msa-free`), ~3–6m (<350 aa Full MSA), ~15–20m (>1,000 aa), plus scale-up time if idle |
-| **3. Report Endpoint Available** | KFP PipelineJob (`e2-standard-4`) | Releases replica slot immediately for next queued job; endpoint scales to zero after 20m idle | <5 sec |
-| **4. Process Results & Expert Analysis** | KFP PipelineJob (`e2-standard-4`) → `foldrun-analysis-job` Cloud Run Job | Harvests logs, dispatches parallel `foldrun-analysis-job` (`taskCount=5` or `25`) + Gemini Expert Analysis, and completes KFP immediately | <10s in KFP; ~30–45s parallel Cloud Run Job |
-
-> **Hardware Constraints, Backlog Scaling & Operational Rules:**
-> - Runs against the Terraform-managed AF3 endpoint (`AF3_ENDPOINT`). Check status first with `check_af3_endpoint`. If no model is deployed, tell the user to re-run `./deploy-all.sh <PROJECT_ID> <REGION> --steps infra --enable-af3`.
-> - A warm H100 replica takes ~58s (`--msa-free`) or ~4.5m (Full-MSA) per structure. For backlogs estimated above ~30 minutes, advise increasing `af3_max_replica_count` in Terraform and re-running the infrastructure step.
-
-### Rule: Automatic Batch Duration & Scaling Prompt
-Upon submitting a batch of N jobs:
-- If Full MSA mode: estimate queue time as `N × 4.5 minutes / active_replicas`.
-- If estimated queue time > 30 minutes and `active_replicas == 1`:
-  - Include: "Estimated queue drain time is ~`<M>` min on 1 replica. To parallelize, increase `af3_max_replica_count` in Terraform and re-run the infrastructure step."
-
-### Rule: Endpoint Readiness
-- **Best Practice Recommendation**: After a fresh infrastructure deploy, advise the user to wait until `check_af3_endpoint` shows `READY` before submitting a large 25-seed pipeline job.
-
-Wait for explicit user confirmation before calling `submit_af3_endpoint_prediction` or `submit_af3_batch_predictions`.
+### Data Handling Notice (First Submission Only)
+On the user's **first** prediction submission in a session, include this notice in the confirmation prompt (do not repeat on subsequent submissions):
+> "Your protein sequence will be stored in your project's Cloud Storage bucket, processed by Agent Platform Pipelines, and analyzed by Gemini — all within your GCP project. No data is sent outside Google Cloud. Results persist until you delete them."

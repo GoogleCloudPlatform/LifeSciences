@@ -29,38 +29,15 @@ def estimate_job_cost(
     num_diffusion_samples: int = 5,
     region: str | None = None,
 ) -> dict:
-    """Estimate the cost of a single FoldRun prediction job.
-
-    Returns a per-phase cost breakdown (MSA, predict, relax) with both on-demand
-    and DWS FLEX_START (spot/preemptible) pricing side by side. FoldRun uses
-    FLEX_START by default. These are estimates based on Google Cloud list pricing
-    — actual costs depend on your organization's pricing agreement with Google.
-
-    Durations scale continuously with sequence length (longer proteins take longer
-    to predict and relax). The number of predict/relax tasks depends on job type:
-    - AF2 monomer: always 5 tasks (5 models x 1 seed)
-    - AF2 multimer: 5 x num_predictions_per_model tasks (default 25)
-    - OF3/Boltz-2: num_predictions_per_model seeds, each running num_diffusion_samples
+    """Estimate On-Demand and DWS FLEX_START costs for a single FoldRun prediction job.
 
     Args:
-        job_type: Type of prediction job. Use "af2_monomer" for single-chain AF2,
-            "af2_multimer" for multi-chain AF2, "af3" for AlphaFold3 predictions,
-            "of3" for OpenFold3 predictions, or "boltz2" for Boltz-2 predictions.
-        gpu_type: GPU to use. "auto" selects based on sequence length (recommended).
-            Can also be "L4", "A100", "A100_80GB", or "H100".
-        sequence_length: Number of residues (AF2) or tokens (AF3/OF3/Boltz-2) in the input.
-            For multimers, use the total across all chains. Larger proteins take
-            proportionally longer to predict.
-        num_predictions_per_model: For AF2 multimer: predictions per model (default
-            5, giving 5 models x 5 = 25 total). For OF3/Boltz-2: number of seeds (default 5).
-            For AF3: number of seeds (default 1). Ignored for AF2 monomer (always 5 models x 1).
-        num_diffusion_samples: AF3/OF3/Boltz-2 only — diffusion samples per seed (default 5).
-            Ignored for AF2 jobs.
+        job_type: One of "af2_monomer", "af2_multimer", "af3", "of3", or "boltz2".
+        gpu_type: "auto" (recommended), "L4", "A100", "A100_80GB", or "H100".
+        sequence_length: Total residues (AF2) or tokens (AF3/OF3/Boltz-2).
+        num_predictions_per_model: Predictions per model (AF2 multimer default 5) or seeds (OF3/Boltz-2 default 5, AF3 default 1).
+        num_diffusion_samples: Diffusion samples per seed for AF3/OF3/Boltz-2 (default 5).
         region: GCP region (default: us-central1).
-
-    Returns:
-        Dict with on_demand and dws_flex_start phase breakdowns, estimated totals,
-        savings percentage, and pricing disclaimer.
     """
     resolved_region = region if (region and region.lower() != "global") else "us-central1"
     return estimate_single_job(
@@ -83,39 +60,17 @@ def estimate_monthly_cost(
     include_infrastructure: bool = True,
     region: str | None = None,
 ) -> dict:
-    """Estimate monthly and annual FoldRun costs for a given workload.
-
-    Returns both on-demand and DWS FLEX_START (spot/preemptible) estimates side
-    by side. Infrastructure and other costs are the same in both modes. These are
-    estimates based on Google Cloud list pricing — actual costs depend on your
-    organization's pricing agreement with Google.
-
-    Uses default prediction counts per job type:
-    - AF2 monomer: 5 predictions (5 models x 1 seed)
-    - AF2 multimer: 25 predictions (5 models x 5 seeds)
-    - AF3: 1 seed x 5 diffusion samples = 5 structures
-    - OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures
-
-    Calculates total cost across three categories:
-    - Compute: GPU prediction costs based on job volumes (varies by pricing mode)
-    - Infrastructure: always-on services (Filestore, GCS, Agent Runtime, etc.)
-    - Other: Gemini API, logging, egress, database refreshes
+    """Estimate monthly and annual FoldRun compute and infrastructure costs (On-Demand vs DWS FLEX_START).
 
     Args:
-        af2_monomer_jobs: Number of AF2 monomer jobs per month.
-        af2_multimer_jobs: Number of AF2 multimer jobs per month.
-        af3_jobs: Number of AlphaFold3 jobs per month.
-        of3_jobs: Number of OpenFold3 jobs per month.
-        boltz2_jobs: Number of Boltz-2 jobs per month.
-        avg_sequence_length: Average sequence length in residues/tokens. Larger
-            proteins cost more due to longer predict and relax runtimes.
-        include_infrastructure: Include always-on infrastructure costs (default True).
-            Set to False to see compute-only costs.
+        af2_monomer_jobs: Monthly AF2 monomer jobs.
+        af2_multimer_jobs: Monthly AF2 multimer jobs.
+        af3_jobs: Monthly AlphaFold3 jobs.
+        of3_jobs: Monthly OpenFold3 jobs.
+        boltz2_jobs: Monthly Boltz-2 jobs.
+        avg_sequence_length: Average sequence length in residues/tokens.
+        include_infrastructure: Include always-on Filestore/GCS/Agent Runtime costs (default True).
         region: GCP region (default: us-central1).
-
-    Returns:
-        Dict with on_demand and dws_flex_start breakdowns, infrastructure, other
-        costs, savings percentage, and pricing disclaimer.
     """
     resolved_region = region if (region and region.lower() != "global") else "us-central1"
     return estimate_monthly(
@@ -134,29 +89,11 @@ def get_actual_job_costs(
     pipeline_job_id: str | None = None,
     limit: int = 50,
 ) -> dict:
-    """Retrieve actual costs for completed FoldRun prediction jobs.
-
-    Queries Agent Platform for completed custom jobs submitted by FoldRun, calculates
-    actual costs from real runtimes and machine specs using list pricing, and
-    groups results by pipeline run. Also compares actuals against estimates.
-
-    Use this to:
-    - See how much a specific prediction actually cost
-    - Compare actual vs estimated costs to calibrate trust in the estimator
-    - Review historical spending across all FoldRun jobs
+    """Retrieve actual compute costs for completed FoldRun jobs from runtime durations and machine specs.
 
     Args:
-        pipeline_job_id: Optional pipeline billing ID to get costs for a specific
-            prediction run. If not provided, returns costs for all recent jobs.
-            This is the numeric ID from the pipeline run (visible in job labels
-            or Agent Platform console).
+        pipeline_job_id: Optional pipeline billing ID for a specific run (omit for recent jobs).
         limit: Maximum number of jobs to retrieve (default 50).
-
-    Returns:
-        Dict with pipeline_runs (each containing per-phase actual costs, durations,
-        and estimate comparisons), plus a summary with totals. Costs are calculated
-        from actual runtimes multiplied by list pricing — actual billed amounts may
-        differ based on your pricing agreement.
     """
     import os
     import re

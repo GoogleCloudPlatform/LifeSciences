@@ -124,3 +124,45 @@ class TestFastaReDoS:
         elapsed_ms = (time.perf_counter() - start) * 1000
         assert result == payload
         assert elapsed_ms < 50.0, f"fix_fasta took {elapsed_ms:.2f}ms (expected < 50ms)"
+
+
+class TestMultimoleculeFastaHelpers:
+    """Tests for shared chain ID, molecule detection, validation, and parsing helpers."""
+
+    def test_next_chain_id_bijective_base26(self):
+        from foldrun_app.core.fasta import next_chain_id
+
+        assert next_chain_id(0) == "A"
+        assert next_chain_id(25) == "Z"
+        assert next_chain_id(26) == "AA"
+        assert next_chain_id(27) == "AB"
+        assert next_chain_id(51) == "AZ"
+        assert next_chain_id(52) == "BA"
+
+    def test_detect_molecule_type_with_header_hints(self):
+        from foldrun_app.core.fasta import detect_molecule_type
+
+        assert detect_molecule_type("ACGUACGU", header="chainA") == "rna"
+        assert detect_molecule_type("ACGT" * 10, header="chainA") == "dna"
+        assert detect_molecule_type("ACGTACGT", header="seq|dna") == "dna"
+        assert detect_molecule_type("ACGCACGC", header="seq type=rna") == "rna"
+        assert detect_molecule_type("MKQLEDKVEELL", header="seq|protein") == "protein"
+
+    def test_validate_sequence_chars_shared(self):
+        from foldrun_app.core.fasta import validate_sequence_chars
+
+        assert validate_sequence_chars("MKQLEDKV", "protein") == []
+        errors = validate_sequence_chars("MKQ123", "protein")
+        assert len(errors) == 1
+        assert "invalid characters" in errors[0].lower()
+
+    def test_parse_multimolecule_fasta_records_over_26_chains(self):
+        from foldrun_app.core.fasta import parse_multimolecule_fasta_records
+
+        fasta = "\n".join(f">chain_{i}\nACDEFGHIKLMNPQRSTVWY" for i in range(28))
+        records = parse_multimolecule_fasta_records(fasta)
+        assert len(records) == 28
+        assert records[0].chain_id == "A"
+        assert records[25].chain_id == "Z"
+        assert records[26].chain_id == "AA"
+        assert records[27].chain_id == "AB"

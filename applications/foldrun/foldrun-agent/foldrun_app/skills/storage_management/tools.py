@@ -24,31 +24,17 @@ def cleanup_gcs_files(
     confirm_delete: bool = False,
     include_fasta: bool = False,
 ) -> dict:
-    """
-    Find and optionally delete GCS output files for a job.
+    """Find and optionally delete GCS output files for a job or list of GCS paths.
 
-    Works even if the job has been deleted from Agent Platform - just pass the job name directly.
-    Searches for pipeline outputs in GCS and optionally deletes them. This is useful
-    for cleaning up storage after failed or unnecessary jobs.
-
-    Supports two modes:
-    - Mode 1 (job-based): Provide job_id to find/delete files for a specific job
-    - Mode 2 (bulk deletion): Provide gcs_paths list to delete specific directories/files
-
-    Workflow:
-    1. First call with search_only=True (default) to see what files exist
-    2. Review the file list and sizes
-    3. Call again with search_only=False and confirm_delete=True to delete
+    Always call with search_only=True first to preview files and sizes, then call with
+    search_only=False and confirm_delete=True only after explicit user confirmation.
 
     Args:
-        job_id: Job ID or job name to search for (works even if job deleted from Agent Platform)
-        gcs_paths: List of GCS paths to delete (for bulk mode)
-        search_only: If True, only list files without deleting (default: True)
-        confirm_delete: Must be True to actually delete files (safety check)
-        include_fasta: Also delete the original FASTA file (default: False)
-
-    Returns:
-        File list with sizes and deletion status if applicable
+        job_id: Job ID or job name to search for.
+        gcs_paths: Explicit list of GCS paths for bulk cleanup.
+        search_only: List files without deleting (default True).
+        confirm_delete: Must be True to delete files.
+        include_fasta: Also delete input FASTA file (default False).
     """
     args = {
         "search_only": search_only,
@@ -66,25 +52,11 @@ def find_orphaned_gcs_files(
     check_fasta: bool = True,
     max_jobs_to_check: int = 1000,
 ) -> dict:
-    """
-    Find all GCS files that don't have corresponding Agent Platform jobs.
-
-    This tool identifies "orphaned" files from jobs that have been deleted from
-    Agent Platform but still have files consuming storage in GCS. Useful for bulk cleanup
-    and identifying storage cost savings opportunities.
-
-    The tool:
-    1. Retrieves all pipeline jobs from Agent Platform
-    2. Scans pipeline_runs/ and fasta/ directories in GCS
-    3. Identifies files/directories without corresponding jobs
-    4. Reports sizes and potential cost savings
+    """Scan GCS for orphaned pipeline_runs/ and fasta/ files without corresponding Agent Platform jobs.
 
     Args:
-        check_fasta: Also check for orphaned FASTA files (default: True)
-        max_jobs_to_check: Maximum number of jobs to retrieve from Agent Platform (default: 1000)
-
-    Returns:
-        List of orphaned directories and files with sizes and cleanup instructions
+        check_fasta: Also check for orphaned FASTA files (default True).
+        max_jobs_to_check: Max pipeline jobs to cross-reference (default 1000).
     """
     return get_tool("find_orphaned_files").run(
         {

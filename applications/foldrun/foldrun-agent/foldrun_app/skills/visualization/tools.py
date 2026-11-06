@@ -25,23 +25,14 @@ def open_structure_viewer(
     model_name: str = "Best Model",
     open_browser: bool = True,
 ) -> dict:
-    """
-    Open the FoldRun 3D structure viewer for any completed prediction job.
-
-    Automatically detects the job's model backend (AlphaFold2, OpenFold3, Boltz-2,
-    or AlphaFold 3) and constructs the interactive Mol* viewer URL displaying
-    3D coordinates (PDB / mmCIF) with pLDDT confidence coloring, polymers, ligands,
-    quality metrics, and analysis plots.
+    """Construct and optionally open the FoldRun 3D Mol* structure viewer URL for any completed job.
 
     Args:
-        job_id: Pipeline job ID or AlphaFold 3 job name
-        pdb_uri: GCS URI to PDB file (optional, AF2 only)
-        summary_uri: GCS URI to analysis summary.json (optional, AF2 only)
-        model_name: Display name for the model (default: 'Best Model')
-        open_browser: Automatically open in browser (default: True)
-
-    Returns:
-        Viewer URL and status information
+        job_id: Pipeline job ID or AlphaFold 3 job name.
+        pdb_uri: Optional GCS URI to PDB file (AF2 only).
+        summary_uri: Optional GCS URI to summary.json (AF2 only).
+        model_name: Display name (default "Best Model").
+        open_browser: Open in browser automatically (default True).
     """
     return dispatch_open_structure_viewer(
         job_id,

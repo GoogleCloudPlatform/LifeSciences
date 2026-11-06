@@ -74,17 +74,13 @@ def submit_af2_monomer_prediction(
     enable_flex_start: bool = True,
     msa_method: str = "auto",
 ) -> dict:
-    """Submit AlphaFold2 monomer protein structure prediction job to Agent Platform.
+    """Submit AlphaFold2 monomer prediction job (requires prior user confirmation).
 
     Args:
-        gpu_type: GPU for predict phase. "auto" (default) selects based on
-            sequence length. Override with "L4", "A100", or "A100_80GB".
-        relax_gpu_type: GPU type for the relaxation phase. If not specified,
-            uses a cost-optimized default (downgraded from predict GPU).
-            Options: "L4", "A100", "A100_80GB".
-        msa_method: MSA search method. "auto" (default) selects based on
-            use_small_bfd. Override with "mmseqs2" (GPU-accelerated, 177x
-            faster, requires use_small_bfd=True) or "jackhmmer" (CPU).
+        sequence: FASTA string, raw amino-acid sequence, or GCS URI.
+        gpu_type: "auto" (default), "L4", "A100", or "A100_80GB".
+        relax_gpu_type: Optional relax GPU ("L4", "A100", "A100_80GB").
+        msa_method: "auto" (default), "mmseqs2" (requires use_small_bfd=True), or "jackhmmer".
     """
     validated_sequence = _validate_input_source(sequence, "sequence")
     args = {
@@ -114,17 +110,13 @@ def submit_af2_multimer_prediction(
     enable_flex_start: bool = True,
     msa_method: str = "auto",
 ) -> dict:
-    """Submit AlphaFold2 multimer/complex protein structure prediction job to Agent Platform.
+    """Submit AlphaFold2 multimer prediction job (requires prior user confirmation).
 
     Args:
-        gpu_type: GPU for predict phase. "auto" (default) selects based on
-            total sequence length. Override with "L4", "A100", or "A100_80GB".
-        relax_gpu_type: GPU type for the relaxation phase. If not specified,
-            uses a cost-optimized default (downgraded from predict GPU).
-            Options: "L4", "A100", "A100_80GB".
-        msa_method: MSA search method. "auto" (default) selects based on
-            use_small_bfd. Override with "mmseqs2" (GPU-accelerated, 177x
-            faster, requires use_small_bfd=True) or "jackhmmer" (CPU).
+        sequence: Multi-chain FASTA string or GCS URI.
+        gpu_type: "auto" (default), "L4", "A100", or "A100_80GB".
+        relax_gpu_type: Optional relax GPU ("L4", "A100", "A100_80GB").
+        msa_method: "auto" (default), "mmseqs2" (requires use_small_bfd=True), or "jackhmmer".
     """
     validated_sequence = _validate_input_source(sequence, "sequence")
     args = {
@@ -165,29 +157,16 @@ def submit_of3_prediction(
     enable_flex_start: bool = True,
     use_templates: bool = True,
 ) -> dict:
-    """Submit OpenFold3 structure prediction job to Agent Platform.
-
-    Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted
-    to OF3 JSON) or native OF3 JSON input.
+    """Submit OpenFold3 structure prediction job for proteins, RNA, DNA, or ligands (requires prior user confirmation).
 
     Args:
-        input: Input in FASTA format, OF3 JSON format, or path to file.
-            FASTA is auto-converted to OF3 JSON.
-        job_name: Human-readable job name for tracking.
-        num_model_seeds: Number of model seeds (default: 1). More seeds =
-            more independent predictions.
-        num_diffusion_samples: Number of diffusion samples per seed
-            (default: 5). More samples = more structural diversity.
-        gpu_type: GPU type. "auto" (default) selects A100 for <=2200 tokens,
-            A100_80GB for >2200. No L4 — OF3 requires minimum 40GB VRAM.
-        enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
-        use_templates: Use PDB structural templates (default: true). Runs
-            jackhmmer against pdb_seqres to find structural homologs, then
-            uses local pdb_mmcif CIF files for featurization. Improves
-            prediction quality for proteins with known related structures.
-            Adds ~10-20 min to the MSA step. Requires pdb_seqres and
-            pdb_mmcif databases on NFS (included in 'of3 full' install).
-            Set to false for ab initio prediction or to reduce job time.
+        input: FASTA string, OF3 JSON string, or GCS URI.
+        job_name: Human-readable job name.
+        num_model_seeds: Number of seeds (default 1).
+        num_diffusion_samples: Diffusion samples per seed (default 5).
+        gpu_type: "auto" (default: A100 <=2200 tokens, A100_80GB >2200), "A100", or "A100_80GB".
+        enable_flex_start: Use DWS FLEX_START scheduling (default True).
+        use_templates: Use PDB structural templates (default True).
     """
     validated_input = _validate_input_source(input, "input")
     args = {
@@ -211,24 +190,15 @@ def submit_boltz2_prediction(
     gpu_type: str = "auto",
     enable_flex_start: bool = True,
 ) -> dict:
-    """Submit Boltz2 structure prediction job to Agent Platform.
-
-    Supports proteins, RNA, DNA, and ligands. Accepts FASTA (auto-converted
-    to Boltz2 YAML) or native Boltz2 YAML input.
+    """Submit Boltz-2 structure/affinity prediction job for proteins, nucleic acids, ligands, or glycans (requires prior user confirmation).
 
     Args:
-        input: Input in FASTA format, Boltz2 YAML format, or path to file.
-            FASTA is auto-converted to Boltz2 YAML.
-        job_name: Human-readable job name for tracking.
-        num_model_seeds: Number of model seeds (default: 1). More seeds =
-            more independent predictions.
-        num_diffusion_samples: Number of diffusion samples per seed
-            (default: 5). More samples = more structural diversity.
-        gpu_type: GPU type. "auto" (default) selects A100 for <=2000 tokens,
-            A100_80GB for >2000. Override with "L4" (explicit g2-standard-12 /
-            24GB VRAM tier for smaller targets <=1000 tokens), "A100", or
-            "A100_80GB".
-        enable_flex_start: Enable DWS FLEX_START scheduling (default: true).
+        input: FASTA string, Boltz-2 YAML string, or GCS URI.
+        job_name: Human-readable job name.
+        num_model_seeds: Number of seeds (default 1).
+        num_diffusion_samples: Diffusion samples per seed (default 5).
+        gpu_type: "auto" (default: A100 <=2000 tokens, A100_80GB >2000), "L4" (g2-standard-12 <=1000 tokens), "A100", or "A100_80GB".
+        enable_flex_start: Use DWS FLEX_START scheduling (default True).
     """
     validated_input = _validate_input_source(input, "input")
     args = {
@@ -253,33 +223,17 @@ def submit_af3_endpoint_prediction(
     endpoint_id: str | None = None,
     sync: bool = False,
 ) -> dict:
-    """Submit AlphaFold 3 all-atom structure prediction via a Gemini platform PipelineJob calling the AF3 Endpoint.
-
-    Supports proteins, RNA, DNA, ligands, and ions with full 630 GB MSA + PDB templates on H100 NVMe SSD
-    (default: msa_free=False) or fast --msa-free zero-MSA mode (msa_free=True).
-
-    By default (`sync=False`), submits an asynchronous Gemini platform PipelineJob (`alphafold3-inference-pipeline-...`)
-    that returns immediately so the agent never blocks or times out, while a lightweight CPU worker
-    coordinates H100 replica access via GCS slot locks, calls the AF3 Endpoint, harvests Cloud Logging
-    container logs, and generates all 3D viewer analysis artifacts. The endpoint scales to zero on its
-    own when idle (configured in Terraform).
+    """Submit AlphaFold 3 all-atom prediction job to the dedicated H100 Endpoint via KFP (requires prior user confirmation).
 
     Args:
-        input: Input sequence in FASTA format, AF3 JSON format, or path to input file / GCS URI.
-            FASTA is automatically converted to AF3 JSON.
-        job_name: Human-readable job name for tracking (optional).
-        msa_free: Whether to skip MSA/template search and run in zero-MSA mode (default: False).
-            Leave False for natural proteins, multimers, and protein-ligand complexes so the
-            630 GB MSA + template pipeline runs on the H100 NVMe SSD.
-        model_seeds: Explicit random seed list for diffusion generation (e.g. [1] for 1 seed = 5 samples,
-            or [1, 2, 3, 4, 5] for 5 seeds = 25 samples). Leave None to auto-select or use num_model_seeds.
-        num_model_seeds: Number of random model seeds (e.g. 1 for 5 samples, 5 for 25 samples).
-            Each seed generates `num_diffusion_samples` (default: 5) structures.
-        num_diffusion_samples: Diffusion samples generated per seed (default: 5).
-            Total structures = len(model_seeds) * num_diffusion_samples (e.g., 5 seeds * 5 samples = 25).
-        endpoint_id: Optional Agent Platform Endpoint ID override.
-        sync: If False (default), submits an async Gemini platform PipelineJob and returns immediately.
-            Only set True for unit tests or short in-process debugging.
+        input: FASTA string, AF3 JSON string, or GCS URI.
+        job_name: Human-readable job name.
+        msa_free: Skip MSA/template search for zero-MSA mode (default False = Full 630 GB MSA).
+        model_seeds: Optional list of integer random seeds (e.g. [1] or [1,2,3,4,5]).
+        num_model_seeds: Optional seed count (each generates num_diffusion_samples=5 structures).
+        num_diffusion_samples: Diffusion samples per seed (default 5).
+        endpoint_id: Optional Endpoint ID override.
+        sync: Submit async KFP PipelineJob when False (default).
     """
     validated_input = _validate_input_source(input, "input")
     args = {
@@ -302,22 +256,10 @@ def submit_af3_endpoint_prediction(
 def submit_af3_batch_predictions(
     batch_config: list[dict],
 ) -> dict:
-    """Submit multiple AlphaFold 3 prediction jobs in batch as asynchronous Gemini platform PipelineJobs.
-
-    Each item in `batch_config` is submitted as its own non-blocking KFP PipelineJob
-    (`alphafold3-inference-pipeline-YYYYMMDDHHMMSS`) that coordinates H100 replica access
-    via GCS slot locks (`R` concurrent jobs per `R` deployed H100 replicas), harvests
-    container logs into Cloud Logging / KFP, and populates the 3D viewer upon completion.
-    The endpoint scales to zero on its own when idle (configured in Terraform).
+    """Submit multiple AlphaFold 3 prediction jobs in batch across H100 Endpoint replica(s).
 
     Args:
-        batch_config: List of job configuration dicts, each containing:
-            - `input` (or `sequence`): FASTA string, AF3 JSON string, or GCS URI (required)
-            - `job_name`: Human-readable job name (optional, recommended)
-            - `msa_free`: Boolean (default: False for full 630 GB MSA; True for zero-MSA)
-            - `model_seeds`: Optional list of integer random seeds (auto-defaults to [1] / 5 samples
-              for monomers or msa_free=True, and [1, 2, 3, 4, 5] / 25 samples for Full-MSA multimers/complexes)
-            - `endpoint_id`: Optional endpoint ID override
+        batch_config: List of dicts with `input`, optional `job_name`, `msa_free` (default False), and `model_seeds`.
     """
     sanitized_batch = []
     for item in batch_config:

@@ -107,7 +107,7 @@ packages = [
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
-pythonpath = ["."]
+pythonpath = [".", "packages/foldrun-common"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]

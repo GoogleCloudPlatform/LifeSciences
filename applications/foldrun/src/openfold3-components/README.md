@@ -2,7 +2,7 @@
 
 1.  The base image `openfoldconsortium/openfold3:0.5-pixi` manages its CUDA 12 runtime (`openfold3-cuda12`) with [Pixi](https://pixi.sh).
 2.  [`pixi.toml`](./pixi.toml) and [`pixi.lock`](./pixi.lock) pin every Conda and PyPI artifact in `openfold3-cuda12` (`linux-64-cuda12`) by URL and SHA-256 digest, applied deterministically at build time via `pixi install --locked`.
-3.  [`requirements.lock`](./requirements.lock) exports the exact frozen Python package versions and SHA-256 digests from `pixi.lock` so `osv-scanner` can continuously audit `openfold3-components` in CI (`security/cloudbuild-security.yaml`).
+3.  [`requirements.lock`](./requirements.lock) exports the exact frozen Python package versions and SHA-256 digests from `pixi.lock` so `osv-scanner` can continuously audit `openfold3-components`.
 4.  [`verify_lockfile_sync.py`](./verify_lockfile_sync.py) runs during `docker build` to assert `python3 -m pip list --format=json` matches `requirements.lock` 1:1.
 
 ---

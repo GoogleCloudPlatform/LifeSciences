@@ -14,15 +14,15 @@
 
 """Skill registry for FoldRun modular agent architecture."""
 
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 from google.adk.skills import load_skills_from_dir
 from google.adk.skills.models import Skill as AdkSkill
 from google.adk.tools import FunctionTool
-from google.adk.tools.skill_toolset import SkillToolset
+from google.adk.tools.skill_toolset import SkillDiscoveryMode, SkillToolset
 
+from foldrun_app.core.model_registry import get_model
 from foldrun_app.skills.base import Skill
 from foldrun_app.skills.cost_estimation.tools import (
     estimate_job_cost,
@@ -136,30 +136,44 @@ class SkillRegistry:
 
     def __init__(self):
         self._skills: dict[str, Skill] = {}
+        self._adk_skills: dict[str, AdkSkill] = {}
         self._register_defaults()
 
     def _register_defaults(self):
         """Register the baseline FoldRun domain skills with environment-conditional tools."""
-        has_of3 = bool(os.getenv("OPENFOLD3_COMPONENTS_IMAGE"))
-        has_boltz2 = bool(os.getenv("BOLTZ2_COMPONENTS_IMAGE"))
-        has_af3 = bool(
-            os.getenv("AF3_ENDPOINT")
-            or os.getenv("AF3_AGENT_PLATFORM_ENDPOINT")
-            or os.getenv("AF3_ENDPOINT_ID")
-            or os.getenv("AF3_VERTEX_ENDPOINT")
-        )
+        of3_model = get_model("of3")
+        boltz2_model = get_model("boltz2")
+        af3_model = get_model("af3")
+        has_of3 = bool(of3_model and of3_model.is_enabled())
+        has_boltz2 = bool(boltz2_model and boltz2_model.is_enabled())
+        has_af3 = bool(af3_model and af3_model.is_enabled())
 
-        # Load instruction bodies strictly from packages/*/SKILL.md (single source of truth)
-        adk_skills = {s.name.replace("-", "_"): s for s in self.load_adk_skills()}
+        # Load instruction bodies and descriptions strictly from packages/*/SKILL.md (single source of truth)
+        self._adk_skills = {s.name.replace("-", "_"): s for s in self.load_adk_skills()}
 
-        def _get_instruction(name: str) -> str:
-            skill_obj = adk_skills.get(name)
+        def _get_skill_meta(name: str) -> tuple[str, str]:
+            skill_obj = self._adk_skills.get(name)
             body = getattr(skill_obj, "instructions", None) if skill_obj is not None else None
             if not body:
                 raise RuntimeError(
                     f"Missing SKILL.md instruction body for built-in skill '{name}' under skills/packages/."
                 )
-            return body
+            desc = (
+                getattr(getattr(skill_obj, "frontmatter", None), "description", None)
+                or skill_obj.description
+            )
+            return desc, body
+
+        def _register_builtin(name: str, tool_functions: list):
+            description, instruction = _get_skill_meta(name)
+            self.register(
+                Skill(
+                    name=name,
+                    description=description,
+                    instruction=instruction,
+                    tool_functions=tool_functions,
+                )
+            )
 
         # 1. Job Submission
         submission_tools = [
@@ -174,15 +188,9 @@ class SkillRegistry:
         if has_af3:
             submission_tools.extend([submit_af3_endpoint_prediction, submit_af3_batch_predictions])
 
-        self.register(
-            Skill(
-                name="job_submission",
-                description="Submission of protein, RNA, ligand, and multimer predictions via AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2",
-                instruction=_get_instruction("job_submission"),
-                tool_functions=submission_tools,
-            )
-        )
+        _register_builtin("job_submission", submission_tools)
 
+        # 2. Job Management
         management_tools = [
             check_gpu_quota,
             list_jobs,
@@ -193,81 +201,51 @@ class SkillRegistry:
         if has_af3:
             management_tools.append(check_af3_endpoint)
 
-        self.register(
-            Skill(
-                name="job_management",
-                description="Job monitoring, GPU quota inspection, AF3 endpoint status, retry with caching, and job deletion",
-                instruction=_get_instruction("job_management"),
-                tool_functions=management_tools,
-            )
-        )
-        self.register(
-            Skill(
-                name="storage_management",
-                description="GCS bucket hygiene, identifying orphaned prediction outputs, and safe two-step file cleanup",
-                instruction=_get_instruction("storage_management"),
-                tool_functions=[
-                    find_orphaned_gcs_files,
-                    cleanup_gcs_files,
-                ],
-            )
+        _register_builtin("job_management", management_tools)
+
+        # 3. Storage Management
+        _register_builtin(
+            "storage_management",
+            [
+                find_orphaned_gcs_files,
+                cleanup_gcs_files,
+            ],
         )
 
         # 4. Results & Analysis
-        analysis_tools = [
-            get_prediction_results,
-            download_job_artifacts,
-            analyze_prediction_quality,
-            analyze_job_parallel,
-            get_analysis_results,
-            analyze_job,
-        ]
-
-        self.register(
-            Skill(
-                name="results_analysis",
-                description="Quality assessment (pLDDT, PAE, PDE, ipTM, pTM), AF3 confidence metrics, parallel batch analysis via Cloud Run, and troubleshooting",
-                instruction=_get_instruction("results_analysis"),
-                tool_functions=analysis_tools,
-            )
+        _register_builtin(
+            "results_analysis",
+            [
+                get_prediction_results,
+                download_job_artifacts,
+                analyze_prediction_quality,
+                analyze_job_parallel,
+                get_analysis_results,
+                analyze_job,
+            ],
         )
 
         # 5. Visualization
-        vis_tools = [
-            open_structure_viewer,
-        ]
+        _register_builtin("visualization", [open_structure_viewer])
 
-        self.register(
-            Skill(
-                name="visualization",
-                description="Interactive 3D structure visualization URLs with Mol* for AF2, AF3, OF3, and Boltz-2",
-                instruction=_get_instruction("visualization"),
-                tool_functions=vis_tools,
-            )
+        # 6. Cost Estimation
+        _register_builtin(
+            "cost_estimation",
+            [
+                estimate_job_cost,
+                estimate_monthly_cost,
+                get_actual_job_costs,
+            ],
         )
-        self.register(
-            Skill(
-                name="cost_estimation",
-                description="Per-job and monthly infrastructure cost modeling with DWS FLEX_START spot vs on-demand comparison",
-                instruction=_get_instruction("cost_estimation"),
-                tool_functions=[
-                    estimate_job_cost,
-                    estimate_monthly_cost,
-                    get_actual_job_costs,
-                ],
-            )
-        )
-        self.register(
-            Skill(
-                name="database_queries",
-                description="AlphaFold DB structure lookups, annotations, and variant summary checks",
-                instruction=_get_instruction("database_queries"),
-                tool_functions=[
-                    query_alphafold_db_summary,
-                    query_alphafold_db_prediction,
-                    query_alphafold_db_annotations,
-                ],
-            )
+
+        # 7. Database Queries
+        _register_builtin(
+            "database_queries",
+            [
+                query_alphafold_db_summary,
+                query_alphafold_db_prediction,
+                query_alphafold_db_annotations,
+            ],
         )
 
     def register(self, skill: Skill):
@@ -296,14 +274,38 @@ class SkillRegistry:
             return []
         return load_skills_from_dir(packages_dir)
 
-    def get_skill_toolset(self) -> SkillToolset:
+    def get_skill_toolset(
+        self,
+        discovery_mode: SkillDiscoveryMode = SkillDiscoveryMode.EAGER,
+    ) -> SkillToolset:
         """Construct an ADK SkillToolset with progressive disclosure and dynamic additional tools."""
-        skills = self.load_adk_skills()
+        skills = list(self._adk_skills.values()) or self.load_adk_skills()
         additional_tools = self.compile_tools()
-        return SkillToolset(skills=skills, additional_tools=additional_tools)
+        allowed_tool_names = [
+            "load_skill",
+            "load_skill_resource",
+            *[t.name for t in additional_tools],
+        ]
+        return SkillToolset(
+            skills=skills,
+            additional_tools=additional_tools,
+            tool_filter=allowed_tool_names,
+            discovery_mode=discovery_mode,
+        )
 
     def _load_skill_references(self, skill_name: str) -> list[str]:
         """Load any Markdown files under packages/<skill-dir>/references/*.md for static compilation."""
+        normalized = skill_name.replace("-", "_")
+        adk_skill = self._adk_skills.get(normalized)
+        resources = getattr(adk_skill, "resources", None) if adk_skill is not None else None
+        cached_refs = getattr(resources, "references", None) if resources is not None else None
+        if isinstance(cached_refs, dict) and cached_refs:
+            return [
+                str(content).strip()
+                for _, content in sorted(cached_refs.items())
+                if str(content).strip()
+            ]
+
         pkg_dir = Path(__file__).parent / "packages" / skill_name.replace("_", "-") / "references"
         if not pkg_dir.is_dir():
             return []
@@ -320,7 +322,7 @@ class SkillRegistry:
         include_header: bool = True,
         include_guidelines: bool = True,
         progressive: bool = False,
-        include_references: bool = False,
+        include_references: bool = True,
     ) -> str:
         """Compile modular instructions for the requested skills.
 

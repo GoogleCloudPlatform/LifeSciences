@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AlphaFold2 ADK Agent application."""
+"""FoldRun ADK Agent application package."""
 
-from foldrun_app.agent import app, create_alphafold_agent, create_foldrun_agent
+__all__ = ["app", "create_alphafold_agent", "create_foldrun_agent", "root_agent"]
 
-__all__ = ["app", "create_alphafold_agent", "create_foldrun_agent"]
+
+def __getattr__(name: str):
+    """Lazily import agent entrypoints so submodule imports do not trigger eager ADK startup."""
+    if name in __all__:
+        from foldrun_app import agent as _agent_mod
+
+        return getattr(_agent_mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

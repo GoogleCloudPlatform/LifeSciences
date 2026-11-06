@@ -29,63 +29,19 @@ OF3 query JSON schema:
 """
 
 import json
-import re
 
-# Standard nucleotide alphabet (RNA)
-_RNA_NT = set("ACGU")
-# Standard nucleotide alphabet (DNA)
-_DNA_NT = set("ACGT")
-# Standard + extended amino acids
-_PROTEIN_AA = set("ACDEFGHIKLMNPQRSTVWYBJOUXZ")
+from foldrun_app.core.fasta import (
+    detect_molecule_type as _detect_molecule_type,  # noqa: F401
+)
+from foldrun_app.core.fasta import (
+    parse_multimolecule_fasta_records,
+)
+from foldrun_app.core.fasta import (
+    validate_sequence_chars as _validate_sequence_chars,
+)
+
 # Valid molecule types in OF3 JSON
 _VALID_MOL_TYPES = {"protein", "rna", "dna", "ligand"}
-
-
-def _validate_sequence_chars(sequence: str, mol_type: str) -> list[str]:
-    """Return a list of error strings for invalid characters in a sequence."""
-    errors = []
-    if mol_type == "protein":
-        invalid = sorted(set(sequence.upper()) - _PROTEIN_AA)
-        if invalid:
-            errors.append(
-                f"Protein sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected standard amino acids (ACDEFGHIKLMNPQRSTVWY) plus ambiguity codes."
-            )
-    elif mol_type == "rna":
-        invalid = sorted(set(sequence.upper()) - _RNA_NT)
-        if invalid:
-            errors.append(
-                f"RNA sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected A, C, G, U only."
-            )
-    elif mol_type == "dna":
-        invalid = sorted(set(sequence.upper()) - _DNA_NT)
-        if invalid:
-            errors.append(
-                f"DNA sequence contains invalid characters: {', '.join(invalid)}. "
-                "Expected A, C, G, T only."
-            )
-    return errors
-
-
-def _detect_molecule_type(sequence: str) -> str:
-    """Detect whether a sequence is protein, rna, or dna.
-
-    Args:
-        sequence: The sequence string (uppercase).
-
-    Returns:
-        'protein', 'rna', or 'dna'
-    """
-    chars = set(sequence.upper())
-    # If it contains U, it's RNA
-    if "U" in chars and chars <= _RNA_NT:
-        return "rna"
-    # If it's only ACGT and long enough, it's DNA
-    if chars <= _DNA_NT and len(sequence) > 30:
-        return "dna"
-    # Default to protein
-    return "protein"
 
 
 def fasta_to_of3_json(fasta_content: str, job_name: str | None = None) -> dict:
@@ -98,64 +54,17 @@ def fasta_to_of3_json(fasta_content: str, job_name: str | None = None) -> dict:
     Returns:
         OF3 query JSON dictionary matching the run_openfold schema.
     """
-    content = fasta_content.strip()
-    if not content.startswith(">"):
-        content = f">sequence\n{content}"
+    parsed_chains = parse_multimolecule_fasta_records(fasta_content, min_length=5)
+    query_name = job_name or parsed_chains[0].seq_id
 
-    parsed = []
-    current_id = None
-    current_seq_lines = []
-
-    for line in content.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith(">"):
-            if current_id is not None and current_seq_lines:
-                seq = "".join(current_seq_lines).upper()
-                parsed.append((current_id, seq))
-            header = line[1:].strip()
-            parts = header.split(None, 1)
-            current_id = parts[0] if parts else f"seq_{len(parsed)}"
-            current_seq_lines = []
-        else:
-            cleaned = re.sub(r"[^A-Za-z]", "", line)
-            current_seq_lines.append(cleaned)
-
-    if current_id is not None and current_seq_lines:
-        seq = "".join(current_seq_lines).upper()
-        parsed.append((current_id, seq))
-
-    if not parsed:
-        raise ValueError("No valid sequences found in FASTA input")
-
-    errors = []
-    for seq_id, sequence in parsed:
-        if not sequence:
-            errors.append(f"Sequence '{seq_id}' is empty after stripping non-alphabetic characters")
-            continue
-        if len(sequence) < 5:
-            errors.append(f"Sequence '{seq_id}' is too short ({len(sequence)} residues, minimum 5)")
-        mol_type = _detect_molecule_type(sequence)
-        errors.extend(_validate_sequence_chars(sequence, mol_type))
-
-    if errors:
-        raise ValueError("FASTA validation failed:\n" + "\n".join(f"  - {e}" for e in errors))
-
-    query_name = job_name or parsed[0][0]
-
-    # Build chains with auto-assigned chain IDs (A, B, C, ...)
-    chains = []
-    for i, (_seq_id, sequence) in enumerate(parsed):
-        chain_id = chr(65 + i) if i < 26 else f"chain_{i}"
-        mol_type = _detect_molecule_type(sequence)
-        chains.append(
-            {
-                "molecule_type": mol_type,
-                "chain_ids": [chain_id],
-                "sequence": sequence,
-            }
-        )
+    chains = [
+        {
+            "molecule_type": rec.molecule_type,
+            "chain_ids": [rec.chain_id],
+            "sequence": rec.sequence,
+        }
+        for rec in parsed_chains
+    ]
 
     return {
         "queries": {
