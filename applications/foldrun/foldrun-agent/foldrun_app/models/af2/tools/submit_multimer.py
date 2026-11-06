@@ -18,9 +18,9 @@ from typing import ClassVar
 
 from google.cloud import aiplatform as vertex_ai
 
-from .submit_base import AF2SubmitBaseTool
+from .submit_base import _COMPILE_ENV_LOCK, AF2SubmitBaseTool
 
-__all__ = ["AF2SubmitMultimerTool", "vertex_ai"]
+__all__ = ["_COMPILE_ENV_LOCK", "AF2SubmitMultimerTool", "vertex_ai"]
 
 
 class AF2SubmitMultimerTool(AF2SubmitBaseTool):

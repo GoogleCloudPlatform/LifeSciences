@@ -82,6 +82,12 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             )
         )
 
+        # Per-task max wait for GPU provisioning via DWS.
+        # Configurable via DWS_MAX_WAIT_HOURS env var (default: 168h / 7 days).
+        # STANDARD strategy always uses 24h (minimum sensible timeout).
+        flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
+        max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
+
         # Data pipeline: CPU-only for jackhmmer, GPU for mmseqs2
         DataPipelineOp = create_custom_training_job_from_component(
             data_pipeline,
@@ -97,7 +103,11 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             network=config.NETWORK or os.environ.get("NETWORK", "placeholder"),
             strategy=dp_strategy,
             **(
-                {"accelerator_type": dp_accel_type, "accelerator_count": dp_accel_count}
+                {
+                    "accelerator_type": dp_accel_type,
+                    "accelerator_count": dp_accel_count,
+                    "max_wait_duration": max_wait,
+                }
                 if dp_accel_type and dp_accel_count > 0
                 else {}
             ),
@@ -140,17 +150,6 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             backoff_factor=2.0,
         )
 
-        # Per-task max wait for GPU provisioning via DWS.
-        # Configurable via DWS_MAX_WAIT_HOURS env var (default: 168h / 7 days).
-        # STANDARD strategy always uses 24h (minimum sensible timeout).
-        # NOTE: This timeout applies independently to each predict/relax task,
-        # not to the pipeline as a whole. A monomer pipeline has ~10 GPU tasks
-        # (5 predict + 5 relax), a multimer up to ~50. With parallelism=5,
-        # tasks batch sequentially. Consider reducing to 24-48h per task if
-        # sustained GPU shortages cause pipelines to hang silently.
-        flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
-        max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
-
         JobPredictOp = create_custom_training_job_from_component(
             PredictOp,
             display_name="AF2 Predict",
@@ -176,7 +175,9 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         ).set_display_name("Model parameters")
 
         with dsl.ParallelFor(
-            items=run_config_task.outputs["model_runners"], name="model-predict"
+            items=run_config_task.outputs["model_runners"],
+            name="model-predict",
+            parallelism=config.PARALLELISM,
         ) as model_runner:
             model_predict_task = JobPredictOp(
                 project=project,

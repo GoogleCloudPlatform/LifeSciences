@@ -38,8 +38,10 @@ dependencies = [
     "aiohttp>=3.13.4",
     "gcsfs>=2026.10.0",
     "protobuf>=6.31.1,<7.0.0",
+    "python-multipart>=0.0.9",
     "zstandard>=0.23.0",
     "foldrun-common",
+    "tqdm>=4.66.0",
 ]
 
 [project.optional-dependencies]
@@ -69,6 +71,7 @@ packages = [
     "foldrun_app.app_utils",
     "foldrun_app.core",
     "foldrun_app.core.tools",
+    "foldrun_app.gateway",
     "foldrun_app.models",
     "foldrun_app.models.af2",
     "foldrun_app.models.af2.tools",
