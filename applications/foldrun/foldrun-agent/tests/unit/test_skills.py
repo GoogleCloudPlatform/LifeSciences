@@ -674,3 +674,137 @@ class TestPolymorphicResultsAnalysisSkills:
             get_analysis_results(job_id="af3-789")
             mock_get.assert_called_with("af3_get_results")
             assert mock.run.call_args[0][0] == {"job_id": "af3-789"}
+
+
+class TestGenerativeBinderSkills:
+    """Tests for BoltzGen, RFD4-Proteina, and BindCraft skill wrappers."""
+
+    def test_submit_boltzgen_design_accepts_pdb_id_and_rejects_traversal(
+        self, tmp_path, monkeypatch
+    ):
+        """submit_boltzgen_design allows 4-char PDB IDs on target_structure and blocks traversal."""
+        import pytest
+
+        from foldrun_app.skills.job_submission import submit_boltzgen_design
+
+        staging_dir = tmp_path / "staging"
+        staging_dir.mkdir()
+        monkeypatch.setenv("FOLDRUN_STAGING_DIR", str(staging_dir))
+
+        mock = _mock_tool({"status": "submitted", "job_id": "boltzgen-123"})
+        with _patch_get_tool(mock, _JOB_SUBMISSION) as mock_get:
+            result = submit_boltzgen_design(
+                input="entities:\n  - protein:\n      id: B\n      sequence: 80..120\n",
+                target_structure="7K4N",
+                protocol="protein-anything",
+                num_model_seeds=5,
+                num_designs_per_seed=2,
+                budget_per_seed=2,
+            )
+            mock_get.assert_called_with("boltzgen_submit_design")
+            args = mock.run.call_args[0][0]
+            assert args["target_structure"] == "7K4N"
+            assert args["protocol"] == "protein-anything"
+            assert args["num_model_seeds"] == 5
+            assert args["num_designs_per_seed"] == 2
+            assert args["budget_per_seed"] == 2
+            assert result["status"] == "submitted"
+
+            with pytest.raises(ValueError, match="staging directory"):
+                submit_boltzgen_design(
+                    input="entities: []",
+                    target_structure="/etc/passwd",
+                )
+
+    def test_submit_rfd4_proteina_and_bindcraft_designs(self):
+        """submit_rfd4_proteina_design and submit_bindcraft_design invoke expected registry tools."""
+        from foldrun_app.skills.job_submission import (
+            submit_bindcraft_design,
+            submit_rfd4_proteina_design,
+        )
+
+        mock = _mock_tool({"status": "submitted"})
+        with _patch_get_tool(mock, _JOB_SUBMISSION) as mock_get:
+            submit_rfd4_proteina_design(
+                design_mode="binder_design",
+                target_structure="gs://bucket/target.pdb",
+                binding_residues=["A:45", "A:48"],
+                binder_length_range="70..100",
+                compute_metrics=True,
+            )
+            mock_get.assert_called_with("rfd4_proteina_submit_design")
+            assert mock.run.call_args[0][0]["binder_length_range"] == "70..100"
+            assert mock.run.call_args[0][0]["compute_metrics"] is True
+
+            submit_bindcraft_design(
+                target_structure="gs://bucket/target.pdb",
+                target_chains=["A"],
+                binder_length_range="65..120",
+                num_model_seeds=3,
+                num_designs_per_seed=2,
+            )
+            mock_get.assert_called_with("bindcraft_submit_design")
+            assert mock.run.call_args[0][0]["num_model_seeds"] == 3
+            assert mock.run.call_args[0][0]["num_designs_per_seed"] == 2
+
+    def test_generative_binder_analysis_and_viewer_wrappers(self):
+        """Polymorphic analysis, results, and viewer wrappers dispatch generative binder jobs."""
+        from foldrun_app.skills.results_analysis import (
+            analyze_job_parallel,
+            get_analysis_results,
+        )
+        from foldrun_app.skills.visualization import open_structure_viewer
+
+        mock_analysis = _mock_tool({"status": "ok"})
+        with _patch_get_tool(mock_analysis, _RESULTS_ANALYSIS) as mock_get:
+            analyze_job_parallel("boltzgen-1", overwrite=True)
+            mock_get.assert_called_with("boltzgen_analyze_parallel")
+            assert mock_analysis.run.call_args[0][0]["overwrite"] is True
+            get_analysis_results("boltzgen-1", wait=True)
+            mock_get.assert_called_with("boltzgen_get_analysis_results")
+            assert mock_analysis.run.call_args[0][0]["wait"] is True
+
+            analyze_job_parallel("rfd4-1")
+            mock_get.assert_called_with("rfd4_proteina_analyze_job")
+            get_analysis_results("rfd4-1")
+            mock_get.assert_called_with("rfd4_proteina_get_analysis_results")
+
+            analyze_job_parallel("bindcraft-1")
+            mock_get.assert_called_with("bindcraft_analyze_job")
+            get_analysis_results("bindcraft-1")
+            mock_get.assert_called_with("bindcraft_get_analysis_results")
+
+        mock_viewer = _mock_tool({"viewer_url": "https://viewer.example.com"})
+        with _patch_get_tool(mock_viewer, _VISUALIZATION) as mock_get:
+            open_structure_viewer("boltzgen-1")
+            mock_get.assert_called_with("boltzgen_open_viewer")
+            open_structure_viewer("rfd4-1")
+            mock_get.assert_called_with("rfd4_proteina_open_viewer")
+            open_structure_viewer("bindcraft-1")
+            mock_get.assert_called_with("bindcraft_open_viewer")
+
+    def test_cost_estimation_generative_binder_jobs(self):
+        """estimate_job_cost and estimate_monthly_cost support generative binder models."""
+        from foldrun_app.skills.cost_estimation.tools import (
+            estimate_job_cost,
+            estimate_monthly_cost,
+        )
+
+        for jt in ("boltzgen", "rfd4_proteina", "bindcraft"):
+            est = estimate_job_cost(job_type=jt, sequence_length=300, region="global")
+            assert est["job_type"] == jt
+            assert est["region"] in ("us-central1", "global")
+            # Generative binder models omit the CPU MSA phase (msa_min == 0)
+            phases = est["dws_flex_start"]["phases"]
+            assert len(phases) == 1
+            assert phases[0]["phase"] == "Predict"
+            assert est["dws_flex_start"]["estimated_total"] > 0
+
+        monthly = estimate_monthly_cost(
+            boltzgen_jobs=2,
+            rfd4_proteina_jobs=3,
+            bindcraft_jobs=1,
+            include_infrastructure=False,
+        )
+        job_types = {item["job_type"] for item in monthly["dws_flex_start"]["compute_items"]}
+        assert job_types == {"boltzgen", "rfd4_proteina", "bindcraft"}

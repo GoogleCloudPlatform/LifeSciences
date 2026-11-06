@@ -20,7 +20,15 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ModelType = Literal["alphafold2", "alphafold3", "openfold3", "boltz2"]
+ModelType = Literal[
+    "alphafold2",
+    "alphafold3",
+    "openfold3",
+    "boltz2",
+    "boltzgen",
+    "rfd4_proteina",
+    "bindcraft",
+]
 
 MODEL_TYPE_ALIASES: dict[str, ModelType] = {
     "af2": "alphafold2",
@@ -33,6 +41,12 @@ MODEL_TYPE_ALIASES: dict[str, ModelType] = {
     "boltz": "boltz2",
     "boltz-2": "boltz2",
     "boltz2": "boltz2",
+    "boltzgen": "boltzgen",
+    "rfd4-proteina": "rfd4_proteina",
+    "rfd4_proteina": "rfd4_proteina",
+    "rfd4": "rfd4_proteina",
+    "proteina": "rfd4_proteina",
+    "bindcraft": "bindcraft",
 }
 
 SUPPORTED_MODEL_TYPES: frozenset[str] = frozenset(MODEL_TYPE_ALIASES.values())
@@ -60,8 +74,14 @@ def infer_model_type_from_display_name(display_name: str | None) -> ModelType:
         return "alphafold3"
     if "of3" in lower or "openfold3" in lower or "openfold" in lower:
         return "openfold3"
+    if "boltzgen" in lower:
+        return "boltzgen"
     if "boltz" in lower:
         return "boltz2"
+    if "rfd4" in lower or "proteina" in lower:
+        return "rfd4_proteina"
+    if "bindcraft" in lower:
+        return "bindcraft"
     return "alphafold2"
 
 

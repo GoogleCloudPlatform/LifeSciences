@@ -202,6 +202,31 @@ class TestSkillRegistry:
         assert "get_af3_results" not in tool_names
         assert "open_af3_structure_viewer" not in tool_names
 
+    def test_conditional_generative_binder_tools(self, monkeypatch):
+        """When BoltzGen, RFD4-Proteina, and BindCraft images are set, their submission tools register."""
+        monkeypatch.setenv("BOLTZGEN_COMPONENTS_IMAGE", "test-boltzgen-image:latest")
+        monkeypatch.setenv("RFD4_PROTEINA_COMPONENTS_IMAGE", "test-rfd4-image:latest")
+        monkeypatch.setenv("BINDCRAFT_COMPONENTS_IMAGE", "test-bindcraft-image:latest")
+
+        gen_registry = SkillRegistry()
+        tools = gen_registry.compile_tools()
+        tool_names = {
+            getattr(t, "name", None)
+            or getattr(getattr(t, "func", None), "__name__", None)
+            or str(t)
+            for t in tools
+        }
+        # 25 baseline (AF2 + OF3 + Boltz-2) + 3 generative binder submission tools = 28
+        # (analysis, results, and viewer are polymorphically routed via analyze_job_parallel,
+        # get_analysis_results, and open_structure_viewer)
+        assert len(tools) == 28
+        for expected_name in (
+            "submit_boltzgen_design",
+            "submit_rfd4_proteina_design",
+            "submit_bindcraft_design",
+        ):
+            assert expected_name in tool_names, f"Missing expected tool: {expected_name}"
+
     def test_tool_introspection_safety_custom_class(self):
         """Tool compilation safely inspects tools lacking a func attribute."""
 
@@ -255,6 +280,9 @@ class TestSkillRegistry:
         """Every tool in SKILL.md adk_additional_tools must exist in SkillRegistry."""
         monkeypatch.setenv("OPENFOLD3_COMPONENTS_IMAGE", "test-of3:latest")
         monkeypatch.setenv("BOLTZ2_COMPONENTS_IMAGE", "test-boltz2:latest")
+        monkeypatch.setenv("BOLTZGEN_COMPONENTS_IMAGE", "test-boltzgen:latest")
+        monkeypatch.setenv("RFD4_PROTEINA_COMPONENTS_IMAGE", "test-rfd4:latest")
+        monkeypatch.setenv("BINDCRAFT_COMPONENTS_IMAGE", "test-bindcraft:latest")
         monkeypatch.setenv(
             "AF3_VERTEX_ENDPOINT", "projects/test-proj/locations/us-central1/endpoints/123"
         )
@@ -301,6 +329,7 @@ class TestSkillRegistry:
         toolset = skill_registry.get_skill_toolset()
         assert isinstance(toolset, SkillToolset)
         assert toolset._discovery_mode == SkillDiscoveryMode.EAGER
+        assert isinstance(toolset.tool_filter, list)
         assert "load_skill" in toolset.tool_filter
         assert "load_skill_resource" in toolset.tool_filter
         assert "run_skill_script" not in toolset.tool_filter

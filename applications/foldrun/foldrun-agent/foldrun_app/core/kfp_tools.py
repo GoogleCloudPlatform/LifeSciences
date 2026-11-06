@@ -624,7 +624,14 @@ class KFPGetAnalysisResultsTool(KFPModelTool):
                 return None
 
             base = viewer_base.rstrip("/")
-            if self.model_type in ("openfold3", "boltz2", "alphafold3"):
+            if self.model_type in (
+                "openfold3",
+                "boltz2",
+                "alphafold3",
+                "boltzgen",
+                "rfd4_proteina",
+                "bindcraft",
+            ):
                 return f"{base}/job/{quote_plus(job_id)}"
 
             summary_dict = summary or {}
@@ -637,6 +644,9 @@ class KFPGetAnalysisResultsTool(KFPModelTool):
                 "alphafold3",
                 "openfold3",
                 "boltz2",
+                "boltzgen",
+                "rfd4_proteina",
+                "bindcraft",
             ):
                 return f"{base}/job/{quote_plus(job_id)}"
 

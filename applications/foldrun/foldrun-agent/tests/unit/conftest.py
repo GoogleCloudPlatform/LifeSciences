@@ -35,15 +35,54 @@ def pytest_configure(config):
     os.environ["BOLTZ2_COMPONENTS_IMAGE"] = "test-boltz2-image"
     os.environ["BOLTZ2_CACHE_PATH"] = "boltz2/cache"
 
+    # Optional generative binder models disabled by default in baseline unit tests
+    for opt_var in (
+        "BOLTZGEN_COMPONENTS_IMAGE",
+        "RFD4_PROTEINA_COMPONENTS_IMAGE",
+        "BINDCRAFT_COMPONENTS_IMAGE",
+    ):
+        os.environ.pop(opt_var, None)
+
 
 @pytest.fixture(autouse=True)
 def _isolate_gcp_clients():
-    """Ensure unit tests never leak singleton clients or require ambient GCP credentials."""
+    """Ensure unit tests never leak singleton clients, configs, env vars, or parent .env files."""
+    from dotenv import load_dotenv as _real_load_dotenv
+
     import foldrun_app.core.base_tool as base_tool
 
+    env_snapshot = dict(os.environ)
+
+    def _reset_startup_configs():
+        for mod_name in (
+            "foldrun_app.models.af2.startup",
+            "foldrun_app.models.af3.startup",
+            "foldrun_app.models.of3.startup",
+            "foldrun_app.models.boltz2.startup",
+            "foldrun_app.models.boltzgen.startup",
+            "foldrun_app.models.rfd4_proteina.startup",
+            "foldrun_app.models.bindcraft.startup",
+        ):
+            mod = __import__(mod_name, fromlist=["_config"]) if mod_name in os.sys.modules else None
+            if mod is not None and hasattr(mod, "_config"):
+                mod._config = None
+
+    _reset_startup_configs()
     base_tool._vertex_initialized = False
     base_tool._shared_storage_client = None
-    with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
+    with (
+        patch(
+            "foldrun_app.core.config.load_dotenv",
+            side_effect=lambda dotenv_path=None, *a, **kw: (
+                _real_load_dotenv(dotenv_path, *a, **kw) if dotenv_path else False
+            ),
+        ),
+        patch("google.cloud.aiplatform.init"),
+        patch("google.cloud.storage.Client"),
+    ):
         yield
+    os.environ.clear()
+    os.environ.update(env_snapshot)
+    _reset_startup_configs()
     base_tool._vertex_initialized = False
     base_tool._shared_storage_client = None
