@@ -17,7 +17,7 @@ name = "alphagenome-variant-annotation-agent"
 version = "0.1.0"
 description = "AlphaGenome — Variant Annotation: Scores variants across 18 AlphaGenome modalities (AVI Phred, Atlas links) and builds ACMG dossiers with ClinVar, gnomAD v4, GWAS Catalog, and PharmGKB."
 readme = "README.md"
-requires-python = "~=3.13.0"
+requires-python = "~=3.15.2"
 dependencies = [
     "a2a-sdk[http-server]>=1.0,<2",
     "aiohttp>=3.13.4",
@@ -31,7 +31,7 @@ dependencies = [
     "google-genai>=1.0.0",
     "httpx>=0.28.1",
     "matplotlib>=3.10.0",
-    "opentelemetry-resourcedetector-gcp<=1.12.0a0",
+    "opentelemetry-resourcedetector-gcp<=1.14.0",
     "pillow>=10.0.0",
     "protobuf>=6.31.1,<7.0.0",
     "pydantic>=2.7.0",
