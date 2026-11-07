@@ -40,7 +40,7 @@ BIN_DIR="${OASE_BIN:-${TOOLS_HOME_DIR}/bin}"
 # Hypex is vendored as source. Provisioning builds deployment-local binaries;
 # no generated artifact belongs in Git.
 HYPEX_REVISION="22316b2db118ab3f3f175a05faa75d74c42a698c"
-HYPEX_VENDOR_VERSION="${HYPEX_REVISION}+oase.2"
+HYPEX_VENDOR_VERSION="${HYPEX_REVISION}+oase.3"
 HYPEX_GO_VERSION="1.26.1"
 HYPEX_SHARE_DIR="${TOOLS_HOME_DIR}/share/hypex"
 HYPEX_SOURCE_ROOT="${SCRIPT_DIR}/vendor/hypex"
