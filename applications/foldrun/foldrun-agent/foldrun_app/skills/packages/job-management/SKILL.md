@@ -1,6 +1,6 @@
 ---
 name: job-management
-description: Monitors, lists, inspects, retries, and deletes FoldRun prediction jobs, and checks GPU quotas and AlphaFold3 endpoint readiness. Use when the user asks for job status, active or failed jobs, GPU availability, endpoint state, retrying a failed run, or deleting a job.
+description: Monitors, lists, inspects, retries, and deletes FoldRun prediction and binder design jobs, and checks GPU quotas and AlphaFold3 endpoint readiness. Use when the user asks for job status, active or failed jobs, GPU availability, endpoint state, retrying a failed run, or deleting a job.
 metadata:
   adk_additional_tools:
     - check_job_status
@@ -20,10 +20,10 @@ metadata:
 3. If `check_job_status` returns `NOT_FOUND` or an error, report that directly—do not assume success or failure.
 
 ## Core Operations
-- **Check Job Status (`check_job_status`)**: Monitors progress of any AF2, OF3, Boltz-2, or AF3 pipeline job (running, failed, or succeeded). Use when the user asks *"what's the status"* or *"check progress"* (do NOT call `analyze_job` for simple status checks).
+- **Check Job Status (`check_job_status`)**: Monitors progress of any AF2, OF3, Boltz-2, AF3, BoltzGen, RFD4-Proteina, or BindCraft pipeline job (running, failed, or succeeded). Use when the user asks *"what's the status"* or *"check progress"* (do NOT call `analyze_job` for simple status checks).
 - **List Jobs (`list_jobs`)**: Filters jobs by `state` (`"running"`, `"failed"`, `"succeeded"`, `"pending"`, `"cancelled"` — always simple lowercase words, never `PIPELINE_STATE_*`), `job_type`, `gpu_type`, `seq_name`, or sequence length.
   - **Display Analysis Column**: `list_jobs` includes `has_analysis` for succeeded jobs. Always include an **Analysis** column in job tables (`"✓"` if `True`, `"✗"` if `False`, `"-"` if non-succeeded).
-- **Inspect Job Details (`get_job_details`)**: Retrieves original FASTA/query input, submission parameters, timing, error details, and per-task `task_configurations` (showing actual `machine_type`, `accelerator_type`, and `strategy` for `data-pipeline`, `predict`, and `relax`).
+- **Inspect Job Details (`get_job_details`)**: Retrieves original FASTA/query input, submission parameters, timing, error details, and per-task `task_configurations` (showing actual `machine_type`, `accelerator_type`, and `strategy` for `data-pipeline`/`configure-seeds`, `predict`, and `relax`). Generative binder jobs (**BoltzGen**, **RFD4-Proteina**, **BindCraft**) use a 2-stage pipeline (`configure-seeds` CPU + `predict` GPU) without a separate CPU MSA step.
 - **Check GPU Quota (`check_gpu_quota`)**: Displays on-demand and preemptible/spot (`FLEX_START`) quota limits and usage for `L4`, `A100` (40GB), and `A100_80GB`. Call proactively before submitting multiple jobs or large batches.
 
 ## AlphaFold 3 Dedicated Endpoint Monitoring (`check_af3_endpoint`)
@@ -38,7 +38,7 @@ metadata:
 ## Retry Failed Jobs with Pipeline Caching
 - **Retry failed jobs**: When a pipeline job fails (e.g., transient GPU provisioning timeout):
 1. Call `get_job_details(job_id=...)` to retrieve the original sequence/query and parameters, and check which task (`data-pipeline`, `predict`, or `relax`) failed.
-2. Resubmit using the corresponding submission tool (`submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_of3_prediction`, or `submit_boltz2_prediction`) after user confirmation.
+2. Resubmit using the corresponding submission tool (`submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_of3_prediction`, `submit_boltz2_prediction`, `submit_boltzgen_design`, `submit_rfd4_proteina_design`, or `submit_bindcraft_design`) after user confirmation.
 3. Pipeline caching (`enable_caching=True`) automatically skips completed steps (e.g., skipping `data-pipeline` and `predict` if only `relax` failed).
 - **AMBER Relaxation Fallback (`RELAX_FALLBACK`)**: If logs show `RELAX_FALLBACK`, AMBER minimization fell back to the unrelaxed structure due to disordered regions. The job succeeded and pLDDT/PAE scores are unaffected.
 

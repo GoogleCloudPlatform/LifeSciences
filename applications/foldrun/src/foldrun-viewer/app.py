@@ -1081,6 +1081,12 @@ def trigger_analysis():
             esmfold2_extra_cfg = {
                 "query_json_uri": _resolve_esmfold2_query_json_uri(pj),
             }
+        elif model_type == "boltzgen":
+            raw_predictions = _discover_boltzgen_predictions(gcs_output_dir)
+        elif model_type in ("rfd4_proteina", "rfd4-proteina"):
+            raw_predictions = _discover_rfd4_proteina_predictions(gcs_output_dir)
+        elif model_type == "bindcraft":
+            raw_predictions = _discover_bindcraft_predictions(gcs_output_dir)
         else:
             raw_predictions = _discover_af2_predictions(gcs_output_dir)
 
@@ -1466,16 +1472,21 @@ def download_file():
             "pae_plot",
             "pde_plot",
             "iptm_matrix_plot",
+            "ranking_comparison",
+            "plddt_distribution",
         ):
-            plot_uri = (selected_pred.get("plots") or {}).get(artifact_type)
+            plot_uri = (selected_pred.get("plots") or {}).get(artifact_type) or (
+                summary.get("plots") or {}
+            ).get(artifact_type)
             if not plot_uri:
                 return jsonify(
                     {"error": f"Plot '{artifact_type}' not found for rank {pred_rank}"}
                 ), 404
             filename = (
                 f"{effective_job_id}_rank_{pred_rank:02d}_{artifact_type}.png"
-                if artifact_type != "iptm_matrix_plot"
-                else f"{effective_job_id}_iptm_matrix.png"
+                if artifact_type
+                not in ("iptm_matrix_plot", "ranking_comparison", "plddt_distribution")
+                else f"{effective_job_id}_{artifact_type}.png"
             )
             return _serve_gcs_download(
                 gcs_uri=plot_uri,
@@ -1500,6 +1511,89 @@ def download_file():
 def health():
     """Health check endpoint for Cloud Run"""
     return jsonify({"status": "healthy", "service": "foldrun-viewer"}), 200
+
+
+_BINDER_MODEL_ALIASES = {
+    "boltzgen": "boltzgen",
+    "rfd4-proteina": "rfd4_proteina",
+    "rfd4_proteina": "rfd4_proteina",
+    "rfd4": "rfd4_proteina",
+    "proteina": "rfd4_proteina",
+    "bindcraft": "bindcraft",
+}
+
+
+def _discover_binder_predictions(pipeline_root: str) -> list:
+    """Scan GCS for generative binder design confidence_design_*.json files under pipeline_root."""
+    bucket_name, prefix = parse_gcs_uri(pipeline_root)
+    if not prefix.endswith("/"):
+        prefix += "/"
+    bucket = storage_client.bucket(bucket_name)
+    predictions = []
+    seen = set()
+    for blob in bucket.list_blobs(prefix=prefix):
+        name = blob.name
+        if not name.endswith(".json") or (
+            "/predictions/" not in name and "confidence_design" not in name
+        ):
+            continue
+        parts_list = name.split("/")
+        filename = parts_list[-1]
+        if "confidence_design_" in filename and name not in seen:
+            seen.add(name)
+            cif_filename = filename.replace("confidence_", "", 1).replace(
+                ".json", ".cif"
+            )
+            cif_name = "/".join([*parts_list[:-1], cif_filename])
+            sample_name = filename.replace("confidence_", "", 1).replace(".json", "")
+            predictions.append(
+                {
+                    "sample_name": sample_name,
+                    "cif_uri": f"gs://{bucket_name}/{cif_name}",
+                    "aggregated_uri": f"gs://{bucket_name}/{name}",
+                }
+            )
+    return predictions
+
+
+def _discover_bindcraft_predictions(pipeline_root: str) -> list:
+    """Discover BindCraft design outputs (confidence_design_*.json or Accepted/*.cif|*.pdb)."""
+    predictions = _discover_binder_predictions(pipeline_root)
+    if predictions:
+        return predictions
+
+    bucket_name, prefix = parse_gcs_uri(pipeline_root)
+    if not prefix.endswith("/"):
+        prefix += "/"
+    bucket = storage_client.bucket(bucket_name)
+    all_blobs = list(bucket.list_blobs(prefix=prefix))
+    stats_csv = next(
+        (
+            b.name
+            for b in all_blobs
+            if b.name.endswith("/final_design_stats.csv")
+            or b.name.endswith("final_design_stats.csv")
+        ),
+        "",
+    )
+    for blob in sorted(all_blobs, key=lambda x: x.name):
+        name = blob.name
+        if "/Accepted/" in name and (name.endswith(".cif") or name.endswith(".pdb")):
+            sample_name = name.split("/")[-1].rsplit(".", 1)[0]
+            predictions.append(
+                {
+                    "sample_name": sample_name,
+                    "cif_uri": f"gs://{bucket_name}/{name}",
+                    "aggregated_uri": (
+                        f"gs://{bucket_name}/{stats_csv}" if stats_csv else ""
+                    ),
+                }
+            )
+    return predictions
+
+
+_discover_boltzgen_predictions = _discover_binder_predictions
+_discover_rfd4_proteina_predictions = _discover_binder_predictions
 
 
 if __name__ == "__main__":

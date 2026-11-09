@@ -45,14 +45,29 @@ class TestToolRegistry:
             "foldrun_app.models.esmfold2.startup._auto_detect_gpus",
             lambda config, **kwargs: None,
         )
+        monkeypatch.setattr(
+            "foldrun_app.models.boltzgen.startup._auto_detect_gpus",
+            lambda config, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            "foldrun_app.models.rfd4_proteina.startup._auto_detect_gpus",
+            lambda config, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            "foldrun_app.models.bindcraft.startup._auto_detect_gpus",
+            lambda config, **kwargs: None,
+        )
 
     def _reset_registry(self):
         """Reset the registry global state between tests."""
         import foldrun_app.models.af2.startup as af2_startup
         import foldrun_app.models.af3.startup as af3_startup
+        import foldrun_app.models.bindcraft.startup as bindcraft_startup
         import foldrun_app.models.boltz2.startup as boltz2_startup
+        import foldrun_app.models.boltzgen.startup as boltzgen_startup
         import foldrun_app.models.esmfold2.startup as esmfold2_startup
         import foldrun_app.models.of3.startup as of3_startup
+        import foldrun_app.models.rfd4_proteina.startup as rfd4_startup
         import foldrun_app.skills._tool_registry as reg
         from foldrun_app.core.startup_utils import reset_core_config
 
@@ -63,6 +78,9 @@ class TestToolRegistry:
         of3_startup._config = None
         boltz2_startup._config = None
         esmfold2_startup._config = None
+        boltzgen_startup._config = None
+        rfd4_startup._config = None
+        bindcraft_startup._config = None
         af3_startup._config = None
 
     def test_get_tool_initializes_on_first_call(self, mock_env_vars):
@@ -170,8 +188,37 @@ class TestToolRegistry:
             assert len(reg._agents) == 11
             assert "af2_submit_monomer" not in reg._agents
 
-    def test_model_registry_registers_all_four_models(self, mock_env_vars, monkeypatch):
-        """ModelDescriptor registry registers alphafold2, openfold3, boltz2, esmfold2, and alphafold3."""
+    def test_generative_binder_tools_registered(self, mock_env_vars, monkeypatch):
+        """When BoltzGen, RFD4-Proteina, and BindCraft images are set, all 43 tools register."""
+        self._reset_registry()
+        monkeypatch.setenv("BOLTZGEN_COMPONENTS_IMAGE", "test-boltzgen-image:latest")
+        monkeypatch.setenv("RFD4_PROTEINA_COMPONENTS_IMAGE", "test-rfd4-image:latest")
+        monkeypatch.setenv("BINDCRAFT_COMPONENTS_IMAGE", "test-bindcraft-image:latest")
+
+        with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
+            import foldrun_app.skills._tool_registry as reg
+            from foldrun_app.skills._tool_registry import get_tool
+
+            get_tool("af2_submit_monomer")
+            assert len(reg._agents) == 43
+            for tool_name in [
+                "boltzgen_submit_design",
+                "boltzgen_analyze_parallel",
+                "boltzgen_get_analysis_results",
+                "boltzgen_open_viewer",
+                "rfd4_proteina_submit_design",
+                "rfd4_proteina_analyze_job",
+                "rfd4_proteina_get_analysis_results",
+                "rfd4_proteina_open_viewer",
+                "bindcraft_submit_design",
+                "bindcraft_analyze_job",
+                "bindcraft_get_analysis_results",
+                "bindcraft_open_viewer",
+            ]:
+                assert tool_name in reg._agents, f"Tool '{tool_name}' not registered"
+
+    def test_model_registry_registers_all_models(self, mock_env_vars, monkeypatch):
+        """ModelDescriptor registry registers all 8 structure prediction and binder design models."""
         from foldrun_app.core.model_registry import (
             get_model,
             infer_model_type_from_job_id,
@@ -180,7 +227,16 @@ class TestToolRegistry:
         )
 
         all_models = list_models()
-        assert set(all_models) == {"alphafold2", "openfold3", "boltz2", "esmfold2", "alphafold3"}
+        assert set(all_models) == {
+            "alphafold2",
+            "openfold3",
+            "boltz2",
+            "esmfold2",
+            "alphafold3",
+            "boltzgen",
+            "rfd4_proteina",
+            "bindcraft",
+        }
 
         assert normalize_model_type("af2") == "alphafold2"
         assert normalize_model_type("of3") == "openfold3"
@@ -190,12 +246,18 @@ class TestToolRegistry:
         assert normalize_model_type("esmfold") is None
         assert normalize_model_type("esm2") is None
         assert normalize_model_type("af3") == "alphafold3"
+        assert normalize_model_type("boltzgen") == "boltzgen"
+        assert normalize_model_type("rfd4-proteina") == "rfd4_proteina"
+        assert normalize_model_type("bindcraft") == "bindcraft"
 
         assert infer_model_type_from_job_id("alphafold2-inference-pipeline-123") == "alphafold2"
         assert infer_model_type_from_job_id("of3-inference-pipeline-123") == "openfold3"
         assert infer_model_type_from_job_id("boltz2-inference-pipeline-123") == "boltz2"
         assert infer_model_type_from_job_id("esmfold2-inference-pipeline-123") == "esmfold2"
         assert infer_model_type_from_job_id("alphafold3-inference-pipeline-123") == "alphafold3"
+        assert infer_model_type_from_job_id("boltzgen-design-pipeline-123") == "boltzgen"
+        assert infer_model_type_from_job_id("rfd4-proteina-pipeline-123") == "rfd4_proteina"
+        assert infer_model_type_from_job_id("bindcraft-design-pipeline-123") == "bindcraft"
 
         af3_desc = get_model("af3")
         assert af3_desc.display_name == "AlphaFold 3"

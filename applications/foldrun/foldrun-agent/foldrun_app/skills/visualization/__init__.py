@@ -14,6 +14,10 @@
 
 """Visualization skill - 3D structure viewer."""
 
-from .tools import open_structure_viewer
+from .tools import (
+    open_structure_viewer,
+)
 
-__all__ = ["open_structure_viewer"]
+__all__ = [
+    "open_structure_viewer",
+]

@@ -20,9 +20,12 @@ from .tools import (
     submit_af2_multimer_prediction,
     submit_af3_batch_predictions,
     submit_af3_endpoint_prediction,
+    submit_bindcraft_design,
     submit_boltz2_prediction,
+    submit_boltzgen_design,
     submit_esmfold2_prediction,
     submit_of3_prediction,
+    submit_rfd4_proteina_design,
 )
 
 __all__ = [
@@ -31,7 +34,10 @@ __all__ = [
     "submit_af2_multimer_prediction",
     "submit_af3_batch_predictions",
     "submit_af3_endpoint_prediction",
+    "submit_bindcraft_design",
     "submit_boltz2_prediction",
+    "submit_boltzgen_design",
     "submit_esmfold2_prediction",
     "submit_of3_prediction",
+    "submit_rfd4_proteina_design",
 ]

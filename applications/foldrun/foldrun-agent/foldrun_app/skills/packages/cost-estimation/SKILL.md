@@ -10,10 +10,10 @@ metadata:
 
 # Cost Estimation
 
-- **Per-Job Cost Forecast (`estimate_job_cost`)**: Estimates compute cost before submitting a prediction (`af2_monomer`, `af2_multimer`, `of3`, `boltz2`, `esmfold2`, `esmfold2_fast`, or `af3`).
+- **Per-Job Cost Forecast (`estimate_job_cost`)**: Estimates compute cost before submitting a prediction or generative binder design job (`af2_monomer`, `af2_multimer`, `af3`, `of3`, `boltz2`, `esmfold2`, `esmfold2_fast`, `boltzgen`, `rfd4_proteina`, or `bindcraft`).
   - Returns per-phase breakdown (MSA, predict, relax) with both **on-demand** and **DWS FLEX_START** (spot) pricing side by side.
-  - GPU auto-selection matches the submission tools (`A100` 40GB default, `A100_80GB` for large sequences, or explicit `L4` override).
+  - GPU auto-selection matches the submission tools (`A100` 40GB default, `A100_80GB` for large sequences, `H100` for AF3, or explicit `L4` override).
   - Always present both pricing columns so users can compare (FoldRun defaults to `DWS FLEX_START`).
-- **Monthly Budget Projection (`estimate_monthly_cost`)**: Models monthly and annual TCO from expected job volumes plus shared infrastructure (Filestore, GCS, Artifact Registry, Agent Runtime, Cloud Run, VPC/NAT; pass `include_infrastructure=False` for compute-only).
+- **Monthly Budget Projection (`estimate_monthly_cost`)**: Models monthly and annual TCO from expected job volumes (`af2_monomer_jobs`, `af2_multimer_jobs`, `af3_jobs`, `of3_jobs`, `boltz2_jobs`, `esmfold2_jobs`, `esmfold2_fast_jobs`, `boltzgen_jobs`, `rfd4_proteina_jobs`, `bindcraft_jobs`) plus shared infrastructure (Filestore, GCS, Artifact Registry, Agent Runtime, Cloud Run, VPC/NAT; pass `include_infrastructure=False` for compute-only).
 - **Actual Job Spend (`get_actual_job_costs`)**: Calculates actual costs from completed PipelineJob task runtimes and machine specs, including estimate-vs-actual accuracy. Pass `pipeline_job_id` for a single run or omit for recent jobs.
 - **Pricing Disclaimer**: Always remind users that estimates use Google Cloud **list pricing** and actual spend depends on their organization's negotiated rates, CUDs, or enterprise discounts.

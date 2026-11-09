@@ -75,7 +75,7 @@ resource "google_vertex_ai_reasoning_engine" "agent_runtime" {
   project      = var.project_id
   region       = var.region
   display_name = "FoldRun_Agent"
-  description  = "Expert AI assistant for FoldRun protein structure prediction, job management, and results analysis"
+  description  = "Expert AI assistant for FoldRun biomolecular structure prediction and generative binder design (AlphaFold2, AlphaFold 3, OpenFold3, Boltz-2, BoltzGen, RFD4-Proteina, BindCraft)"
 
   spec {
     # Specify the service account on the engine so it has the right permissions pre-provisioned.
