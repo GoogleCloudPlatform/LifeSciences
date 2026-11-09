@@ -167,6 +167,25 @@ class ListJobsTool(BaseTool):
             state_value = state_map.get(state_filter.lower(), state_filter.upper())
 
         # Add label-based convenience filters
+        if arguments.get("model_type"):
+            mt_raw = str(arguments["model_type"]).strip().lower()
+            mt_aliases = {
+                "af2": "alphafold2",
+                "alphafold2": "alphafold2",
+                "af3": "alphafold3",
+                "alphafold3": "alphafold3",
+                "of3": "openfold3",
+                "openfold3": "openfold3",
+                "boltz": "boltz2",
+                "boltz2": "boltz2",
+                "esmfold2": "esmfold2",
+                "esmfold2_fast": "esmfold2",
+                "boltzgen": "boltzgen",
+                "rfd4_proteina": "rfd4-proteina",
+                "rfd4-proteina": "rfd4-proteina",
+                "bindcraft": "bindcraft",
+            }
+            label_filter["model_type"] = mt_aliases.get(mt_raw, mt_raw)
         if arguments.get("job_type"):
             label_filter["job_type"] = arguments["job_type"]
         if arguments.get("gpu_type"):
@@ -223,9 +242,11 @@ class ListJobsTool(BaseTool):
                     continue
 
             # Filter by sequence length / token count range
-            # AF2 uses 'seq_len'; OF3, Boltz-2, and AF3 use 'num_tokens'
+            # AF2 uses 'seq_len'; OF3, Boltz-2, and AF3 use 'num_tokens'; BindCraft uses 'num_residues'
             if min_seq_length is not None or max_seq_length is not None:
-                raw_seq_len = labels.get("seq_len") or labels.get("num_tokens")
+                raw_seq_len = (
+                    labels.get("seq_len") or labels.get("num_tokens") or labels.get("num_residues")
+                )
                 if raw_seq_len is None:
                     continue
                 try:
@@ -294,10 +315,16 @@ class ListJobsTool(BaseTool):
                     "ESMFold2-Fast" if labels.get("model_variant") == "fast" else "ESMFold2"
                 ),
                 "esmfold2_fast": "ESMFold2-Fast",
+                "boltzgen": "BoltzGen",
+                "rfd4-proteina": "RFD4-Proteina",
+                "rfd4_proteina": "RFD4-Proteina",
+                "bindcraft": "BindCraft",
             }
             model_prefix = model_display_map.get(model_type, labels.get("model_type", "AlphaFold"))
             if "job_type" in labels:
-                job_info["experiment"] = f"{model_prefix} {labels['job_type'].title()}"
+                job_info["experiment"] = (
+                    f"{model_prefix} {labels['job_type'].replace('_', ' ').title()}"
+                )
             seq_or_query_name = labels.get("seq_name") or labels.get("query_name")
             if seq_or_query_name:
                 job_info["sequence_name"] = seq_or_query_name

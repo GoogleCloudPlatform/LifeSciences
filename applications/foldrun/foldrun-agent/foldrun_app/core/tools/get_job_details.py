@@ -57,19 +57,54 @@ class GetJobDetailsTool(BaseTool):
         labels = dict(job.labels) if job.labels else {}
         params = dict(job.runtime_config.parameter_values) if job.runtime_config else {}
 
-        # Get the original input path from parameters
-        # AF2 uses 'sequence_path' (FASTA); OF3, Boltz-2, and AF3 pass 'query_json_path'
+        # Get the original input path from parameters across all 7 supported models:
+        # AF2: sequence_path (FASTA)
+        # OF3 / AF3 / Boltz-2: query_json_path (JSON or YAML)
+        # BoltzGen: query_yaml_path (YAML)
+        # RFD4-Proteina: spec_json_path (JSON)
+        # BindCraft: settings_json_path (JSON)
         sequence_path = params.get("sequence_path")
         query_json_path = params.get("query_json_path")
-        input_path = sequence_path or query_json_path
+        query_yaml_path = params.get("query_yaml_path")
+        spec_json_path = params.get("spec_json_path")
+        settings_json_path = params.get("settings_json_path")
+        input_path = (
+            sequence_path
+            or query_json_path
+            or query_yaml_path
+            or spec_json_path
+            or settings_json_path
+        )
 
         if not input_path:
-            raise ValueError(f"Could not find sequence_path or query_json_path in job {job_id}")
+            raise ValueError(
+                f"Could not find input parameter (sequence_path, query_json_path, query_yaml_path, spec_json_path, or settings_json_path) in job {job_id}"
+            )
 
         norm_model_type = normalize_model_type(labels.get("model_type"))
-        lower_input_path = input_path.lower()
-        is_boltz2 = (
+        raw_model_type = labels.get("model_type", "").lower()
+        lower_input_path = str(input_path).lower()
+        is_boltzgen = (
+            norm_model_type == "boltzgen"
+            or raw_model_type == "boltzgen"
+            or query_yaml_path is not None
+            or "/boltzgen_queries/" in lower_input_path
+        )
+        is_rfd4 = (
+            norm_model_type == "rfd4_proteina"
+            or raw_model_type in ("rfd4_proteina", "rfd4-proteina")
+            or spec_json_path is not None
+            or "/rfd4_proteina_queries/" in lower_input_path
+        )
+        is_bindcraft = (
+            norm_model_type == "bindcraft"
+            or raw_model_type == "bindcraft"
+            or settings_json_path is not None
+            or "/bindcraft_queries/" in lower_input_path
+        )
+        is_boltz2 = not is_boltzgen and (
             norm_model_type == "boltz2"
+            or raw_model_type in ("boltz2", "boltz")
             or lower_input_path.endswith((".yaml", ".yml"))
             or "/boltz2_queries/" in lower_input_path
         )
@@ -77,6 +112,9 @@ class GetJobDetailsTool(BaseTool):
         is_esmfold2 = norm_model_type == "esmfold2" or "/esmfold2_queries/" in lower_input_path
         is_of3 = (
             not is_boltz2
+            and not is_boltzgen
+            and not is_rfd4
+            and not is_bindcraft
             and not is_af3
             and not is_esmfold2
             and (
@@ -86,7 +124,16 @@ class GetJobDetailsTool(BaseTool):
             )
         )
 
-        if is_boltz2:
+        if is_boltzgen:
+            resolved_model_type = "boltzgen"
+            input_format = "yaml"
+        elif is_rfd4:
+            resolved_model_type = labels.get("model_type") or "rfd4_proteina"
+            input_format = "json"
+        elif is_bindcraft:
+            resolved_model_type = "bindcraft"
+            input_format = "json"
+        elif is_boltz2:
             resolved_model_type = "boltz2"
             input_format = "yaml"
         elif is_af3:
@@ -101,6 +148,7 @@ class GetJobDetailsTool(BaseTool):
         else:
             resolved_model_type = labels.get("model_type") or "alphafold2"
             input_format = "fasta"
+        is_structured_input = input_format in ("json", "yaml")
 
         # Step 2: Download the input content from GCS
         fasta_header = None
@@ -109,34 +157,61 @@ class GetJobDetailsTool(BaseTool):
         if input_path.startswith("gs://"):
             bucket_name, blob_path = self._validate_gcs_uri(input_path)
 
-            try:
-                # Download input from GCS
-                storage_client = storage.Client(project=self.config.project_id)
-                bucket = storage_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
-                fasta_content = blob.download_as_text()
-
-                if is_boltz2:
-                    fasta_header = "Boltz-2 query YAML"
-                    fasta_sequence = fasta_content
-                elif is_af3:
-                    fasta_header = "AF3 query JSON"
-                    fasta_sequence = fasta_content
-                elif is_esmfold2:
-                    fasta_header = "ESMFold2 query JSON"
-                    fasta_sequence = fasta_content
-                elif is_of3:
-                    fasta_header = "OF3 query JSON"
-                    fasta_sequence = fasta_content
-                else:
-                    # AF2 input is FASTA
-                    lines = fasta_content.strip().split("\n")
-                    if lines and lines[0].startswith(">"):
-                        fasta_header = lines[0][1:].strip()  # Remove '>'
-                        fasta_sequence = "".join(line.strip() for line in lines[1:])
-            except Exception as e:
-                fasta_header = f"Error retrieving input: {e!s}"
+            allowed_buckets = {
+                b
+                for b in (
+                    self.config.bucket_name,
+                    getattr(self.config, "databases_bucket_name", None),
+                )
+                if b
+            }
+            if allowed_buckets and bucket_name not in allowed_buckets:
+                fasta_header = f"Unauthorized GCS bucket: {bucket_name}"
                 fasta_sequence = None
+            else:
+                try:
+                    # Download input from GCS
+                    from foldrun_app.core.base_tool import _shared_storage_client
+
+                    storage_client = (
+                        self.storage_client
+                        if (
+                            getattr(self, "storage_client", None) is not None
+                            and self.storage_client is not _shared_storage_client
+                        )
+                        else storage.Client(project=self.config.project_id)
+                    )
+                    bucket = storage_client.bucket(bucket_name)
+                    blob = bucket.blob(blob_path)
+                    fasta_content = blob.download_as_text()
+
+                    if is_boltz2:
+                        fasta_header = "Boltz-2 query YAML"
+                        fasta_sequence = fasta_content
+                    elif is_af3:
+                        fasta_header = "AF3 query JSON"
+                        fasta_sequence = fasta_content
+                    elif is_esmfold2:
+                        fasta_header = "ESMFold2 query JSON"
+                        fasta_sequence = fasta_content
+                    elif is_of3:
+                        fasta_header = "OF3 query JSON"
+                        fasta_sequence = fasta_content
+                    elif is_structured_input:
+                        fasta_header = f"{resolved_model_type} {input_format.upper()}"
+                        fasta_sequence = fasta_content
+                    else:
+                        # AF2 input is FASTA (possibly multi-chain)
+                        lines = fasta_content.strip().split("\n")
+                        if lines and lines[0].startswith(">"):
+                            fasta_header = lines[0][1:].strip()  # Remove '>'
+                            if sum(1 for ln in lines if ln.startswith(">")) > 1:
+                                fasta_sequence = fasta_content.strip()
+                            else:
+                                fasta_sequence = "".join(line.strip() for line in lines[1:])
+                except Exception as e:
+                    fasta_header = f"Error retrieving input: {e!s}"
+                    fasta_sequence = None
 
         # Extract job timing info
         create_time = job.create_time.isoformat() if job.create_time else None
@@ -216,7 +291,9 @@ class GetJobDetailsTool(BaseTool):
             "input": {
                 "header": fasta_header,
                 "content": fasta_sequence,
-                "length": labels.get("seq_len") or labels.get("num_tokens", "unknown"),
+                "length": labels.get("seq_len")
+                or labels.get("num_tokens")
+                or labels.get("num_residues", "unknown"),
                 "name": labels.get("seq_name") or labels.get("query_name", "unknown"),
                 "path": input_path,
                 "format": input_format,
@@ -233,6 +310,7 @@ class GetJobDetailsTool(BaseTool):
                 ),
                 "num_model_seeds": params.get("num_model_seeds"),
                 "num_diffusion_samples": params.get("num_diffusion_samples"),
+                "num_designs": params.get("num_designs"),
                 "strategy": strategy,
                 "enable_flex_start": enable_flex_start,
                 "max_wait_duration": params.get("max_wait_duration", "unknown"),
@@ -247,7 +325,7 @@ class GetJobDetailsTool(BaseTool):
                 "input_available": fasta_sequence is not None,
                 "suggested_params": {
                     "input": fasta_sequence
-                    if input_format in ("json", "yaml")
+                    if (is_structured_input or (fasta_sequence and fasta_sequence.startswith(">")))
                     else (f">{fasta_header}\n{fasta_sequence}" if fasta_sequence else None),
                     "job_name": f"{job.display_name}_retry",
                     "model_type": resolved_model_type,

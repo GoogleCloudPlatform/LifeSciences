@@ -62,6 +62,8 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
         use_templates: bool = True,
         base_seed: int = 42,
         use_cueq_triangle_kernels: bool = True,
+        extra_cli_args: list = [],
+        custom_runner_yaml_overrides: dict = {},
     ):
         """OpenFold3 Inference Pipeline.
 
@@ -173,6 +175,8 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
                 use_templates=use_templates,
                 nfs_mmcif_dir=nfs_mmcif_dir,
                 use_cueq_triangle_kernels=use_cueq_triangle_kernels,
+                extra_cli_args=extra_cli_args,
+                custom_runner_yaml_overrides=custom_runner_yaml_overrides,
             ).set_retry(
                 num_retries=2,
                 backoff_duration="60s",
