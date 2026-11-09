@@ -55,7 +55,7 @@ class ESMFOLD2SubmitPredictionTool(ESMFOLD2Tool):
                 'num_diffusion_samples': Diffusion samples per seed (default: 1),
                 'num_loops': Recycling loops (default: 4),
                 'num_sampling_steps': Diffusion sampling steps (default: 200),
-                'gpu_type': 'auto', 'L4', 'A100', or 'A100_80GB',
+                'gpu_type': 'auto', 'L4', 'A100', 'A100_80GB', or 'RTX_PRO_6000',
                 'enable_flex_start': Enable DWS FLEX_START (default: true),
             }
 

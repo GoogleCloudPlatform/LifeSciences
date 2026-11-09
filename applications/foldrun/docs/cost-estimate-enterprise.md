@@ -98,9 +98,10 @@ The estimator was calibrated against production job data from Agent Platform. Us
 
 | Machine + GPU | On-Demand | DWS FLEX_START (spot) | Savings |
 |---|---|---|---|
-| c2-standard-16 (CPU, MSA pipeline) | $0.84/hr | $0.27/hr | 68% |
+| n4-standard-8 (CPU, right-sized MSA pipeline; fallback: c2-standard-16) | $0.36/hr | $0.22/hr | 39% |
 | g2-standard-12 + 1x L4 | $1.00/hr | $0.40/hr | 60% |
 | a2-highgpu-1g + 1x A100 (40GB) | $3.67/hr | $1.80/hr | 51% |
+| g4-standard-48 + 1x RTX PRO 6000 (96GB) | $4.50/hr | $1.66/hr | 63% |
 | a3-highgpu-1g + 1x H100 (80GB, AF3 Endpoint) | $11.06/hr | N/A (Online Endpoint + 20m auto-undeploy to `$0.00/hr`) | Idle auto-drain |
 
 ### Storage
@@ -130,27 +131,27 @@ The estimator was calibrated against production job data from Agent Platform. Us
 
 | Step | Machine | Duration | On-Demand | FLEX_START |
 |---|---|---|---|---|
-| MSA / Data Pipeline | c2-standard-16 | ~37 min | ~$0.52 | ~$0.17 |
+| MSA / Data Pipeline | n4-standard-8 | ~37 min | ~$0.22 | ~$0.13 |
 | Predict (5 models) | g2-standard-12 + 1x L4 | ~19 min each | ~$1.58 | ~$0.63 |
 | Relax (5 structures) | g2-standard-12 + 1x L4 | ~5 min each | ~$0.42 | ~$0.17 |
-| **Total** | | | **~$2.52** | **~$0.97** |
+| **Total** | | | **~$2.22** | **~$0.93** |
 
 ### AF2 multimer — A100 GPU, ~500 residues total (25 predict + 25 relax tasks)
 
 | Step | Machine | Duration | On-Demand | FLEX_START |
 |---|---|---|---|---|
-| MSA / Data Pipeline | c2-standard-16 | ~38 min | ~$0.53 | ~$0.17 |
+| MSA / Data Pipeline | n4-standard-8 | ~38 min | ~$0.23 | ~$0.14 |
 | Predict (5 models x 5 seeds) | a2-highgpu-1g + 1x A100 | ~17 min each | ~$25.82 | ~$12.67 |
 | Relax (25 structures) | g2-standard-12 + 1x L4 | ~5.5 min each | ~$2.29 | ~$0.92 |
-| **Total** | | | **~$28.64** | **~$13.76** |
+| **Total** | | | **~$28.34** | **~$13.73** |
 
 ### OF3 prediction — A100 GPU, ~300 tokens, 5 seeds x 5 samples
 
 | Step | Machine | Duration | On-Demand | FLEX_START |
 |---|---|---|---|---|
-| MSA Pipeline | c2-standard-16 | ~13 min | ~$0.18 | ~$0.06 |
+| MSA Pipeline | n4-standard-8 | ~13 min | ~$0.08 | ~$0.05 |
 | Predict (5 seeds x 5 samples) | a2-highgpu-1g + 1x A100 | ~2.5 min/sample | ~$3.82 | ~$1.88 |
-| **Total** | | | **~$4.00** | **~$1.94** |
+| **Total** | | | **~$3.90** | **~$1.93** |
 
 ### AF3 prediction — Dedicated H100 Endpoint (`a3-highgpu-1g`, 630 GB NVMe MSA)
 

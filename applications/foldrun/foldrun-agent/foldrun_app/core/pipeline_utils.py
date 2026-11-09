@@ -25,7 +25,18 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import NamedTuple
 
+from foldrun_app.core.hardware import resolve_boot_disk_type
+
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "PIPELINE_COMPILE_LOCK",
+    "compile_pipeline",
+    "get_configure_seeds_component",
+    "load_kfp_inference_pipeline",
+    "model_pipeline_load_context",
+    "resolve_boot_disk_type",
+]
 
 # Process-wide lock for thread-safe pipeline compilation to prevent
 # concurrent compilations from racing on os.environ or sys.modules["config"]

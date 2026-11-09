@@ -503,7 +503,7 @@ requires-dist = [
     { name = "google-cloud-aiplatform", extras = ["evaluation"], marker = "extra == 'eval'", specifier = ">=1.156.0,<2.0.0" },
     { name = "google-cloud-aiplatform", extras = ["evaluation", "agent-engines"], specifier = ">=1.156.0,<2.0.0" },
     { name = "google-cloud-artifact-registry", specifier = ">=1.11.0" },
-    { name = "google-cloud-batch", specifier = ">=0.17.0" },
+    { name = "google-cloud-batch", specifier = ">=0.22.5" },
     { name = "google-cloud-compute", specifier = ">=1.19.0" },
     { name = "google-cloud-filestore", specifier = ">=1.8.0" },
     { name = "google-cloud-logging", specifier = ">=3.12.0,<4.0.0" },
@@ -869,7 +869,7 @@ wheels = [
 
 [[package]]
 name = "google-cloud-batch"
-version = "0.22.2"
+version = "0.22.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core", extra = ["grpc"] },
@@ -878,9 +878,9 @@ dependencies = [
     { name = "proto-plus" },
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/40/400c2e856aa6baa736d48cdd2626c49a8c9c0fe7f13e7cb03a02b777095d/google_cloud_batch-0.22.2.tar.gz", hash = "sha256:4711998f0f25c1379bb7eb3bea953df311b07aa06ea2fc6bc4d72ff96a6ed953", size = 209492, upload-time = "2026-08-06T06:24:06.659Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/10/71/45402db5114b29091f50c1e98f8999d1feb58f9e5ac5d1c24b8f92b92400/google_cloud_batch-0.22.5.tar.gz", hash = "sha256:eada4e5847d94b11df94f8bff59ce81ba2c9df2b7a69e5f58530ab173358f157", size = 211241, upload-time = "2026-11-05T18:39:48.3Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/a7/b1ec3a0e5e79e850d3c99e647830b042e04ad1e95688bf29446a7f4bd190/google_cloud_batch-0.22.2-py3-none-any.whl", hash = "sha256:ed6a3a3448be60e100abeb6cdb841c7dceb6d6a32d6766196ae03fe4a2c14fdd", size = 182485, upload-time = "2026-08-06T06:22:58.88Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/01/584eb45e8f7dec0107b0919bc930c88ac8ca003c865f6262f2ba74021bd1/google_cloud_batch-0.22.5-py3-none-any.whl", hash = "sha256:db6e2021687d6b31cef67b9262898d2561b7a0b52c29c9be3ef01add9ac29c49", size = 183393, upload-time = "2026-11-05T18:39:08.315Z" },
 ]
 
 [[package]]
@@ -1956,11 +1956,11 @@ wheels = [
 
 [[package]]
 name = "oauthlib"
-version = "4.0.0"
+version = "4.0.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7a/d8/a1bcc8ba112a627f8ffbdc212a78ce18d3ac07e91a5ca65d27918eee25a1/oauthlib-4.0.0.tar.gz", hash = "sha256:efb274799819440f95b4ab3b818869f1ce9ae26c5beacba0201d1a1b76b54f86", size = 187232, upload-time = "2026-09-28T06:01:18.77Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/17/2bb072de0b990303c985f26869fd47bb179024a051f47e7f9d208eb92f8e/oauthlib-4.0.1.tar.gz", hash = "sha256:3d73febdb6faa00f277c81fb04be7b7586fb96fc3b7f0b9c772dada69a25ede7", size = 191219, upload-time = "2026-10-31T09:52:58.008Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/f4/78229a1066068ca14fc60fb26cf7381cabe4382261392b90e5f9552722d4/oauthlib-4.0.0-py3-none-any.whl", hash = "sha256:624c28c13a0a59cabf9747dfa52af63be3e512a7f2714df16e91b5b3a145e6cd", size = 159715, upload-time = "2026-09-28T06:01:17.008Z" },
+    { url = "https://files.pythonhosted.org/packages/df/ef/3b8adde1b32a6f540758bff734d3442c621734c83708e5f02b0ba2f43b84/oauthlib-4.0.1-py3-none-any.whl", hash = "sha256:498a298876e996301950a5b053d12c31628bb7b895db03666430c69ce182eb61", size = 161934, upload-time = "2026-10-31T09:52:56.206Z" },
 ]
 
 [[package]]

@@ -27,7 +27,7 @@ properties:
 - **Binding Affinity (`properties`)**: Add `properties: [affinity: <LIGAND_CHAIN_ID>]` (supported for a single small-molecule ligand with <=128 heavy atoms; produces `affinity_<name>.json` with `affinity_pred_value` (`log10(IC50 uM)`) and `affinity_probability_binary`).
 
 ## Hardware & Pipeline Parameters
-- **GPU**: Requires **NVIDIA A100** (`a2-highgpu-1g` 40GB or `a2-ultragpu-1g` 80GB; L4 is unsupported). Supports multi-GPU scaling (`num_gpus=1, 2, 4, 8`) on A100/A100_80GB.
+- **GPU**: Auto-selects **NVIDIA A100** (`a2-highgpu-1g` 40GB or `a2-ultragpu-1g` 80GB) and also supports `RTX_PRO_6000` (`g4-standard-48` 96GB) or explicit `L4` (`g2-standard-12` 24GB for `<=1000` tokens). Supports multi-GPU scaling (`num_gpus=1, 2, 4, 8`) on A100/A100_80GB/RTX_PRO_6000.
 - **Seeds & Samples**: Default `num_model_seeds=1`, `num_diffusion_samples=5` (use `num_model_seeds=5`, `num_diffusion_samples=5` for 25-sample production ensembles).
 - **No Relaxation Phase**: Diffusion output (`*.cif`) requires no AMBER relaxation step.
 
@@ -39,7 +39,7 @@ Present the hardware breakdown and wait for user approval before calling `submit
 
 | Phase | Machine | GPU | Strategy |
 |-------|---------|-----|----------|
-| MSA Pipeline | c2-standard-16 | None (CPU Jackhmmer) | STANDARD |
+| MSA Pipeline | n4-standard-8 | None (CPU Jackhmmer) | STANDARD |
 | Predict | a2-highgpu-1g | A100 × 1 | DWS FLEX_START |
 
 - Entities: <chain & ligand summary + whether affinity prediction is enabled>

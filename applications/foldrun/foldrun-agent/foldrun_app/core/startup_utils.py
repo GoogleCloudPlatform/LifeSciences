@@ -76,5 +76,14 @@ def auto_detect_model_gpus(
         else:
             logger.warning(f"No GPUs found with limit > 0{suffix}! Keeping defaults.")
 
+        from foldrun_app.core import hardware as hw_mod
+
+        region_key = (config.project_id or "", config.region or "")
+        cpu_mocked = type(hw_mod.check_cpu_quota).__module__.startswith("unittest.mock")
+        if region_key in hw_mod._last_cpu_quotas_by_region or cpu_mocked:
+            cpu_quotas = config.detect_cpu_quotas_cached()
+            if cpu_quotas:
+                config.set_cpu_quotas(cpu_quotas)
+
     except Exception as e:
         logger.warning(f"Auto-detection failed{suffix} (using defaults): {e}")

@@ -69,7 +69,7 @@ class TestConfig:
         """Default supported GPUs list."""
         monkeypatch.delenv("AF2_SUPPORTED_GPUS", raising=False)
         config = Config()
-        assert config.supported_gpus == ["L4", "A100", "A100_80GB"]
+        assert config.supported_gpus == ["L4", "A100", "A100_80GB", "RTX_PRO_6000"]
 
     def test_config_supported_gpus_custom(self, mock_env_vars, monkeypatch):
         """Custom AF2_SUPPORTED_GPUS env var."""

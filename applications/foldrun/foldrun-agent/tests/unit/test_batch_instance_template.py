@@ -17,7 +17,7 @@
 from unittest.mock import MagicMock, patch
 
 from foldrun_app.core.batch import (
-    get_machine_resources,
+    build_instance_flexibility_policy,
     get_or_create_instance_template,
     submit_batch_job,
 )
@@ -147,6 +147,10 @@ class TestInstanceTemplateIsolation:
 
         assert link == created.self_link
         client.insert.assert_called_once()
+        first_queried_name = client.get.call_args_list[0].kwargs["instance_template"]
+        inserted_name = client.insert.call_args.kwargs["instance_template_resource"].name
+        assert inserted_name != first_queried_name
+        assert inserted_name.startswith(first_queried_name + "-")
 
     @patch("google.cloud.compute_v1.InstanceTemplatesClient")
     def test_shared_vpc_project_id_vs_number_reuses_template(self, mock_client_cls):
@@ -173,34 +177,148 @@ class TestInstanceTemplateIsolation:
         client.insert.assert_not_called()
 
 
-class TestMachineResourceSizing:
-    """Verify Cloud Batch CPU and RAM sizing across GCE machine families."""
+class TestInstanceFlexibilityAndTemplates:
+    """Verify Cloud Batch Gen 3/4 InstanceFlexibilityPolicy and instance template setup."""
 
-    def test_n2d_standard_4_fits_within_16_gib_ram(self):
-        """boltz2_cache uses n2d-standard-4 (4 vCPU, 16 GiB = 16,384 MiB physical RAM)."""
-        cpu_milli, memory_mib = get_machine_resources("n2d-standard-4")
-        assert cpu_milli == 4000
-        assert memory_mib == 16000
-        assert memory_mib < 16384
+    def test_build_instance_flexibility_policy(self):
+        """Gen 3/4 InstanceFlexibilityPolicy ranks C4/C4D/C3/C3D/N4/N4D shapes."""
+        # 1. c4-standard-4-lssd -> rank 1: [c4-standard-4-lssd, c4d-standard-4-lssd],
+        #    rank 2: [c3-standard-4-lssd, c3d-standard-4-lssd]
+        p_c4 = build_instance_flexibility_policy("c4-standard-4-lssd")
+        assert list(p_c4.instance_selections["rank-1"].machine_types) == [
+            "c4-standard-4-lssd",
+            "c4d-standard-4-lssd",
+        ]
+        assert p_c4.instance_selections["rank-1"].rank == 1
+        assert list(p_c4.instance_selections["rank-2"].machine_types) == [
+            "c3-standard-4-lssd",
+            "c3d-standard-4-lssd",
+        ]
+        assert p_c4.instance_selections["rank-2"].rank == 2
+        assert "rank-3" not in p_c4.instance_selections
 
-    def test_n2d_standard_8_uses_all_8_vcpus(self):
-        """Database downloads on n2d-standard-8 must allocate 8000 cpu_milli, not 4000."""
-        cpu_milli, memory_mib = get_machine_resources("n2d-standard-8")
-        assert cpu_milli == 8000
-        assert memory_mib == 32000
+        # 2. c4-highmem-32-lssd -> rank 1: [c4-highmem-32-lssd, c4d-highmem-32-lssd],
+        #    rank 2: [c3d-highmem-30-lssd]
+        p_hm = build_instance_flexibility_policy("c4-highmem-32-lssd")
+        assert list(p_hm.instance_selections["rank-1"].machine_types) == [
+            "c4-highmem-32-lssd",
+            "c4d-highmem-32-lssd",
+        ]
+        assert list(p_hm.instance_selections["rank-2"].machine_types) == ["c3d-highmem-30-lssd"]
+        assert "rank-3" not in p_hm.instance_selections
 
-    def test_n1_and_modern_families(self):
-        assert get_machine_resources("n1-standard-4") == (4000, 15000)
-        assert get_machine_resources("n1-highmem-32") == (32000, 208000)
-        assert get_machine_resources("c2-standard-16") == (16000, 64000)
-        assert get_machine_resources("e2-highcpu-8") == (8000, 8000)
-        assert get_machine_resources("c3-standard-8-lssd") == (8000, 32000)
-        assert get_machine_resources("n2d-custom-8-32768") == (8000, 32000)
-        assert get_machine_resources("unknown-type") == (4000, 15000)
+        # 3. n4-standard-2 -> rank 1: [n4-standard-2, n4d-standard-2],
+        #    rank 2: [c4-standard-2, c4d-standard-2],
+        #    rank 3: [c3-standard-4, c3d-standard-4]
+        p_n4_2 = build_instance_flexibility_policy("n4-standard-2")
+        assert list(p_n4_2.instance_selections["rank-1"].machine_types) == [
+            "n4-standard-2",
+            "n4d-standard-2",
+        ]
+        assert list(p_n4_2.instance_selections["rank-2"].machine_types) == [
+            "c4-standard-2",
+            "c4d-standard-2",
+        ]
+        assert list(p_n4_2.instance_selections["rank-3"].machine_types) == [
+            "c3-standard-4",
+            "c3d-standard-4",
+        ]
+
+        # 4. n4-standard-4 -> rank 1: [n4-standard-4, n4d-standard-4],
+        #    rank 2: [c4-standard-4, c4d-standard-4, c3-standard-4, c3d-standard-4]
+        p_n4_4 = build_instance_flexibility_policy("n4-standard-4")
+        assert list(p_n4_4.instance_selections["rank-1"].machine_types) == [
+            "n4-standard-4",
+            "n4d-standard-4",
+        ]
+        assert list(p_n4_4.instance_selections["rank-2"].machine_types) == [
+            "c4-standard-4",
+            "c4d-standard-4",
+            "c3-standard-4",
+            "c3d-standard-4",
+        ]
+
+    @patch("google.cloud.compute_v1.InstanceTemplatesClient")
+    def test_gen4_lssd_and_hyperdisk_instance_templates(self, mock_client_cls):
+        """Gen 3/4 Hyperdisk shapes create a single boot-disk-only template; legacy Gen 1/2 attaches SCRATCH SSDs."""
+        inserted = []
+        client = MagicMock()
+        mock_client_cls.return_value = client
+
+        def fake_get(project: str, instance_template: str):
+            for t in inserted:
+                if t.name == instance_template:
+                    m = _make_mock_template(
+                        name=t.name,
+                        network=t.properties.network_interfaces[0].network,
+                        subnet=t.properties.network_interfaces[0].subnetwork,
+                        self_link=f"projects/{project}/global/instanceTemplates/{t.name}",
+                    )
+                    m.properties.disks = t.properties.disks
+                    return m
+            raise Exception("NotFound")
+
+        def fake_insert(project: str, instance_template_resource):
+            inserted.append(instance_template_resource)
+            op = MagicMock()
+            op.result.return_value = None
+            return op
+
+        client.get.side_effect = fake_get
+        client.insert.side_effect = fake_insert
+
+        get_or_create_instance_template(
+            project_id="p",
+            machine_type="c4-standard-4-lssd",
+            network="projects/p/global/networks/default",
+            subnet="projects/p/regions/us-central1/subnetworks/default",
+            local_ssd_count=1,
+        )
+        c4_tmpl = inserted[-1]
+        assert len(c4_tmpl.properties.disks) == 1
+        assert c4_tmpl.properties.disks[0].initialize_params.disk_type == "hyperdisk-balanced"
+
+        get_or_create_instance_template(
+            project_id="p",
+            machine_type="n4-standard-4",
+            network="projects/p/global/networks/default",
+            subnet="projects/p/regions/us-central1/subnetworks/default",
+            local_ssd_count=1,
+        )
+        n4_tmpl = inserted[-1]
+        assert len(n4_tmpl.properties.disks) == 1
+        assert n4_tmpl.properties.disks[0].initialize_params.disk_type == "hyperdisk-balanced"
+
+        get_or_create_instance_template(
+            project_id="p",
+            machine_type="n2d-standard-8",
+            network="projects/p/global/networks/default",
+            subnet="projects/p/regions/us-central1/subnetworks/default",
+            local_ssd_count=1,
+        )
+        n2d_tmpl = inserted[-1]
+        assert len(n2d_tmpl.properties.disks) == 2
+        assert n2d_tmpl.properties.disks[0].initialize_params.disk_type == "pd-balanced"
+        assert n2d_tmpl.properties.disks[1].type_ == "SCRATCH"
+        assert n2d_tmpl.properties.disks[1].initialize_params.disk_type == "local-ssd"
+
+    def test_databases_yaml_uses_right_sized_gen4_machine_types(self):
+        """databases.yaml entries use right-sized Gen 4 shapes (n4-standard-2/4, c4-standard-4-lssd) without redundant local_ssd_count."""
+        from foldrun_app.core.download import load_manifest
+
+        dbs = load_manifest()["databases"]
+        assert dbs["boltz2_cache"]["machine_type"] == "n4-standard-2"
+        assert dbs["esmfold2_fast_cache"]["machine_type"] == "n4-standard-4"
+        assert dbs["esmfold2_cache"]["machine_type"] == "n4-standard-4"
+        for ssd_db in ("uniref90", "mgnify", "uniprot", "pdb_mmcif", "pdb70", "uniref30"):
+            assert dbs[ssd_db]["machine_type"] == "c4-standard-4-lssd"
+            assert "local_ssd_count" not in dbs[ssd_db]
 
     @patch("foldrun_app.core.batch.get_or_create_instance_template")
     @patch("foldrun_app.core.batch.batch_v1.BatchServiceClient")
-    def test_submit_batch_job_wires_computed_cpu_and_memory(self, mock_batch_cls, mock_get_tmpl):
+    def test_submit_batch_job_wires_lssd_preamble_and_flexibility_policy(
+        self, mock_batch_cls, mock_get_tmpl
+    ):
         mock_get_tmpl.return_value = "projects/p/global/instanceTemplates/t"
         mock_client = MagicMock()
         mock_created = MagicMock()
@@ -214,7 +332,7 @@ class TestMachineResourceSizing:
             zone="us-central1-a",
             job_id="j1",
             script="echo ok",
-            machine_type="n2d-standard-8",
+            machine_type="c4-standard-4-lssd",
             filestore_ip="10.0.0.2",
             filestore_network="projects/123/global/networks/default",
             nfs_share="/datasets",
@@ -223,6 +341,16 @@ class TestMachineResourceSizing:
         )
 
         req = mock_client.create_job.call_args.kwargs["request"]
-        cr = req.job.task_groups[0].task_spec.compute_resource
-        assert cr.cpu_milli == 8000
-        assert cr.memory_mib == 32000
+        script_text = req.job.task_groups[0].task_spec.runnables[0].script.text
+        assert "_SSD_DEV=/dev/disk/by-id/google-local-nvme-ssd-0" in script_text
+        assert 'if [ -b "$_SSD_DEV" ]; then\n    mkdir -p /mnt/scratch' in script_text
+        flex = req.job.allocation_policy.instance_flexibility_policy
+        assert list(flex.instance_selections["rank-1"].machine_types) == [
+            "c4-standard-4-lssd",
+            "c4d-standard-4-lssd",
+        ]
+        assert list(flex.instance_selections["rank-2"].machine_types) == [
+            "c3-standard-4-lssd",
+            "c3d-standard-4-lssd",
+        ]
+        assert "rank-3" not in flex.instance_selections

@@ -19,6 +19,8 @@ import os
 from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 from kfp import dsl
 
+from foldrun_app.core.pipeline_utils import resolve_boot_disk_type
+
 from .. import config
 from ..components import configure_run as ConfigureRunOp
 from ..components import data_pipeline
@@ -87,6 +89,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             data_pipeline,
             display_name="AF2 Data Pipeline",
             machine_type=dp_machine_type,
+            boot_disk_type=resolve_boot_disk_type(dp_machine_type),
             nfs_mounts=[
                 {
                     "server": config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
@@ -151,20 +154,24 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
         max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
 
+        predict_machine_type = os.environ.get("PREDICT_MACHINE_TYPE", "g2-standard-12")
         JobPredictOp = create_custom_training_job_from_component(
             PredictOp,
             display_name="AF2 Predict",
-            machine_type=os.environ.get("PREDICT_MACHINE_TYPE", "g2-standard-12"),
+            machine_type=predict_machine_type,
+            boot_disk_type=resolve_boot_disk_type(predict_machine_type),
             accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_L4"),
             accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
             strategy=strategy,
             max_wait_duration=max_wait,
         )
 
+        relax_machine_type = os.environ.get("RELAX_MACHINE_TYPE", "g2-standard-12")
         JobRelaxOp = create_custom_training_job_from_component(
             RelaxOp,
             display_name="AF2 Relax",
-            machine_type=os.environ.get("RELAX_MACHINE_TYPE", "g2-standard-12"),
+            machine_type=relax_machine_type,
+            boot_disk_type=resolve_boot_disk_type(relax_machine_type),
             accelerator_type=os.environ.get("RELAX_ACCELERATOR_TYPE", "NVIDIA_L4"),
             accelerator_count=int(os.environ.get("RELAX_ACCELERATOR_COUNT", "1")),
             strategy=strategy,

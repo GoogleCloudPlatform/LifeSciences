@@ -37,7 +37,7 @@ def mock_env():
         "NFS_PATH": "/datasets",
         "NFS_MOUNT_POINT": "/mnt/nfs/foldrun",
         "NETWORK": "projects/123/global/networks/test-net",
-        "DATA_PIPELINE_MACHINE_TYPE": "c2-standard-16",
+        "DATA_PIPELINE_MACHINE_TYPE": "n4-standard-8",
         "PREDICT_MACHINE_TYPE": "a2-highgpu-1g",
         "PREDICT_ACCELERATOR_TYPE": "NVIDIA_TESLA_A100",
         "PREDICT_ACCELERATOR_COUNT": "1",
@@ -160,6 +160,23 @@ class TestAF2PipelineCompilation:
         # Verify the pipeline has sequence_path and model_preset as user-facing inputs.
         assert "sequence_path" in content
         assert "model_preset" in content
+        os.remove(out)
+
+    def test_compiled_pipeline_sets_hyperdisk_for_gen4_msa_and_pd_ssd_for_a2_gpu(self):
+        """Gen 4 n4-standard-8 MSA uses hyperdisk-balanced while Gen 2 a2-highgpu-1g uses pd-ssd."""
+        _clear_config_cache()
+        from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
+
+        pipeline = load_vertex_pipeline(enable_flex_start=False, msa_method="jackhmmer")
+        out = os.path.join(tempfile.gettempdir(), "af2_check_boot_disk.yaml")
+        compiler.Compiler().compile(pipeline_func=pipeline, package_path=out)
+
+        with open(out) as f:
+            content = f.read()
+        assert "hyperdisk-balanced" in content
+        assert "pd-ssd" in content
         os.remove(out)
 
 

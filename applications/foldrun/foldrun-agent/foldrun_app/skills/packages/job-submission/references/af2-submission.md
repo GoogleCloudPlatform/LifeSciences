@@ -15,7 +15,7 @@
   - Multimer >=1,000 total residues → `A100_80GB` (relax: `A100` 40GB)
 - **Explicit override**: `gpu_type` accepts `'L4'`, `'A100'`, or `'A100_80GB'`. Override AMBER relax GPU via `relax_gpu_type`.
 - **MSA Method (`msa_method`)**:
-  - `'auto'` (default) / `'jackhmmer'`: CPU-based search (`c2-standard-16`) using Jackhmmer (UniRef90, MGnify) and HHblits (UniRef30, BFD).
+  - `'auto'` (default) / `'jackhmmer'`: CPU-based search (`n4-standard-8`, with automatic fallback to `c3-standard-8` or `c2-standard-16`) using Jackhmmer (UniRef90, MGnify) and HHblits (UniRef30, BFD).
   - `'mmseqs2'`: GPU-accelerated search (monomers with `use_small_bfd=True`; requires pre-built MMseqs2 indexes on Filestore via `./deploy-all.sh <PROJECT_ID> <REGION> --steps convert`).
 - **Database (`use_small_bfd`)**: `True` (default, faster ~15–30 min) or `False` (Full BFD, ~30–60+ min, compatible with `jackhmmer` only).
 - **Templates (`max_template_date`)**: Default `'2030-01-01'` (all PDB templates enabled). Set an earlier date to restrict templates.
@@ -29,7 +29,7 @@ Present the resolved hardware and parameters before calling `submit_af2_*`:
 
 | Pipeline Phase | Machine Type | GPU | Count | Strategy |
 |----------------|-------------|-----|-------|----------|
-| Data Pipeline | c2-standard-16 | None (CPU, Jackhmmer) | - | DWS FLEX_START |
+| Data Pipeline | n4-standard-8 | None (CPU, Jackhmmer) | - | DWS FLEX_START |
 | Predict | a2-highgpu-1g | A100 40GB | 1 | DWS FLEX_START |
 | Relax | a2-highgpu-1g | A100 40GB | 1 | DWS FLEX_START |
 

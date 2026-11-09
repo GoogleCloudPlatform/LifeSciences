@@ -15,7 +15,6 @@
 """Base class for ESMFold2 / ESMFold2-Fast tools."""
 
 import logging
-import os
 from typing import Any
 
 from foldrun_app.core.kfp_tools import KFPModelTool
@@ -68,26 +67,23 @@ class ESMFOLD2Tool(KFPModelTool):
     def _recommend_gpu(num_tokens: int, model_variant: str = "fast") -> str:
         """Recommend GPU type based on total input tokens and model variant.
 
+        Auto-selection defaults to >=40GB A100 tiers:
         ESMFold2-Fast (24-block trunk, single-sequence):
-            <=1000 tokens     -> L4       (24 GB VRAM)
-            1001..2500 tokens -> A100     (40 GB VRAM)
-            >2500 tokens      -> A100_80GB (80 GB VRAM)
+            <=2500 tokens -> A100     (40 GB VRAM)
+            >2500 tokens  -> A100_80GB (80 GB VRAM)
 
         ESMFold2 (48-block trunk, optional MSA):
-            <=700 tokens      -> L4       (24 GB VRAM)
-            701..2000 tokens  -> A100     (40 GB VRAM)
-            >2000 tokens      -> A100_80GB (80 GB VRAM)
+            <=2000 tokens -> A100     (40 GB VRAM)
+            >2000 tokens  -> A100_80GB (80 GB VRAM)
+
+        L4 (g2-standard-12, 24 GB VRAM) is available via explicit gpu_type='L4'.
         """
         variant = str(model_variant).strip().lower()
         if variant == "full":
-            if num_tokens <= 700:
-                return "L4"
             if num_tokens <= 2000:
                 return "A100"
             return "A100_80GB"
 
-        if num_tokens <= 1000:
-            return "L4"
         if num_tokens <= 2500:
             return "A100"
         return "A100_80GB"
@@ -114,7 +110,7 @@ class ESMFOLD2Tool(KFPModelTool):
                 f"Unsupported GPU type '{gpu_type}' for ESMFold2. Supported types: {supported_types}"
             )
 
-        allowed_pool = ["L4", "A100", "A100_80GB"]
+        allowed_pool = ["A100", "A100_80GB", "RTX_PRO_6000", "L4"]
         gpu_type = self._resolve_supported_gpu(
             gpu_type,
             allowed_pool=allowed_pool,
@@ -132,6 +128,6 @@ class ESMFOLD2Tool(KFPModelTool):
 
         config = self.predict_spec_for_gpu(gpu_type)
         self._scale_multi_gpu_machine(config, gpu_type, num_gpus)
-        config["msa_machine"] = os.getenv("MSA_MACHINE_TYPE", self.DEFAULT_MSA_MACHINE)
+        config["msa_machine"] = self._resolve_msa_machine()
         config["dws_max_wait_hours"] = self.config.dws_max_wait_hours
         return config

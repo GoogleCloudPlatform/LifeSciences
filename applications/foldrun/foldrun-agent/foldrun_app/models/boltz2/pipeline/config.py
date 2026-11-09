@@ -28,7 +28,7 @@ NETWORK = os.getenv("NETWORK")
 BOLTZ2_CACHE_PATH = os.getenv("BOLTZ2_CACHE_PATH", "boltz2/cache")
 
 # MSA machine type (CPU-only, same as AF2 data pipeline)
-MSA_MACHINE_TYPE = os.getenv("MSA_MACHINE_TYPE", "c2-standard-16")
+MSA_MACHINE_TYPE = os.getenv("MSA_MACHINE_TYPE", "n4-standard-8")
 
 # Predict GPU hardware
 PREDICT_MACHINE_TYPE = os.getenv("PREDICT_MACHINE_TYPE", "a2-highgpu-1g")

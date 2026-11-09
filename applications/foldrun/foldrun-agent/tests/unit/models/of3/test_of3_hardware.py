@@ -100,7 +100,28 @@ class TestOF3HardwareConfig:
 
         tool = OF3Tool({"name": "test", "description": "test"})
         config = tool._get_hardware_config("A100")
-        assert config["msa_machine"] == "c2-standard-16"
+        assert config["msa_machine"] == "n4-standard-8"
+
+    def test_explicit_rtx_pro_6000_and_spillover(self):
+        """OF3 supports explicit RTX_PRO_6000 / G4 selection, multi-GPU scaling, and quota spillover."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        tool = OF3Tool({"name": "test", "description": "test"})
+        for alias in ("RTX_PRO_6000", "rtx-pro-6000", "g4"):
+            cfg = tool._get_hardware_config(alias)
+            assert cfg["predict_accel"] == "NVIDIA_RTX_PRO_6000"
+            assert cfg["predict_machine"] == "g4-standard-48"
+            assert cfg["predict_count"] == 1
+
+        multi = tool._get_hardware_config("RTX_PRO_6000", num_gpus=2)
+        assert multi["predict_machine"] == "g4-standard-96"
+        assert multi["predict_count"] == 2
+
+        # Spillover when A100 and A100_80GB are unavailable
+        tool.config.set_supported_gpus(["L4", "RTX_PRO_6000"])
+        spill = tool._get_hardware_config("auto", num_tokens=500)
+        assert spill["predict_accel"] == "NVIDIA_RTX_PRO_6000"
+        assert spill["predict_machine"] == "g4-standard-48"
 
     def test_multi_gpu(self):
         from foldrun_app.models.of3.base import OF3Tool

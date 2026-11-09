@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
-from foldrun_app.core.hardware import AF3_HARDWARE_TIER_LADDER
+from foldrun_app.core.hardware import AF3_HARDWARE_TIER_LADDER, MSA_CPU_FALLBACK_LADDER
 from foldrun_app.core.kfp_tools import KFPModelTool
 from foldrun_app.models.af2.base import AF2Tool
 from foldrun_app.models.boltz2.base import BOLTZ2Tool
@@ -27,10 +27,13 @@ from foldrun_app.skills.cost_estimation.pricing import (
     DEFAULT_PRICES,
     DURATION_ANCHORS,
     _auto_select_gpu,
+    _hourly_rate,
     _interpolate_durations,
     _machine_for_gpu,
+    _match_sku,
     _normalize_gpu_type,
     _relax_gpu,
+    _resolve_machine_spec,
     estimate_single_job,
 )
 from foldrun_app.skills.cost_estimation.tools import estimate_job_cost
@@ -121,7 +124,22 @@ class TestOF3L4UpgradeInCostEstimation:
         assert _machine_for_gpu("L4") == "g2-standard-12"
         assert _machine_for_gpu("A100") == "a2-highgpu-1g"
         assert _machine_for_gpu("A100_80GB") == "a2-ultragpu-1g"
+        assert _machine_for_gpu("RTX_PRO_6000") == "g4-standard-48"
         assert _machine_for_gpu("H100") == "a3-highgpu-1g"
+
+    def test_gen4_msa_and_rtx_pro_6000_cost_estimation(self):
+        """Cost estimation uses right-sized n4-standard-8 for MSA and supports RTX_PRO_6000 (g4-standard-48)."""
+        est = estimate_job_cost(job_type="of3", gpu_type="rtx-pro-6000", sequence_length=500)
+        assert est["gpu_type"] == "RTX_PRO_6000"
+        msa_phase = next(
+            p for p in est["on_demand"]["phases"] if p["phase"] == "MSA / Data Pipeline"
+        )
+        predict_phase = next(p for p in est["on_demand"]["phases"] if p["phase"] == "Predict")
+        assert msa_phase["machine_type"] == "n4-standard-8"
+        assert msa_phase["hourly_rate"] == pytest.approx(0.3629, rel=1e-2)
+        assert predict_phase["machine_type"] == "g4-standard-48"
+        assert predict_phase["gpu"] == "RTX_PRO_6000 x 1"
+        assert predict_phase["hourly_rate"] == pytest.approx(4.50, rel=1e-2)
 
 
 class TestPricingSubmissionNonDriftContract:
@@ -161,3 +179,44 @@ class TestPricingSubmissionNonDriftContract:
     )
     def test_normalize_gpu_type_matches_kfp_model_tool(self, raw_gpu):
         assert _normalize_gpu_type(raw_gpu) == KFPModelTool._normalize_gpu_type(raw_gpu)
+
+    def test_all_fallback_ladder_machines_are_priceable(self):
+        """Every machine type in MSA_CPU_FALLBACK_LADDER and AF3_HARDWARE_TIER_LADDER resolves and prices > 0."""
+        for mt in MSA_CPU_FALLBACK_LADDER:
+            assert _resolve_machine_spec(mt) is not None, f"Unresolved MSA machine spec: {mt}"
+            assert _hourly_rate(mt, None, 0, False, DEFAULT_PRICES) > 0
+            assert _hourly_rate(mt, None, 0, True, DEFAULT_PRICES) > 0
+
+        for af3_entry in AF3_HARDWARE_TIER_LADDER:
+            mt = af3_entry["machine_type"]
+            gpu = af3_entry["accelerator_type"]
+            count = af3_entry["accelerator_count"]
+            assert _resolve_machine_spec(mt) is not None, f"Unresolved AF3 machine spec: {mt}"
+            assert _hourly_rate(mt, gpu, count, False, DEFAULT_PRICES) > 0
+            assert _hourly_rate(mt, gpu, count, True, DEFAULT_PRICES) > 0
+
+        for multi_mt in ("a2-highgpu-2g", "a2-highgpu-4g", "a2-ultragpu-2g", "a3-highgpu-2g"):
+            assert _resolve_machine_spec(multi_mt) is not None, (
+                f"Unresolved multi-GPU spec: {multi_mt}"
+            )
+
+        af2_rtx_est = estimate_single_job(
+            "af2_monomer", gpu_type="RTX_PRO_6000", sequence_length=300
+        )
+        assert af2_rtx_est["gpu_type"] == "A100"
+
+    @pytest.mark.parametrize(
+        ("desc", "expected_key"),
+        [
+            ("n4 instance core running in iowa", "n4_core"),
+            ("spot preemptible n4d amd instance ram running in iowa", "n4d_ram_gib_spot"),
+            ("c4 instance core running in iowa", "c4_core"),
+            ("c4d amd instance ram running in iowa", "c4d_ram_gib"),
+            ("c3d amd instance core running in iowa", "c3d_core"),
+            ("compute optimized core running in iowa", "c2_core"),
+            ("nvidia rtx pro 6000 gpu running in iowa", "nvidia_rtx_pro_6000"),
+            ("commitment v1: n4 instance core", None),
+        ],
+    )
+    def test_match_sku_supports_gen4_and_amd_series(self, desc, expected_key):
+        assert _match_sku(desc) == expected_key

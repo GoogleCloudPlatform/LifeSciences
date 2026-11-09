@@ -98,7 +98,7 @@ class OF3Tool(KFPModelTool):
                 f"(num_tokens={num_tokens})"
             )
 
-        supported_types = ["A100", "A100_80GB"]
+        supported_types = ["A100", "A100_80GB", "RTX_PRO_6000"]
         if gpu_type not in supported_types:
             raise ValueError(
                 f"Unsupported GPU type '{gpu_type}' for OpenFold3. Supported types: {supported_types}"
@@ -108,13 +108,13 @@ class OF3Tool(KFPModelTool):
             gpu_type,
             allowed_pool=supported_types,
             empty_pool_error=(
-                f"OpenFold3 requires at least 40GB VRAM (A100 or A100_80GB), "
+                f"OpenFold3 requires at least 40GB VRAM (A100, A100_80GB, or RTX_PRO_6000), "
                 f"but none are supported in this environment! (Supported: {self.config.supported_gpus})"
             ),
         )
 
         config = self.predict_spec_for_gpu(gpu_type)
         self._scale_multi_gpu_machine(config, gpu_type, num_gpus)
-        config["msa_machine"] = self.DEFAULT_MSA_MACHINE
+        config["msa_machine"] = self._resolve_msa_machine()
         config["dws_max_wait_hours"] = self.config.dws_max_wait_hours
         return config

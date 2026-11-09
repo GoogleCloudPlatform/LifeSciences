@@ -12,12 +12,80 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Model-agnostic GPU quota querying and hardware detection."""
+"""Model-agnostic GPU/CPU quota querying, boot disk resolution, and hardware detection."""
 
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Gen 3 and Gen 4 Compute Engine machine families that require Hyperdisk boot disks
+# (standard Persistent Disk types pd-standard / pd-balanced / pd-ssd are rejected).
+HYPERDISK_ONLY_MACHINE_FAMILIES: frozenset[str] = frozenset(
+    {
+        "n4",
+        "n4a",
+        "n4d",
+        "c4",
+        "c4a",
+        "c4d",
+        "c3",
+        "c3d",
+        "g4",
+        "a3",
+        "a4",
+        "x4",
+        "m3",
+        "m4",
+        "z3",
+        "h3",
+    }
+)
+
+# Generation-compensated fallback ladder for Vertex AI KFP CPU MSA / Data Pipeline tasks:
+# Gen 4/3 shapes are right-sized to 8 vCPUs (matching jackhmmer/hhblits --cpu 8 and
+# saturating Filestore's 9.6 Gbps read cap), while stepping down to Gen 2/1 scales
+# back up to the full 16-vCPU legacy baseline (60-64 GiB RAM page cache + 16-32 Gbps).
+# Note: c3d-* and c2d-* are omitted here because Vertex AI CustomJob rejects them.
+MSA_CPU_FALLBACK_LADDER: tuple[str, ...] = (
+    "n4-standard-8",
+    "n4d-standard-8",
+    "c4-standard-8",
+    "c4d-standard-8",
+    "c3-standard-8",
+    "c2-standard-16",
+    "n2d-standard-16",
+    "n1-standard-16",
+)
+
+# GCE Region.quotas (compute_v1.RegionsClient().get) only reports legacy non-dimensional
+# CPU family metrics (C3_CPUS, C2_CPUS, N2D_CPUS, N2_CPUS, CPUS). Newer Gen 4 and Gen 3 AMD
+# families (N4, N4D, C4, C4D, C3D) use the dimensional CPUS_PER_VM_FAMILY metric in
+# Cloud Quotas / Service Usage and are omitted from Region.quotas responses.
+_VM_FAMILY_CPU_METRICS: frozenset[str] = frozenset(
+    {"N4_CPUS", "N4D_CPUS", "C4_CPUS", "C4D_CPUS", "C3D_CPUS"}
+)
+_LEGACY_REGION_CPU_METRICS: frozenset[str] = frozenset(
+    {"C3_CPUS", "C2_CPUS", "N2D_CPUS", "N2_CPUS"}
+)
+
+_MACHINE_VCPU_RE = re.compile(r"^[a-z][a-z0-9]*-[a-z0-9]+-(\d+)(?:-[a-z0-9]+)*$")
+_last_cpu_quotas_by_region: dict[tuple[str, str], dict[str, dict[str, float]]] = {}
+
+
+def clear_region_quota_cache() -> None:
+    """Clear the cached regional CPU quota snapshot."""
+    _last_cpu_quotas_by_region.clear()
+
+
+def resolve_boot_disk_type(machine_type: str | None, *, legacy_default: str = "pd-ssd") -> str:
+    """Return ``hyperdisk-balanced`` for Gen 3/4 machine families, else ``legacy_default``."""
+    family = (machine_type or "").strip().lower().split("-", 1)[0]
+    if family in HYPERDISK_ONLY_MACHINE_FAMILIES:
+        return "hyperdisk-balanced"
+    return legacy_default
+
 
 # Map of GCE quota metric names to GPU metadata
 _QUOTA_MAPPING = {
@@ -38,6 +106,12 @@ _QUOTA_MAPPING = {
         "friendly_name": "A100 (80GB)",
         "machine_types": ["a2-ultragpu-*"],
         "typical_use": "Large proteins/complexes (>2000 residues)",
+    },
+    "NVIDIA_RTX_PRO_6000_GPUS": {
+        "gpu_type": "NVIDIA_RTX_PRO_6000",
+        "friendly_name": "RTX PRO 6000 (96GB)",
+        "machine_types": ["g4-standard-*"],
+        "typical_use": "Gen 4 Blackwell 96GB GPU for large proteins & complexes (OF3, Boltz-2, ESMFold2)",
     },
     "NVIDIA_H100_GPUS": {
         "gpu_type": "NVIDIA_H100_80GB",
@@ -62,6 +136,12 @@ _QUOTA_MAPPING = {
         "friendly_name": "A100 80GB (Preemptible/Spot)",
         "machine_types": ["a2-ultragpu-*"],
         "typical_use": "Cost-effective A100 80GB GPUs for FLEX_START jobs",
+    },
+    "PREEMPTIBLE_NVIDIA_RTX_PRO_6000_GPUS": {
+        "gpu_type": "NVIDIA_RTX_PRO_6000",
+        "friendly_name": "RTX PRO 6000 96GB (Preemptible/Spot)",
+        "machine_types": ["g4-standard-*"],
+        "typical_use": "Cost-effective RTX PRO 6000 96GB GPUs for FLEX_START jobs",
     },
     "PREEMPTIBLE_NVIDIA_H100_GPUS": {
         "gpu_type": "NVIDIA_H100_80GB",
@@ -247,20 +327,21 @@ def resolve_af3_hardware_plan(
                 f"({chosen['available_count']}/{chosen['total_count']} available)"
             )
 
+    matched_tier = next(
+        (
+            t
+            for t in AF3_HARDWARE_TIER_LADDER
+            if t["machine_type"] == requested_machine_type
+            or t["accelerator_type"] == requested_accelerator_type
+        ),
+        AF3_HARDWARE_TIER_LADDER[-1],
+    )
     primary_candidate = {
         "tier": "PRIMARY",
         "machine_type": requested_machine_type,
         "accelerator_type": requested_accelerator_type,
         "accelerator_count": requested_accelerator_count,
-        "hourly_rate": (
-            11.06
-            if ("a3" in requested_machine_type or "H100" in requested_accelerator_type)
-            else 5.00
-            if ("ultragpu" in requested_machine_type or "80GB" in requested_accelerator_type)
-            else 3.67
-            if ("a2" in requested_machine_type or "A100" in requested_accelerator_type)
-            else 1.01
-        ),
+        "hourly_rate": matched_tier["hourly_rate"],
         "reservation_affinity_type": resolved_affinity_type,
         "reservation_affinity_key": resolved_affinity_key,
         "reservation_affinity_values": resolved_affinity_values,
@@ -296,6 +377,194 @@ def resolve_af3_hardware_plan(
     }
 
 
+def _extract_cpu_quotas(raw_quotas: Any) -> dict[str, dict[str, float]]:
+    """Extract regional CPU family quota metrics from a GCE Region.quotas list."""
+    tracked_metrics = _LEGACY_REGION_CPU_METRICS | _VM_FAMILY_CPU_METRICS | {"CPUS"}
+    cpu_quotas: dict[str, dict[str, float]] = {}
+    for quota in raw_quotas or []:
+        metric = getattr(quota, "metric", None)
+        if metric not in tracked_metrics:
+            continue
+        limit = float(getattr(quota, "limit", 0.0) or 0.0)
+        usage = float(getattr(quota, "usage", 0.0) or 0.0)
+        cpu_quotas[str(metric)] = {
+            "limit": limit,
+            "usage": usage,
+            "available": max(0.0, limit - usage),
+        }
+    return cpu_quotas
+
+
+def _fetch_vm_family_cpu_quotas(project_id: str, region: str) -> dict[str, dict[str, float]]:
+    """Best-effort query for GCE dimensional ``CPUS_PER_VM_FAMILY`` quotas via Service Usage API.
+
+    GCE ``Region.quotas`` only includes legacy non-dimensional CPU metrics (``C3_CPUS``,
+    ``C2_CPUS``, ``N2D_CPUS``, ``N2_CPUS``, ``CPUS``). Newer Gen 4 and Gen 3 AMD families
+    (``N4``, ``N4D``, ``C4``, ``C4D``, ``C3D``) are exposed under the dimensional
+    ``compute.googleapis.com/cpus_per_vm_family`` metric. Returns ``{}`` on permission or
+    network errors so callers degrade gracefully.
+    """
+    if not project_id or not region:
+        return {}
+    try:
+        import google.auth
+        from google.auth.transport.requests import AuthorizedSession
+
+        creds, _ = google.auth.default()
+        session = AuthorizedSession(creds)
+        url = (
+            f"https://serviceusage.googleapis.com/v1beta1/projects/{project_id}"
+            "/services/compute.googleapis.com/consumerQuotaMetrics/"
+            "compute.googleapis.com%2Fcpus_per_vm_family"
+        )
+        resp = session.get(url, timeout=3.0)
+        if resp.status_code != 200:
+            return {}
+        data = resp.json()
+        defaults: dict[str, float] = {}
+        regional: dict[str, float] = {}
+        for limit_entry in data.get("consumerQuotaLimits", []):
+            if limit_entry.get("unit") != "1/{project}/{region}/{vm_family}":
+                continue
+            for bucket in limit_entry.get("quotaBuckets", []):
+                dims = bucket.get("dimensions") or {}
+                vm_fam = str(dims.get("vm_family") or "").strip().upper()
+                if not vm_fam:
+                    continue
+                eff_raw = bucket.get("effectiveLimit", bucket.get("defaultLimit", -1))
+                try:
+                    eff = float(eff_raw)
+                except (TypeError, ValueError):
+                    continue
+                if eff < 0:
+                    continue
+                if "region" not in dims:
+                    defaults[vm_fam] = eff
+                elif dims.get("region") == region:
+                    regional[vm_fam] = eff
+        return {
+            f"{vm_fam}_CPUS": {"limit": lim, "usage": 0.0, "available": lim}
+            for vm_fam, lim in {**defaults, **regional}.items()
+        }
+    except Exception:
+        return {}
+
+
+def _is_mock_regions_client(regions_client: Any) -> bool:
+    """Return True if ``regions_client`` or its ``.get`` method is a unittest.mock object."""
+    return type(regions_client).__module__.startswith("unittest.mock") or type(
+        getattr(regions_client, "get", None)
+    ).__module__.startswith("unittest.mock")
+
+
+def check_cpu_quota(
+    project_id: str, region: str, *, use_cached: bool = False
+) -> dict[str, dict[str, float]]:
+    """Return regional CPU quota limits/availability by GCE metric name.
+
+    Reuses the snapshot captured by ``check_gpu_quota()`` when ``use_cached=True``
+    so startup detection makes zero additional Compute Engine API calls.
+    """
+    cache_key = (project_id or "", region or "")
+    if use_cached and cache_key in _last_cpu_quotas_by_region:
+        return dict(_last_cpu_quotas_by_region[cache_key])
+
+    from google.cloud import compute_v1
+
+    regions_client = compute_v1.RegionsClient()
+    region_info = regions_client.get(project=project_id, region=region)
+    cpu_quotas = _extract_cpu_quotas(getattr(region_info, "quotas", None))
+    if not _is_mock_regions_client(regions_client):
+        for k, v in _fetch_vm_family_cpu_quotas(project_id, region).items():
+            cpu_quotas.setdefault(k, v)
+    _last_cpu_quotas_by_region[cache_key] = dict(cpu_quotas)
+    return cpu_quotas
+
+
+def _machine_vcpus(machine_type: str) -> int:
+    """Extract the vCPU count from a standard GCE machine type string."""
+    match = _MACHINE_VCPU_RE.match((machine_type or "").strip().lower())
+    return int(match.group(1)) if match else 8
+
+
+def _has_cpu_quota_for_machine(
+    machine_type: str,
+    cpu_quotas: dict[str, dict[str, float]],
+    *,
+    strict_missing_vm_family: bool,
+    strict_missing_legacy_family: bool,
+) -> bool:
+    """Return True if ``cpu_quotas`` has enough regional vCPU quota for ``machine_type``."""
+    mt = (machine_type or "").strip().lower()
+    family = mt.split("-", 1)[0]
+    required_vcpus = _machine_vcpus(mt)
+
+    if "CPUS" in cpu_quotas:
+        cpus_info = cpu_quotas["CPUS"]
+        avail = float(cpus_info.get("available", cpus_info.get("limit", 0.0)))
+        if float(cpus_info.get("limit", avail)) < required_vcpus or avail < required_vcpus:
+            return False
+
+    if not family or family == "n1":
+        return True
+    metric = f"{family.upper()}_CPUS"
+
+    if metric not in cpu_quotas:
+        if metric in _VM_FAMILY_CPU_METRICS:
+            return not strict_missing_vm_family
+        return not strict_missing_legacy_family
+
+    info = cpu_quotas[metric]
+    avail = float(info.get("available", info.get("limit", 0.0)))
+    return float(info.get("limit", avail)) >= required_vcpus and avail >= required_vcpus
+
+
+def resolve_cpu_machine_type(
+    preferred: str = "n4-standard-8",
+    candidates: tuple[str, ...] = MSA_CPU_FALLBACK_LADDER,
+    cpu_quotas: dict[str, dict[str, float]] | None = None,
+) -> str:
+    """Resolve a CPU machine type across ``candidates`` using regional ``cpu_quotas``.
+
+    Each candidate is evaluated against its own vCPU count (e.g. 8 vCPUs for
+    Gen 4/3 ``n4-standard-8`` / ``n4d-standard-8`` / ``c4-standard-8`` /
+    ``c4d-standard-8`` / ``c3-standard-8`` vs. 16 vCPUs for Gen 2/1
+    ``c2-standard-16`` / ``n2d-standard-16`` / ``n1-standard-16``). Returns
+    ``preferred`` when ``cpu_quotas`` is None/empty or when ``preferred`` has
+    sufficient quota.
+    """
+    if not cpu_quotas:
+        return preferred
+
+    has_vm_family_metric = any(m in cpu_quotas for m in _VM_FAMILY_CPU_METRICS)
+    has_any_family_metric = has_vm_family_metric or any(
+        m in cpu_quotas for m in _LEGACY_REGION_CPU_METRICS
+    )
+    ordered_candidates = (
+        (preferred, *(c for c in candidates if c != preferred)) if candidates else (preferred,)
+    )
+    for candidate in ordered_candidates:
+        if _has_cpu_quota_for_machine(
+            candidate,
+            cpu_quotas,
+            strict_missing_vm_family=has_vm_family_metric,
+            strict_missing_legacy_family=has_any_family_metric,
+        ):
+            if candidate != preferred:
+                logger.warning(
+                    f"Insufficient regional CPU quota for '{preferred}'; "
+                    f"falling back to '{candidate}'."
+                )
+            return candidate
+
+    fallback = ordered_candidates[-1]
+    logger.warning(
+        f"No candidate in {ordered_candidates} satisfied regional CPU quota; "
+        f"falling back to '{fallback}'."
+    )
+    return fallback
+
+
 def check_gpu_quota(project_id: str, region: str) -> dict[str, Any]:
     """Query Compute Engine API and return GPU quota and active reservation information.
 
@@ -313,6 +582,11 @@ def check_gpu_quota(project_id: str, region: str) -> dict[str, Any]:
 
     regions_client = compute_v1.RegionsClient()
     region_info = regions_client.get(project=project_id, region=region)
+    cpu_quotas = _extract_cpu_quotas(getattr(region_info, "quotas", None))
+    if not _is_mock_regions_client(regions_client):
+        for k, v in _fetch_vm_family_cpu_quotas(project_id, region).items():
+            cpu_quotas.setdefault(k, v)
+    _last_cpu_quotas_by_region[(project_id or "", region or "")] = cpu_quotas
 
     gpu_quotas = {}
     for quota in region_info.quotas:
@@ -386,6 +660,8 @@ def detect_supported_gpus(project_id: str, region: str, include_h100: bool = Fal
 
         if "L4" in gpu_type and limit > 0:
             gpu_types_seen.add("L4")
+        elif "RTX_PRO_6000" in gpu_type and limit > 0:
+            gpu_types_seen.add("RTX_PRO_6000")
         elif "H100" in gpu_type and limit > 0:
             gpu_types_seen.add("H100")
         elif "A100_80GB" in gpu_type and limit > 0:
@@ -394,7 +670,9 @@ def detect_supported_gpus(project_id: str, region: str, include_h100: bool = Fal
             gpu_types_seen.add("A100")
 
     tier_order = (
-        ["L4", "A100", "A100_80GB", "H100"] if include_h100 else ["L4", "A100", "A100_80GB"]
+        ["L4", "A100", "A100_80GB", "RTX_PRO_6000", "H100"]
+        if include_h100
+        else ["L4", "A100", "A100_80GB", "RTX_PRO_6000"]
     )
     ordered = [g for g in tier_order if g in gpu_types_seen]
     return ordered

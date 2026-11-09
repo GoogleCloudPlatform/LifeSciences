@@ -42,4 +42,8 @@ def get_config():
 
 def _auto_detect_gpus(config):
     """Run startup GPU quota auto-detection."""
-    auto_detect_model_gpus(config)
+    auto_detect_model_gpus(
+        config,
+        model_label="AF2",
+        allowed_gpus=("L4", "A100", "A100_80GB"),
+    )

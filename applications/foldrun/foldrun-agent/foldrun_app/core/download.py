@@ -60,7 +60,7 @@ MMSEQS2_INDEXABLE_DATABASES = {
     },
 }
 
-MMSEQS2_MACHINE_TYPE = "n1-highmem-32"
+MMSEQS2_MACHINE_TYPE = "c4-highmem-32-lssd"
 MMSEQS2_LOCAL_SSD_COUNT = 2
 
 
@@ -245,7 +245,7 @@ def submit_download(
     model = models[0] if models else "unknown"
     display_name = db_config.get("display_name", db_name)
     nfs_path = db_config["nfs_path"]
-    machine_type = db_config.get("machine_type", "n1-standard-4")
+    machine_type = db_config.get("machine_type", "n4-standard-2")
     local_ssd_count = db_config.get("local_ssd_count", 0)
     dest_path = f"{nfs_mount}/{nfs_path}"
     if ".." in dest_path.split("/") or not re.match(r"^/[a-zA-Z0-9_./-]+$", dest_path):
@@ -487,13 +487,29 @@ def submit_mmseqs2_conversions(
         script = "\n".join(
             [
                 "set -e",
-                "echo '=== Setting up local SSD RAID-0 (750 GB) ==='",
+                "echo '=== Setting up local SSD RAID-0 / scratch storage ==='",
                 "apt-get update -qq",
                 "apt-get install -y -qq mdadm python3-crcmod 2>/dev/null || true",
-                "mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme0n1 /dev/nvme0n2 --force --run",
-                "mkfs.ext4 -F /dev/md0",
-                "mkdir -p /mnt/localssd",
-                "mount /dev/md0 /mnt/localssd",
+                "SSD_DEVS=(/dev/disk/by-id/google-local-nvme-ssd-*)",
+                'if [ -b "${SSD_DEVS[0]:-}" ]; then',
+                "  mkdir -p /mnt/localssd",
+                '  for d in "${SSD_DEVS[@]}"; do umount -f "$d" 2>/dev/null || true; done',
+                '  if [ "${#SSD_DEVS[@]}" -ge 2 ]; then',
+                '    mdadm --create /dev/md0 --level=0 --raid-devices="${#SSD_DEVS[@]}" "${SSD_DEVS[@]}" --force --run',
+                "    mkfs.ext4 -F /dev/md0 && mount /dev/md0 /mnt/localssd",
+                "  else",
+                '    mkfs.ext4 -F "${SSD_DEVS[0]}" && mount "${SSD_DEVS[0]}" /mnt/localssd',
+                "  fi",
+                "elif mountpoint -q /mnt/scratch 2>/dev/null; then",
+                "  rm -rf /mnt/localssd && ln -sfnT /mnt/scratch /mnt/localssd",
+                "elif [ -b /dev/nvme0n1 ] && [ -b /dev/nvme0n2 ]; then",
+                "  mkdir -p /mnt/localssd",
+                "  mdadm --create /dev/md0 --level=0 --raid-devices=2 /dev/nvme0n1 /dev/nvme0n2 --force --run",
+                "  mkfs.ext4 -F /dev/md0 && mount /dev/md0 /mnt/localssd",
+                "else",
+                f"  mkdir -p '{nfs_mount}/{subdir}/mmseqs_scratch'",
+                f"  rm -rf /mnt/localssd && ln -sfnT '{nfs_mount}/{subdir}/mmseqs_scratch' /mnt/localssd",
+                "fi",
                 "export TMPDIR=/mnt/localssd/tmp && mkdir -p $TMPDIR",
                 f"echo '=== Cleaning up previous MMseqs2 files for {db_name} ==='",
                 f"rm -f '{mmseqs_path}' '{mmseqs_path}'.*  '{mmseqs_path}_h' '{mmseqs_path}_h'.*",
@@ -514,6 +530,7 @@ def submit_mmseqs2_conversions(
                 f"  $MMSEQS createindex '{local_mmseqs}' /mnt/localssd/tmp --split {index_splits} --index-subset 2 --remove-tmp-files 1",
                 f"  echo '{db_name}: copying results to NFS'",
                 f"  cp {local_mmseqs}* {nfs_mount}/{subdir}/",
+                f"  rm -rf '{nfs_mount}/{subdir}/mmseqs_scratch'",
                 f"  echo '{db_name}: done'",
                 "else",
                 f"  echo '{db_name}: FASTA not found at {fasta_path}, skipping'",

@@ -41,15 +41,15 @@ class TestEsmfold2HardwareAndPipelineCompilation:
     """Tests for GPU auto-recommendation and KFP pipeline compilation (use_msa=False vs True)."""
 
     def test_recommend_gpu_tiers(self):
-        # Fast variant (default): <=1000 -> L4, <=2500 -> A100, >2500 -> A100_80GB
-        assert ESMFOLD2Tool._recommend_gpu(76, "fast") == "L4"
-        assert ESMFOLD2Tool._recommend_gpu(1000, "fast") == "L4"
+        # Fast variant (default): <=2500 -> A100, >2500 -> A100_80GB
+        assert ESMFOLD2Tool._recommend_gpu(76, "fast") == "A100"
+        assert ESMFOLD2Tool._recommend_gpu(1000, "fast") == "A100"
         assert ESMFOLD2Tool._recommend_gpu(1001, "fast") == "A100"
         assert ESMFOLD2Tool._recommend_gpu(2500, "fast") == "A100"
         assert ESMFOLD2Tool._recommend_gpu(2501, "fast") == "A100_80GB"
 
-        # Full variant: <=700 -> L4, <=2000 -> A100, >2000 -> A100_80GB
-        assert ESMFOLD2Tool._recommend_gpu(700, "full") == "L4"
+        # Full variant: <=2000 -> A100, >2000 -> A100_80GB
+        assert ESMFOLD2Tool._recommend_gpu(700, "full") == "A100"
         assert ESMFOLD2Tool._recommend_gpu(701, "full") == "A100"
         assert ESMFOLD2Tool._recommend_gpu(2000, "full") == "A100"
         assert ESMFOLD2Tool._recommend_gpu(2001, "full") == "A100_80GB"
@@ -73,11 +73,53 @@ class TestEsmfold2HardwareAndPipelineCompilation:
         compiler.Compiler().compile(
             pipeline_func=full_pipeline_fn, package_path=str(full_yaml_path)
         )
-        full_spec = yaml.safe_load(full_yaml_path.read_text(encoding="utf-8"))
+        full_raw = full_yaml_path.read_text(encoding="utf-8")
+        full_spec = yaml.safe_load(full_raw)
         full_execs = set(full_spec["deploymentSpec"]["executors"].keys())
         assert any("configure-seeds" in k for k in full_execs)
         assert any("msa-pipeline-esmfold2" in k for k in full_execs)
         assert any("predict-esmfold2" in k for k in full_execs)
+        assert "a2-highgpu-1g" in full_raw
+        assert "NVIDIA_TESLA_A100" in full_raw
+        assert "hyperdisk-balanced" in full_raw
+        assert "pd-ssd" in full_raw
+
+    def test_rtx_pro_6000_spillover_and_boot_disk_compilation(
+        self, mock_env_vars, tmp_path, monkeypatch
+    ):
+        cfg = ESMFOLD2Config()
+        tool = ESMFOLD2Tool({"name": "test"}, cfg)
+        hw = tool._get_hardware_config("RTX_PRO_6000", num_tokens=500, model_variant="fast")
+        assert hw["predict_machine"] == "g4-standard-48"
+        assert hw["predict_accel"] == "NVIDIA_RTX_PRO_6000"
+        assert hw["msa_machine"] == "n4-standard-8"
+
+        # Spillover when L4/A100/A100_80GB quota is exhausted
+        cfg.set_supported_gpus(["RTX_PRO_6000"])
+        spill = tool._get_hardware_config("auto", num_tokens=500, model_variant="fast")
+        assert spill["predict_machine"] == "g4-standard-48"
+        assert spill["predict_accel"] == "NVIDIA_RTX_PRO_6000"
+
+        monkeypatch.setenv("PREDICT_MACHINE_TYPE", "g4-standard-48")
+        monkeypatch.setenv("PREDICT_ACCELERATOR_TYPE", "NVIDIA_RTX_PRO_6000")
+        g4_pipeline_fn = load_vertex_pipeline(enable_flex_start=True, use_msa=False)
+        g4_yaml_path = tmp_path / "esmfold2_g4.yaml"
+        compiler.Compiler().compile(pipeline_func=g4_pipeline_fn, package_path=str(g4_yaml_path))
+        g4_raw = g4_yaml_path.read_text(encoding="utf-8")
+        assert "g4-standard-48" in g4_raw
+        assert "NVIDIA_RTX_PRO_6000" in g4_raw
+        assert "hyperdisk-balanced" in g4_raw
+
+    def test_predict_component_gates_esmc_fp8_on_sm89_plus(self):
+        """predict_esmfold2 uses fp8 on SM >= 8.9 (L4/H100/RTX PRO 6000) and bf16 on A100 (SM 8.0)."""
+        import inspect
+
+        from foldrun_app.models.esmfold2.pipeline.components.predict import predict_esmfold2
+
+        src = inspect.getsource(predict_esmfold2.python_func)
+        assert "get_device_capability() >= (8, 9)" in src
+        assert '"fp8"' in src
+        assert '"bf16"' in src
 
 
 class TestEsmfold2SubmitPrediction:
@@ -113,7 +155,7 @@ class TestEsmfold2SubmitPrediction:
             assert res_fast["input_info"]["model_variant"] == "fast"
             assert res_fast["input_info"]["use_msa"] is False
             assert "none" in res_fast["hardware"]["msa_pipeline"]
-            assert "NVIDIA_L4" in res_fast["hardware"]["prediction"]
+            assert "NVIDIA_TESLA_A100" in res_fast["hardware"]["prediction"]
 
             fast_params = mock_pj_cls.call_args.kwargs["parameter_values"]
             assert fast_params["nfs_cache_path"] == f"{cfg.nfs_mount_point}/{cfg.fast_cache_path}"
@@ -126,7 +168,7 @@ class TestEsmfold2SubmitPrediction:
             assert res_full["use_msa"] is True
             assert res_full["input_info"]["model_variant"] == "full"
             assert res_full["input_info"]["use_msa"] is True
-            assert "c2-standard-16" in res_full["hardware"]["msa_pipeline"]
+            assert "n4-standard-8" in res_full["hardware"]["msa_pipeline"]
 
             full_params = mock_pj_cls.call_args.kwargs["parameter_values"]
             assert full_params["nfs_cache_path"] == f"{cfg.nfs_mount_point}/{cfg.full_cache_path}"
@@ -153,7 +195,7 @@ class TestEsmfold2SubmitPrediction:
     def test_cost_estimation_esmfold2_fast_vs_full(self):
         fast_est = estimate_job_cost(job_type="esmfold2_fast", sequence_length=300)
         assert fast_est["job_type"] == "esmfold2_fast"
-        assert fast_est["gpu_type"] == "L4"
+        assert fast_est["gpu_type"] == "A100"
         assert len(fast_est["dws_flex_start"]["phases"]) == 1
         assert fast_est["dws_flex_start"]["phases"][0]["phase"] == "Predict"
 

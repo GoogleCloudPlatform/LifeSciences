@@ -25,6 +25,8 @@ import os
 from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 from kfp import dsl
 
+from foldrun_app.core.pipeline_utils import resolve_boot_disk_type
+
 from .. import config
 from ..components import configure_seeds_esmfold2 as ConfigureSeedsESMFold2
 from ..components import msa_pipeline_esmfold2 as MSAPipelineESMFold2
@@ -71,6 +73,7 @@ def create_esmfold2_inference_pipeline(strategy: str = "STANDARD", use_msa: bool
                 MSAPipelineESMFold2,
                 display_name="ESMFold2 MSA Pipeline",
                 machine_type=config.MSA_MACHINE_TYPE,
+                boot_disk_type=resolve_boot_disk_type(config.MSA_MACHINE_TYPE),
                 nfs_mounts=[
                     {
                         "server": config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
@@ -107,12 +110,18 @@ def create_esmfold2_inference_pipeline(strategy: str = "STANDARD", use_msa: bool
         flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
         max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
 
+        predict_machine_type = os.environ.get("PREDICT_MACHINE_TYPE", config.PREDICT_MACHINE_TYPE)
         JobPredictOp = create_custom_training_job_from_component(
             PredictESMFold2,
             display_name="ESMFold2 Predict",
-            machine_type=os.environ.get("PREDICT_MACHINE_TYPE", "g2-standard-12"),
-            accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_L4"),
-            accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
+            machine_type=predict_machine_type,
+            boot_disk_type=resolve_boot_disk_type(predict_machine_type),
+            accelerator_type=os.environ.get(
+                "PREDICT_ACCELERATOR_TYPE", config.PREDICT_ACCELERATOR_TYPE
+            ),
+            accelerator_count=int(
+                os.environ.get("PREDICT_ACCELERATOR_COUNT", str(config.PREDICT_ACCELERATOR_COUNT))
+            ),
             nfs_mounts=[
                 {
                     "server": config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),

@@ -233,7 +233,7 @@ class TestDataPipelineNumAlignments:
             "NFS_PATH": "/datasets",
             "NFS_MOUNT_POINT": "/mnt/nfs/foldrun",
             "NETWORK": "projects/123/global/networks/test-net",
-            "DATA_PIPELINE_MACHINE_TYPE": "c2-standard-16",
+            "DATA_PIPELINE_MACHINE_TYPE": "n4-standard-8",
             "PREDICT_MACHINE_TYPE": "a2-highgpu-1g",
             "PREDICT_ACCELERATOR_TYPE": "NVIDIA_TESLA_A100",
             "PREDICT_ACCELERATOR_COUNT": "1",

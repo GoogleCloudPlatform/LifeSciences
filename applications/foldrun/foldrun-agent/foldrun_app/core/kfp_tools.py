@@ -61,22 +61,25 @@ class KFPModelTool(BaseTool):
         "L4": ("g2-standard-12", "NVIDIA_L4", 1),
         "A100": ("a2-highgpu-1g", "NVIDIA_TESLA_A100", 1),
         "A100_80GB": ("a2-ultragpu-1g", "NVIDIA_A100_80GB", 1),
+        "RTX_PRO_6000": ("g4-standard-48", "NVIDIA_RTX_PRO_6000", 1),
     }
 
     # Canonical predict -> relax GPU tier mapping (used by AF2 submission and cost estimation)
     RELAX_GPU_MAP: ClassVar[dict[str, str]] = {
         "H100": "A100",
+        "RTX_PRO_6000": "A100",
         "A100_80GB": "A100",
         "A100": "A100",
         "L4": "L4",
     }
 
-    DEFAULT_MSA_MACHINE: ClassVar[str] = "c2-standard-16"
+    DEFAULT_MSA_MACHINE: ClassVar[str] = "n4-standard-8"
 
     ACCEL_TO_LABEL: ClassVar[dict[str, str]] = {
         "NVIDIA_L4": "l4",
         "NVIDIA_TESLA_A100": "a100",
         "NVIDIA_A100_80GB": "a100-80gb",
+        "NVIDIA_RTX_PRO_6000": "rtx-pro-6000",
     }
 
     @staticmethod
@@ -172,11 +175,24 @@ class KFPModelTool(BaseTool):
 
     @staticmethod
     def _normalize_gpu_type(gpu_type: str | None) -> str:
-        """Normalize GPU type strings (e.g. 'l4', 'a100-80gb', 'auto')."""
+        """Normalize GPU type strings (e.g. 'l4', 'a100-80gb', 'rtx-pro-6000', 'g4', 'auto')."""
         normalized = (gpu_type or "auto").strip()
         if not normalized or normalized.lower() == "auto":
             return "auto"
-        return normalized.upper().replace("-", "_")
+        raw = normalized.upper().replace("-", "_").replace(" ", "_")
+        if raw in ("G4", "NVIDIA_RTX_PRO_6000", "RTX6000", "RTX_6000"):
+            return "RTX_PRO_6000"
+        return raw
+
+    def _resolve_msa_machine(self, env_var: str = "MSA_MACHINE_TYPE") -> str:
+        """Resolve the CPU MSA machine type via explicit env override or quota-aware ladder."""
+        explicit = os.getenv(env_var, "").strip()
+        if explicit:
+            return explicit
+        resolver = getattr(self.config, "resolve_msa_machine", None)
+        if callable(resolver):
+            return str(resolver(self.DEFAULT_MSA_MACHINE))
+        return self.DEFAULT_MSA_MACHINE
 
     @classmethod
     def predict_spec_for_gpu(cls, gpu_type: str) -> dict[str, Any]:
@@ -200,10 +216,13 @@ class KFPModelTool(BaseTool):
 
     @staticmethod
     def _scale_multi_gpu_machine(hw_config: dict[str, Any], gpu_type: str, num_gpus: int) -> None:
-        """Scale A2 machine type and accelerator count when ``num_gpus > 1``."""
+        """Scale A2 or G4 machine type and accelerator count when ``num_gpus > 1``."""
         if num_gpus > 1 and gpu_type in ("A100", "A100_80GB"):
             base = "a2-highgpu" if gpu_type == "A100" else "a2-ultragpu"
             hw_config["predict_machine"] = f"{base}-{num_gpus}g"
+            hw_config["predict_count"] = num_gpus
+        elif num_gpus > 1 and gpu_type == "RTX_PRO_6000" and num_gpus in (2, 4, 8):
+            hw_config["predict_machine"] = f"g4-standard-{48 * num_gpus}"
             hw_config["predict_count"] = num_gpus
 
     def _resolve_supported_gpu(
@@ -260,7 +279,7 @@ class KFPModelTool(BaseTool):
         """Build common KFP compilation environment variables."""
         nfs_server = filestore_ip or self.config.filestore_ip or ""
         network = filestore_network or self.config.filestore_network or ""
-        return {
+        env = {
             "NFS_SERVER": nfs_server,
             "NFS_PATH": self.config.nfs_share,
             "NFS_MOUNT_POINT": self.config.nfs_mount_point,
@@ -270,6 +289,9 @@ class KFPModelTool(BaseTool):
             "PREDICT_ACCELERATOR_COUNT": str(hardware_config.get("predict_count", 1)),
             "DWS_MAX_WAIT_HOURS": str(hardware_config.get("dws_max_wait_hours", 168)),
         }
+        if "msa_machine" in hardware_config:
+            env["MSA_MACHINE_TYPE"] = str(hardware_config["msa_machine"])
+        return env
 
     def _scoped_compile_env(
         self,

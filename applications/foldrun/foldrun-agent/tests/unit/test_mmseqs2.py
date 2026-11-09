@@ -93,7 +93,7 @@ class TestDownloadScriptsMMseqs2:
         for db_name in MMSEQS2_INDEXABLE_DATABASES:
             assert "fasta_file" in MMSEQS2_INDEXABLE_DATABASES[db_name]
             assert "mmseqs_name" in MMSEQS2_INDEXABLE_DATABASES[db_name]
-        assert MMSEQS2_MACHINE_TYPE == "n1-highmem-32"
+        assert MMSEQS2_MACHINE_TYPE == "c4-highmem-32-lssd"
         assert MMSEQS2_LOCAL_SSD_COUNT == 2
 
     def test_mmseqs2_indexable_databases_registry(self):
@@ -111,13 +111,13 @@ class TestDownloadScriptsMMseqs2:
             assert "mmseqs_name" in info, f"{db_name} missing mmseqs_name"
 
     def test_default_download_machine_type(self):
-        """Default download machine type is n1-standard-4 (cheap, network-bound)."""
+        """Default download machine type is n4-standard-2 (right-sized Gen 4, network-bound)."""
         import inspect
 
         from foldrun_app.core.download import submit_download
 
         source = inspect.getsource(submit_download)
-        assert "n1-standard-4" in source
+        assert "n4-standard-2" in source
 
     def test_index_splits_are_single_pass(self):
         """All indexable databases use --split 1 (single-pass on n1-highmem-32)."""

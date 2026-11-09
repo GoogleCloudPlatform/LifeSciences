@@ -148,7 +148,7 @@ def evaluate(instance: dict[str, Any]) -> dict[str, Any]:
         )
         has_esmfold2_plan = (
             "|" in response
-            and ("l4" in response_lower or "hardware" in response_lower)
+            and ("a100" in response_lower or "l4" in response_lower or "hardware" in response_lower)
             and ("msa" in response_lower)
         )
         checks.append(("presented_esmfold2_confirmation_plan", has_esmfold2_plan))

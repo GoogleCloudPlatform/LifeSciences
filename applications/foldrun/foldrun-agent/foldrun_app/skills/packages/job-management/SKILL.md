@@ -24,7 +24,7 @@ metadata:
 - **List Jobs (`list_jobs`)**: Filters jobs by `state` (`"running"`, `"failed"`, `"succeeded"`, `"pending"`, `"cancelled"` — always simple lowercase words, never `PIPELINE_STATE_*`), `job_type`, `gpu_type`, `seq_name`, or sequence length.
   - **Display Analysis Column**: `list_jobs` includes `has_analysis` for succeeded jobs. Always include an **Analysis** column in job tables (`"✓"` if `True`, `"✗"` if `False`, `"-"` if non-succeeded).
 - **Inspect Job Details (`get_job_details`)**: Retrieves original FASTA/query input, submission parameters, timing, error details, and per-task `task_configurations` (showing actual `machine_type`, `accelerator_type`, and `strategy` for `data-pipeline`, `predict`, and `relax`).
-- **Check GPU Quota (`check_gpu_quota`)**: Displays on-demand and preemptible/spot (`FLEX_START`) quota limits and usage for `L4`, `A100` (40GB), and `A100_80GB`. Call proactively before submitting multiple jobs or large batches.
+- **Check GPU Quota (`check_gpu_quota`)**: Displays on-demand and preemptible/spot (`FLEX_START`) quota limits and usage for `L4`, `A100` (40GB), `A100_80GB`, `RTX_PRO_6000` (96GB), and `H100` (80GB). Call proactively before submitting multiple jobs or large batches.
 
 ## AlphaFold 3 Dedicated Endpoint Monitoring (`check_af3_endpoint`)
 - **Architecture & Cost**: AF3 runs on a Terraform-managed dedicated endpoint (`a3-highgpu-1g`, 1x NVIDIA H100 80GB + 3 TB local NVMe SSD, ~$11.06/hr per active replica). The agent does **not** deploy or undeploy the endpoint.

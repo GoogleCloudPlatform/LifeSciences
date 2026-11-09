@@ -29,11 +29,11 @@ ESMFOLD2_FAST_CACHE_PATH = os.getenv("ESMFOLD2_FAST_CACHE_PATH", "esmfold2/fast"
 ESMFOLD2_CACHE_PATH = os.getenv("ESMFOLD2_CACHE_PATH", "esmfold2/full")
 
 # MSA machine type (CPU-only, used only when use_msa=True for full ESMFold2)
-MSA_MACHINE_TYPE = os.getenv("MSA_MACHINE_TYPE", "c2-standard-16")
+MSA_MACHINE_TYPE = os.getenv("MSA_MACHINE_TYPE", "n4-standard-8")
 
 # Predict GPU hardware
-PREDICT_MACHINE_TYPE = os.getenv("PREDICT_MACHINE_TYPE", "g2-standard-12")
-PREDICT_ACCELERATOR_TYPE = os.getenv("PREDICT_ACCELERATOR_TYPE", "NVIDIA_L4")
+PREDICT_MACHINE_TYPE = os.getenv("PREDICT_MACHINE_TYPE", "a2-highgpu-1g")
+PREDICT_ACCELERATOR_TYPE = os.getenv("PREDICT_ACCELERATOR_TYPE", "NVIDIA_TESLA_A100")
 PREDICT_ACCELERATOR_COUNT = int(os.getenv("PREDICT_ACCELERATOR_COUNT", "1"))
 
 # DWS scheduling

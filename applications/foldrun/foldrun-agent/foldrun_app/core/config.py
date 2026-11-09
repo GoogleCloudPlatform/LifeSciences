@@ -28,11 +28,16 @@ class CoreConfig:
     """Model-agnostic configuration class for FoldRun tools."""
 
     _gpu_detection_cache: ClassVar[dict[tuple[Callable, str, str, bool], list[str]]] = {}
+    _cpu_detection_cache: ClassVar[dict[tuple[str, str], dict[str, dict[str, float]]]] = {}
 
     @classmethod
     def clear_gpu_detection_cache(cls) -> None:
-        """Clear the session-level GPU quota detection cache."""
+        """Clear the session-level GPU and CPU quota detection caches."""
+        from foldrun_app.core.hardware import clear_region_quota_cache
+
         cls._gpu_detection_cache.clear()
+        cls._cpu_detection_cache.clear()
+        clear_region_quota_cache()
 
     def __init__(self, env_path: str | None = None):
         """
@@ -169,7 +174,7 @@ class CoreConfig:
             return self._supported_gpus
 
         # Default to all supported types if not explicitly configured
-        default_gpus = "L4,A100,A100_80GB"
+        default_gpus = "L4,A100,A100_80GB,RTX_PRO_6000"
         supported = os.getenv("AF2_SUPPORTED_GPUS", default_gpus)
         self._supported_gpus = [g.strip() for g in supported.split(",") if g.strip()]
         return self._supported_gpus
@@ -178,6 +183,37 @@ class CoreConfig:
         """Update supported GPUs list (e.g. after auto-detection)."""
         logger.info(f"Updating supported GPUs to: {gpus}")
         self._supported_gpus = gpus
+
+    @property
+    def cpu_quotas(self) -> dict[str, dict[str, float]] | None:
+        """Optional regional CPU quota map populated during startup auto-detection."""
+        return getattr(self, "_cpu_quotas", None)
+
+    def set_cpu_quotas(self, quotas: dict[str, dict[str, float]] | None) -> None:
+        """Set regional CPU quota map for generation-compensated MSA fallback."""
+        self._cpu_quotas = dict(quotas) if quotas is not None else None
+
+    def detect_cpu_quotas_cached(self) -> dict[str, dict[str, float]]:
+        """Detect regional CPU quotas once per (project_id, region) per session."""
+        from foldrun_app.core.hardware import check_cpu_quota
+
+        key = (self.project_id or "", self.region or "")
+        if key in self._cpu_detection_cache:
+            return dict(self._cpu_detection_cache[key])
+
+        quotas = check_cpu_quota(self.project_id, self.region, use_cached=True)
+        self._cpu_detection_cache[key] = dict(quotas)
+        return dict(quotas)
+
+    def resolve_msa_machine(self, default_machine: str = "n4-standard-8") -> str:
+        """Resolve the CPU MSA machine type using the generation-compensated fallback ladder."""
+        from foldrun_app.core.hardware import MSA_CPU_FALLBACK_LADDER, resolve_cpu_machine_type
+
+        return resolve_cpu_machine_type(
+            preferred=default_machine,
+            candidates=MSA_CPU_FALLBACK_LADDER,
+            cpu_quotas=self.cpu_quotas,
+        )
 
     def to_dict(self) -> dict:
         """Convert configuration to dictionary."""

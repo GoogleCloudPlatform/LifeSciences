@@ -49,7 +49,7 @@ class BOLTZ2SubmitPredictionTool(BOLTZ2Tool):
                 'input': FASTA content, BOLTZ2 JSON content, or file path,
                 'job_name': Optional job name,
                 'num_model_seeds': Number of seeds (default: 1),
-                'gpu_type': 'auto', 'L4', 'A100', or 'A100_80GB',
+                'gpu_type': 'auto', 'L4', 'A100', 'A100_80GB', or 'RTX_PRO_6000',
                 'enable_flex_start': Enable DWS FLEX_START (default: true),
             }
 

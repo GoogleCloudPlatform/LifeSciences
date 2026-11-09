@@ -20,81 +20,37 @@ Provides NFS-mounted Batch job submission for any model's download tools.
 import hashlib
 import logging
 import os
-import re
 from typing import Any
 
-from google.cloud import batch_v1
+from google.cloud import batch_v1alpha as batch_v1
+
+from foldrun_app.core.hardware import resolve_boot_disk_type
 
 logger = logging.getLogger(__name__)
 
-# Machine type -> memory in MiB (~1000 MiB per GiB leaves ~2.4% headroom for OS/Batch agent)
-MACHINE_MEMORY_MB = {
-    "n1-standard-4": 15000,
-    "n1-standard-8": 30000,
-    "n1-standard-16": 60000,
-    "n1-standard-32": 120000,
-    "n1-highmem-8": 52000,
-    "n1-highmem-16": 104000,
-    "n1-highmem-32": 208000,
+# Ranked Gen 3/4 InstanceFlexibilityPolicy selections for Cloud Batch jobs.
+# Keeping all candidate machine types in Gen 3 (C3, C3D) and Gen 4 (C4, C4D, N4, N4D)
+# ensures every selection shares a single hyperdisk-balanced boot disk InstanceTemplate
+# with zero extra template disks.
+BATCH_INSTANCE_SELECTIONS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "c4-standard-4-lssd": (
+        ("c4-standard-4-lssd", "c4d-standard-4-lssd"),
+        ("c3-standard-4-lssd", "c3d-standard-4-lssd"),
+    ),
+    "c4-highmem-32-lssd": (
+        ("c4-highmem-32-lssd", "c4d-highmem-32-lssd"),
+        ("c3d-highmem-30-lssd",),
+    ),
+    "n4-standard-4": (
+        ("n4-standard-4", "n4d-standard-4"),
+        ("c4-standard-4", "c4d-standard-4", "c3-standard-4", "c3d-standard-4"),
+    ),
+    "n4-standard-2": (
+        ("n4-standard-2", "n4d-standard-2"),
+        ("c4-standard-2", "c4d-standard-2"),
+        ("c3-standard-4", "c3d-standard-4"),
+    ),
 }
-
-_CUSTOM_MACHINE_RE = re.compile(r"^(?:[a-z][a-z0-9]*-)?custom-(\d+)-(\d+)(?:-ext)?$")
-_STANDARD_MACHINE_RE = re.compile(
-    r"^([a-z][a-z0-9]*)-(standard|highmem|highcpu|megamem|ultramem|hypermem)-(\d+)(?:-[a-z0-9]+)*$"
-)
-_N1_GB_PER_VCPU = {
-    "standard": 3.75,
-    "highmem": 6.5,
-    "highcpu": 0.9,
-    "megamem": 14.933333,
-    "ultramem": 24.025,
-}
-_MODERN_GB_PER_VCPU = {
-    "standard": 4.0,
-    "highmem": 8.0,
-    "highcpu": 1.0,
-    "megamem": 14.0,
-    "ultramem": 24.0,
-    "hypermem": 16.0,
-}
-
-
-def get_machine_resources(machine_type: str) -> tuple[int, int]:
-    """Compute (cpu_milli, memory_mib) for a GCE machine type.
-
-    Uses ~1000 MiB per GiB of physical VM RAM (~97.6% of total MiB) so Cloud Batch
-    tasks never exceed usable host memory after kernel/agent reservation.
-    """
-    mt = (machine_type or "").strip().lower()
-
-    custom_match = _CUSTOM_MACHINE_RE.match(mt)
-    if custom_match:
-        vcpus = int(custom_match.group(1))
-        raw_mib = int(custom_match.group(2))
-        memory_mib = MACHINE_MEMORY_MB.get(mt, max(1024, (raw_mib * 1000) // 1024))
-        return vcpus * 1000, memory_mib
-
-    std_match = _STANDARD_MACHINE_RE.match(mt)
-    if std_match:
-        family, tier, vcpus_str = std_match.groups()
-        vcpus = int(vcpus_str)
-        if mt in MACHINE_MEMORY_MB:
-            return vcpus * 1000, MACHINE_MEMORY_MB[mt]
-        if family == "n1":
-            gb_per_vcpu = _N1_GB_PER_VCPU.get(tier, 3.75)
-        elif tier == "highcpu" and family in ("c2d", "c3", "c3d", "c4"):
-            gb_per_vcpu = 2.0
-        else:
-            gb_per_vcpu = _MODERN_GB_PER_VCPU.get(tier, 4.0)
-        return vcpus * 1000, round(vcpus * gb_per_vcpu * 1000)
-
-    if mt in MACHINE_MEMORY_MB:
-        return 4000, MACHINE_MEMORY_MB[mt]
-
-    logger.warning(
-        f"Unrecognized machine_type '{machine_type}', defaulting Batch compute_resource to 4 vCPU / 15000 MiB"
-    )
-    return 4000, 15000
 
 
 def filestore_location_candidates(
@@ -272,6 +228,69 @@ def _template_nic_matches(existing: Any, network: str, subnet: str) -> bool:
     return existing_net.endswith(net_suffix) and existing_sub.endswith(sub_suffix)
 
 
+def _template_boot_disk_matches(existing: Any, expected_boot_disk_type: str) -> bool:
+    """Return True if an existing InstanceTemplate's boot disk type matches ``expected_boot_disk_type``."""
+    disks = getattr(getattr(existing, "properties", None), "disks", None)
+    if not isinstance(disks, (list, tuple)) or not disks:
+        return True
+    init_params = getattr(disks[0], "initialize_params", None)
+    disk_type = getattr(init_params, "disk_type", None)
+    if not isinstance(disk_type, str) or not disk_type.strip():
+        return True
+    return disk_type.strip().lower().endswith(expected_boot_disk_type.lower())
+
+
+def _is_lssd_machine_type(machine_type: str) -> bool:
+    """Return True if ``machine_type`` bundles Titanium Local SSDs natively (``*-lssd``)."""
+    return (machine_type or "").strip().lower().endswith("-lssd")
+
+
+def _build_lssd_mount_preamble(local_ssd_count: int) -> str:
+    """Build an idempotent bash preamble that formats and mounts bundled ``-lssd`` NVMe disks.
+
+    Only creates ``/mnt/scratch*`` when the underlying Titanium NVMe block device
+    (``/dev/disk/by-id/google-local-nvme-ssd-N``) is present on the provisioned VM.
+    If ``instance_flexibility_policy`` falls back to a non-``-lssd`` shape (such as
+    ``n4-standard-4``), ``/mnt/scratch`` is left uncreated so the download script's
+    ``if [ ! -d /mnt/scratch ]`` fallback symlinks ``/mnt/scratch`` to ``{dest}/scratch``
+    on Filestore NFS.
+    """
+    if local_ssd_count <= 0:
+        return ""
+    lines = ["# Mount bundled Titanium Local SSDs (-lssd) if present and not already mounted"]
+    for i in range(local_ssd_count):
+        suffix = str(i) if i > 0 else ""
+        mount_dir = f"/mnt/scratch{suffix}"
+        lines.extend(
+            [
+                f"if ! mountpoint -q {mount_dir} 2>/dev/null; then",
+                f"  _SSD_DEV=/dev/disk/by-id/google-local-nvme-ssd-{i}",
+                '  if [ -b "$_SSD_DEV" ]; then',
+                f"    mkdir -p {mount_dir}",
+                '    mkfs.ext4 -F -q "$_SSD_DEV" >/dev/null 2>&1 || true',
+                f'    mount "$_SSD_DEV" {mount_dir} 2>/dev/null || true',
+                "  fi",
+                "fi",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def build_instance_flexibility_policy(
+    machine_type: str,
+) -> batch_v1.AllocationPolicy.InstanceFlexibilityPolicy:
+    """Build a ranked Gen 3/4 Cloud Batch ``InstanceFlexibilityPolicy`` for ``machine_type``."""
+    req = (machine_type or "n4-standard-2").strip().lower()
+    ranks = BATCH_INSTANCE_SELECTIONS.get(req, ((req,),))
+    policy = batch_v1.AllocationPolicy.InstanceFlexibilityPolicy()
+    for idx, candidates in enumerate(ranks, start=1):
+        selection = batch_v1.AllocationPolicy.InstanceSelection()
+        selection.machine_types = list(candidates)
+        selection.rank = idx
+        policy.instance_selections[f"rank-{idx}"] = selection
+    return policy
+
+
 def get_or_create_instance_template(
     project_id: str,
     machine_type: str,
@@ -282,22 +301,34 @@ def get_or_create_instance_template(
     """Create/reuse a Shielded VM instance template. Returns self_link."""
     from google.cloud import compute_v1
 
-    net_hash = hashlib.sha256(f"{network}:{subnet}".encode()).hexdigest()[:8]
+    boot_disk_type = resolve_boot_disk_type(machine_type, legacy_default="pd-balanced")
+    uses_hyperdisk = boot_disk_type == "hyperdisk-balanced"
+    effective_ssd_count = (
+        0 if (_is_lssd_machine_type(machine_type) or uses_hyperdisk) else local_ssd_count
+    )
+
+    net_hash = hashlib.sha256(f"{network}:{subnet}:{boot_disk_type}".encode()).hexdigest()[:8]
     safe_name = f"foldrun-batch-{machine_type.replace('_', '-')}"
-    if local_ssd_count > 0:
-        safe_name += f"-{local_ssd_count}ssd"
+    if effective_ssd_count > 0:
+        safe_name += f"-{effective_ssd_count}ssd"
     safe_name += f"-{net_hash}"
 
     client = compute_v1.InstanceTemplatesClient()
 
     try:
         existing = client.get(project=project_id, instance_template=safe_name)
-        if _template_nic_matches(existing, network, subnet):
+        if _template_nic_matches(existing, network, subnet) and _template_boot_disk_matches(
+            existing, boot_disk_type
+        ):
             logger.info(f"Reusing instance template: {safe_name}")
             return existing.self_link
+        replacement_suffix = hashlib.sha256(
+            f"{safe_name}:{network}:{subnet}:{boot_disk_type}".encode()
+        ).hexdigest()[:6]
+        safe_name = f"{safe_name}-{replacement_suffix}"
         logger.warning(
-            f"Existing instance template {safe_name} has mismatched network/subnet; "
-            "creating isolated replacement template."
+            f"Existing instance template has mismatched network/subnet or boot disk; "
+            f"creating isolated replacement template {safe_name}."
         )
     except Exception:
         pass
@@ -312,21 +343,21 @@ def get_or_create_instance_template(
     disk.boot = True
     init = compute_v1.AttachedDiskInitializeParams()
     init.source_image = "projects/debian-cloud/global/images/family/debian-12"
-    init.disk_type = "pd-balanced"
+    init.disk_type = boot_disk_type
     init.disk_size_gb = 50
     disk.initialize_params = init
     props.disks = [disk]
 
-    for i in range(local_ssd_count):
-        local_ssd = compute_v1.AttachedDisk()
-        local_ssd.auto_delete = True
-        local_ssd.type_ = "SCRATCH"
-        local_ssd.interface = "NVME"
-        local_ssd.device_name = f"local-ssd-{i}"
+    for i in range(effective_ssd_count):
+        scratch_disk = compute_v1.AttachedDisk()
+        scratch_disk.type_ = "SCRATCH"
+        scratch_disk.interface = "NVME"
+        scratch_disk.auto_delete = True
+        scratch_disk.device_name = f"local-ssd-{i}"
         init_ssd = compute_v1.AttachedDiskInitializeParams()
         init_ssd.disk_type = "local-ssd"
-        local_ssd.initialize_params = init_ssd
-        props.disks.append(local_ssd)
+        scratch_disk.initialize_params = init_ssd
+        props.disks.append(scratch_disk)
 
     nic = compute_v1.NetworkInterface()
     nic.network = network
@@ -368,24 +399,39 @@ def submit_batch_job(
     subnet_name: str | None = None,
     local_ssd_count: int = 0,
 ) -> dict[str, Any]:
-    """Submit a Cloud Batch job with NFS volume mount.
+    """Submit a Cloud Batch job with NFS volume mount and Gen 3/4 InstanceFlexibilityPolicy.
 
-    Returns dict with job_id, job_name, console_url.
+    Returns dict with job_id, job_name, console_url, machine_type.
     """
     client = batch_v1.BatchServiceClient()
 
+    primary_machine = (machine_type or "n4-standard-2").strip().lower()
+    uses_hyperdisk = (
+        resolve_boot_disk_type(primary_machine, legacy_default="pd-balanced")
+        == "hyperdisk-balanced"
+    )
+    template_ssd_count = (
+        0 if (_is_lssd_machine_type(primary_machine) or uses_hyperdisk) else local_ssd_count
+    )
+    lssd_mount_count = (
+        local_ssd_count
+        if local_ssd_count > 0
+        else (1 if _is_lssd_machine_type(primary_machine) else 0)
+    )
+    lssd_preamble = (
+        _build_lssd_mount_preamble(lssd_mount_count)
+        if lssd_mount_count > 0 and template_ssd_count == 0
+        else ""
+    )
+
     runnable = batch_v1.Runnable()
     runnable.script = batch_v1.Runnable.Script()
-    runnable.script.text = f"#!/bin/bash\n{script}"
+    runnable.script.text = f"#!/bin/bash\n{lssd_preamble}{script}"
 
     task_spec = batch_v1.TaskSpec()
     task_spec.runnables = [runnable]
     task_spec.max_retry_count = 1
     task_spec.max_run_duration = "86400s"
-
-    compute_resource = batch_v1.ComputeResource()
-    compute_resource.cpu_milli, compute_resource.memory_mib = get_machine_resources(machine_type)
-    task_spec.compute_resource = compute_resource
 
     nfs_volume = batch_v1.Volume()
     nfs_volume.nfs = batch_v1.NFS()
@@ -394,7 +440,7 @@ def submit_batch_job(
     nfs_volume.mount_path = nfs_mount
 
     volumes = [nfs_volume]
-    for i in range(local_ssd_count):
+    for i in range(template_ssd_count):
         ssd_volume = batch_v1.Volume()
         ssd_volume.device_name = f"local-ssd-{i}"
         # Mount to /mnt/scratch for the first SSD, /mnt/scratch1 etc. for others
@@ -429,10 +475,10 @@ def submit_batch_job(
 
     instance_template_url = get_or_create_instance_template(
         project_id=project_id,
-        machine_type=machine_type,
+        machine_type=primary_machine,
         network=batch_network,
         subnet=batch_subnet,
-        local_ssd_count=local_ssd_count,
+        local_ssd_count=template_ssd_count,
     )
 
     instances = batch_v1.AllocationPolicy.InstancePolicyOrTemplate()
@@ -440,6 +486,9 @@ def submit_batch_job(
 
     allocation_policy = batch_v1.AllocationPolicy()
     allocation_policy.instances = [instances]
+    allocation_policy.instance_flexibility_policy = build_instance_flexibility_policy(
+        primary_machine
+    )
     allocation_policy.location = batch_v1.AllocationPolicy.LocationPolicy()
     allocation_policy.location.allowed_locations = [f"zones/{zone}"]
 
@@ -474,4 +523,5 @@ def submit_batch_job(
         "job_id": job_id,
         "job_name": created_job.name,
         "console_url": console_url,
+        "machine_type": primary_machine,
     }

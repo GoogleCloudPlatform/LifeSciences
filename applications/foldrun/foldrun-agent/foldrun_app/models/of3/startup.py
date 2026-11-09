@@ -49,5 +49,5 @@ def _auto_detect_gpus(config):
     auto_detect_model_gpus(
         config,
         model_label="OF3",
-        allowed_gpus=("A100", "A100_80GB", "L4"),
+        allowed_gpus=("A100", "A100_80GB", "RTX_PRO_6000", "L4"),
     )

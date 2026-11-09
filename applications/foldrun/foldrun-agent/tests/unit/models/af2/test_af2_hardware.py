@@ -171,13 +171,87 @@ class TestAF2HardwareConfig:
         assert config["predict_count"] == 2
 
     def test_data_pipeline_always_cpu(self):
-        """Data pipeline (MSA) uses CPU machine regardless of GPU tier."""
+        """Data pipeline (MSA) uses right-sized Gen 4 CPU machine regardless of GPU tier."""
         from foldrun_app.models.af2.base import AF2Tool
 
         tool = AF2Tool({"name": "test", "description": "test"})
         for gpu in ["L4", "A100", "A100_80GB"]:
             config = tool._get_hardware_config(gpu)
-            assert config["data_pipeline"] == "c2-standard-16"
+            assert config["data_pipeline"] == "n4-standard-8"
+
+    def test_data_pipeline_generation_compensated_cpu_quota_fallback(self):
+        """When Gen 3/4 CPU quota is 0, MSA scales back up to 16-vCPU Gen 1/2 legacy baselines."""
+        from foldrun_app.models.af2.base import AF2Tool
+
+        tool = AF2Tool({"name": "test", "description": "test"})
+
+        # 1. N4_CPUS=0, C3_CPUS=16 -> steps to Gen 3 c3-standard-8 (8 vCPUs)
+        tool.config.set_cpu_quotas(
+            {
+                "N4_CPUS": {"limit": 0, "usage": 0, "available": 0},
+                "C3_CPUS": {"limit": 16, "usage": 0, "available": 16},
+            }
+        )
+        assert tool._get_hardware_config("A100")["data_pipeline"] == "c3-standard-8"
+
+        # 2. N4_CPUS=0, C3_CPUS=0, C2_CPUS=64 -> scales up to 16-vCPU Gen 2 c2-standard-16
+        tool.config.set_cpu_quotas(
+            {
+                "N4_CPUS": {"limit": 0, "usage": 0, "available": 0},
+                "C3_CPUS": {"limit": 0, "usage": 0, "available": 0},
+                "C2_CPUS": {"limit": 64, "usage": 0, "available": 64},
+            }
+        )
+        assert tool._get_hardware_config("A100")["data_pipeline"] == "c2-standard-16"
+
+        # 3. C2_CPUS=8 (<16 required for Gen 2), N2D_CPUS=32 -> skips c2-standard-16 for n2d-standard-16
+        tool.config.set_cpu_quotas(
+            {
+                "N4_CPUS": {"limit": 0, "usage": 0, "available": 0},
+                "C3_CPUS": {"limit": 0, "usage": 0, "available": 0},
+                "C2_CPUS": {"limit": 8, "usage": 0, "available": 8},
+                "N2D_CPUS": {"limit": 32, "usage": 0, "available": 32},
+            }
+        )
+        assert tool._get_hardware_config("A100")["data_pipeline"] == "n2d-standard-16"
+
+        # 4. N4_CPUS and C3_CPUS omitted while C4_CPUS=0 and C2_CPUS=64 are present ->
+        #    steps down to c2-standard-16 rather than assuming missing N4_CPUS is available
+        tool.config.set_cpu_quotas(
+            {
+                "C4_CPUS": {"limit": 0, "usage": 0, "available": 0},
+                "C2_CPUS": {"limit": 64, "usage": 0, "available": 64},
+            }
+        )
+        assert tool._get_hardware_config("A100")["data_pipeline"] == "c2-standard-16"
+
+        # 5. GCE Region.quotas-only snapshot (legacy C3_CPUS/C2_CPUS present, dimensional
+        #    CPUS_PER_VM_FAMILY metrics omitted) -> keeps preferred n4-standard-8 when CPUS >= 8
+        tool.config.set_cpu_quotas(
+            {
+                "CPUS": {"limit": 200, "usage": 0, "available": 200},
+                "C3_CPUS": {"limit": 24, "usage": 0, "available": 24},
+                "C2_CPUS": {"limit": 100, "usage": 0, "available": 100},
+            }
+        )
+        assert tool._get_hardware_config("A100")["data_pipeline"] == "n4-standard-8"
+
+        # 6. N4_CPUS=0, N4D_CPUS=16 -> steps down from n4-standard-8 to n4d-standard-8
+        tool.config.set_cpu_quotas(
+            {
+                "N4_CPUS": {"limit": 0, "usage": 0, "available": 0},
+                "N4D_CPUS": {"limit": 16, "usage": 0, "available": 16},
+            }
+        )
+        assert tool._get_hardware_config("A100")["data_pipeline"] == "n4d-standard-8"
+
+        # 7. Only global CPUS metric reported (no family-specific metrics) -> keeps preferred n4-standard-8
+        tool.config.set_cpu_quotas(
+            {
+                "CPUS": {"limit": 64, "usage": 0, "available": 64},
+            }
+        )
+        assert tool._get_hardware_config("A100")["data_pipeline"] == "n4-standard-8"
 
     def test_mmseqs2_adds_gpu_dp_config(self):
         """MMseqs2 MSA method adds GPU data pipeline config."""
@@ -227,3 +301,27 @@ class TestAF2HardwareConfig:
             tool = AF2Tool({"name": "test", "description": "test"})
             config = tool._get_hardware_config("L4")
             assert config["predict_accel"] == "NVIDIA_TESLA_A100"
+
+    def test_rtx_pro_6000_rejected_for_af2_predict_and_relax(self):
+        """AF2 stays on L4/A100/A100_80GB even when RTX_PRO_6000 is requested for predict or relax."""
+        from foldrun_app.models.af2.base import AF2Tool
+
+        tool = AF2Tool({"name": "test", "description": "test"})
+        monomer_cfg = tool._get_hardware_config(
+            "rtx-pro-6000",
+            relax_gpu_type="RTX_PRO_6000",
+            seq_length=500,
+            is_multimer=False,
+        )
+        assert monomer_cfg["predict_accel"] == "NVIDIA_TESLA_A100"
+        assert monomer_cfg["predict_machine"] == "a2-highgpu-1g"
+        assert monomer_cfg["relax_accel"] == "NVIDIA_TESLA_A100"
+        assert monomer_cfg["relax_machine"] == "a2-highgpu-1g"
+
+        multimer_cfg = tool._get_hardware_config(
+            "RTX_PRO_6000",
+            seq_length=2000,
+            is_multimer=True,
+        )
+        assert multimer_cfg["predict_accel"] == "NVIDIA_A100_80GB"
+        assert multimer_cfg["predict_machine"] == "a2-ultragpu-1g"

@@ -34,14 +34,14 @@
 | High confidence | 5 | 10 | 50 | Maximum conformational diversity |
 
 ## OF3 Pre-Submission Confirmation
-- **Hardware rules**: Minimum **NVIDIA A100** (`a2-highgpu-1g` 40GB or `a2-ultragpu-1g` 80GB; **L4 is unsupported**). No AMBER relaxation phase (`Relaxation: None`). MSA Pipeline runs on CPU (`c2-standard-16`, Jackhmmer + nhmmer RNA MSA + `pdb_seqres` templates).
+- **Hardware rules**: Minimum **NVIDIA A100** (`a2-highgpu-1g` 40GB, `a2-ultragpu-1g` 80GB, or `g4-standard-48` 96GB `RTX_PRO_6000`; **L4 is unsupported**). No AMBER relaxation phase (`Relaxation: None`). MSA Pipeline runs on CPU (`n4-standard-8`, Jackhmmer + nhmmer RNA MSA + `pdb_seqres` templates).
 
 ```markdown
 ## OF3 Submission Plan for <query_name> (<N> tokens, <C> chains)
 
 | Phase | Machine | GPU | Strategy |
 |-------|---------|-----|----------|
-| MSA Pipeline | c2-standard-16 | None (Jackhmmer + nhmmer + pdb_seqres) | STANDARD |
+| MSA Pipeline | n4-standard-8 | None (Jackhmmer + nhmmer + pdb_seqres) | STANDARD |
 | Predict | a2-highgpu-1g | A100 × 1 | DWS FLEX_START |
 
 - Molecule types: <chain breakdown>

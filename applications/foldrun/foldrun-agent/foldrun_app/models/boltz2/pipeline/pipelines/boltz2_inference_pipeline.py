@@ -26,6 +26,8 @@ import os
 from google_cloud_pipeline_components.v1.custom_job import create_custom_training_job_from_component
 from kfp import dsl
 
+from foldrun_app.core.pipeline_utils import resolve_boot_disk_type
+
 from .. import config
 from ..components import configure_seeds_boltz2 as ConfigureSeedsBOLTZ2
 from ..components import msa_pipeline_boltz2 as MSAPipelineBOLTZ2
@@ -68,6 +70,7 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
             MSAPipelineBOLTZ2,
             display_name="BOLTZ2 MSA Pipeline",
             machine_type=config.MSA_MACHINE_TYPE,
+            boot_disk_type=resolve_boot_disk_type(config.MSA_MACHINE_TYPE),
             nfs_mounts=[
                 {
                     "server": config.NFS_SERVER or os.environ.get("NFS_SERVER", "placeholder"),
@@ -112,10 +115,12 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
         flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
         max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
 
+        predict_machine_type = os.environ.get("PREDICT_MACHINE_TYPE", "a2-highgpu-1g")
         JobPredictOp = create_custom_training_job_from_component(
             PredictBOLTZ2,
             display_name="BOLTZ2 Predict",
-            machine_type=os.environ.get("PREDICT_MACHINE_TYPE", "a2-highgpu-1g"),
+            machine_type=predict_machine_type,
+            boot_disk_type=resolve_boot_disk_type(predict_machine_type),
             accelerator_type=os.environ.get("PREDICT_ACCELERATOR_TYPE", "NVIDIA_TESLA_A100"),
             accelerator_count=int(os.environ.get("PREDICT_ACCELERATOR_COUNT", "1")),
             nfs_mounts=[

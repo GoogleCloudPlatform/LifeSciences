@@ -38,10 +38,10 @@ metadata:
 
 | Model | Data / MSA Phase | Predict Hardware (`gpu_type="auto"`) | Relax Phase | Default Seeds × Samples | Provisioning |
 |-------|------------------|--------------------------------------|-------------|-------------------------|--------------|
-| **AlphaFold2** | `c2-standard-16` CPU (`jackhmmer`, `use_small_bfd=True`) or GPU `mmseqs2` | `<500` aa: `L4` (`g2-standard-12`, 24 GB) or `A100` (`a2-highgpu-1g`, 40 GB); `500–1500` aa: `A100` 40 GB; `>1500` aa: `A100_80GB` (`a2-ultragpu-1g`, 80 GB) | `L4` / `A100` (`run_relaxation=True`) | Monomer: `5 × 1 = 5`; Multimer: `5 × 5 = 25` | `DWS FLEX_START` |
-| **OpenFold3** | `c2-standard-16` CPU (`jackhmmer` + `nhmmer` RNA MSA + PDB templates) | `<=2200` tokens: `A100` 40 GB (`a2-highgpu-1g`); `>2200` tokens: `A100_80GB` 80 GB (`a2-ultragpu-1g`) | None | `1 × 5 = 5` (or `5 × 5 = 25` AF3 protocol) | `DWS FLEX_START` |
-| **Boltz-2** | `c2-standard-16` CPU (`jackhmmer` protein MSA) | `<=2000` tokens: `A100` 40 GB (`a2-highgpu-1g`); `>2000` tokens: `A100_80GB` 80 GB (or `L4` for `<=1000` tokens) | None | `1 × 5 = 5` (or `5 × 5 = 25`) | `DWS FLEX_START` |
-| **ESMFold2-Fast / ESMFold2** | None (`model_variant="fast"`, `use_msa=False`) or `c2-standard-16` CPU Jackhmmer (`model_variant="full"`, `use_msa=True`) | `<=1000` tokens (`fast`) / `<=700` tokens (`full`): `L4` (`g2-standard-12`, 24 GB); up to `2500` (`fast`) / `2000` (`full`): `A100` 40 GB (`a2-highgpu-1g`); above: `A100_80GB` 80 GB (`a2-ultragpu-1g`) | None | `1 × 1 = 1` (configurable `num_model_seeds × num_diffusion_samples`) | `DWS FLEX_START` |
+| **AlphaFold2** | `n4-standard-8` CPU (`jackhmmer`, `use_small_bfd=True`) or GPU `mmseqs2` | `<500` aa: `L4` (`g2-standard-12`, 24 GB) or `A100` (`a2-highgpu-1g`, 40 GB); `500–1500` aa: `A100` 40 GB; `>1500` aa: `A100_80GB` (`a2-ultragpu-1g`, 80 GB) | `L4` / `A100` (`run_relaxation=True`) | Monomer: `5 × 1 = 5`; Multimer: `5 × 5 = 25` | `DWS FLEX_START` |
+| **OpenFold3** | `n4-standard-8` CPU (`jackhmmer` + `nhmmer` RNA MSA + PDB templates) | `<=2200` tokens: `A100` 40 GB (`a2-highgpu-1g`); `>2200` tokens: `A100_80GB` 80 GB (`a2-ultragpu-1g`, or `RTX_PRO_6000` 96 GB `g4-standard-48`) | None | `1 × 5 = 5` (or `5 × 5 = 25` AF3 protocol) | `DWS FLEX_START` |
+| **Boltz-2** | `n4-standard-8` CPU (`jackhmmer` protein MSA) | `<=2000` tokens: `A100` 40 GB (`a2-highgpu-1g`); `>2000` tokens: `A100_80GB` 80 GB (or `RTX_PRO_6000` 96 GB `g4-standard-48`, or `L4` for `<=1000` tokens) | None | `1 × 5 = 5` (or `5 × 5 = 25`) | `DWS FLEX_START` |
+| **ESMFold2-Fast / ESMFold2** | None (`model_variant="fast"`, `use_msa=False`) or `n4-standard-8` CPU Jackhmmer (`model_variant="full"`, `use_msa=True`) | `<=2500` tokens (`fast`) / `<=2000` tokens (`full`): `A100` 40 GB (`a2-highgpu-1g`); above: `A100_80GB` 80 GB (`a2-ultragpu-1g`, or `RTX_PRO_6000` 96 GB `g4-standard-48`, or `L4` for `<=1000` tokens) | None | `1 × 1 = 1` (configurable `num_model_seeds × num_diffusion_samples`) | `DWS FLEX_START` |
 | **AlphaFold 3** | H100 local NVMe SSD (`msa_free=False` Full 630 GB MSA default, or `msa_free=True`) | `H100` 80 GB (`a3-highgpu-1g` Dedicated Endpoint) | None | Monomer/`msa_free`: `1 × 5 = 5`; Full-MSA complex: `5 × 5 = 25` | `DWS FLEX_START` |
 
 - **Boltz-2 Binding Affinity (`submit_boltz2_prediction`)**: Use Boltz-2 YAML (`version: 1`) with `sequences:` (`protein` chain `A`, `ligand` chain `B` via `ccd: ATP` or `smiles: '...'`) and `properties: [{affinity: {binder: B}}]`. Outputs `affinity_pred_value` (`log10(IC50 uM)`) and `affinity_probability_binary` (`0–1` active binder probability).
@@ -62,9 +62,9 @@ Always show the **resolved** GPU (not `'auto'`), MSA method, scheduling strategy
 
 | Pipeline Phase | Machine Type | GPU | Count | Strategy |
 |----------------|-------------|-----|-------|----------|
-| Data / MSA Pipeline | c2-standard-16 | None (CPU, Jackhmmer) | - | DWS FLEX_START / STANDARD |
-| Predict | a2-highgpu-1g (or g2-standard-12 / a3-highgpu-1g) | L4 / A100 40GB / A100 80GB / H100 80GB | 1 | DWS FLEX_START |
-| Relax (AF2 only; None for OF3/Boltz-2/AF3) | a2-highgpu-1g (or g2-standard-12) | L4 / A100 40GB | 1 | DWS FLEX_START |
+| Data / MSA Pipeline | n4-standard-8 | None (CPU, Jackhmmer) | - | DWS FLEX_START / STANDARD |
+| Predict | a2-highgpu-1g (or g2-standard-12 / g4-standard-48 / a3-highgpu-1g) | L4 / A100 40GB / A100 80GB / RTX PRO 6000 96GB / H100 80GB | 1 | DWS FLEX_START |
+| Relax (AF2 only; None for OF3/Boltz-2/ESMFold2/AF3) | a2-highgpu-1g (or g2-standard-12) | L4 / A100 40GB | 1 | DWS FLEX_START |
 
 ### Data Handling Notice (First Submission Only)
 On the user's **first** prediction submission in a session, include this notice in the confirmation prompt (do not repeat on subsequent submissions):

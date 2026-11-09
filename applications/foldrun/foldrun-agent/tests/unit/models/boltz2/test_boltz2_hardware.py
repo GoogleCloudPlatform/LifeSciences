@@ -98,7 +98,25 @@ class TestBOLTZ2HardwareConfig:
 
         tool = BOLTZ2Tool({"name": "test", "description": "test"})
         config = tool._get_hardware_config("A100")
-        assert config["msa_machine"] == "c2-standard-16"
+        assert config["msa_machine"] == "n4-standard-8"
+
+    def test_explicit_rtx_pro_6000_and_spillover(self):
+        """Boltz-2 supports explicit RTX_PRO_6000 / G4 selection, multi-GPU scaling, and spillover."""
+        from foldrun_app.models.boltz2.base import BOLTZ2Tool
+
+        tool = BOLTZ2Tool({"name": "test", "description": "test"})
+        cfg = tool._get_hardware_config("RTX_PRO_6000")
+        assert cfg["predict_accel"] == "NVIDIA_RTX_PRO_6000"
+        assert cfg["predict_machine"] == "g4-standard-48"
+
+        multi = tool._get_hardware_config("g4", num_gpus=4)
+        assert multi["predict_machine"] == "g4-standard-192"
+        assert multi["predict_count"] == 4
+
+        tool.config.set_supported_gpus(["RTX_PRO_6000"])
+        spill = tool._get_hardware_config("auto", num_tokens=500)
+        assert spill["predict_accel"] == "NVIDIA_RTX_PRO_6000"
+        assert spill["predict_machine"] == "g4-standard-48"
 
     def test_multi_gpu(self):
         from foldrun_app.models.boltz2.base import BOLTZ2Tool

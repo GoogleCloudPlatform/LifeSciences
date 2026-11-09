@@ -29,7 +29,7 @@ OF3_PARAMS_PATH = os.getenv("OF3_PARAMS_PATH", "of3/params")
 OF3_CCD_PATH = os.getenv("OF3_CCD_PATH", "of3/ccd")
 
 # MSA machine type (CPU-only, same as AF2 data pipeline)
-MSA_MACHINE_TYPE = os.getenv("MSA_MACHINE_TYPE", "c2-standard-16")
+MSA_MACHINE_TYPE = os.getenv("MSA_MACHINE_TYPE", "n4-standard-8")
 
 # Predict GPU hardware
 PREDICT_MACHINE_TYPE = os.getenv("PREDICT_MACHINE_TYPE", "a2-highgpu-1g")

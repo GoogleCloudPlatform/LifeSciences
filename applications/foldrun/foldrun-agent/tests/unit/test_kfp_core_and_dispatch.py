@@ -76,21 +76,40 @@ class TestStartupGpuDetectionCache:
 
         with patch(
             "foldrun_app.core.hardware.detect_supported_gpus",
-            return_value=["L4", "A100", "A100_80GB", "H100"],
+            return_value=["L4", "A100", "A100_80GB", "RTX_PRO_6000", "H100"],
         ) as mock_detect:
             af2_auto_detect(af2_cfg)
             of3_auto_detect(of3_cfg)
             boltz2_auto_detect(boltz2_cfg)
 
             assert mock_detect.call_count == 1
-            assert af2_cfg.supported_gpus == ["L4", "A100", "A100_80GB", "H100"]
-            assert of3_cfg.supported_gpus == ["L4", "A100", "A100_80GB"]
-            assert boltz2_cfg.supported_gpus == ["L4", "A100", "A100_80GB"]
+            assert af2_cfg.supported_gpus == ["L4", "A100", "A100_80GB"]
+            assert of3_cfg.supported_gpus == ["L4", "A100", "A100_80GB", "RTX_PRO_6000"]
+            assert boltz2_cfg.supported_gpus == ["L4", "A100", "A100_80GB", "RTX_PRO_6000"]
 
             # Clearing cache triggers a fresh quota lookup
             CoreConfig.clear_gpu_detection_cache()
             af2_auto_detect(af2_cfg)
             assert mock_detect.call_count == 2
+
+    def test_resolve_boot_disk_type_and_rtx_pro_6000_quota_mapping(self):
+        from foldrun_app.core.hardware import _QUOTA_MAPPING, resolve_boot_disk_type
+
+        assert resolve_boot_disk_type("n4-standard-8") == "hyperdisk-balanced"
+        assert resolve_boot_disk_type("n4d-standard-8") == "hyperdisk-balanced"
+        assert resolve_boot_disk_type("c4-standard-4-lssd") == "hyperdisk-balanced"
+        assert resolve_boot_disk_type("c4d-standard-8") == "hyperdisk-balanced"
+        assert resolve_boot_disk_type("c3-standard-8") == "hyperdisk-balanced"
+        assert resolve_boot_disk_type("c3d-standard-8") == "hyperdisk-balanced"
+        assert resolve_boot_disk_type("g4-standard-48") == "hyperdisk-balanced"
+        assert resolve_boot_disk_type("g2-standard-12") == "pd-ssd"
+        assert resolve_boot_disk_type("a2-highgpu-1g") == "pd-ssd"
+        assert resolve_boot_disk_type("c2-standard-16") == "pd-ssd"
+        assert (
+            resolve_boot_disk_type("n2d-standard-8", legacy_default="pd-balanced") == "pd-balanced"
+        )
+        assert "NVIDIA_RTX_PRO_6000_GPUS" in _QUOTA_MAPPING
+        assert "PREEMPTIBLE_NVIDIA_RTX_PRO_6000_GPUS" in _QUOTA_MAPPING
 
 
 class TestSharedKFPPostSubmissionTools:

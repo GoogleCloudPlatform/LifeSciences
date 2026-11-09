@@ -673,8 +673,8 @@ if $run_convert; then
     extract_terraform_outputs
 
     echo "Step 6: MMseqs2 GPU Index Conversion (optional)"
-    echo "  Machine: n1-highmem-32 (208 GB RAM, 32 vCPUs)"
-    echo "  Storage: 2x local SSD RAID-0 (750 GB NVMe)"
+    echo "  Machine: c4-highmem-32-lssd (248 GB RAM, 32 vCPUs; fallback: n4/n2d/n1-highmem-32)"
+    echo "  Storage: Bundled Titanium SSD / NVMe RAID-0 scratch"
     echo "  Index:   --split 1 (single-pass)"
     cd foldrun-agent
     export GCP_PROJECT_ID=$PROJECT_ID

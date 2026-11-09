@@ -155,7 +155,7 @@ class TestSkillAdherenceMetric:
             "response": (
                 "| Phase | Machine | GPU | Strategy |\n|---|---|---|---|\n"
                 "| MSA Pipeline | Skipped (zero-MSA) | - | - |\n"
-                "| Predict | g2-standard-12 | L4 x 1 | DWS FLEX_START |\n\n"
+                "| Predict | a2-highgpu-1g | A100 x 1 | DWS FLEX_START |\n\n"
                 "Full ESMFold2 adds a CPU Jackhmmer MSA step.\n1. Confirm submission\n2. Switch to full ESMFold2"
             ),
             "agent_data": {"turns": []},

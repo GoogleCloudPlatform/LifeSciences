@@ -49,10 +49,28 @@ CLOUD_STORAGE_SERVICE = "services/95FF-2EF5-5EA1"
 # ---------------------------------------------------------------------------
 DEFAULT_PRICES = {
     # --- On-demand (per hour) ---
+    "n4_core": 0.031200,
+    "n4_ram_gib": 0.003540,
+    "n4d_core": 0.028080,
+    "n4d_ram_gib": 0.003190,
+    "c4_core": 0.039350,
+    "c4_ram_gib": 0.004416,
+    "c4d_core": 0.035415,
+    "c4d_ram_gib": 0.003974,
+    "c3_core": 0.036149,
+    "c3_ram_gib": 0.004845,
+    "c3d_core": 0.032534,
+    "c3d_ram_gib": 0.004361,
     "c2_core": 0.033982,
     "c2_ram_gib": 0.004555,
+    "n2d_core": 0.027502,
+    "n2d_ram_gib": 0.003686,
+    "n1_core": 0.031611,
+    "n1_ram_gib": 0.004237,
     "g2_core": 0.024988,
     "g2_ram_gib": 0.002927,
+    "g4_core": 0.025200,
+    "g4_ram_gib": 0.003000,
     "a2_core": 0.031611,
     "a2_ram_gib": 0.004237,
     "a3_core": 0.031611,
@@ -60,12 +78,31 @@ DEFAULT_PRICES = {
     "nvidia_l4": 0.560040,
     "nvidia_a100": 2.933908,
     "nvidia_a100_80gb": 3.930000,
+    "nvidia_rtx_pro_6000": 2.750400,
     "nvidia_h100": 9.354000,
     # --- Spot / preemptible (per hour) ---
+    "n4_core_spot": 0.018490,
+    "n4_ram_gib_spot": 0.002098,
+    "n4d_core_spot": 0.011232,
+    "n4d_ram_gib_spot": 0.001276,
+    "c4_core_spot": 0.015740,
+    "c4_ram_gib_spot": 0.001766,
+    "c4d_core_spot": 0.014166,
+    "c4d_ram_gib_spot": 0.001590,
+    "c3_core_spot": 0.011780,
+    "c3_ram_gib_spot": 0.001580,
+    "c3d_core_spot": 0.010590,
+    "c3d_ram_gib_spot": 0.001422,
     "c2_core_spot": 0.011080,
     "c2_ram_gib_spot": 0.001478,
+    "n2d_core_spot": 0.006600,
+    "n2d_ram_gib_spot": 0.000885,
+    "n1_core_spot": 0.006655,
+    "n1_ram_gib_spot": 0.000892,
     "g2_core_spot": 0.010000,
     "g2_ram_gib_spot": 0.001171,
+    "g4_core_spot": 0.009300,
+    "g4_ram_gib_spot": 0.001100,
     "a2_core_spot": 0.015810,
     "a2_ram_gib_spot": 0.002118,
     "a3_core_spot": 0.015810,
@@ -73,6 +110,7 @@ DEFAULT_PRICES = {
     "nvidia_l4_spot": 0.223100,
     "nvidia_a100_spot": 1.434100,
     "nvidia_a100_80gb_spot": 1.964000,
+    "nvidia_rtx_pro_6000_spot": 1.015600,
     "nvidia_h100_spot": 3.273900,
     # --- Storage (per GiB-month, us-central1 list prices) ---
     # Filestore Basic SSD (default tier, 2.5 TiB minimum)
@@ -98,56 +136,58 @@ DEFAULT_PRICES = {
 # ---------------------------------------------------------------------------
 # Machine type specifications
 # ---------------------------------------------------------------------------
-MACHINE_SPECS = {
-    "c2-standard-16": {
-        "core_key": "c2",
-        "vcpus": 16,
-        "ram_gib": 64,
-        "gpu_key": None,
-        "gpu_count": 0,
-    },
-    "g2-standard-12": {
-        "core_key": "g2",
-        "vcpus": 12,
-        "ram_gib": 48,
-        "gpu_key": None,
-        "gpu_count": 0,
-    },
-    "a2-highgpu-1g": {
-        "core_key": "a2",
-        "vcpus": 12,
-        "ram_gib": 85,
-        "gpu_key": None,
-        "gpu_count": 0,
-    },
-    "a2-ultragpu-1g": {
-        "core_key": "a2",
-        "vcpus": 12,
-        "ram_gib": 170,
-        "gpu_key": None,
-        "gpu_count": 0,
-    },
-    "a3-highgpu-1g": {
-        "core_key": "a3",
-        "vcpus": 26,
-        "ram_gib": 234,
-        "gpu_key": None,
-        "gpu_count": 0,
-    },
+_FIXED_GPU_MACHINE_SPECS: dict[str, tuple[str, int, float]] = {
+    "a2-highgpu-1g": ("a2", 12, 85.0),
+    "a2-ultragpu-1g": ("a2", 12, 170.0),
+    "a3-highgpu-1g": ("a3", 26, 234.0),
 }
+_GPU_MACHINE_RE = re.compile(r"^(a2|a3)-(highgpu|ultragpu)-(\d+)g$")
+_MACHINE_TYPE_RE = re.compile(r"^([a-z0-9]+)-(standard|highcpu|highmem)-(\d+)(?:-lssd)?$")
+_TIER_GIB_PER_VCPU: dict[str, float] = {
+    "standard": 4.0,
+    "highcpu": 2.0,
+    "highmem": 8.0,
+}
+_STANDARD_GIB_PER_VCPU_OVERRIDES: dict[str, float] = {
+    "n1": 3.75,
+    "g4": 3.75,
+}
+
+
+def _resolve_machine_spec(machine_type: str) -> tuple[str, int, float] | None:
+    """Resolve (core_key, vcpus, ram_gib) for a GCE machine type."""
+    if machine_type in _FIXED_GPU_MACHINE_SPECS:
+        return _FIXED_GPU_MACHINE_SPECS[machine_type]
+    gpu_match = _GPU_MACHINE_RE.match(machine_type)
+    if gpu_match:
+        family, tier, gpus_str = gpu_match.groups()
+        base = _FIXED_GPU_MACHINE_SPECS.get(f"{family}-{tier}-1g")
+        if base:
+            num_gpus = int(gpus_str)
+            return base[0], base[1] * num_gpus, base[2] * num_gpus
+    match = _MACHINE_TYPE_RE.match(machine_type)
+    if not match:
+        return None
+    family, tier, vcpus_str = match.groups()
+    vcpus = int(vcpus_str)
+    gib_per_vcpu = (
+        _STANDARD_GIB_PER_VCPU_OVERRIDES.get(family, 4.0)
+        if tier == "standard"
+        else _TIER_GIB_PER_VCPU[tier]
+    )
+    return family, vcpus, vcpus * gib_per_vcpu
+
 
 GPU_PRICE_KEYS = {
     "L4": "nvidia_l4",
     "A100": "nvidia_a100",
     "A100_80GB": "nvidia_a100_80gb",
+    "RTX_PRO_6000": "nvidia_rtx_pro_6000",
     "H100": "nvidia_h100",
-}
-
-# Map Agent Platform accelerator type enum to our price key prefix
-VERTEX_GPU_TO_PRICE_KEY = {
     "NVIDIA_L4": "nvidia_l4",
     "NVIDIA_TESLA_A100": "nvidia_a100",
     "NVIDIA_A100_80GB": "nvidia_a100_80gb",
+    "NVIDIA_RTX_PRO_6000": "nvidia_rtx_pro_6000",
     "NVIDIA_H100_80GB": "nvidia_h100",
 }
 
@@ -166,6 +206,36 @@ VERTEX_GPU_TO_PRICE_KEY = {
 #
 # Anchors derived from production benchmarks and FoldRun documentation.
 # ---------------------------------------------------------------------------
+_OF3_ANCHORS = {
+    # predict_per_task is per seed (each seed runs num_diffusion_samples)
+    "A100": [
+        (100, 10, 1.5, 0),
+        (300, 13, 2.5, 0),
+        (600, 15, 5, 0),
+        (1000, 18, 8, 0),
+        (1500, 20, 12, 0),
+        (2000, 25, 18, 0),
+    ],
+    "A100_80GB": [
+        (100, 10, 1, 0),
+        (300, 13, 2, 0),
+        (600, 15, 4, 0),
+        (1000, 18, 6, 0),
+        (1500, 20, 10, 0),
+        (2000, 25, 15, 0),
+        (3000, 30, 22, 0),
+    ],
+    "RTX_PRO_6000": [
+        (100, 10, 0.9, 0),
+        (300, 13, 1.8, 0),
+        (600, 15, 3.5, 0),
+        (1000, 18, 5.5, 0),
+        (1500, 20, 9.0, 0),
+        (2000, 25, 13.5, 0),
+        (3000, 30, 20.0, 0),
+    ],
+}
+
 DURATION_ANCHORS = {
     "af2_monomer": {
         # Predict/relax have a high baseline (~16-17 min on L4 even for tiny
@@ -214,45 +284,9 @@ DURATION_ANCHORS = {
             (3000, 70, 40, 12),
         ],
     },
-    "of3": {
-        # predict_per_task is per seed (each seed runs num_diffusion_samples)
-        "A100": [
-            (100, 10, 1.5, 0),
-            (300, 13, 2.5, 0),
-            (600, 15, 5, 0),
-            (1000, 18, 8, 0),
-            (1500, 20, 12, 0),
-            (2000, 25, 18, 0),
-        ],
-        "A100_80GB": [
-            (100, 10, 1, 0),
-            (300, 13, 2, 0),
-            (600, 15, 4, 0),
-            (1000, 18, 6, 0),
-            (1500, 20, 10, 0),
-            (2000, 25, 15, 0),
-            (3000, 30, 22, 0),
-        ],
-    },
+    "of3": _OF3_ANCHORS,
     "boltz2": {
-        # predict_per_task is per seed (each seed runs num_diffusion_samples)
-        "A100": [
-            (100, 10, 1.5, 0),
-            (300, 13, 2.5, 0),
-            (600, 15, 5, 0),
-            (1000, 18, 8, 0),
-            (1500, 20, 12, 0),
-            (2000, 25, 18, 0),
-        ],
-        "A100_80GB": [
-            (100, 10, 1, 0),
-            (300, 13, 2, 0),
-            (600, 15, 4, 0),
-            (1000, 18, 6, 0),
-            (1500, 20, 10, 0),
-            (2000, 25, 15, 0),
-            (3000, 30, 22, 0),
-        ],
+        **_OF3_ANCHORS,
         # Explicit L4 override (g2-standard-12, 24 GB GDDR6; runs --no_kernels
         # --write_full_pde without fused cuEquivariance kernels, scaling ~2x slower
         # than A100; inputs >1000 tokens carry high OOM risk on 24 GB VRAM).
@@ -309,6 +343,14 @@ DURATION_ANCHORS = {
             (2000, 0, 5.0, 0),
             (3000, 0, 8.0, 0),
         ],
+        "RTX_PRO_6000": [
+            (100, 0, 0.6, 0),
+            (300, 0, 0.8, 0),
+            (600, 0, 1.3, 0),
+            (1000, 0, 2.2, 0),
+            (2000, 0, 4.5, 0),
+            (3000, 0, 7.0, 0),
+        ],
     },
     "esmfold2": {
         # Full ESMFold2 (biohub/ESMFold2, 48-block trunk) with Jackhmmer CPU MSA
@@ -334,6 +376,15 @@ DURATION_ANCHORS = {
             (1500, 20, 9.0, 0),
             (2000, 25, 13.0, 0),
             (3000, 30, 20.0, 0),
+        ],
+        "RTX_PRO_6000": [
+            (100, 10, 0.9, 0),
+            (300, 13, 1.8, 0),
+            (600, 15, 3.2, 0),
+            (1000, 18, 5.0, 0),
+            (1500, 20, 8.0, 0),
+            (2000, 25, 11.5, 0),
+            (3000, 30, 18.0, 0),
         ],
     },
 }
@@ -459,11 +510,15 @@ def _hourly_rate(
     machine_type: str, gpu_type: str | None, gpu_count: int, spot: bool, prices: dict
 ) -> float:
     """Calculate the hourly rate for a machine + GPU combo."""
-    spec = MACHINE_SPECS[machine_type]
+    spec = _resolve_machine_spec(machine_type)
+    if not spec:
+        logger.warning(f"Unknown machine type {machine_type}, cannot price")
+        return 0.0
+    core_key, vcpus, ram_gib = spec
     suffix = "_spot" if spot else ""
-    core_price = prices.get(f"{spec['core_key']}_core{suffix}", 0)
-    ram_price = prices.get(f"{spec['core_key']}_ram_gib{suffix}", 0)
-    vm_cost = core_price * spec["vcpus"] + ram_price * spec["ram_gib"]
+    core_price = prices.get(f"{core_key}_core{suffix}", 0)
+    ram_price = prices.get(f"{core_key}_ram_gib{suffix}", 0)
+    vm_cost = core_price * vcpus + ram_price * ram_gib
 
     gpu_cost = 0.0
     if gpu_type and gpu_count > 0:
@@ -472,6 +527,42 @@ def _hourly_rate(
             gpu_cost = prices.get(f"{gpu_price_key}{suffix}", 0) * gpu_count
 
     return vm_cost + gpu_cost
+
+
+_CPU_SKU_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("n4d amd instance", "n4d"),
+    ("n4 instance", "n4"),
+    ("c4d amd instance", "c4d"),
+    ("c4 instance", "c4"),
+    ("c3d amd instance", "c3d"),
+    ("c3 instance", "c3"),
+    ("n2d amd instance", "n2d"),
+    ("n1 predefined instance", "n1"),
+    ("g2 instance", "g2"),
+    ("g4 instance", "g4"),
+    ("a2 instance", "a2"),
+    ("a3 instance", "a3"),
+)
+
+_GPU_SKU_PATTERNS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("nvidia l4 gpu",), "nvidia_l4"),
+    (("rtx pro 6000", "gpu"), "nvidia_rtx_pro_6000"),
+    (("nvidia h100 80gb gpu",), "nvidia_h100"),
+    (("nvidia tesla a100 80gb gpu",), "nvidia_a100_80gb"),
+    (("nvidia tesla a100 gpu",), "nvidia_a100"),
+)
+
+_FILESTORE_SINGLE_RATE_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("instance capacity", "regional"), "filestore_regional_custom_gib_mo"),
+    (("instance capacity", "zonal"), "filestore_zonal_custom_gib_mo"),
+    (("instance count", "regional"), "filestore_regional_custom_instance_mo"),
+    (("instance count", "zonal"), "filestore_zonal_custom_instance_mo"),
+    (("instance iops", "regional"), "filestore_regional_custom_iops_mo"),
+    (("instance iops", "zonal"), "filestore_zonal_custom_iops_mo"),
+    (("capacity", "basic", "ssd"), "filestore_basic_ssd_gib_mo"),
+    (("capacity", "basic", "hdd"), "filestore_basic_hdd_gib_mo"),
+    (("capacity", "regional", "enterprise"), "filestore_regional_gib_mo"),
+)
 
 
 def fetch_live_prices(region: str = "us-central1") -> dict | None:
@@ -486,10 +577,7 @@ def fetch_live_prices(region: str = "us-central1") -> dict | None:
 
         prices = {}
         for sku in client.list_skus(parent=COMPUTE_ENGINE_SERVICE):
-            if region not in sku.service_regions:
-                continue
-            desc = sku.description.lower()
-            if not sku.pricing_info:
+            if region not in sku.service_regions or not sku.pricing_info:
                 continue
             expr = sku.pricing_info[0].pricing_expression
             if not expr.tiered_rates:
@@ -497,7 +585,7 @@ def fetch_live_prices(region: str = "us-central1") -> dict | None:
             rate = expr.tiered_rates[-1]
             price = int(rate.unit_price.units) + rate.unit_price.nanos / 1e9
 
-            key = _match_sku(desc)
+            key = _match_sku(sku.description.lower())
             if key:
                 prices[key] = price
 
@@ -506,7 +594,7 @@ def fetch_live_prices(region: str = "us-central1") -> dict | None:
             if region not in sku.service_regions or not sku.pricing_info:
                 continue
             desc = sku.description.lower()
-            if "backup" in desc or "snapshot" in desc or "small instance" in desc:
+            if any(term in desc for term in ("backup", "snapshot", "small instance")):
                 continue
             expr = sku.pricing_info[0].pricing_expression
             if not expr.tiered_rates:
@@ -514,24 +602,16 @@ def fetch_live_prices(region: str = "us-central1") -> dict | None:
             rate = expr.tiered_rates[-1]
             unit_price = int(rate.unit_price.units) + rate.unit_price.nanos / 1e9
 
-            if "instance capacity" in desc and "regional" in desc:
-                prices["filestore_regional_custom_gib_mo"] = unit_price
-            elif "instance capacity" in desc and "zonal" in desc:
-                prices["filestore_zonal_custom_gib_mo"] = unit_price
-            elif "instance count" in desc and "regional" in desc:
-                prices["filestore_regional_custom_instance_mo"] = unit_price
-            elif "instance count" in desc and "zonal" in desc:
-                prices["filestore_zonal_custom_instance_mo"] = unit_price
-            elif "instance iops" in desc and "regional" in desc:
-                prices["filestore_regional_custom_iops_mo"] = unit_price
-            elif "instance iops" in desc and "zonal" in desc:
-                prices["filestore_zonal_custom_iops_mo"] = unit_price
-            elif "capacity" in desc and "basic" in desc and "ssd" in desc:
-                prices["filestore_basic_ssd_gib_mo"] = unit_price
-            elif "capacity" in desc and "basic" in desc and "hdd" in desc:
-                prices["filestore_basic_hdd_gib_mo"] = unit_price
-            elif "capacity" in desc and "regional" in desc and "enterprise" in desc:
-                prices["filestore_regional_gib_mo"] = unit_price
+            matched_key = next(
+                (
+                    key
+                    for tokens, key in _FILESTORE_SINGLE_RATE_RULES
+                    if all(t in desc for t in tokens)
+                ),
+                None,
+            )
+            if matched_key:
+                prices[matched_key] = unit_price
             elif "capacity" in desc and "zonal" in desc:
                 first_nonzero = next(
                     (
@@ -557,41 +637,28 @@ def fetch_live_prices(region: str = "us-central1") -> dict | None:
 
 def _match_sku(desc: str) -> str | None:
     """Match a SKU description to a price key."""
-    is_spot = "spot" in desc or "preemptible" in desc
-    is_commitment = "commitment" in desc
-    is_sole = "sole" in desc
-    is_vws = "virtual workstation" in desc
-
-    if is_commitment or is_sole or is_vws:
+    if any(term in desc for term in ("commitment", "sole", "virtual workstation")):
         return None
 
-    suffix = "_spot" if is_spot else ""
+    suffix = "_spot" if ("spot" in desc or "preemptible" in desc) else ""
 
     if "compute optimized" in desc:
         if "core" in desc:
             return f"c2_core{suffix}"
         if "ram" in desc:
             return f"c2_ram_gib{suffix}"
-    elif "g2 instance core" in desc:
-        return f"g2_core{suffix}"
-    elif "g2 instance ram" in desc:
-        return f"g2_ram_gib{suffix}"
-    elif "a2 instance core" in desc:
-        return f"a2_core{suffix}"
-    elif "a2 instance ram" in desc:
-        return f"a2_ram_gib{suffix}"
-    elif "a3 instance core" in desc:
-        return f"a3_core{suffix}"
-    elif "a3 instance ram" in desc:
-        return f"a3_ram_gib{suffix}"
-    elif "nvidia l4 gpu" in desc:
-        return f"nvidia_l4{suffix}"
-    elif "nvidia h100 80gb gpu" in desc:
-        return f"nvidia_h100{suffix}"
-    elif "nvidia tesla a100 80gb gpu" in desc:
-        return f"nvidia_a100_80gb{suffix}"
-    elif "nvidia tesla a100 gpu" in desc:
-        return f"nvidia_a100{suffix}"
+        return None
+
+    for prefix, family in _CPU_SKU_PREFIXES:
+        if f"{prefix} core" in desc:
+            return f"{family}_core{suffix}"
+        if f"{prefix} ram" in desc:
+            return f"{family}_ram_gib{suffix}"
+
+    for tokens, gpu_key in _GPU_SKU_PATTERNS:
+        if all(tok in desc for tok in tokens):
+            return f"{gpu_key}{suffix}"
+
     return None
 
 
@@ -784,6 +851,10 @@ def estimate_single_job(
         # Mirror OF3Tool._get_hardware_config: OF3 requires >=40GB VRAM and
         # upgrades explicit L4 requests to A100 / A100_80GB by token count.
         gpu_type = _auto_select_gpu("of3", sequence_length)
+    elif job_type.startswith("af2") and gpu_type == "RTX_PRO_6000":
+        # Mirror AF2Tool._get_hardware_config: AF2 stays on L4/A100/A100_80GB
+        # due to CUDA 12.2 / JAX 0.4.26.
+        gpu_type = _auto_select_gpu(job_type, sequence_length)
 
     # Determine total number of predict (and relax) tasks
     if job_type == "af2_monomer":
@@ -1122,37 +1193,6 @@ def estimate_monthly(
 # ---------------------------------------------------------------------------
 
 
-def _job_hourly_rate(
-    machine_type: str, gpu_enum: str | None, gpu_count: int, is_spot: bool, prices: dict
-) -> float:
-    """Calculate hourly rate for a Agent Platform custom job's hardware config.
-
-    Args:
-        machine_type: GCE machine type (e.g. "g2-standard-12")
-        gpu_enum: Agent Platform accelerator type enum (e.g. "NVIDIA_L4") or None
-        gpu_count: Number of GPUs attached
-        is_spot: Whether the job used FLEX_START (spot) scheduling
-        prices: Price dict from get_prices()
-    """
-    spec = MACHINE_SPECS.get(machine_type)
-    if not spec:
-        logger.warning(f"Unknown machine type {machine_type}, cannot price")
-        return 0.0
-
-    suffix = "_spot" if is_spot else ""
-    core_price = prices.get(f"{spec['core_key']}_core{suffix}", 0)
-    ram_price = prices.get(f"{spec['core_key']}_ram_gib{suffix}", 0)
-    vm_cost = core_price * spec["vcpus"] + ram_price * spec["ram_gib"]
-
-    gpu_cost = 0.0
-    if gpu_enum and gpu_count > 0:
-        gpu_price_key = VERTEX_GPU_TO_PRICE_KEY.get(gpu_enum)
-        if gpu_price_key:
-            gpu_cost = prices.get(f"{gpu_price_key}{suffix}", 0) * gpu_count
-
-    return vm_cost + gpu_cost
-
-
 def get_actual_costs(
     project_id: str,
     region: str = "us-central1",
@@ -1258,8 +1298,8 @@ def get_actual_costs(
         if start_time and end_time:
             duration_min = (end_time - start_time).total_seconds() / 60
 
-        hourly_rate_od = _job_hourly_rate(machine_type, gpu_enum, gpu_count, False, prices)
-        hourly_rate_spot = _job_hourly_rate(machine_type, gpu_enum, gpu_count, True, prices)
+        hourly_rate_od = _hourly_rate(machine_type, gpu_enum, gpu_count, False, prices)
+        hourly_rate_spot = _hourly_rate(machine_type, gpu_enum, gpu_count, True, prices)
         actual_rate = hourly_rate_spot if is_spot else hourly_rate_od
         actual_cost = (duration_min / 60) * actual_rate
 

@@ -45,5 +45,5 @@ def _auto_detect_gpus(config):
     auto_detect_model_gpus(
         config,
         model_label="ESMFOLD2",
-        allowed_gpus=("L4", "A100", "A100_80GB"),
+        allowed_gpus=("A100", "A100_80GB", "RTX_PRO_6000", "L4"),
     )

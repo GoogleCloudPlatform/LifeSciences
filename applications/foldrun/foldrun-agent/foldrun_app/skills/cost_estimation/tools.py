@@ -33,7 +33,7 @@ def estimate_job_cost(
 
     Args:
         job_type: One of "af2_monomer", "af2_multimer", "af3", "of3", "boltz2", "esmfold2", or "esmfold2_fast".
-        gpu_type: "auto" (recommended), "L4", "A100", "A100_80GB", or "H100".
+        gpu_type: "auto" (recommended), "L4", "A100", "A100_80GB", "RTX_PRO_6000", or "H100".
         sequence_length: Total residues (AF2/ESMFold2) or tokens (AF3/OF3/Boltz-2).
         num_predictions_per_model: Predictions per model (AF2 multimer default 5) or seeds (OF3/Boltz-2 default 5, AF3/ESMFold2 default 1).
         num_diffusion_samples: Diffusion samples per seed for AF3/OF3/Boltz-2 (default 5) or ESMFold2 (default 1).

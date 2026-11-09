@@ -164,7 +164,7 @@ def submit_of3_prediction(
         job_name: Human-readable job name.
         num_model_seeds: Number of seeds (default 1).
         num_diffusion_samples: Diffusion samples per seed (default 5).
-        gpu_type: "auto" (default: A100 <=2200 tokens, A100_80GB >2200), "A100", or "A100_80GB".
+        gpu_type: "auto" (default: A100 <=2200 tokens, A100_80GB >2200), "A100", "A100_80GB", or "RTX_PRO_6000".
         enable_flex_start: Use DWS FLEX_START scheduling (default True).
         use_templates: Use PDB structural templates (default True).
     """
@@ -197,7 +197,7 @@ def submit_boltz2_prediction(
         job_name: Human-readable job name.
         num_model_seeds: Number of seeds (default 1).
         num_diffusion_samples: Diffusion samples per seed (default 5).
-        gpu_type: "auto" (default: A100 <=2000 tokens, A100_80GB >2000), "L4" (g2-standard-12 <=1000 tokens), "A100", or "A100_80GB".
+        gpu_type: "auto" (default: A100 <=2000 tokens, A100_80GB >2000), "L4" (g2-standard-12 <=1000 tokens), "A100", "A100_80GB", or "RTX_PRO_6000".
         enable_flex_start: Use DWS FLEX_START scheduling (default True).
     """
     validated_input = _validate_input_source(input, "input")
@@ -236,7 +236,7 @@ def submit_esmfold2_prediction(
         num_diffusion_samples: Diffusion samples per seed (default 1).
         num_loops: Number of trunk recycling loops (default 4).
         num_sampling_steps: Diffusion sampling steps (default 200).
-        gpu_type: "auto" (default: L4 <=1000 tokens fast / <=700 tokens full, A100 <=2500 fast / <=2000 full, A100_80GB above), "L4", "A100", or "A100_80GB".
+        gpu_type: "auto" (default: A100 <=2500 tokens fast / <=2000 tokens full, A100_80GB above), "L4", "A100", "A100_80GB", or "RTX_PRO_6000".
         enable_flex_start: Use DWS FLEX_START scheduling (default True).
     """
     validated_input = _validate_input_source(input, "input")

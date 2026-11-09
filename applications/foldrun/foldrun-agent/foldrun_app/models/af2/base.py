@@ -137,11 +137,20 @@ class AF2Tool(KFPModelTool):
         is_multimer: bool = False,
     ) -> dict[str, Any]:
         """Get hardware configuration based on GPU type and MSA method."""
+        allowed_af2_gpus = ["L4", "A100", "A100_80GB"]
+        gpu_type = self._normalize_gpu_type(gpu_type)
         if gpu_type == "auto":
             gpu_type = self._recommend_gpu(seq_length, is_multimer)
             logger.info(
                 f"Auto-selected GPU: {gpu_type} (seq_length={seq_length}, multimer={is_multimer})"
             )
+        elif gpu_type == "RTX_PRO_6000":
+            recommended = self._recommend_gpu(seq_length, is_multimer)
+            logger.warning(
+                f"AlphaFold2 does not support RTX_PRO_6000 (CUDA 12.2 / JAX 0.4.26); "
+                f"selecting {recommended} instead (seq_length={seq_length}, multimer={is_multimer})"
+            )
+            gpu_type = recommended
 
         if msa_method == "auto":
             msa_method = "jackhmmer"
@@ -151,7 +160,7 @@ class AF2Tool(KFPModelTool):
 
         resolved_gpu = self._resolve_supported_gpu(
             gpu_type,
-            allowed_pool=["L4", "A100", "A100_80GB"],
+            allowed_pool=allowed_af2_gpus,
             empty_pool_error=(
                 f"No GPUs are supported in this environment! (Supported: {self.config.supported_gpus})"
             ),
@@ -166,13 +175,14 @@ class AF2Tool(KFPModelTool):
         self._scale_multi_gpu_machine(config, resolved_gpu, num_gpus)
 
         if relax_gpu_type:
-            if relax_gpu_type in self.GPU_SPECS:
-                config.update(self.relax_spec_for_gpu(relax_gpu_type))
-                logger.info(f"Relax GPU overridden to {relax_gpu_type}")
+            norm_relax_gpu = self._normalize_gpu_type(relax_gpu_type)
+            if norm_relax_gpu in allowed_af2_gpus:
+                config.update(self.relax_spec_for_gpu(norm_relax_gpu))
+                logger.info(f"Relax GPU overridden to {norm_relax_gpu}")
             else:
                 logger.warning(f"Unknown relax_gpu_type '{relax_gpu_type}', using default")
 
-        config["data_pipeline"] = self.DEFAULT_MSA_MACHINE
+        config["data_pipeline"] = self._resolve_msa_machine("DATA_PIPELINE_MACHINE_TYPE")
         config["parallelism"] = self.config.parallelism
         config["dws_max_wait_hours"] = self.config.dws_max_wait_hours
         config["msa_method"] = msa_method

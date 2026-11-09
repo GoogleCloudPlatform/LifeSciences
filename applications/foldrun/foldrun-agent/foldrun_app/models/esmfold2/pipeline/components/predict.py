@@ -164,7 +164,12 @@ def predict_esmfold2(
         )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    esmc_precision = "fp8" if device == "cuda" else "fp32"
+    if device == "cuda":
+        # Hardware FP8 GEMMs require compute capability >= 8.9 (L4 8.9, H100 9.0, RTX PRO 6000 12.0);
+        # Ampere A100 (8.0) must use bf16.
+        esmc_precision = "fp8" if torch.cuda.get_device_capability() >= (8, 9) else "bf16"
+    else:
+        esmc_precision = "fp32"
     logging.info(
         f"Loading EsmFold2Model from {cache_dir} on device={device} esmc_precision={esmc_precision}"
     )

@@ -566,6 +566,18 @@ class TestDatabaseSetupScripts:
         )
         assert "SHOULD_NOT_REACH_HERE" not in result.stdout
 
+    def test_pdb_mmcif_streams_decompressed_files_directly_to_nfs(self):
+        """pdb_mmcif moves decompressed .cif files directly to {dest}/mmcif_files/ so 1x 375 GiB Local SSD does not fill up."""
+        manifest = load_manifest()
+        script = build_script(
+            "pdb_mmcif", manifest["databases"]["pdb_mmcif"], "/mnt/nfs/foldrun/pdb_mmcif"
+        )
+        assert "rm -rf /mnt/scratch/raw" in script
+        assert "mv -t /mnt/nfs/foldrun/pdb_mmcif/mmcif_files/" in script
+        assert "/mnt/scratch/pdb_mmcif/mmcif_files" not in script
+        assert "cp -au" not in script
+        assert "GCS_SYNC_SOURCE" not in script
+
     def test_boltz2_cache_pins_immutable_commit_and_verifies_sha256(self, tmp_path):
         """boltz2_cache pins Hugging Face commit SHA and fails fast on SHA-256 mismatch before extraction."""
         import subprocess
@@ -620,3 +632,8 @@ class TestDatabaseSetupScripts:
                 "soedinglab/MMseqs2/releases/download/18-8cc5c/mmseqs-linux-avx2.tar.gz" in script
             )
             assert "sha256sum -c -" in script
+            assert "rm -rf /mnt/localssd && ln -sfnT /mnt/scratch /mnt/localssd" in script
+            assert (
+                "rm -rf /mnt/localssd && ln -sfnT '/mnt/nfs/foldrun/uniref90/mmseqs_scratch' /mnt/localssd"
+                in script
+            )

@@ -97,13 +97,17 @@ class BOLTZ2Tool(KFPModelTool):
             )
 
         explicit_l4 = gpu_type == "L4"
-        allowed_pool = ["L4", "A100", "A100_80GB"] if explicit_l4 else ["A100", "A100_80GB"]
+        allowed_pool = (
+            ["L4", "A100", "A100_80GB", "RTX_PRO_6000"]
+            if explicit_l4
+            else ["A100", "A100_80GB", "RTX_PRO_6000"]
+        )
         gpu_type = self._resolve_supported_gpu(
             gpu_type,
             allowed_pool=allowed_pool,
             empty_pool_error=(
                 f"No Boltz-2 compatible GPUs are supported in this environment! "
-                f"(Supported: {self.config.supported_gpus}; >=40GB A100/A100_80GB required unless gpu_type='L4')"
+                f"(Supported: {self.config.supported_gpus}; >=40GB A100/A100_80GB/RTX_PRO_6000 required unless gpu_type='L4')"
             ),
         )
 
@@ -116,6 +120,6 @@ class BOLTZ2Tool(KFPModelTool):
 
         config = self.predict_spec_for_gpu(gpu_type)
         self._scale_multi_gpu_machine(config, gpu_type, num_gpus)
-        config["msa_machine"] = self.DEFAULT_MSA_MACHINE
+        config["msa_machine"] = self._resolve_msa_machine()
         config["dws_max_wait_hours"] = self.config.dws_max_wait_hours
         return config

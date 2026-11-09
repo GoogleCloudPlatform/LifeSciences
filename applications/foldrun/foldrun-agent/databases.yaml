@@ -24,7 +24,7 @@
 #                 no duplication on NFS.
 #   display_name: Human-readable name shown in logs.
 #   nfs_path:     Subdirectory under NFS_MOUNT_POINT (e.g. /mnt/nfs/foldrun/<nfs_path>).
-#   machine_type: Cloud Batch VM type (default: n1-standard-4).
+#   machine_type: Cloud Batch VM type (default: n4-standard-2).
 #
 # Standard download (90% of cases):
 #   source:       URL to download (via aria2c).
@@ -43,7 +43,7 @@ databases:
     display_name: Boltz-2 Model Weights + CCD (unified cache)
     nfs_path: boltz2/cache
     expected_file: boltz2_conf.ckpt
-    machine_type: n2d-standard-4
+    machine_type: n4-standard-2
     script: |
       echo "Downloading Boltz-2 model weights + CCD to {dest}..."
       mkdir -p {dest}
@@ -84,7 +84,7 @@ databases:
     display_name: ESMFold2-Fast Model Weights + CCD (single-sequence, 24-block trunk)
     nfs_path: esmfold2/fast
     expected_file: model.safetensors.index.json
-    machine_type: n2d-standard-8
+    machine_type: n4-standard-4
     script: |
       echo "Downloading ESMFold2-Fast model weights + CCD to {dest}..."
       mkdir -p {dest}
@@ -121,7 +121,7 @@ databases:
     display_name: ESMFold2 Model Weights + CCD (full 48-block trunk, MSA + single-sequence)
     nfs_path: esmfold2/full
     expected_file: model.safetensors.index.json
-    machine_type: n2d-standard-8
+    machine_type: n4-standard-4
     script: |
       echo "Downloading ESMFold2 model weights + CCD to {dest}..."
       mkdir -p {dest}
@@ -153,8 +153,7 @@ databases:
     models: [af2, of3, boltz, boltz2, esmfold2]
     display_name: UniRef90
     nfs_path: uniref90
-    machine_type: n2d-standard-8
-    local_ssd_count: 1
+    machine_type: c4-standard-4-lssd
     script: |
       # 1. Prepare Scratch Space
       if [ ! -d /mnt/scratch ]; then
@@ -179,8 +178,7 @@ databases:
     models: [af2, of3, boltz, boltz2, esmfold2]
     display_name: MGnify
     nfs_path: mgnify
-    machine_type: n2d-standard-8
-    local_ssd_count: 1
+    machine_type: c4-standard-4-lssd
     script: |
       # 1. Prepare Scratch Space
       if [ ! -d /mnt/scratch ]; then
@@ -212,8 +210,7 @@ databases:
     models: [af2, of3]
     display_name: UniProt
     nfs_path: uniprot
-    machine_type: n2d-standard-8
-    local_ssd_count: 1
+    machine_type: c4-standard-4-lssd
     script: |
       if [ ! -d /mnt/scratch ]; then
         mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
@@ -236,17 +233,16 @@ databases:
     models: [af2, of3]
     display_name: PDB mmCIF
     nfs_path: pdb_mmcif
-    machine_type: n2d-standard-8
-    local_ssd_count: 1
+    machine_type: c4-standard-4-lssd
     script: |
       # 1. Prepare Scratch Space
       if [ ! -d /mnt/scratch ]; then
         echo "/mnt/scratch not found, falling back to NFS for scratch..."
         mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
       fi
-      mkdir -p /mnt/scratch/raw /mnt/scratch/pdb_mmcif/mmcif_files
+      rm -rf /mnt/scratch/raw /mnt/scratch/pdb_mmcif
+      mkdir -p /mnt/scratch/raw
       mkdir -p {dest}/mmcif_files
-      export GCS_SYNC_SOURCE=/mnt/scratch/pdb_mmcif/
 
       # 2. Sync from RCSB to SSD (Background)
       echo "Syncing structures from RCSB (in background)..."
@@ -255,33 +251,27 @@ databases:
         --port=33444 rsync.rcsb.org::ftp_data/structures/divided/mmCIF/ /mnt/scratch/raw &
       RSYNC_PID=$!
 
-      # 3. Incremental Processing Loop
-      echo "Processing and copying files as they are downloaded..."
+      # 3. Incremental Processing Loop (stream decompressed batches directly to NFS)
+      echo "Processing and moving files to NFS as they are downloaded..."
       while kill -0 $RSYNC_PID 2>/dev/null; do
-        # Decompress finished files (not starting with .)
+        # Decompress finished files (not starting with .) on Local SSD
         find /mnt/scratch/raw -name '[!.]*.cif.gz' -exec unpigz -f {} + 2>/dev/null || true
-        # Move to flat directory
-        find /mnt/scratch/raw -name '[!.]*.cif' -exec mv -t /mnt/scratch/pdb_mmcif/mmcif_files/ {} + 2>/dev/null || true
-        # Incremental copy to NFS
-        cp -au /mnt/scratch/pdb_mmcif/mmcif_files/. {dest}/mmcif_files/ 2>/dev/null || true
+        # Move decompressed files directly to NFS to keep Local SSD usage low
+        find /mnt/scratch/raw -name '[!.]*.cif' -exec mv -t {dest}/mmcif_files/ {} + 2>/dev/null || true
         sleep 30
       done
       wait $RSYNC_PID
 
       # 4. Final Cleanup Pass
-      echo "Finalizing decompression and move..."
+      echo "Finalizing decompression and move to NFS..."
       find /mnt/scratch/raw -name '*.cif.gz' -exec unpigz -f {} +
-      find /mnt/scratch/raw -name '*.cif' -exec mv -t /mnt/scratch/pdb_mmcif/mmcif_files/ {} +
-      rm -rf /mnt/scratch/raw
+      find /mnt/scratch/raw -name '*.cif' -exec mv -t {dest}/mmcif_files/ {} +
+      rm -rf /mnt/scratch/raw {dest}/scratch
 
-      # 5. Final copy to NFS
-      echo "Copying final files to NFS..."
-      cp -au /mnt/scratch/pdb_mmcif/mmcif_files/. {dest}/mmcif_files/
-      
-      # 6. Additional metadata
+      # 5. Additional metadata
       echo "Downloading obsolete metadata..."
-      aria2c --continue=true 'https://files.wwpdb.org/pub/pdb/data/status/obsolete.dat' --dir={dest}
-      cp {dest}/obsolete.dat /mnt/scratch/pdb_mmcif/obsolete.dat
+      aria2c --continue=true --allow-overwrite=true \
+        'https://files.wwpdb.org/pub/pdb/data/status/obsolete.dat' --dir={dest} --out=obsolete.dat
 
   # ===========================================================================
   # AlphaFold2 only
@@ -311,8 +301,7 @@ databases:
     models: [af2]
     display_name: PDB70
     nfs_path: pdb70
-    machine_type: n2d-standard-8
-    local_ssd_count: 1
+    machine_type: c4-standard-4-lssd
     script: |
       if [ ! -d /mnt/scratch ]; then
         mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
@@ -329,8 +318,7 @@ databases:
     models: [af2]
     display_name: UniRef30
     nfs_path: uniref30
-    machine_type: n2d-standard-8
-    local_ssd_count: 1
+    machine_type: c4-standard-4-lssd
     script: |
       if [ ! -d /mnt/scratch ]; then
         mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
