@@ -11,7 +11,7 @@
           "role": "model",
           "parts": [
             {
-              "text": "Welcomes the user to FoldRun, summarizes the four supported structure prediction models (AlphaFold2, AlphaFold 3, OpenFold3, and Boltz-2), displays a configuration summary table (Project, Region, Models, AI Model), and offers example getting-started prompts."
+              "text": "Welcomes the user to FoldRun, summarizes the five supported structure prediction model families (AlphaFold2, AlphaFold 3, OpenFold3, Boltz-2, and ESMFold2 / ESMFold2-Fast), displays a configuration summary table (Project, Region, Models, AI Model), and offers example getting-started prompts."
             }
           ]
         }
@@ -53,7 +53,7 @@
           "role": "model",
           "parts": [
             {
-              "text": "FoldRun supports protein-ligand complex prediction with small-molecule SMILES or CCD ligands using AlphaFold3, Boltz-2, and OpenFold3, whereas AlphaFold2 only supports standard amino acid monomer and multimer protein sequences."
+              "text": "FoldRun supports protein-ligand complex prediction with small-molecule SMILES or CCD ligands using AlphaFold3, Boltz-2, OpenFold3, and ESMFold2 / ESMFold2-Fast, whereas AlphaFold2 only supports standard amino acid monomer and multimer protein sequences."
             }
           ]
         }
@@ -243,6 +243,48 @@
           "parts": [
             {
               "text": "Explains pLDDT (0-100 per-atom confidence: >=90 very high, 70-90 confident, 50-70 low, <50 disordered), ipTM (0-1 interface confidence: >0.8 high-confidence complex interface, 0.6-0.8 moderate, <0.6 uncertain), PDE/PAE (distance/alignment error in Angstroms where lower is better, <2 A rigid), and notes that open_structure_viewer launches the interactive 3D Mol* viewer."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_job_submission_esmfold2_confirmation",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Prepare an ESMFold2-Fast prediction for human ubiquitin (MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG) and explain how its pipeline differs from full ESMFold2. Show me the confirmation plan first."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Does NOT call submit_esmfold2_prediction before user confirmation. Explains that ESMFold2-Fast (model_variant='fast', biohub/ESMFold2-Fast, 24-block trunk) runs single-sequence zero-MSA inference (use_msa=False), whereas full ESMFold2 (model_variant='full', biohub/ESMFold2, 48-block trunk) includes a CPU Jackhmmer MSA step (use_msa=True default). Presents a Markdown pre-submission confirmation table showing L4 GPU hardware (g2-standard-12 for 76 residues), DWS FLEX_START provisioning, skipped MSA phase, and asks for user confirmation."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "eval_case_id": "skill_cost_estimation_esmfold2",
+      "prompt": {
+        "role": "user",
+        "parts": [
+          {
+            "text": "Compare the estimated compute cost of folding a 300-residue protein with ESMFold2-Fast versus full ESMFold2."
+          }
+        ]
+      },
+      "reference": {
+        "response": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Calls estimate_job_cost for job_type='esmfold2_fast' and job_type='esmfold2' with sequence_length=300, then compares On-Demand and DWS FLEX_START spot pricing across both variants—highlighting that ESMFold2-Fast skips the CPU Jackhmmer MSA phase and uses faster 24-block L4 GPU inference compared to full ESMFold2."
             }
           ]
         }

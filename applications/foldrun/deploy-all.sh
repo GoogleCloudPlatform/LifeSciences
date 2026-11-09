@@ -43,6 +43,7 @@ usage() {
     echo "                           of3            - openfold3-components + agent"
     echo "                           af2            - alphafold-components + agent"
     echo "                           boltz2         - boltz2-components + agent"
+    echo "                           esmfold2       - esmfold2-components + agent"
     echo "                           viewer         - foldrun-viewer + agent"
     echo "                           agent          - agent only (no container rebuilds)"
     echo "                           analysis       - foldrun-analysis-job Cloud Run Job"
@@ -50,7 +51,8 @@ usage() {
     echo "  --db DATABASE          With --steps data or convert: target a single database."
     echo "                   data options: bfd, small_bfd, mgnify, pdb70, pdb_mmcif,"
     echo "                                pdb_seqres, uniref30, uniref90, uniprot,"
-    echo "                                alphafold_params, of3_params, boltz2_params"
+    echo "                                alphafold_params, of3_params, boltz2_params,"
+    echo "                                esmfold2_fast_cache, esmfold2_cache"
     echo "                   convert options: uniref90, mgnify, small_bfd"
     echo "  --force        With --steps data: re-download even if databases exist in GCS."
     echo "  --clean        Remove generated build artifacts (.egg-info, .venv, etc.)"
@@ -580,6 +582,7 @@ if $run_data; then
     export ALPHAFOLD_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/alphafold-components:latest
     export OPENFOLD3_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/openfold3-components:latest
     export BOLTZ2_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/boltz2-components:latest
+    export ESMFOLD2_COMPONENTS_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/esmfold2-components:latest
     export DOWNLOAD_MODE
     DB_ARG=""
     if [[ -n "$DB_NAME" ]]; then

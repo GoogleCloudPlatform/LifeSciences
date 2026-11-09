@@ -79,8 +79,78 @@ databases:
       tar -xf {dest}/mols.tar -C {dest}
       rm {dest}/mols.tar
 
+  esmfold2_fast_cache:
+    models: [esmfold2, esmfold2_fast]
+    display_name: ESMFold2-Fast Model Weights + CCD (single-sequence, 24-block trunk)
+    nfs_path: esmfold2/fast
+    expected_file: model.safetensors.index.json
+    machine_type: n2d-standard-8
+    script: |
+      echo "Downloading ESMFold2-Fast model weights + CCD to {dest}..."
+      mkdir -p {dest}
+
+      ESMFOLD2_FAST_COMMIT="45fe8656f5b3ef493c17fcf9abe9a2968902e712"
+      ESMFOLD2_FAST_BASE="https://huggingface.co/biohub/ESMFold2-Fast/resolve/${ESMFOLD2_FAST_COMMIT}"
+      ESMFOLD2_FULL_COMMIT="69869f737beffec5294845ede23db5fc0b4f509e"
+      ESMFOLD2_FULL_BASE="https://huggingface.co/biohub/ESMFold2/resolve/${ESMFOLD2_FULL_COMMIT}"
+
+      for f in config.json model.safetensors.index.json tokenizer.json tokenizer_config.json \
+               model-00001-of-00006.safetensors model-00002-of-00006.safetensors \
+               model-00003-of-00006.safetensors model-00004-of-00006.safetensors \
+               model-00005-of-00006.safetensors model-00006-of-00006.safetensors; do
+        aria2c --continue=true --max-connection-per-server=16 --split=16 \
+          "${ESMFOLD2_FAST_BASE}/${f}" --dir={dest} --out="${f}"
+      done
+
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        "${ESMFOLD2_FULL_BASE}/ccd.pkl" --dir={dest} --out=ccd.pkl
+
+      echo "Verifying ESMFold2-Fast SHA-256 checksums..."
+      sha256sum -c <<'EOF'
+      2bbc3d3b6d48dd39a698ef5bf8f1bea659ce8b19f4444145503a4785af962618  {dest}/model-00001-of-00006.safetensors
+      999157d7d20926c54f2ee02c4ee7e46eddc16bbf8963850e6b59d718b36afa59  {dest}/model-00002-of-00006.safetensors
+      d8a3d8121d4c0d41d9fdac2b7d093048a7d54b569840f6f639eb060e7ebd9211  {dest}/model-00003-of-00006.safetensors
+      f28625f5d104e7ce0fafbdb2eacedb53c4e5fbfb2fb080f26995e81f0858348b  {dest}/model-00004-of-00006.safetensors
+      2e15b21fcedab793eebc39301bb608765023824a54a5dc6b748b6e7e0d946203  {dest}/model-00005-of-00006.safetensors
+      34fc8868f3af8a0bf3e624996eb451906054889b3e7247b03c5ac2f9f838d8da  {dest}/model-00006-of-00006.safetensors
+      9ff44b1927c6b9198e38ffe0928706827a09a350c15530beeeabebfa88038fc5  {dest}/ccd.pkl
+      EOF
+
+  esmfold2_cache:
+    models: [esmfold2]
+    display_name: ESMFold2 Model Weights + CCD (full 48-block trunk, MSA + single-sequence)
+    nfs_path: esmfold2/full
+    expected_file: model.safetensors.index.json
+    machine_type: n2d-standard-8
+    script: |
+      echo "Downloading ESMFold2 model weights + CCD to {dest}..."
+      mkdir -p {dest}
+
+      ESMFOLD2_FULL_COMMIT="69869f737beffec5294845ede23db5fc0b4f509e"
+      ESMFOLD2_FULL_BASE="https://huggingface.co/biohub/ESMFold2/resolve/${ESMFOLD2_FULL_COMMIT}"
+
+      for f in config.json model.safetensors.index.json tokenizer.json tokenizer_config.json \
+               ccd.pkl \
+               model-00001-of-00006.safetensors model-00002-of-00006.safetensors \
+               model-00003-of-00006.safetensors model-00004-of-00006.safetensors \
+               model-00005-of-00006.safetensors model-00006-of-00006.safetensors; do
+        aria2c --continue=true --max-connection-per-server=16 --split=16 \
+          "${ESMFOLD2_FULL_BASE}/${f}" --dir={dest} --out="${f}"
+      done
+
+      echo "Verifying ESMFold2 SHA-256 checksums..."
+      sha256sum -c <<'EOF'
+      a24f050e2a2f9746b43b435c53719afc575a374fa302731b6911356a3d8b5cac  {dest}/model-00001-of-00006.safetensors
+      1af1615f6f6d1b3c0a24a63d9052a0ecad5b3831d1513c1a5fea73870c1bec73  {dest}/model-00002-of-00006.safetensors
+      357b55ec56192fd01a1cfc39a5260caf2242503ac7c554f614e43c7a469f0ced  {dest}/model-00003-of-00006.safetensors
+      f065aca1a13308bce41b78f728c28a0a29e3a9db6af531a74a258dbb06f8721b  {dest}/model-00004-of-00006.safetensors
+      e0c507dce5b2ddb22f77305607b4332506137850c5378e98e9729345264668b7  {dest}/model-00005-of-00006.safetensors
+      90015eb13bbeab54237b18d6748dbd47f4bfd108fdf45704d66e5c3a93f8df7c  {dest}/model-00006-of-00006.safetensors
+      9ff44b1927c6b9198e38ffe0928706827a09a350c15530beeeabebfa88038fc5  {dest}/ccd.pkl
+      EOF
+
   uniref90:
-    models: [af2, of3, boltz, boltz2]
+    models: [af2, of3, boltz, boltz2, esmfold2]
     display_name: UniRef90
     nfs_path: uniref90
     machine_type: n2d-standard-8
@@ -106,7 +176,7 @@ databases:
       mv /mnt/scratch/uniref90.fasta {dest}/uniref90.fasta
 
   mgnify:
-    models: [af2, of3, boltz, boltz2]
+    models: [af2, of3, boltz, boltz2, esmfold2]
     display_name: MGnify
     nfs_path: mgnify
     machine_type: n2d-standard-8
@@ -374,3 +444,24 @@ modes:
       - mgnify
     core:
       - boltz2_cache
+  esmfold2_fast:
+    full:
+      - esmfold2_fast_cache
+    reduced:
+      - esmfold2_fast_cache
+    core:
+      - esmfold2_fast_cache
+  esmfold2:
+    full:
+      - esmfold2_fast_cache
+      - esmfold2_cache
+      - uniref90
+      - mgnify
+    reduced:
+      - esmfold2_fast_cache
+      - esmfold2_cache
+      - uniref90
+      - mgnify
+    core:
+      - esmfold2_fast_cache
+      - esmfold2_cache

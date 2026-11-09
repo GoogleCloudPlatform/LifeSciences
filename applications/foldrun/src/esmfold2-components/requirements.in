@@ -1,0 +1,14 @@
+# Pin PyTorch to a CUDA 12.6 wheel (`+cu126`) from the PyTorch wheel index so
+# `esm` runs cleanly on CUDA 12 GPU node drivers (default PyPI wheels for
+# PyTorch >=2.13 link against CUDA 13) while remediating PyTorch CVEs.
+torch==2.14.1+cu126
+esm==3.4.2
+transformers>=4.48.0
+accelerate>=1.2.0
+safetensors>=0.4.5
+huggingface-hub>=0.28.0
+pyyaml>=6.0.2
+# Bake kfp into the container so Vertex AI Pipelines run in air-gapped Shared
+# VPC environments (`install_kfp_package=False`) without runtime PyPI access.
+kfp>=2.16.1
+pip>=26.2.2

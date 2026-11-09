@@ -82,6 +82,19 @@ def evaluate(instance: dict[str, Any]) -> dict[str, Any]:
         checks.append(("called_list_jobs", "list_jobs" in call_names))
     elif "estimate the cost" in prompt and "350-residue" in prompt:
         checks.append(("called_estimate_job_cost", "estimate_job_cost" in call_names))
+    elif "compare the estimated compute cost" in prompt and "esmfold2" in prompt:
+        checks.append(("called_estimate_job_cost", "estimate_job_cost" in call_names))
+        estimated_types = {
+            str(c["args"].get("job_type", "")).lower()
+            for c in calls
+            if c["name"] == "estimate_job_cost"
+        }
+        checks.append(
+            (
+                "estimated_both_esmfold2_variants",
+                "esmfold2" in estimated_types and "esmfold2_fast" in estimated_types,
+            )
+        )
     elif "p69905" in prompt and "alphafold db" in prompt:
         db_tools = {
             "query_alphafold_db_prediction",
@@ -126,11 +139,24 @@ def evaluate(instance: dict[str, Any]) -> dict[str, Any]:
             and ("a100" in response_lower or "hardware" in response_lower)
         )
         checks.append(("presented_boltz2_affinity_plan", has_boltz_plan))
+    elif "prepare an esmfold2-fast prediction" in prompt:
+        checks.append(
+            (
+                "no_premature_esmfold2_submit",
+                "submit_esmfold2_prediction" not in call_names,
+            )
+        )
+        has_esmfold2_plan = (
+            "|" in response
+            and ("l4" in response_lower or "hardware" in response_lower)
+            and ("msa" in response_lower)
+        )
+        checks.append(("presented_esmfold2_confirmation_plan", has_esmfold2_plan))
     elif "hello, what can you help me with" in prompt:
-        has_four_models = all(
-            m in response_lower for m in ("alphafold2", "openfold3", "boltz")
+        has_all_models = all(
+            m in response_lower for m in ("alphafold2", "openfold3", "boltz", "esmfold2")
         ) and ("alphafold 3" in response_lower or "alphafold3" in response_lower)
-        checks.append(("mentions_all_four_models", has_four_models))
+        checks.append(("mentions_all_five_models", has_all_models))
         checks.append(
             (
                 "includes_config_context",

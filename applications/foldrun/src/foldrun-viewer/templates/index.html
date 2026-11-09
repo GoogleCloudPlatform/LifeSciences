@@ -182,6 +182,7 @@
         .badge-openfold3   { background: #e6f4ea; color: #1e8e3e; }
         .badge-boltz2      { background: #f3e8fd; color: #7627bb; }
         .badge-alphafold3  { background: #fef7e0; color: #b06000; }
+        .badge-esmfold2    { background: #e0f2f1; color: #00695c; }
 
         .state-chip {
             font-size: 0.72rem;
@@ -386,6 +387,7 @@
                     <option value="alphafold3">AlphaFold 3</option>
                     <option value="openfold3">OpenFold3</option>
                     <option value="boltz2">Boltz-2</option>
+                    <option value="esmfold2">ESMFold2</option>
                 </select>
                 <select id="filter-state" onchange="renderJobs()">
                     <option value="">All states</option>
@@ -476,6 +478,7 @@
             alphafold3: 'AlphaFold 3',
             openfold3:  'OpenFold3',
             boltz2:     'Boltz-2',
+            esmfold2:   'ESMFold2',
         };
 
         const STATE_META = {

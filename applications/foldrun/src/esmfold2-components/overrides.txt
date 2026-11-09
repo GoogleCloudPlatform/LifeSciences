@@ -1,0 +1,15 @@
+# Transitive security and compatibility overrides for exact version pins in
+# upstream dependencies (including eMudhra CA compromise remediation and
+# protobuf>=6 compatibility required by kfp>=2.16.1).
+biopython>=1.88
+certifi>=2026.10.19
+click>=8.1.8
+filelock>=4.2.1
+grpcio>=1.84.1
+pillow>=13.0.0
+requests>=2.33.0
+setuptools>=84.1.0
+torch==2.14.1+cu126
+transformers>=5.10.0
+triton>=3.8.0
+urllib3>=2.8.0

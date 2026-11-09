@@ -21,6 +21,7 @@ from .tools import (
     submit_af3_batch_predictions,
     submit_af3_endpoint_prediction,
     submit_boltz2_prediction,
+    submit_esmfold2_prediction,
     submit_of3_prediction,
 )
 
@@ -31,5 +32,6 @@ __all__ = [
     "submit_af3_batch_predictions",
     "submit_af3_endpoint_prediction",
     "submit_boltz2_prediction",
+    "submit_esmfold2_prediction",
     "submit_of3_prediction",
 ]

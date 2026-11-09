@@ -35,6 +35,11 @@ def pytest_configure(config):
     os.environ["BOLTZ2_COMPONENTS_IMAGE"] = "test-boltz2-image"
     os.environ["BOLTZ2_CACHE_PATH"] = "boltz2/cache"
 
+    # ESMFold2 required variables
+    os.environ["ESMFOLD2_COMPONENTS_IMAGE"] = "test-esmfold2-image"
+    os.environ["ESMFOLD2_FAST_CACHE_PATH"] = "esmfold2_fast/cache"
+    os.environ["ESMFOLD2_CACHE_PATH"] = "esmfold2/cache"
+
 
 @pytest.fixture(autouse=True)
 def _isolate_gcp_clients():

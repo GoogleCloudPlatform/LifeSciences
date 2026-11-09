@@ -61,12 +61,15 @@ class SampleMetrics:
     iptm: float | None = None
     avg_plddt: float | None = None
     gpde: float | None = None
+    pae_mean: float | None = None
+    pae_max: float | None = None
     has_clash: int | float = 0
     disorder: int | float = 0
     chain_ptm: dict[str, Any] = field(default_factory=dict)
     chain_pair_iptm: dict[str, Any] = field(default_factory=dict)
     plddt_scores: list[float] = field(default_factory=list)
     pde_matrix: list[Any] | None = None
+    pae_matrix: list[Any] | None = None
 
 
 @dataclass
@@ -271,6 +274,7 @@ class BaseStructureAnalyzer(ABC):
             plots = best.get("plots") or {}
             plot_specs = (
                 ("plddt_plot", "pLDDT Plot (Best Sample):"),
+                ("pae_plot", "PAE Plot (Best Sample):"),
                 ("pde_plot", "PDE Plot (Best Sample):"),
                 ("iptm_matrix_plot", "ipTM Matrix (Best Sample):"),
             )
@@ -318,7 +322,7 @@ class BaseStructureAnalyzer(ABC):
         sample_name = pred["sample_name"]
         cif_uri = pred["cif_uri"]
         confidences_uri = pred.get("confidences_uri", "")
-        aggregated_uri = pred["aggregated_uri"]
+        aggregated_uri = pred.get("aggregated_uri") or confidences_uri
         output_uri = pred["output_uri"]
 
         logger.info(
@@ -371,6 +375,21 @@ class BaseStructureAnalyzer(ABC):
             if plddt_plot_uri:
                 plot_files["plddt_plot"] = plddt_plot_uri
 
+        pae_matrix = metrics.pae_matrix
+        if pae_matrix:
+            pae_plot_uri = self._render_and_upload_plot(
+                f"{output_base}/pae_plot_{pred_idx}.png",
+                lambda path: shared_utils.plot_error_matrix(
+                    pae_matrix,
+                    sample_name,
+                    "Predicted Aligned Error (Å)",
+                    path,
+                    chain_info,
+                ),
+            )
+            if pae_plot_uri:
+                plot_files["pae_plot"] = pae_plot_uri
+
         pde_matrix = metrics.pde_matrix
         if pde_matrix:
             pde_plot_uri = self._render_and_upload_plot(
@@ -410,6 +429,8 @@ class BaseStructureAnalyzer(ABC):
             "iptm": metrics.iptm,
             "avg_plddt": metrics.avg_plddt,
             "gpde": metrics.gpde,
+            "pae_mean": metrics.pae_mean,
+            "pae_max": metrics.pae_max,
             "has_clash": metrics.has_clash,
             "disorder": metrics.disorder,
             "chain_ptm": metrics.chain_ptm,
@@ -425,6 +446,7 @@ class BaseStructureAnalyzer(ABC):
             "plddt_scores": plddt_stats["per_residue"],
             "quality_assessment": quality,
             "has_pde": metrics.pde_matrix is not None,
+            "has_pae": metrics.pae_matrix is not None,
             "cif_uri": cif_uri,
             "aggregated_uri": aggregated_uri,
             "confidences_uri": confidences_uri,
@@ -549,6 +571,7 @@ class BaseStructureAnalyzer(ABC):
                 "best_ptm": best["ptm"],
                 "best_iptm": best["iptm"],
                 "best_plddt": best["plddt_mean"],
+                "best_model_pae": best.get("pae_mean"),
                 "quality_assessment": best["quality_assessment"],
             },
             **extras.extra_summary_fields,
@@ -595,6 +618,7 @@ class BaseStructureAnalyzer(ABC):
                     "iptm": a["iptm"],
                     "plddt_mean": a["plddt_mean"],
                     "plddt_min": a["plddt_min"],
+                    "pae_mean": a.get("pae_mean"),
                     "quality_assessment": a["quality_assessment"],
                     "has_clash": a.get("has_clash", 0),
                     "per_chain_plddt": a.get("per_chain_plddt", {}),

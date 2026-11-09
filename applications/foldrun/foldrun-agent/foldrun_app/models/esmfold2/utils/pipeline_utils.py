@@ -1,0 +1,38 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Pipeline compilation and execution utilities for ESMFold2 / ESMFold2-Fast."""
+
+import logging
+import os
+
+from foldrun_app.core.pipeline_utils import model_pipeline_load_context
+
+logger = logging.getLogger(__name__)
+
+
+def load_vertex_pipeline(enable_flex_start: bool = False, use_msa: bool = False):
+    """Load ESMFold2 pipeline from vendored copy with optional MSA step."""
+    vertex_pipeline_dir = os.path.join(os.path.dirname(__file__), "..", "pipeline")
+    with model_pipeline_load_context(
+        pkg_prefix="foldrun_app.models.esmfold2.pipeline",
+        vertex_pipeline_dir=vertex_pipeline_dir,
+        pipeline_module_name="esmfold2_inference_pipeline",
+    ) as pipe_mod:
+        strategy = "FLEX_START" if enable_flex_start else "STANDARD"
+        logger.info(
+            f"Loading ESMFOLD2 inference pipeline with {strategy} scheduling (use_msa={use_msa})"
+        )
+        factory = pipe_mod.create_esmfold2_inference_pipeline
+        return factory(strategy=strategy, use_msa=use_msa)

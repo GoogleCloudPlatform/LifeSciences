@@ -18,7 +18,15 @@ import logging
 import os
 import sys
 
-from . import af2_analyzer, af3_analyzer, boltz2_analyzer, of3_analyzer
+from foldrun_common import normalize_model_type
+
+from . import (
+    af2_analyzer,
+    af3_analyzer,
+    boltz2_analyzer,
+    esmfold2_analyzer,
+    of3_analyzer,
+)
 from .shared_utils import download_json_from_gcs
 
 # Configure logging
@@ -85,29 +93,35 @@ def main():
                 or "pde_uri" in first_pred
             ):
                 model_type = "boltz2"
+            elif "query_json_uri" in task_config or "pae_uri" in first_pred:
+                model_type = "esmfold2"
             else:
                 model_type = "openfold3"
         else:
             logger.error("Could not auto-detect model type: predictions list is empty")
             sys.exit(1)
 
-    model_type = model_type.lower()
+    model_type = normalize_model_type(model_type)
     logger.info(f"Task {task_index}: Routed to parser for model type '{model_type}'")
 
     try:
-        if model_type in ["alphafold2", "af2"]:
+        if model_type == "alphafold2":
             af2_analyzer.run_task(
                 task_index, task_count, task_config, bucket_name, analysis_path
             )
-        elif model_type in ["alphafold3", "af3"]:
+        elif model_type == "alphafold3":
             af3_analyzer.run_task(
                 task_index, task_count, task_config, bucket_name, analysis_path
             )
-        elif model_type in ["boltz2", "boltz"]:
+        elif model_type == "boltz2":
             boltz2_analyzer.run_task(
                 task_index, task_count, task_config, bucket_name, analysis_path
             )
-        elif model_type in ["openfold3", "of3"]:
+        elif model_type == "esmfold2":
+            esmfold2_analyzer.run_task(
+                task_index, task_count, task_config, bucket_name, analysis_path
+            )
+        elif model_type == "openfold3":
             of3_analyzer.run_task(
                 task_index, task_count, task_config, bucket_name, analysis_path
             )

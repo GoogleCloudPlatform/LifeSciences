@@ -165,10 +165,11 @@ class FindOrphanedGCSFilesTool(BaseTool):
                 )
                 total_orphaned_size += dir_size
 
-        # Step 3: Check for orphaned input files (AF2 FASTA, OF3 JSON, Boltz-2 YAML)
+        # Step 3: Check for orphaned input files (AF2 FASTA, OF3 JSON, Boltz-2 YAML, ESMFold2 JSON)
         orphaned_fasta = []
         orphaned_of3_queries = []
         orphaned_boltz2_queries = []
+        orphaned_esmfold2_queries = []
         if check_fasta:
             logger.info("Scanning FASTA files...")
             fasta_blobs = bucket.list_blobs(prefix="fasta/")
@@ -233,6 +234,27 @@ class FindOrphanedGCSFilesTool(BaseTool):
                         )
                         total_orphaned_size += blob.size
 
+            logger.info("Scanning ESMFold2 query JSON files...")
+            for blob in bucket.list_blobs(prefix="esmfold2_queries/"):
+                if blob.name.endswith(".json"):
+                    esmfold2_job_name = blob.name.removeprefix("esmfold2_queries/").removesuffix(
+                        ".json"
+                    )
+                    if (
+                        esmfold2_job_name not in vertex_job_names
+                        and blob.name not in active_input_blobs
+                    ):
+                        orphaned_esmfold2_queries.append(
+                            {
+                                "path": f"gs://{self.config.bucket_name}/{blob.name}",
+                                "job_name": esmfold2_job_name,
+                                "size_bytes": blob.size,
+                                "size_kb": round(blob.size / 1024, 2),
+                                "updated": blob.updated.isoformat() if blob.updated else None,
+                            }
+                        )
+                        total_orphaned_size += blob.size
+
         # Calculate totals
         total_mb = round(total_orphaned_size / (1024 * 1024), 2)
         total_gb = round(total_orphaned_size / (1024 * 1024 * 1024), 2)
@@ -243,11 +265,13 @@ class FindOrphanedGCSFilesTool(BaseTool):
             "orphaned_fasta_files": orphaned_fasta,
             "orphaned_of3_queries": orphaned_of3_queries,
             "orphaned_boltz2_queries": orphaned_boltz2_queries,
+            "orphaned_esmfold2_queries": orphaned_esmfold2_queries,
             "summary": {
                 "orphaned_pipeline_dirs_count": len(orphaned_dirs),
                 "orphaned_fasta_count": len(orphaned_fasta),
                 "orphaned_of3_queries_count": len(orphaned_of3_queries),
                 "orphaned_boltz2_queries_count": len(orphaned_boltz2_queries),
+                "orphaned_esmfold2_queries_count": len(orphaned_esmfold2_queries),
                 "total_orphaned_size_mb": total_mb,
                 "total_orphaned_size_gb": total_gb,
                 "potential_savings": f"${round(total_gb * 0.02, 2)}/month"

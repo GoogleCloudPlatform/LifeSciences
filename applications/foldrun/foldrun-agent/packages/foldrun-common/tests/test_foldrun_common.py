@@ -35,11 +35,13 @@ from foldrun_common import (
     discover_af2_predictions_in_gcs,
     discover_af3_predictions,
     discover_boltz2_predictions,
+    discover_esmfold2_predictions,
     discover_of3_predictions,
     ensure_run_archive_in_gcs,
     infer_model_type_from_display_name,
     normalize_model_type,
     resolve_boltz2_query_yaml_uri,
+    resolve_esmfold2_query_json_uri,
     sanitize_json_floats,
     validate_gcs_uri,
 )
@@ -58,11 +60,17 @@ class TestModelsAndNormalization:
         assert normalize_model_type("af2") == "alphafold2"
         assert normalize_model_type("OF3") == "openfold3"
         assert normalize_model_type("boltz-2") == "boltz2"
+        assert normalize_model_type("esmfold2") == "esmfold2"
+        assert normalize_model_type("esmfold2_fast") == "esmfold2"
+        assert normalize_model_type("esmfold") != "esmfold2"
+        assert normalize_model_type("esm2") != "esmfold2"
         assert normalize_model_type("af3") == "alphafold3"
         assert normalize_model_type(None) == ""
 
         assert infer_model_type_from_display_name("openfold3-complex-run") == "openfold3"
         assert infer_model_type_from_display_name("boltz2-kinase-01") == "boltz2"
+        assert infer_model_type_from_display_name("esmfold2-fast-ubiquitin") == "esmfold2"
+        assert infer_model_type_from_display_name("esmfold2_dimer") == "esmfold2"
         assert infer_model_type_from_display_name("af3-dimer") == "alphafold3"
         assert infer_model_type_from_display_name("monomer-20261002") == "alphafold2"
 
@@ -193,6 +201,40 @@ class TestDiscoveryAndTaskConfig:
         )
         assert len(af3_preds) == 1
         assert af3_preds[0]["sample_name"] == "seed_1_sample_0"
+
+        # ESMFold2
+        pae_blob = _mock_blob("pipeline_runs/r4/seed_1/ubq_seed_1_sample_0_pae.npz")
+        pae_blob.exists.return_value = True
+        mock_bucket.list_blobs.return_value = [
+            _mock_blob("pipeline_runs/r4/seed_1/ubq_seed_1_sample_0_confidences.json"),
+            _mock_blob("pipeline_runs/r4/seed_1/ubq_seed_1_sample_0_model.cif"),
+            pae_blob,
+        ]
+        mock_bucket.blob.return_value = pae_blob
+        esmfold2_preds = discover_esmfold2_predictions("gs://bkt/pipeline_runs/r4", mock_client)
+        assert len(esmfold2_preds) == 1
+        assert (
+            esmfold2_preds[0]["cif_uri"]
+            == "gs://bkt/pipeline_runs/r4/seed_1/ubq_seed_1_sample_0_model.cif"
+        )
+        assert (
+            esmfold2_preds[0]["pae_uri"]
+            == "gs://bkt/pipeline_runs/r4/seed_1/ubq_seed_1_sample_0_pae.npz"
+        )
+        esmfold2_query_uri = resolve_esmfold2_query_json_uri(
+            bucket_name="bkt", labels={"query_name": "ubq_01"}
+        )
+        assert esmfold2_query_uri == "gs://bkt/esmfold2_queries/ubq_01.json"
+        esmfold2_cfg = build_analysis_task_config(
+            model_type="esmfold2",
+            job_id="j_esm2",
+            analysis_path="gs://bkt/pipeline_runs/r4/analysis/",
+            raw_predictions=esmfold2_preds,
+            query_json_uri=esmfold2_query_uri,
+        )
+        assert esmfold2_cfg.model_type == "esmfold2"
+        assert esmfold2_cfg.query_json_uri == "gs://bkt/esmfold2_queries/ubq_01.json"
+        assert esmfold2_cfg.predictions[0]["sample_name"] == "seed_1_sample_0"
 
 
 class TestReportAndArchive:

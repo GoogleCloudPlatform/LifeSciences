@@ -93,6 +93,35 @@ class TestToolRouting:
         calls = collect_function_calls(events)
         assert "submit_af2_multimer_prediction" in calls
 
+    async def test_esmfold2_submission(self, runner, session_id, run_config):
+        """ESMFold2-Fast prediction prompt routes to submit_esmfold2_prediction after confirmation."""
+        prompt = (
+            "Submit an ESMFold2-Fast prediction for this sequence:\n"
+            ">test_esmfold2\n"
+            "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG"
+        )
+        # Turn 1: agent shows confirmation plan
+        async for _ in runner.run_async(
+            user_id="test",
+            session_id=session_id,
+            new_message=make_user_message(prompt),
+            run_config=run_config,
+        ):
+            pass
+
+        # Turn 2: confirm submission
+        events = []
+        async for event in runner.run_async(
+            user_id="test",
+            session_id=session_id,
+            new_message=make_user_message("Yes, submit it."),
+            run_config=run_config,
+        ):
+            events.append(event)
+
+        calls = collect_function_calls(events)
+        assert "submit_esmfold2_prediction" in calls
+
     # ------------------------------------------------------------------ #
     # Job Management
     # ------------------------------------------------------------------ #

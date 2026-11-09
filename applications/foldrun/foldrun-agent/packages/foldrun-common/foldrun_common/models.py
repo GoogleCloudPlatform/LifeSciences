@@ -20,7 +20,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ModelType = Literal["alphafold2", "alphafold3", "openfold3", "boltz2"]
+ModelType = Literal["alphafold2", "alphafold3", "openfold3", "boltz2", "esmfold2"]
 
 MODEL_TYPE_ALIASES: dict[str, ModelType] = {
     "af2": "alphafold2",
@@ -33,6 +33,8 @@ MODEL_TYPE_ALIASES: dict[str, ModelType] = {
     "boltz": "boltz2",
     "boltz-2": "boltz2",
     "boltz2": "boltz2",
+    "esmfold2": "esmfold2",
+    "esmfold2_fast": "esmfold2",
 }
 
 SUPPORTED_MODEL_TYPES: frozenset[str] = frozenset(MODEL_TYPE_ALIASES.values())
@@ -62,6 +64,8 @@ def infer_model_type_from_display_name(display_name: str | None) -> ModelType:
         return "openfold3"
     if "boltz" in lower:
         return "boltz2"
+    if "esmfold2" in lower:
+        return "esmfold2"
     return "alphafold2"
 
 
@@ -117,11 +121,27 @@ class AF3PredictionTask(BaseModel):
     output_uri: str = ""
 
 
+class ESMFold2PredictionTask(BaseModel):
+    """Per-sample task item for ESMFold2 / ESMFold2-Fast analysis."""
+
+    model_config = ConfigDict(extra="allow")
+
+    index: int
+    sample_name: str
+    seed: int = 1
+    sample: int = 0
+    cif_uri: str
+    confidences_uri: str
+    pae_uri: str = ""
+    output_uri: str = ""
+
+
 PredictionTaskUnion = (
     AF2PredictionTask
     | OF3PredictionTask
     | Boltz2PredictionTask
     | AF3PredictionTask
+    | ESMFold2PredictionTask
     | dict[str, Any]
 )
 
@@ -138,6 +158,7 @@ class AnalysisTaskConfig(BaseModel):
     predictions: list[dict[str, Any]] = Field(default_factory=list)
     affinity_uri: str | None = None
     query_yaml_uri: str | None = None
+    query_json_uri: str | None = None
     pipeline_job_id: str | None = None
     project_id: str | None = None
     region: str | None = None

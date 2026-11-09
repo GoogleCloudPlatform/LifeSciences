@@ -406,6 +406,13 @@ class TestCustomSlugResolutionAndAnalyzeRouting(unittest.TestCase):
         self.assertEqual(viewer_app._normalize_model_type("alphafold3"), "alphafold3")
         self.assertEqual(viewer_app._normalize_model_type("of3"), "openfold3")
         self.assertEqual(viewer_app._normalize_model_type("boltz"), "boltz2")
+        self.assertEqual(viewer_app._normalize_model_type("esmfold2"), "esmfold2")
+        self.assertEqual(viewer_app._normalize_model_type("esmfold2_fast"), "esmfold2")
+        self.assertNotEqual(
+            viewer_app._normalize_model_type("esmfold2-fast"), "esmfold2"
+        )
+        self.assertNotEqual(viewer_app._normalize_model_type("esmfold"), "esmfold2")
+        self.assertNotEqual(viewer_app._normalize_model_type("esm2"), "esmfold2")
 
     def test_resolve_summary_and_uri_via_runtime_config_custom_slug(self):
         mock_authed = MagicMock()
@@ -649,6 +656,71 @@ class TestCustomSlugResolutionAndAnalyzeRouting(unittest.TestCase):
             "labels": {"query_name": "../secret"},
         }
         self.assertIsNone(viewer_app._resolve_boltz2_query_yaml_uri(bad_pj))
+
+    def test_trigger_analysis_esmfold2_discovers_samples_and_resolves_query_json(self):
+        mock_authed = MagicMock()
+        pj_resp = MagicMock()
+        pj_resp.status_code = 200
+        pj_resp.raise_for_status.return_value = None
+        pj_resp.json.return_value = {
+            "name": "projects/test-project/locations/us-central1/pipelineJobs/esmfold2-job-1",
+            "displayName": "esmfold2-ubq-01",
+            "labels": {
+                "model_type": "esmfold2",
+                "query_name": "esmfold2-ubq-01",
+                "managed_by": "foldrun",
+            },
+            "runtimeConfig": {
+                "gcsOutputDirectory": "gs://allowed-foldrun-bucket/pipeline_runs/esmfold2-run-01",
+                "parameterValues": {
+                    "query_json_path": "gs://allowed-foldrun-bucket/esmfold2_queries/esmfold2-ubq-01.json"
+                },
+            },
+        }
+        cr_resp = MagicMock()
+        cr_resp.raise_for_status.return_value = None
+        mock_authed.get.return_value = pj_resp
+        mock_authed.post.return_value = cr_resp
+
+        conf_blob = MagicMock()
+        conf_blob.name = (
+            "pipeline_runs/esmfold2-run-01/seed_1/ubq_seed_1_sample_0_confidences.json"
+        )
+        pae_blob = MagicMock()
+        pae_blob.name = (
+            "pipeline_runs/esmfold2-run-01/seed_1/ubq_seed_1_sample_0_pae.npz"
+        )
+        pae_blob.exists.return_value = True
+
+        mock_bucket = MagicMock()
+        mock_bucket.list_blobs.side_effect = [
+            [conf_blob, pae_blob],
+            [],
+        ]
+        tc_blob_mock = MagicMock()
+        tc_blob_mock.exists.return_value = True
+        mock_bucket.blob.return_value = tc_blob_mock
+
+        with (
+            patch.object(viewer_app, "_get_authed_session", return_value=mock_authed),
+            patch.object(viewer_app.storage_client, "bucket", return_value=mock_bucket),
+        ):
+            resp = self.client.post(
+                "/api/analyze",
+                json={"job_id": "esmfold2-job-1", "model_type": "esmfold2_fast"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertEqual(payload["model_type"], "esmfold2")
+        self.assertEqual(payload["total_predictions"], 1)
+        uploaded_json = json.loads(
+            tc_blob_mock.upload_from_string.call_args_list[0].args[0]
+        )
+        self.assertEqual(
+            uploaded_json["query_json_uri"],
+            "gs://allowed-foldrun-bucket/esmfold2_queries/esmfold2-ubq-01.json",
+        )
 
 
 if __name__ == "__main__":

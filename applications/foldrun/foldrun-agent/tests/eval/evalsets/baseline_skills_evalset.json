@@ -151,6 +151,37 @@
         "user_id": "eval_user",
         "state": {}
       }
+    },
+    {
+      "eval_id": "eval_estimate_cost_esmfold2",
+      "conversation": [
+        {
+          "invocation_id": "inv_6",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Can you estimate the cost of running an ESMFold2-Fast prediction for a 300-residue protein?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "estimate_job_cost",
+                "args": {
+                  "job_type": "esmfold2_fast",
+                  "sequence_length": 300
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "foldrun_app",
+        "user_id": "eval_user",
+        "state": {}
+      }
     }
   ]
 }

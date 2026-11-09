@@ -29,6 +29,7 @@ from foldrun_app.core.hardware import AF3_HARDWARE_TIER_LADDER
 from foldrun_app.core.kfp_tools import KFPModelTool
 from foldrun_app.models.af2.base import AF2Tool
 from foldrun_app.models.boltz2.base import BOLTZ2Tool
+from foldrun_app.models.esmfold2.base import ESMFOLD2Tool
 from foldrun_app.models.of3.base import OF3Tool
 
 logger = logging.getLogger(__name__)
@@ -283,6 +284,58 @@ DURATION_ANCHORS = {
             (3000, 35, 24.0, 0),
         ],
     },
+    "esmfold2_fast": {
+        # ESMFold2-Fast (biohub/ESMFold2-Fast, 24-block trunk): zero-MSA single-sequence mode
+        "L4": [
+            (100, 0, 1.0, 0),
+            (300, 0, 1.5, 0),
+            (600, 0, 2.5, 0),
+            (1000, 0, 4.0, 0),
+            (1500, 0, 6.0, 0),
+        ],
+        "A100": [
+            (100, 0, 0.8, 0),
+            (300, 0, 1.0, 0),
+            (600, 0, 1.8, 0),
+            (1000, 0, 3.0, 0),
+            (1500, 0, 4.5, 0),
+            (2000, 0, 6.5, 0),
+        ],
+        "A100_80GB": [
+            (100, 0, 0.7, 0),
+            (300, 0, 0.9, 0),
+            (600, 0, 1.5, 0),
+            (1000, 0, 2.5, 0),
+            (2000, 0, 5.0, 0),
+            (3000, 0, 8.0, 0),
+        ],
+    },
+    "esmfold2": {
+        # Full ESMFold2 (biohub/ESMFold2, 48-block trunk) with Jackhmmer CPU MSA
+        "L4": [
+            (100, 10, 2.5, 0),
+            (300, 13, 4.5, 0),
+            (600, 15, 8.0, 0),
+            (1000, 18, 13.0, 0),
+        ],
+        "A100": [
+            (100, 10, 1.5, 0),
+            (300, 13, 2.5, 0),
+            (600, 15, 4.5, 0),
+            (1000, 18, 7.0, 0),
+            (1500, 20, 11.0, 0),
+            (2000, 25, 16.0, 0),
+        ],
+        "A100_80GB": [
+            (100, 10, 1.0, 0),
+            (300, 13, 2.0, 0),
+            (600, 15, 3.5, 0),
+            (1000, 18, 5.5, 0),
+            (1500, 20, 9.0, 0),
+            (2000, 25, 13.0, 0),
+            (3000, 30, 20.0, 0),
+        ],
+    },
 }
 
 # Number of predict tasks per job type
@@ -290,12 +343,15 @@ DURATION_ANCHORS = {
 # AF2 multimer: 5 models x num_predictions_per_model (default 5) = 25 tasks
 # AF3: 1 seed default on Vertex AI Dedicated Endpoint (runs num_diffusion_samples serially)
 # OF3/Boltz-2: num_seeds tasks (default 5, each runs num_diffusion_samples serially)
+# ESMFold2/ESMFold2-Fast: 1 seed default (runs 1 diffusion sample by default)
 DEFAULT_PREDICT_TASKS = {
     "af2_monomer": 5,
     "af2_multimer": 25,
     "af3": 1,
     "of3": 5,
     "boltz2": 5,
+    "esmfold2": 1,
+    "esmfold2_fast": 1,
 }
 
 # Infrastructure monthly costs (always-on, independent of job volume)
@@ -375,6 +431,10 @@ def _auto_select_gpu(job_type: str, sequence_length: int) -> str:
         return OF3Tool._recommend_gpu(sequence_length)
     if job_type == "boltz2":
         return BOLTZ2Tool._recommend_gpu(sequence_length)
+    if job_type == "esmfold2_fast":
+        return ESMFOLD2Tool._recommend_gpu(sequence_length, model_variant="fast")
+    if job_type == "esmfold2":
+        return ESMFOLD2Tool._recommend_gpu(sequence_length, model_variant="full")
     if job_type == "af2_multimer":
         return AF2Tool._recommend_gpu(sequence_length, is_multimer=True)
     return AF2Tool._recommend_gpu(sequence_length, is_multimer=False)
@@ -619,27 +679,28 @@ def _estimate_phases(
         )
         return phases
 
-    # Phase 1: MSA / Data Pipeline (CPU for AF2, OF3, Boltz-2)
-    msa_machine = KFPModelTool.DEFAULT_MSA_MACHINE
-    msa_rate = _hourly_rate(msa_machine, None, 0, spot, prices)
-    msa_cost = (msa_min / 60) * msa_rate
-    phases.append(
-        {
-            "phase": "MSA / Data Pipeline",
-            "machine_type": msa_machine,
-            "gpu": "None (CPU, Jackhmmer)",
-            "duration_minutes": round(msa_min, 1),
-            "hourly_rate": round(msa_rate, 4),
-            "cost": round(msa_cost, 2),
-        }
-    )
+    # Phase 1: MSA / Data Pipeline (CPU for AF2, OF3, Boltz-2, and full ESMFold2 when msa_min > 0)
+    if msa_min > 0:
+        msa_machine = KFPModelTool.DEFAULT_MSA_MACHINE
+        msa_rate = _hourly_rate(msa_machine, None, 0, spot, prices)
+        msa_cost = (msa_min / 60) * msa_rate
+        phases.append(
+            {
+                "phase": "MSA / Data Pipeline",
+                "machine_type": msa_machine,
+                "gpu": "None (CPU, Jackhmmer)",
+                "duration_minutes": round(msa_min, 1),
+                "hourly_rate": round(msa_rate, 4),
+                "cost": round(msa_cost, 2),
+            }
+        )
 
     # Phase 2: Predict
     predict_machine = _machine_for_gpu(gpu_type)
     predict_rate = _hourly_rate(predict_machine, gpu_type, 1, spot, prices)
 
-    if job_type in ["of3", "boltz2"]:
-        # OF3/Boltz-2: each seed task runs num_diffusion_samples sequentially
+    if job_type in ["of3", "boltz2", "esmfold2", "esmfold2_fast"]:
+        # OF3/Boltz-2/ESMFold2: each seed task runs num_diffusion_samples sequentially
         predict_total_min = predict_per_task_min * num_diffusion_samples * num_predictions
         predict_desc = f"{num_predictions} seeds x {num_diffusion_samples} samples"
     elif job_type == "af2_multimer":
@@ -730,14 +791,20 @@ def estimate_single_job(
     elif job_type == "af2_multimer":
         eff_per_model = num_predictions_per_model if num_predictions_per_model is not None else 5
         num_predictions = 5 * eff_per_model  # 5 models x N seeds
-    elif job_type == "af3":
+    elif job_type in ("af3", "esmfold2", "esmfold2_fast"):
         num_predictions = (
             num_predictions_per_model
             if num_predictions_per_model is not None
-            else DEFAULT_PREDICT_TASKS["af3"]
+            else DEFAULT_PREDICT_TASKS[job_type]
         )
     else:  # of3 or boltz2
         num_predictions = num_predictions_per_model if num_predictions_per_model is not None else 5
+
+    eff_diffusion_samples = (
+        1
+        if job_type in ("esmfold2", "esmfold2_fast") and num_diffusion_samples == 5
+        else num_diffusion_samples
+    )
 
     # Build phases for both pricing modes
     spot_phases = _estimate_phases(
@@ -745,7 +812,7 @@ def estimate_single_job(
         gpu_type,
         sequence_length,
         num_predictions,
-        num_diffusion_samples,
+        eff_diffusion_samples,
         True,
         prices,
     )
@@ -754,7 +821,7 @@ def estimate_single_job(
         gpu_type,
         sequence_length,
         num_predictions,
-        num_diffusion_samples,
+        eff_diffusion_samples,
         False,
         prices,
     )
@@ -770,7 +837,9 @@ def estimate_single_job(
         "sequence_length": sequence_length,
         "num_predict_tasks": num_predictions,
         "num_diffusion_samples": (
-            num_diffusion_samples if job_type in ("of3", "boltz2", "af3") else None
+            eff_diffusion_samples
+            if job_type in ("of3", "boltz2", "af3", "esmfold2", "esmfold2_fast")
+            else None
         ),
         "region": region,
         "total_duration_minutes": total_minutes,
@@ -804,7 +873,10 @@ def _compute_items_for_mode(
 
         gpu_type = _auto_select_gpu(job_type, seq_len)
         num_predictions = DEFAULT_PREDICT_TASKS.get(job_type, 5)
-        phases = _estimate_phases(job_type, gpu_type, seq_len, num_predictions, 5, spot, prices)
+        default_samples = 1 if job_type in ("esmfold2", "esmfold2_fast") else 5
+        phases = _estimate_phases(
+            job_type, gpu_type, seq_len, num_predictions, default_samples, spot, prices
+        )
         per_job = round(sum(p["cost"] for p in phases), 2)
         monthly = round(per_job * count, 2)
         total += monthly
@@ -898,6 +970,8 @@ def estimate_monthly(
     af3_jobs: int = 0,
     of3_jobs: int = 0,
     boltz2_jobs: int = 0,
+    esmfold2_jobs: int = 0,
+    esmfold2_fast_jobs: int = 0,
     avg_sequence_length: int = 300,
     include_infrastructure: bool = True,
     region: str = "us-central1",
@@ -912,6 +986,7 @@ def estimate_monthly(
     - AF2 multimer: 5 models x 5 seeds = 25 predictions per job
     - AF3: 1 seed x 5 diffusion samples = 5 structures per job
     - OF3/Boltz-2: 5 seeds x 5 diffusion samples = 25 structures per job
+    - ESMFold2 / ESMFold2-Fast: 1 seed x 1 diffusion sample = 1 structure per job
 
     Args:
         af2_monomer_jobs: Monthly AF2 monomer job count
@@ -919,6 +994,8 @@ def estimate_monthly(
         af3_jobs: Monthly AF3 job count
         of3_jobs: Monthly OF3 job count
         boltz2_jobs: Monthly Boltz-2 job count
+        esmfold2_jobs: Monthly full ESMFold2 job count
+        esmfold2_fast_jobs: Monthly ESMFold2-Fast job count
         avg_sequence_length: Average sequence length for cost estimation
             (drives duration interpolation and GPU auto-selection)
         include_infrastructure: Include always-on infrastructure costs (default True)
@@ -936,6 +1013,8 @@ def estimate_monthly(
         ("af3", af3_jobs, avg_sequence_length),
         ("of3", of3_jobs, avg_sequence_length),
         ("boltz2", boltz2_jobs, avg_sequence_length),
+        ("esmfold2", esmfold2_jobs, avg_sequence_length),
+        ("esmfold2_fast", esmfold2_fast_jobs, avg_sequence_length),
     ]
 
     spot_items, spot_compute = _compute_items_for_mode(
@@ -1144,6 +1223,7 @@ def get_actual_costs(
         if billing_id not in pipelines:
             pipelines[billing_id] = {
                 "model_type": labels.get("model_type", "unknown"),
+                "model_variant": labels.get("model_variant", ""),
                 "job_type": labels.get("job_type", "unknown"),
                 "seq_name": labels.get("seq_name", "unknown"),
                 "seq_len": labels.get("seq_len") or labels.get("num_tokens", "unknown"),
@@ -1231,6 +1311,14 @@ def get_actual_costs(
                 jt = "of3"
             elif model in ("boltz2", "boltz"):
                 jt = "boltz2"
+            elif model in ("esmfold2", "esmfold2_fast"):
+                jt = (
+                    "esmfold2_fast"
+                    if model == "esmfold2_fast"
+                    or pipeline.get("model_variant") == "fast"
+                    or pipeline["job_type"] == "esmfold2_fast"
+                    else "esmfold2"
+                )
 
             if jt:
                 raw_gpu = pipeline["gpu_type"]

@@ -49,6 +49,7 @@ from foldrun_app.skills.job_submission.tools import (
     submit_af3_batch_predictions,
     submit_af3_endpoint_prediction,
     submit_boltz2_prediction,
+    submit_esmfold2_prediction,
     submit_of3_prediction,
 )
 from foldrun_app.skills.results_analysis.tools import (
@@ -67,7 +68,7 @@ from foldrun_app.skills.visualization.tools import (
     open_structure_viewer,
 )
 
-CORE_HEADER = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, AlphaFold3, OpenFold3, and Boltz-2.
+CORE_HEADER = """You are an expert FoldRun protein structure prediction assistant supporting AlphaFold2, AlphaFold3, OpenFold3, Boltz-2, and ESMFold2 / ESMFold2-Fast.
 
 Your role is to help researchers and scientists with:
 1. Submitting protein structure predictions (monomers and multimers)
@@ -143,9 +144,11 @@ class SkillRegistry:
         """Register the baseline FoldRun domain skills with environment-conditional tools."""
         of3_model = get_model("of3")
         boltz2_model = get_model("boltz2")
+        esmfold2_model = get_model("esmfold2")
         af3_model = get_model("af3")
         has_of3 = bool(of3_model and of3_model.is_enabled())
         has_boltz2 = bool(boltz2_model and boltz2_model.is_enabled())
+        has_esmfold2 = bool(esmfold2_model and esmfold2_model.is_enabled())
         has_af3 = bool(af3_model and af3_model.is_enabled())
 
         # Load instruction bodies and descriptions strictly from packages/*/SKILL.md (single source of truth)
@@ -185,6 +188,8 @@ class SkillRegistry:
             submission_tools.append(submit_of3_prediction)
         if has_boltz2:
             submission_tools.append(submit_boltz2_prediction)
+        if has_esmfold2:
+            submission_tools.append(submit_esmfold2_prediction)
         if has_af3:
             submission_tools.extend([submit_af3_endpoint_prediction, submit_af3_batch_predictions])
 

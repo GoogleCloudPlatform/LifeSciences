@@ -64,6 +64,8 @@ class TestCrossInstanceParity:
                 "submit_of3_prediction",
                 # Boltz-2 Pipeline
                 "submit_boltz2_prediction",
+                # ESMFold2 Pipeline
+                "submit_esmfold2_prediction",
                 # Job Management & Monitoring
                 "check_job_status",
                 "list_jobs",
@@ -92,7 +94,7 @@ class TestCrossInstanceParity:
                 "open_structure_viewer",
             }
 
-            assert len(tool_names) == 25, f"Expected exactly 25 tools, got {len(tool_names)}"
+            assert len(tool_names) == 26, f"Expected exactly 26 tools, got {len(tool_names)}"
             assert tool_names == expected_v1_tools, (
                 f"Tool set mismatch: missing={expected_v1_tools - tool_names}, "
                 f"extra={tool_names - expected_v1_tools}"
@@ -189,7 +191,7 @@ class TestCrossInstanceParity:
 
             assert agent_v1.name == "foldrun_app"
             assert agent_v2.name == "foldrun_app"
-            assert len(agent_v1.tools) == 25
+            assert len(agent_v1.tools) == 26
 
             # V2 uses native ADK SkillToolset with progressive disclosure
             assert len(agent_v2.tools) == 1

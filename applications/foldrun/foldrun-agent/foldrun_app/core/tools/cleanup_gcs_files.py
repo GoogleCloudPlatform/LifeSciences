@@ -28,6 +28,7 @@ ALLOWED_BASE_PREFIXES = (
     "fasta/",
     "of3_queries/",
     "boltz2_queries/",
+    "esmfold2_queries/",
     "af3_predictions/",
 )
 DISALLOWED_JOB_IDS = frozenset(
@@ -40,6 +41,7 @@ DISALLOWED_JOB_IDS = frozenset(
         "fasta",
         "of3_queries",
         "boltz2_queries",
+        "esmfold2_queries",
         "af3_predictions",
         "model",
         "models",
@@ -55,6 +57,8 @@ DISALLOWED_JOB_IDS = frozenset(
         "of3",
         "boltz",
         "boltz2",
+        "esmfold2",
+        "esmfold2_fast",
     }
 )
 JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{3,127}$")
@@ -66,6 +70,7 @@ _PIPELINE_TIMESTAMP_PREFIXES = (
     "of3-inference-pipeline-",
     "boltz2-inference-pipeline-",
     "boltz-inference-pipeline-",
+    "esmfold2-inference-pipeline-",
 )
 
 
@@ -437,11 +442,12 @@ class CleanupGCSFilesTool(BaseTool):
             except Exception as e:
                 found_files["timestamped_fallback_error"] = str(e)
 
-        # 3. Search for input query files (AF2 FASTA, OF3 JSON, Boltz-2 YAML)
+        # 3. Search for input query files (AF2 FASTA, OF3 JSON, Boltz-2 YAML, ESMFold2 JSON)
         candidate_input_paths = [
             f"fasta/{job_name}.fasta",
             f"of3_queries/{job_name}.json",
             f"boltz2_queries/{job_name}.yaml",
+            f"esmfold2_queries/{job_name}.json",
         ]
         if job_input_blob and job_input_blob not in candidate_input_paths:
             candidate_input_paths.append(job_input_blob)

@@ -115,7 +115,7 @@ class TestSkillRegistry:
         assert "Response Guidelines" not in instruction
 
     def test_compile_tools_baseline_count(self):
-        """Compilation produces all 25 baseline tools without duplicates."""
+        """Compilation produces all 26 baseline tools without duplicates."""
         tools = skill_registry.compile_tools()
         tool_names = [
             getattr(t, "name", None)
@@ -123,11 +123,12 @@ class TestSkillRegistry:
             or str(t)
             for t in tools
         ]
-        assert len(tool_names) == 25
+        assert len(tool_names) == 26
         assert len(tool_names) == len(set(tool_names))
         assert "submit_af2_monomer_prediction" in tool_names
         assert "submit_of3_prediction" in tool_names
         assert "submit_boltz2_prediction" in tool_names
+        assert "submit_esmfold2_prediction" in tool_names
         assert "download_job_artifacts" in tool_names
 
     def test_compile_instruction_dynamic_custom_skill_asymmetry_fix(self):
@@ -155,9 +156,10 @@ class TestSkillRegistry:
         assert "### Smart Retry Guidance for Failed Jobs" not in progressive_instruction
 
     def test_conditional_tools_without_images(self, monkeypatch):
-        """When OF3, Boltz-2, and AF3 endpoint are missing, only AF2 tools (23 tools) are registered."""
+        """When OF3, Boltz-2, ESMFold2, and AF3 endpoint are missing, only AF2 tools (23 tools) are registered."""
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("BOLTZ2_COMPONENTS_IMAGE", raising=False)
+        monkeypatch.delenv("ESMFOLD2_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("AF3_VERTEX_ENDPOINT", raising=False)
         monkeypatch.delenv("AF3_ENDPOINT_ID", raising=False)
 
@@ -172,6 +174,7 @@ class TestSkillRegistry:
         assert len(tools) == 23
         assert "submit_of3_prediction" not in tool_names
         assert "submit_boltz2_prediction" not in tool_names
+        assert "submit_esmfold2_prediction" not in tool_names
         assert "submit_af3_endpoint_prediction" not in tool_names
         assert "submit_af2_monomer_prediction" in tool_names
         assert "download_job_artifacts" in tool_names
@@ -180,6 +183,7 @@ class TestSkillRegistry:
         """When AF3_VERTEX_ENDPOINT is configured, the 3 AF3 submission/endpoint tools are registered."""
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("BOLTZ2_COMPONENTS_IMAGE", raising=False)
+        monkeypatch.delenv("ESMFOLD2_COMPONENTS_IMAGE", raising=False)
         monkeypatch.setenv(
             "AF3_VERTEX_ENDPOINT", "projects/test-proj/locations/us-central1/endpoints/123"
         )
@@ -255,6 +259,7 @@ class TestSkillRegistry:
         """Every tool in SKILL.md adk_additional_tools must exist in SkillRegistry."""
         monkeypatch.setenv("OPENFOLD3_COMPONENTS_IMAGE", "test-of3:latest")
         monkeypatch.setenv("BOLTZ2_COMPONENTS_IMAGE", "test-boltz2:latest")
+        monkeypatch.setenv("ESMFOLD2_COMPONENTS_IMAGE", "test-esmfold2:latest")
         monkeypatch.setenv(
             "AF3_VERTEX_ENDPOINT", "projects/test-proj/locations/us-central1/endpoints/123"
         )
@@ -308,12 +313,13 @@ class TestSkillRegistry:
         assert "job-submission" in skill_names
         assert "submit_af2_monomer_prediction" in toolset._provided_tools_by_name
 
-        # Verify job-submission has all 4 per-model submission references loaded
+        # Verify job-submission has all 5 per-model submission references loaded
         js_refs = set(toolset._skills["job-submission"].resources.references.keys())
         assert {
             "af2-submission.md",
             "of3-submission.md",
             "boltz2-submission.md",
+            "esmfold2-submission.md",
             "af3-submission.md",
         }.issubset(js_refs)
 

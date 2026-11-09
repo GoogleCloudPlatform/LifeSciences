@@ -213,6 +213,50 @@ def submit_boltz2_prediction(
     return get_tool("boltz2_submit_prediction").run(args)
 
 
+def submit_esmfold2_prediction(
+    input: str,
+    job_name: str | None = None,
+    model_variant: str = "fast",
+    use_msa: bool | None = None,
+    num_model_seeds: int = 1,
+    num_diffusion_samples: int = 1,
+    num_loops: int = 4,
+    num_sampling_steps: int = 200,
+    gpu_type: str = "auto",
+    enable_flex_start: bool = True,
+) -> dict:
+    """Submit ESMFold2 / ESMFold2-Fast all-atom structure prediction job for proteins, RNA, DNA, or ligands (requires prior user confirmation).
+
+    Args:
+        input: FASTA string, raw amino-acid sequence, ESMFold2 JSON string, or GCS URI.
+        job_name: Human-readable job name.
+        model_variant: "fast" (default: biohub/ESMFold2-Fast, 24-block trunk, single-sequence use_msa=False) or "full" (biohub/ESMFold2, 48-block trunk, use_msa=True default).
+        use_msa: Optional override for Jackhmmer MSA step (always False for "fast"; defaults to True for "full").
+        num_model_seeds: Number of random seeds (default 1).
+        num_diffusion_samples: Diffusion samples per seed (default 1).
+        num_loops: Number of trunk recycling loops (default 4).
+        num_sampling_steps: Diffusion sampling steps (default 200).
+        gpu_type: "auto" (default: L4 <=1000 tokens fast / <=700 tokens full, A100 <=2500 fast / <=2000 full, A100_80GB above), "L4", "A100", or "A100_80GB".
+        enable_flex_start: Use DWS FLEX_START scheduling (default True).
+    """
+    validated_input = _validate_input_source(input, "input")
+    args: dict = {
+        "input": validated_input,
+        "model_variant": model_variant,
+        "num_model_seeds": num_model_seeds,
+        "num_diffusion_samples": num_diffusion_samples,
+        "num_loops": num_loops,
+        "num_sampling_steps": num_sampling_steps,
+        "gpu_type": gpu_type,
+        "enable_flex_start": enable_flex_start,
+    }
+    if job_name is not None:
+        args["job_name"] = job_name
+    if use_msa is not None:
+        args["use_msa"] = use_msa
+    return get_tool("esmfold2_submit_prediction").run(args)
+
+
 def submit_af3_endpoint_prediction(
     input: str,
     job_name: str | None = None,

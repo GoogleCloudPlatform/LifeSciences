@@ -41,12 +41,17 @@ class TestToolRegistry:
             "foldrun_app.models.boltz2.startup._auto_detect_gpus",
             lambda config, **kwargs: None,
         )
+        monkeypatch.setattr(
+            "foldrun_app.models.esmfold2.startup._auto_detect_gpus",
+            lambda config, **kwargs: None,
+        )
 
     def _reset_registry(self):
         """Reset the registry global state between tests."""
         import foldrun_app.models.af2.startup as af2_startup
         import foldrun_app.models.af3.startup as af3_startup
         import foldrun_app.models.boltz2.startup as boltz2_startup
+        import foldrun_app.models.esmfold2.startup as esmfold2_startup
         import foldrun_app.models.of3.startup as of3_startup
         import foldrun_app.skills._tool_registry as reg
         from foldrun_app.core.startup_utils import reset_core_config
@@ -57,6 +62,7 @@ class TestToolRegistry:
         af2_startup._config = None
         of3_startup._config = None
         boltz2_startup._config = None
+        esmfold2_startup._config = None
         af3_startup._config = None
 
     def test_get_tool_initializes_on_first_call(self, mock_env_vars):
@@ -95,7 +101,7 @@ class TestToolRegistry:
                 get_tool("nonexistent_tool")
 
     def test_all_expected_tools_registered(self, mock_env_vars):
-        """All 27 tool names are registered (11 platform + 8 AF2 + 4 OF3 + 4 Boltz-2)."""
+        """All 31 tool names are registered (11 platform + 8 AF2 + 4 OF3 + 4 Boltz-2 + 4 ESMFold2)."""
         self._reset_registry()
 
         with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
@@ -136,9 +142,14 @@ class TestToolRegistry:
                 "boltz2_analyze_parallel",
                 "boltz2_get_analysis_results",
                 "boltz2_open_viewer",
+                # ESMFold2 tools (4)
+                "esmfold2_submit_prediction",
+                "esmfold2_analyze_parallel",
+                "esmfold2_get_analysis_results",
+                "esmfold2_open_viewer",
             ]
 
-            assert len(reg._agents) == 27
+            assert len(reg._agents) == 31
             for tool_name in expected_tools:
                 assert tool_name in reg._agents, f"Tool '{tool_name}' not registered"
 
@@ -148,6 +159,7 @@ class TestToolRegistry:
         monkeypatch.delenv("ALPHAFOLD_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("OPENFOLD3_COMPONENTS_IMAGE", raising=False)
         monkeypatch.delenv("BOLTZ2_COMPONENTS_IMAGE", raising=False)
+        monkeypatch.delenv("ESMFOLD2_COMPONENTS_IMAGE", raising=False)
 
         with patch("google.cloud.aiplatform.init"), patch("google.cloud.storage.Client"):
             import foldrun_app.skills._tool_registry as reg
@@ -159,7 +171,7 @@ class TestToolRegistry:
             assert "af2_submit_monomer" not in reg._agents
 
     def test_model_registry_registers_all_four_models(self, mock_env_vars, monkeypatch):
-        """ModelDescriptor registry registers alphafold2, openfold3, boltz2, and alphafold3."""
+        """ModelDescriptor registry registers alphafold2, openfold3, boltz2, esmfold2, and alphafold3."""
         from foldrun_app.core.model_registry import (
             get_model,
             infer_model_type_from_job_id,
@@ -168,16 +180,21 @@ class TestToolRegistry:
         )
 
         all_models = list_models()
-        assert set(all_models) == {"alphafold2", "openfold3", "boltz2", "alphafold3"}
+        assert set(all_models) == {"alphafold2", "openfold3", "boltz2", "esmfold2", "alphafold3"}
 
         assert normalize_model_type("af2") == "alphafold2"
         assert normalize_model_type("of3") == "openfold3"
         assert normalize_model_type("boltz-2") == "boltz2"
+        assert normalize_model_type("esmfold2_fast") == "esmfold2"
+        assert normalize_model_type("esmfold2-fast") is None
+        assert normalize_model_type("esmfold") is None
+        assert normalize_model_type("esm2") is None
         assert normalize_model_type("af3") == "alphafold3"
 
         assert infer_model_type_from_job_id("alphafold2-inference-pipeline-123") == "alphafold2"
         assert infer_model_type_from_job_id("of3-inference-pipeline-123") == "openfold3"
         assert infer_model_type_from_job_id("boltz2-inference-pipeline-123") == "boltz2"
+        assert infer_model_type_from_job_id("esmfold2-inference-pipeline-123") == "esmfold2"
         assert infer_model_type_from_job_id("alphafold3-inference-pipeline-123") == "alphafold3"
 
         af3_desc = get_model("af3")
@@ -188,4 +205,4 @@ class TestToolRegistry:
 
         monkeypatch.setenv("AF3_VERTEX_ENDPOINT", "endpoint-123")
         enabled = list_models(enabled_only=True)
-        assert set(enabled) == {"alphafold2", "openfold3", "boltz2", "alphafold3"}
+        assert set(enabled) == {"alphafold2", "openfold3", "boltz2", "esmfold2", "alphafold3"}

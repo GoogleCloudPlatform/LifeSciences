@@ -20,6 +20,7 @@ from google.cloud import storage
 
 from foldrun_app.core.base_tool import BaseTool
 from foldrun_app.core.vertex_utils import get_pipeline_job
+from foldrun_common import normalize_model_type
 
 
 class GetJobDetailsTool(BaseTool):
@@ -65,19 +66,21 @@ class GetJobDetailsTool(BaseTool):
         if not input_path:
             raise ValueError(f"Could not find sequence_path or query_json_path in job {job_id}")
 
-        raw_model_type = labels.get("model_type", "").lower()
+        norm_model_type = normalize_model_type(labels.get("model_type"))
         lower_input_path = input_path.lower()
         is_boltz2 = (
-            raw_model_type in ("boltz2", "boltz")
+            norm_model_type == "boltz2"
             or lower_input_path.endswith((".yaml", ".yml"))
             or "/boltz2_queries/" in lower_input_path
         )
-        is_af3 = raw_model_type in ("alphafold3", "af3") or "/af3_predictions/" in lower_input_path
+        is_af3 = norm_model_type == "alphafold3" or "/af3_predictions/" in lower_input_path
+        is_esmfold2 = norm_model_type == "esmfold2" or "/esmfold2_queries/" in lower_input_path
         is_of3 = (
             not is_boltz2
             and not is_af3
+            and not is_esmfold2
             and (
-                raw_model_type in ("openfold3", "of3")
+                norm_model_type == "openfold3"
                 or "/of3_queries/" in lower_input_path
                 or query_json_path is not None
             )
@@ -88,6 +91,9 @@ class GetJobDetailsTool(BaseTool):
             input_format = "yaml"
         elif is_af3:
             resolved_model_type = "alphafold3"
+            input_format = "json"
+        elif is_esmfold2:
+            resolved_model_type = "esmfold2"
             input_format = "json"
         elif is_of3:
             resolved_model_type = "openfold3"
@@ -115,6 +121,9 @@ class GetJobDetailsTool(BaseTool):
                     fasta_sequence = fasta_content
                 elif is_af3:
                     fasta_header = "AF3 query JSON"
+                    fasta_sequence = fasta_content
+                elif is_esmfold2:
+                    fasta_header = "ESMFold2 query JSON"
                     fasta_sequence = fasta_content
                 elif is_of3:
                     fasta_header = "OF3 query JSON"

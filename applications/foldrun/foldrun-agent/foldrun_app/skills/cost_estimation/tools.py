@@ -32,11 +32,11 @@ def estimate_job_cost(
     """Estimate On-Demand and DWS FLEX_START costs for a single FoldRun prediction job.
 
     Args:
-        job_type: One of "af2_monomer", "af2_multimer", "af3", "of3", or "boltz2".
+        job_type: One of "af2_monomer", "af2_multimer", "af3", "of3", "boltz2", "esmfold2", or "esmfold2_fast".
         gpu_type: "auto" (recommended), "L4", "A100", "A100_80GB", or "H100".
-        sequence_length: Total residues (AF2) or tokens (AF3/OF3/Boltz-2).
-        num_predictions_per_model: Predictions per model (AF2 multimer default 5) or seeds (OF3/Boltz-2 default 5, AF3 default 1).
-        num_diffusion_samples: Diffusion samples per seed for AF3/OF3/Boltz-2 (default 5).
+        sequence_length: Total residues (AF2/ESMFold2) or tokens (AF3/OF3/Boltz-2).
+        num_predictions_per_model: Predictions per model (AF2 multimer default 5) or seeds (OF3/Boltz-2 default 5, AF3/ESMFold2 default 1).
+        num_diffusion_samples: Diffusion samples per seed for AF3/OF3/Boltz-2 (default 5) or ESMFold2 (default 1).
         region: GCP region (default: us-central1).
     """
     resolved_region = region if (region and region.lower() != "global") else "us-central1"
@@ -56,6 +56,8 @@ def estimate_monthly_cost(
     af3_jobs: int = 0,
     of3_jobs: int = 0,
     boltz2_jobs: int = 0,
+    esmfold2_jobs: int = 0,
+    esmfold2_fast_jobs: int = 0,
     avg_sequence_length: int = 300,
     include_infrastructure: bool = True,
     region: str | None = None,
@@ -68,6 +70,8 @@ def estimate_monthly_cost(
         af3_jobs: Monthly AlphaFold3 jobs.
         of3_jobs: Monthly OpenFold3 jobs.
         boltz2_jobs: Monthly Boltz-2 jobs.
+        esmfold2_jobs: Monthly full ESMFold2 jobs.
+        esmfold2_fast_jobs: Monthly ESMFold2-Fast jobs.
         avg_sequence_length: Average sequence length in residues/tokens.
         include_infrastructure: Include always-on Filestore/GCS/Agent Runtime costs (default True).
         region: GCP region (default: us-central1).
@@ -79,6 +83,8 @@ def estimate_monthly_cost(
         af3_jobs=af3_jobs,
         of3_jobs=of3_jobs,
         boltz2_jobs=boltz2_jobs,
+        esmfold2_jobs=esmfold2_jobs,
+        esmfold2_fast_jobs=esmfold2_fast_jobs,
         avg_sequence_length=avg_sequence_length,
         include_infrastructure=include_infrastructure,
         region=resolved_region,

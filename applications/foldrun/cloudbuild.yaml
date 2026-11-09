@@ -233,6 +233,35 @@ steps:
     waitFor: ['-']
 
   # ============================================================================
+  # 3d. ESMFold2 Components (Pipeline Container Image)
+  # ============================================================================
+  - id: 'build-push-esmfold2-components'
+    name: 'docker:29-cli'
+    entrypoint: 'sh'
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+      - 'BUILD_TARGET=${_BUILD_TARGET}'
+      - 'REGION=${_REGION}'
+      - 'AR_REPO=${_AR_REPO}'
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        _t=",$$BUILD_TARGET,"
+        if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",esmfold2,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/esmfold2-components:latest" || true
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/esmfold2-components:latest" \
+            -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/esmfold2-components:latest" \
+            src/esmfold2-components/
+          docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/esmfold2-components:latest"
+        else
+          echo "Skipping esmfold2-components build (BUILD_TARGET=$$BUILD_TARGET)"
+        fi
+    waitFor: ['-']
+
+  # ============================================================================
   # 4. FoldRun Agent (Agent Runtime)
   # Runs whenever any component or the agent itself is in the target.
   # Skipped only for analysis-job-only targets.
@@ -272,7 +301,8 @@ steps:
         if [[ "$$BUILD_TARGET" != "all" ]] && [[ "$$BUILD_TARGET" != "agent" ]] && \
            [[ "$$_t" != *",agent,"* ]] && \
            [[ "$$_t" != *",viewer,"* ]] && [[ "$$_t" != *",af2,"* ]] && \
-           [[ "$$_t" != *",of3,"* ]] && [[ "$$_t" != *",boltz2,"* ]]; then
+           [[ "$$_t" != *",of3,"* ]] && [[ "$$_t" != *",boltz2,"* ]] && \
+           [[ "$$_t" != *",esmfold2,"* ]]; then
           _skip_agent=true
         fi
 
@@ -302,6 +332,7 @@ steps:
             "ALPHAFOLD_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/alphafold-components:latest"
             "OPENFOLD3_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest"
             "BOLTZ2_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/boltz2-components:latest"
+            "ESMFOLD2_COMPONENTS_IMAGE=$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/esmfold2-components:latest"
             "FOLDRUN_VIEWER_URL=$$FOLDRUN_VIEWER_URL"
             "ANALYSIS_JOB_NAME=foldrun-analysis-job"
             "PIPELINES_SA_EMAIL=$$PIPELINES_SA_EMAIL"
@@ -329,7 +360,7 @@ steps:
         echo ""
         echo "A2A URL: $$A2A_URL"
         echo "A2A Agent Card: $$A2A_URL/.well-known/agent-card.json"
-    waitFor: ['build-push-af2-components', 'build-push-of3-components', 'build-push-boltz2-components']
+    waitFor: ['build-push-af2-components', 'build-push-of3-components', 'build-push-boltz2-components', 'build-push-esmfold2-components']
 
   # ============================================================================
   # 5. [Optional] Register Agent with Gemini Enterprise

@@ -48,9 +48,11 @@ from foldrun_common import (
     discover_af2_predictions_in_gcs,
     discover_af3_predictions,
     discover_boltz2_predictions,
+    discover_esmfold2_predictions,
     discover_of3_predictions,
     ensure_run_archive_in_gcs,
     resolve_boltz2_query_yaml_uri,
+    resolve_esmfold2_query_json_uri,
     validate_gcs_uri,
 )
 from foldrun_common import (
@@ -499,6 +501,26 @@ def _discover_boltz2_predictions(pipeline_root: str) -> list:
 def _resolve_boltz2_query_yaml_uri(pj: dict) -> str | None:
     """Resolve and validate the Boltz-2 input YAML URI within BUCKET_NAME."""
     return resolve_boltz2_query_yaml_uri(
+        bucket_name=BUCKET_NAME,
+        parameter_values=(pj.get("runtimeConfig") or {}).get("parameterValues"),
+        labels=pj.get("labels"),
+        display_name=pj.get("displayName"),
+    )
+
+
+def _discover_esmfold2_predictions(pipeline_root: str) -> list:
+    """Scan GCS for ESMFold2 *_confidences.json files under pipeline_root."""
+    return discover_esmfold2_predictions(
+        pipeline_root,
+        storage_client,
+        expected_bucket=BUCKET_NAME,
+        allowed_prefixes=ALLOWED_GCS_PREFIXES,
+    )
+
+
+def _resolve_esmfold2_query_json_uri(pj: dict) -> str | None:
+    """Resolve and validate the ESMFold2 input JSON URI within BUCKET_NAME."""
+    return resolve_esmfold2_query_json_uri(
         bucket_name=BUCKET_NAME,
         parameter_values=(pj.get("runtimeConfig") or {}).get("parameterValues"),
         labels=pj.get("labels"),
@@ -1011,6 +1033,7 @@ def trigger_analysis():
         analysis_path = f"{gcs_output_dir}analysis/"
         af3_extra_cfg: dict = {}
         boltz2_extra_cfg: dict = {}
+        esmfold2_extra_cfg: dict = {}
 
         # Discover predictions based on model type
         if model_type == "alphafold3":
@@ -1053,6 +1076,11 @@ def trigger_analysis():
                 "affinity_uri": affinity_uri,
                 "query_yaml_uri": _resolve_boltz2_query_yaml_uri(pj),
             }
+        elif model_type == "esmfold2":
+            raw_predictions = _discover_esmfold2_predictions(gcs_output_dir)
+            esmfold2_extra_cfg = {
+                "query_json_uri": _resolve_esmfold2_query_json_uri(pj),
+            }
         else:
             raw_predictions = _discover_af2_predictions(gcs_output_dir)
 
@@ -1068,6 +1096,7 @@ def trigger_analysis():
             raw_predictions=raw_predictions,
             affinity_uri=boltz2_extra_cfg.get("affinity_uri"),
             query_yaml_uri=boltz2_extra_cfg.get("query_yaml_uri"),
+            query_json_uri=esmfold2_extra_cfg.get("query_json_uri"),
             extra_fields=af3_extra_cfg or None,
         ).model_dump()
 

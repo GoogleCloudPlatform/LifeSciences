@@ -14,9 +14,9 @@ metadata:
 # Results & Analysis — Quality Assessment
 
 ## Analysis & Download Tools
-- **Trigger Parallel Analysis (`analyze_job_parallel`)**: Dispatches parallel Cloud Run analysis across AF2, OF3, Boltz-2, and AF3 (`job_id`) to generate pLDDT plots, PAE/PDE heatmaps, ipTM matrices, and Gemini Expert Analysis.
+- **Trigger Parallel Analysis (`analyze_job_parallel`)**: Dispatches parallel Cloud Run analysis across AF2, OF3, Boltz-2, ESMFold2, and AF3 (`job_id`) to generate pLDDT plots, PAE/PDE heatmaps, ipTM matrices, and Gemini Expert Analysis.
   - **IMPORTANT**: After starting `analyze_job_parallel`, DO NOT poll in a loop. Tell the user: *"Analysis started (takes 1–2 minutes). Ask me to check results in a few minutes."*
-- **Retrieve Analysis Results (`get_analysis_results`)**: Fetches completed `summary.json` metrics and expert analysis across AF2, OF3, Boltz-2, and AF3.
+- **Retrieve Analysis Results (`get_analysis_results`)**: Fetches completed `summary.json` metrics and expert analysis across AF2, OF3, Boltz-2, ESMFold2, and AF3.
   - Only call when the user asks to check/retrieve analysis results.
   - If `status` is `'failed'` or `'likely_failed'`, stop retrying and explain `error_hint` / `error_details`.
   - **AF3 Lookup Rule**: AF3 stores artifacts under the sanitized `job_name` (`gs://.../af3_predictions/<job_name>/`). If `get_analysis_results(pipeline_job_id)` returns `not_found`, retry once with the human-readable `job_name`.

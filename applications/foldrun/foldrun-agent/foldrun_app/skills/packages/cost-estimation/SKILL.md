@@ -10,7 +10,7 @@ metadata:
 
 # Cost Estimation
 
-- **Per-Job Cost Forecast (`estimate_job_cost`)**: Estimates compute cost before submitting a prediction (`af2_monomer`, `af2_multimer`, `of3`, or `boltz2`).
+- **Per-Job Cost Forecast (`estimate_job_cost`)**: Estimates compute cost before submitting a prediction (`af2_monomer`, `af2_multimer`, `of3`, `boltz2`, `esmfold2`, `esmfold2_fast`, or `af3`).
   - Returns per-phase breakdown (MSA, predict, relax) with both **on-demand** and **DWS FLEX_START** (spot) pricing side by side.
   - GPU auto-selection matches the submission tools (`A100` 40GB default, `A100_80GB` for large sequences, or explicit `L4` override).
   - Always present both pricing columns so users can compare (FoldRun defaults to `DWS FLEX_START`).

@@ -35,7 +35,7 @@ class TestEvalSuiteConfig:
         dataset_path = _EVAL_DIR / "datasets" / "basic-dataset.json"
         data = json.loads(dataset_path.read_text(encoding="utf-8"))
         cases = data.get("eval_cases", [])
-        assert len(cases) >= 12
+        assert len(cases) >= 14
         case_ids = {c["eval_case_id"] for c in cases}
         expected_ids = {
             "greeting",
@@ -44,11 +44,13 @@ class TestEvalSuiteConfig:
             "skill_job_management_gpu_quota",
             "skill_job_management_list_jobs",
             "skill_cost_estimation_af2",
+            "skill_cost_estimation_esmfold2",
             "skill_database_queries_afdb",
             "skill_storage_management_orphans",
             "skill_storage_management_hitl_safety",
             "skill_job_submission_af2_confirmation_table",
             "skill_job_submission_boltz2_affinity_confirmation",
+            "skill_job_submission_esmfold2_confirmation",
             "skill_results_analysis_and_viewer_guidance",
         }
         assert expected_ids.issubset(case_ids)
@@ -141,6 +143,95 @@ class TestSkillAdherenceMetric:
         }
         res = skill_adherence.evaluate(instance)
         assert "no_unconfirmed_delete=FAIL" in res["explanation"]
+
+    def test_esmfold2_confirmation_table_passes_and_penalizes_premature_submit(self):
+        prompt = (
+            "Prepare an ESMFold2-Fast prediction for human ubiquitin "
+            "(MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRTLSDYNIQKESTLHLVLRLRGG) "
+            "and explain how its pipeline differs from full ESMFold2. Show me the confirmation plan first."
+        )
+        good_instance = {
+            "prompt": prompt,
+            "response": (
+                "| Phase | Machine | GPU | Strategy |\n|---|---|---|---|\n"
+                "| MSA Pipeline | Skipped (zero-MSA) | - | - |\n"
+                "| Predict | g2-standard-12 | L4 x 1 | DWS FLEX_START |\n\n"
+                "Full ESMFold2 adds a CPU Jackhmmer MSA step.\n1. Confirm submission\n2. Switch to full ESMFold2"
+            ),
+            "agent_data": {"turns": []},
+        }
+        res_good = skill_adherence.evaluate(good_instance)
+        assert res_good["score"] == 1.0
+
+        bad_instance = {
+            "prompt": prompt,
+            "response": "Submitted ESMFold2 job!",
+            "agent_data": {
+                "turns": [
+                    {
+                        "events": [
+                            {
+                                "content": {
+                                    "parts": [
+                                        {
+                                            "function_call": {
+                                                "name": "submit_esmfold2_prediction",
+                                                "args": {},
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        }
+        res_bad = skill_adherence.evaluate(bad_instance)
+        assert res_bad["score"] < 0.5
+
+    def test_esmfold2_cost_comparison_checks_both_variants(self):
+        instance = {
+            "prompt": "Compare the estimated compute cost of folding a 300-residue protein with ESMFold2-Fast versus full ESMFold2.",
+            "response": (
+                "ESMFold2-Fast costs less because it skips the CPU MSA step compared to full ESMFold2.\n"
+                "1. Submit ESMFold2-Fast job\n2. Submit full ESMFold2 job"
+            ),
+            "agent_data": {
+                "turns": [
+                    {
+                        "events": [
+                            {
+                                "content": {
+                                    "parts": [
+                                        {
+                                            "function_call": {
+                                                "name": "estimate_job_cost",
+                                                "args": {
+                                                    "job_type": "esmfold2_fast",
+                                                    "sequence_length": 300,
+                                                },
+                                            }
+                                        },
+                                        {
+                                            "function_call": {
+                                                "name": "estimate_job_cost",
+                                                "args": {
+                                                    "job_type": "esmfold2",
+                                                    "sequence_length": 300,
+                                                },
+                                            }
+                                        },
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                ]
+            },
+        }
+        res = skill_adherence.evaluate(instance)
+        assert res["score"] == 1.0
 
     def test_response_quality_client_raises_when_project_missing(self, monkeypatch):
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)

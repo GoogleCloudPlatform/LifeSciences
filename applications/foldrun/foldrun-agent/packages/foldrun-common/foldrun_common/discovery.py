@@ -26,6 +26,7 @@ from .models import (
     AF3PredictionTask,
     AnalysisTaskConfig,
     Boltz2PredictionTask,
+    ESMFold2PredictionTask,
     OF3PredictionTask,
 )
 
@@ -296,6 +297,106 @@ def resolve_boltz2_query_yaml_uri(
     return f"{expected_prefix}{query_name}.yaml"
 
 
+def discover_esmfold2_predictions(
+    pipeline_root: str,
+    storage_client: Any,
+    *,
+    expected_bucket: str | None = None,
+    allowed_prefixes: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    """Scan GCS for ESMFold2 / ESMFold2-Fast ``*_confidences.json`` sample outputs."""
+    bucket_name, prefix = _parse_pipeline_root(
+        pipeline_root,
+        expected_bucket=expected_bucket,
+        allowed_prefixes=allowed_prefixes,
+    )
+    bucket = storage_client.bucket(bucket_name)
+    samples: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for blob in bucket.list_blobs(prefix=prefix):
+        name = blob.name
+        if "/analysis/" in name:
+            continue
+        if (
+            name.endswith("_confidences.json")
+            and not name.endswith("_confidences_aggregated.json")
+            and ("/predictions/" in name or "seed_" in name or "seed-" in name)
+            and name not in seen
+        ):
+            seen.add(name)
+            base = name.removesuffix("_confidences.json")
+            raw_sample_name = name.rsplit("/", 1)[-1].removesuffix("_confidences.json")
+            m = re.search(r"seed[_-](\d+).*sample[_-](\d+)", raw_sample_name)
+            seed = int(m.group(1)) if m else 1
+            sample_idx = int(m.group(2)) if m else len(samples)
+            sample_name = f"seed_{seed}_sample_{sample_idx}" if m else raw_sample_name
+            samples.append(
+                {
+                    "sample_name": sample_name,
+                    "seed": seed,
+                    "sample": sample_idx,
+                    "cif_uri": f"gs://{bucket_name}/{base}_model.cif",
+                    "confidences_uri": f"gs://{bucket_name}/{name}",
+                    "pae_uri": f"gs://{bucket_name}/{base}_pae.npz",
+                }
+            )
+
+    samples.sort(key=lambda s: (int(s.get("seed", 1)), int(s.get("sample", 0)), s["sample_name"]))
+    logger.info(f"Discovered {len(samples)} ESMFold2 samples")
+    return samples
+
+
+def resolve_esmfold2_query_json_uri(
+    *,
+    bucket_name: str,
+    parameter_values: dict[str, Any] | None = None,
+    labels: dict[str, Any] | None = None,
+    display_name: str | None = None,
+    strict_label_validation: bool = False,
+) -> str | None:
+    """Resolve and validate the ESMFold2 input JSON URI under ``gs://<bucket>/esmfold2_queries/``."""
+    lbls = labels or {}
+    raw_label_qname = lbls.get("query_name")
+    if strict_label_validation and raw_label_qname is not None and raw_label_qname != "":
+        if (
+            not isinstance(raw_label_qname, str)
+            or "/" in raw_label_qname
+            or ".." in raw_label_qname
+            or not JOB_ID_PATTERN.fullmatch(raw_label_qname)
+        ):
+            raise ValueError(
+                f"Path traversal detected or invalid characters in query_name label: {raw_label_qname!r}"
+            )
+
+    expected_prefix = f"gs://{bucket_name}/esmfold2_queries/"
+    param_vals = parameter_values or {}
+    raw_query_uri = param_vals.get("query_json_path")
+    if isinstance(raw_query_uri, str) and raw_query_uri.startswith(expected_prefix):
+        rel = raw_query_uri[len(expected_prefix) :]
+        segments = [seg for seg in rel.split("/") if seg]
+        if (
+            segments
+            and ".." not in segments
+            and "." not in segments
+            and rel.lower().endswith(".json")
+        ):
+            return raw_query_uri
+
+    query_name = raw_label_qname or (display_name if not strict_label_validation else "") or ""
+    if not query_name or not isinstance(query_name, str):
+        return None
+
+    if "/" in query_name or ".." in query_name or not JOB_ID_PATTERN.fullmatch(query_name):
+        if strict_label_validation:
+            raise ValueError(
+                f"Path traversal detected or invalid characters in query_name label: {query_name!r}"
+            )
+        return None
+
+    return f"{expected_prefix}{query_name}.json"
+
+
 def build_analysis_task_config(
     *,
     model_type: str,
@@ -304,9 +405,10 @@ def build_analysis_task_config(
     raw_predictions: list[dict[str, Any]],
     affinity_uri: str | None = None,
     query_yaml_uri: str | None = None,
+    query_json_uri: str | None = None,
     extra_fields: dict[str, Any] | None = None,
 ) -> AnalysisTaskConfig:
-    """Construct a validated ``AnalysisTaskConfig`` for AF2, OF3, Boltz-2, or AF3."""
+    """Construct a validated ``AnalysisTaskConfig`` for AF2, OF3, Boltz-2, AF3, or ESMFold2."""
     if model_type == "alphafold2":
         predictions_cfg = [
             AF2PredictionTask(
@@ -355,6 +457,20 @@ def build_analysis_task_config(
             ).model_dump()
             for i, p in enumerate(raw_predictions)
         ]
+    elif model_type == "esmfold2":
+        predictions_cfg = [
+            ESMFold2PredictionTask(
+                index=i,
+                sample_name=p["sample_name"],
+                seed=int(p.get("seed", 1)),
+                sample=int(p.get("sample", i)),
+                cif_uri=p["cif_uri"],
+                confidences_uri=p["confidences_uri"],
+                pae_uri=p.get("pae_uri", ""),
+                output_uri=f"{analysis_path}prediction_{i}_analysis.json",
+            ).model_dump()
+            for i, p in enumerate(raw_predictions)
+        ]
     else:
         raise ValueError(f"Unsupported model_type for task_config: {model_type}")
 
@@ -369,6 +485,8 @@ def build_analysis_task_config(
         payload["affinity_uri"] = affinity_uri
     if query_yaml_uri is not None or model_type == "boltz2":
         payload["query_yaml_uri"] = query_yaml_uri
+    if query_json_uri is not None or model_type == "esmfold2":
+        payload["query_json_uri"] = query_json_uri
     if extra_fields:
         payload.update(extra_fields)
 

@@ -15,7 +15,7 @@
 """FoldRun Agent - Main agent logic.
 
 Multi-model protein structure prediction agent supporting AlphaFold2,
-AlphaFold 3, OpenFold3, and Boltz-2. Deployed to Agent Runtime or run locally via ADK.
+AlphaFold 3, OpenFold3, Boltz-2, and ESMFold2 / ESMFold2-Fast. Deployed to Agent Runtime or run locally via ADK.
 """
 
 import logging
@@ -32,11 +32,12 @@ from foldrun_common import ALLOWED_GEMINI_AGENT_MODELS, DEFAULT_GEMINI_AGENT_MOD
 logger = logging.getLogger(__name__)
 
 # Modular v2 coordinator instructions for native ADK skills (used with SkillDiscoveryMode.EAGER)
-FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction and macromolecular modeling assistant supporting four models:
+FOLDRUN_V2_INSTRUCTION = """You are FoldRun, an expert protein structure prediction and macromolecular modeling assistant supporting five model families:
 - **AlphaFold2** (`submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_af2_batch_predictions`): Specialized for protein-only monomers and multimers (check AlphaFold DB first by UniProt ID before running GPU jobs).
 - **AlphaFold 3** (`submit_af3_endpoint_prediction`, `submit_af3_batch_predictions`): Dedicated H100 80 GB all-atom endpoint supporting Full 630 GB MSA + PDB templates (`msa_free=False`, default) and fast zero-MSA mode (`msa_free=True`) for proteins, RNA, DNA, ligands, and ions.
 - **OpenFold3** (`submit_of3_prediction`): Multi-molecule complexes (proteins, RNA, DNA, CCD/SMILES ligands); **preferred for RNA** because its MSA pipeline runs automated `nhmmer` RNA alignment against Rfam + RNAcentral.
 - **Boltz-2** (`submit_boltz2_prediction`): Biomolecular complexes, covalent modifications, glycans, and **ligand binding affinity prediction** (`properties: [{affinity: {binder: <chain_id>}}]`), outputting `affinity_pred_value` (`log10(IC50 uM)`, more negative = stronger binding) and `affinity_probability_binary` (`0–1` active binder probability).
+- **ESMFold2 / ESMFold2-Fast** (`submit_esmfold2_prediction`): All-atom biomolecular structure prediction (proteins, RNA, DNA, CCD/SMILES ligands, and modified residues) powered by ESM C language model embeddings + diffusion structure module. Supports **ESMFold2-Fast** (`model_variant="fast"`, default: `biohub/ESMFold2-Fast`, 24-block trunk, zero-MSA single-sequence inference `use_msa=False`) and **ESMFold2** (`model_variant="full"`: `biohub/ESMFold2`, 48-block trunk with CPU Jackhmmer MSA `use_msa=True` default).
 
 ## Confidence Metrics & Post-Job Analysis Summary
 - **pLDDT (`0–100`)**: Per-residue/atom local confidence (`>90` very high / reliable sidechains; `70–90` confident backbone; `50–70` flexible loops; `<50` intrinsically disordered regions).
@@ -140,7 +141,7 @@ def _get_agent_config_context(gemini_model: str) -> str:
 - Analysis Viewer: {viewer_base_url} | AI Model: {gemini_model}
 
 **Initial Greeting (First User Message Only)**:
-Welcome the user to FoldRun, summarize the four supported models—**AlphaFold2** (protein-only monomers/multimers), **AlphaFold 3** (all-atom H100 endpoint with `--msa-free` and Full 630 GB MSA), **OpenFold3** (multi-molecule complexes, ligands, and RNA with nhmmer MSA), and **Boltz-2** (covalent modifications, glycans, and ligand binding affinity)—show a compact environment table (`Project`, `Region`, `Models`, `AI Model`), and offer Getting started example prompts (e.g., *"Predict the structure of ubiquitin with AlphaFold 3"*, *"Fold this protein with ATP ligand"*, *"What's the structure of P69905?"*). When asked about configuration, include the GCS bucket and viewer URL.
+Welcome the user to FoldRun, summarize the supported models—**AlphaFold2** (protein-only monomers/multimers), **AlphaFold 3** (all-atom H100 endpoint with `--msa-free` and Full 630 GB MSA), **OpenFold3** (multi-molecule complexes, ligands, and RNA with nhmmer MSA), **Boltz-2** (covalent modifications, glycans, and ligand binding affinity), and **ESMFold2 / ESMFold2-Fast** (ultrafast zero-MSA single-sequence or MSA-enabled all-atom folding for proteins, nucleic acids, and ligands)—show a compact environment table (`Project`, `Region`, `Models`, `AI Model`), and offer Getting started example prompts (e.g., *"Predict the structure of ubiquitin with AlphaFold 3"*, *"Fold this protein with ESMFold2-Fast"*, *"Fold this protein with ATP ligand"*, *"What's the structure of P69905?"*). When asked about configuration, include the GCS bucket and viewer URL.
 """
 
 

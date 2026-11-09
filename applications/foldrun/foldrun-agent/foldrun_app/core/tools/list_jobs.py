@@ -290,6 +290,10 @@ class ListJobsTool(BaseTool):
                 "of3": "OpenFold3",
                 "boltz2": "Boltz-2",
                 "boltz": "Boltz-2",
+                "esmfold2": (
+                    "ESMFold2-Fast" if labels.get("model_variant") == "fast" else "ESMFold2"
+                ),
+                "esmfold2_fast": "ESMFold2-Fast",
             }
             model_prefix = model_display_map.get(model_type, labels.get("model_type", "AlphaFold"))
             if "job_type" in labels:
