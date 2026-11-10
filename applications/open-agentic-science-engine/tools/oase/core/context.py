@@ -76,6 +76,7 @@ ARTIFACT_DIRS: dict[str, str] = {
     "single-cell": "raw/single-cell",
     "structures": "raw/structures",
     "tox": "raw/tox",
+    "triage": "raw/triage",
     "transcriptomics": "raw/transcriptomics",
 }
 
