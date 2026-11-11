@@ -757,6 +757,15 @@ RELAY_CODES: dict[str, str] = {
         "indications. Do not treat the presence of competitor trials as evidence "
         "that the target is validated — a trial is a bet, not a result."
     ),
+    "trials.result_set_capped": (
+        "The search retained fewer studies than the query matched on "
+        "ClinicalTrials.gov. Phase counts, recruiting counts, max phase, "
+        "and top sponsors describe the retained studies, not the full "
+        "query result set: report counts as at least N among the retained "
+        "K studies, and do not read an early_pipeline or no_pipeline "
+        "verdict on a capped set as an absence of later-stage or active "
+        "trials."
+    ),
     "patent.fto_risk_identified": (
         "Patent landscape shows recent filings that may affect freedom to "
         "operate. Check assignees, claim scope, and jurisdiction before "

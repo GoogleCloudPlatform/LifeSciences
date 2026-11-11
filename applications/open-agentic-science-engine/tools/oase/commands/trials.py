@@ -121,11 +121,14 @@ def _fetch_clinicaltrials(query: str, search_by: str) -> tuple[bytes, dict[str, 
     all_studies: list[dict[str, Any]] = []
     raw_pages: list[bytes] = []
     page_token: str | None = None
+    total_results: int | None = None
 
     while len(all_studies) < _MAX_STUDIES:
         url = base_url
         if page_token:
             url += f"&pageToken={quote(page_token, safe='')}"
+        else:
+            url += "&countTotal=true"
 
         response = http.request(
             "GET",
@@ -142,6 +145,15 @@ def _fetch_clinicaltrials(query: str, search_by: str) -> tuple[bytes, dict[str, 
                 "ClinicalTrials.gov did not return JSON", detail=str(exc)
             ) from exc
 
+        # Capture total study count from the first page when present.
+        if len(raw_pages) == 1:
+            raw_total = payload.get("totalCount")
+            if raw_total is not None:
+                try:
+                    total_results = int(raw_total)
+                except (TypeError, ValueError):
+                    total_results = None
+
         studies = payload.get("studies", [])
         if not studies:
             break
@@ -152,7 +164,11 @@ def _fetch_clinicaltrials(query: str, search_by: str) -> tuple[bytes, dict[str, 
             all_studies.append(_extract_study(study))
 
         page_token = payload.get("nextPageToken")
-        if not page_token:
+        if not page_token or (
+            total_results is not None
+            and total_results > 0
+            and len(all_studies) >= total_results
+        ):
             break
 
     # Build verbatim bytes -- combine pages if paginated.
@@ -195,6 +211,7 @@ def _fetch_clinicaltrials(query: str, search_by: str) -> tuple[bytes, dict[str, 
         },
         "summary": {
             "n_studies": len(all_studies),
+            "total_results": total_results,
             "by_phase": by_phase,
             "by_status": by_status,
             "top_sponsors": top_sponsors,
@@ -203,6 +220,68 @@ def _fetch_clinicaltrials(query: str, search_by: str) -> tuple[bytes, dict[str, 
     }
 
     return raw, artifact
+
+
+def capped_counts(summary: dict[str, Any]) -> tuple[int, int] | None:
+    """``(retained, total)`` when fewer studies were kept than matched, else None."""
+    try:
+        n_studies = int(summary.get("n_studies") or 0)
+        total = int(summary.get("total_results") or 0)
+    except (TypeError, ValueError):
+        return None
+    return (n_studies, total) if total > n_studies else None
+
+
+def coverage_relays(summary: dict[str, Any]) -> list[dict[str, str]]:
+    """Relays for a retained study set that is not the whole of what matched.
+
+    Derived from the artifact's own summary rather than the sidecar, so
+    ``search`` and ``analyze`` reach the same answer offline, including on
+    artifacts written before ``total_results`` existed when they hit
+    ``_MAX_STUDIES``.
+
+    Defect-triggered qualifier: fires when the study set was truncated at
+    the cap and is silent on a set that reached the end of the results.
+    """
+    relays: list[dict[str, str]] = []
+
+    capped = capped_counts(summary)
+    if capped:
+        n_studies, total = capped
+        relays.append(
+            provenance.relay(
+                "trials.result_set_capped",
+                f"Retained {n_studies} of {total} studies from "
+                "ClinicalTrials.gov. Counts derived from this set (phase "
+                "breakdown, recruiting count, max phase, top sponsors) "
+                f"describe the first {n_studies} studies, not the full "
+                f"query result set: report them as at least N among the "
+                f"retained {n_studies} studies, and do not read an "
+                "early_pipeline or no_pipeline verdict as an absence of "
+                "later-stage or active trials.",
+            )
+        )
+    elif summary.get("total_results") is None:
+        try:
+            n_studies = int(summary.get("n_studies") or 0)
+        except (TypeError, ValueError):
+            n_studies = 0
+        if n_studies >= _MAX_STUDIES:
+            relays.append(
+                provenance.relay(
+                    "trials.result_set_capped",
+                    f"Retained {n_studies} studies (capped at {_MAX_STUDIES}; "
+                    "total matching studies not recorded in legacy artifact). "
+                    "Counts derived from this set (phase breakdown, recruiting "
+                    f"count, max phase, top sponsors) describe the first "
+                    f"{n_studies} studies, not the full query result set: "
+                    f"report them as at least N among the retained {n_studies} "
+                    "studies, and do not read an early_pipeline or no_pipeline "
+                    "verdict as an absence of later-stage or active trials.",
+                )
+            )
+
+    return relays
 
 
 def _extract_study(study: dict[str, Any]) -> dict[str, Any]:
@@ -313,12 +392,10 @@ def search_cmd(
     )
     sidecar.note("source_db", "clinicaltrials.gov")
     sidecar.note("n_studies", artifact["summary"]["n_studies"])
+    sidecar.note("total_results", artifact["summary"]["total_results"])
 
-    if artifact["summary"]["n_studies"] >= _MAX_STUDIES:
-        sidecar.warn(
-            f"Results capped at {_MAX_STUDIES} studies; the full result set "
-            "may be larger. Refine the query for a more focused search."
-        )
+    for record in coverage_relays(artifact["summary"]):
+        sidecar.warn(record["message"], code=record["code"])
 
     # Write verbatim response.
     verbatim_path = target_dir / f"{slug}.trials-clinicaltrials.json"
@@ -336,6 +413,7 @@ def search_cmd(
     emit.data("query", query)
     emit.data("search_by", search_by)
     emit.data("n_studies", artifact["summary"]["n_studies"])
+    emit.data("total_results", artifact["summary"]["total_results"])
     emit.data("by_phase", artifact["summary"]["by_phase"])
     emit.data("by_status", artifact["summary"]["by_status"])
     emit.data("top_sponsors", artifact["summary"]["top_sponsors"])
@@ -394,7 +472,9 @@ def analyze_cmd(
     thresholds = load_thresholds(state, "trials")
     active_min_phase = thresholds.get("active_pipeline_min_phase")
 
-    relays: list[dict[str, str]] = []
+    # Carried forward from what the search retained: every count below is
+    # taken over that set, so a capped set qualifies all of them.
+    relays: list[dict[str, str]] = coverage_relays(artifact.get("summary") or {})
 
     def add_relay(code: str, message: str) -> None:
         if not any(r["code"] == code for r in relays):

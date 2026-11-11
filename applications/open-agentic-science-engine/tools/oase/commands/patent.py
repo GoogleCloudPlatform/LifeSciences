@@ -121,9 +121,9 @@ def _fetch_google_patents(query: str) -> tuple[bytes, dict[str, Any]]:
                     "Google Patents rate limit exceeded",
                     detail="HTTP 503 on first request",
                     remedy=(
-                        "wait a few minutes and retry; the Google Patents "
-                        "XHR endpoint is undocumented and aggressively "
-                        "rate-limited (~5 requests before 503)"
+                        "wait and retry (cooldowns may last 30-60+ minutes); "
+                        "the Google Patents XHR endpoint is undocumented and "
+                        "aggressively rate-limited (~5 requests before 503)"
                     ),
                 )
             # Got some results before hitting the limit — keep them, and
