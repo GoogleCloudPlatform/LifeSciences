@@ -30,7 +30,7 @@ This project follows
 ### Opening Issues
 
 If you encounter a bug or want to propose a feature for one of the applications
-(`FoldRun`, `Pharma on Gemini Enterprise`, `Sentinel`, etc.), please open a
+(`Protein Structure Prediction Agent`, `Pharma on Gemini Enterprise`, `Sentinel`, etc.), please open a
 [GitHub Issue](https://github.com/GoogleCloudPlatform/LifeSciences/issues) and
 specify the affected application in the issue template.
 

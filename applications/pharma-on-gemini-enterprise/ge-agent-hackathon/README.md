@@ -140,7 +140,7 @@ That's it. Everything else in this repo is detail around those four commands.
 ## Also useful
 
 - [Healthcare MCP servers](https://github.com/GoogleCloudPlatform/hcls-mcp-servers) — ten open-source MCP servers giving agents structured access to PubMed, ClinicalTrials.gov, openFDA, RxNorm, UMLS, CMS and more. Apache-2.0.
-- [LifeSciences applications](https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications) — more reference agents: FoldRun (protein structure), Sentinel (regulated content review), Model Garden (third-party model bridge).
+- [LifeSciences applications](https://github.com/GoogleCloudPlatform/LifeSciences/tree/main/applications) — more reference agents: Protein Structure Prediction Agent, Sentinel (regulated content review), Model Garden (third-party model bridge).
 - [ADK sample agents](https://github.com/google/adk-samples)
 
 ## Licence

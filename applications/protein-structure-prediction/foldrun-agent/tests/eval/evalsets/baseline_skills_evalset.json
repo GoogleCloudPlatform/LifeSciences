@@ -1,0 +1,187 @@
+{
+  "eval_set_id": "baseline_skills_evalset",
+  "name": "Baseline Protein Structure Prediction Skills Evaluation",
+  "description": "Evaluates core baseline skills including job management, GPU quota, database query, cost estimation, and storage hygiene",
+  "eval_cases": [
+    {
+      "eval_id": "eval_check_quota",
+      "conversation": [
+        {
+          "invocation_id": "inv_1",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What GPU capacity and quota do we have available in the project before I submit any jobs?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "check_gpu_quota",
+                "args": {}
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "foldrun_app",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "eval_check_status",
+      "conversation": [
+        {
+          "invocation_id": "inv_2",
+          "user_content": {
+            "parts": [
+              {
+                "text": "What is the status of prediction job foldrun-job-12345?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "check_job_status",
+                "args": {
+                  "job_id": "foldrun-job-12345"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "foldrun_app",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "eval_estimate_cost",
+      "conversation": [
+        {
+          "invocation_id": "inv_3",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Can you estimate the cost of running an AlphaFold2 monomer prediction for a 350-residue protein?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "estimate_job_cost",
+                "args": {
+                  "job_type": "af2_monomer",
+                  "sequence_length": 350
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "foldrun_app",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "eval_query_afdb",
+      "conversation": [
+        {
+          "invocation_id": "inv_4",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Check if AlphaFold DB already has a predicted structure for UniProt accession P69905 before we fold it."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "query_alphafold_db_prediction",
+                "args": {
+                  "qualifier": "P69905"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "foldrun_app",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "eval_find_orphans",
+      "conversation": [
+        {
+          "invocation_id": "inv_5",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Can you check if there are any orphaned pipeline files or directories in our Cloud Storage bucket?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "find_orphaned_gcs_files",
+                "args": {
+                  "check_fasta": true
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "foldrun_app",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    },
+    {
+      "eval_id": "eval_estimate_cost_esmfold2",
+      "conversation": [
+        {
+          "invocation_id": "inv_6",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Can you estimate the cost of running an ESMFold2-Fast prediction for a 300-residue protein?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "estimate_job_cost",
+                "args": {
+                  "job_type": "esmfold2_fast",
+                  "sequence_length": 300
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "foldrun_app",
+        "user_id": "eval_user",
+        "state": {}
+      }
+    }
+  ]
+}

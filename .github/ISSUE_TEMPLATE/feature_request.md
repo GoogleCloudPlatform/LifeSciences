@@ -7,7 +7,7 @@ labels: ["enhancement"]
 
 ## Application
 
-<!-- Which application is this feature request for? (e.g., FoldRun, Pharma on Gemini Enterprise, Sentinel, New Application / General) -->
+<!-- Which application is this feature request for? (e.g., Protein Structure Prediction Agent, Pharma on Gemini Enterprise, Sentinel, New Application / General) -->
 - Application:
 
 ## Problem or Use Case

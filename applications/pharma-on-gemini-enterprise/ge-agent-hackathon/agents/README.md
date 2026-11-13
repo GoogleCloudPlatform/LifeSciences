@@ -78,6 +78,6 @@ Run `git -C agents/<name> status` after fetching to confirm nothing was modified
 - Building something that **routes work between specialists** → BioCompass's coordinator is the cleanest example.
 - Starting from nothing → `agents-cli create` and borrow patterns from both.
 
-More reference agents in the same upstream repo: **FoldRun** (protein structure
+More reference agents in the same upstream repo: **Protein Structure Prediction Agent** (protein structure
 prediction orchestration), **Sentinel** (regulated content review), **Model
 Garden** (third-party model bridge into Gemini Enterprise).

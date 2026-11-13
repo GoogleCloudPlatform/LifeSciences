@@ -16,7 +16,7 @@ This sparse-checkouts just the two agent directories from
 into `agents/`, then applies this kit's fixes.
 
 **Why a script instead of a fork?** The agents live inside a large monorepo
-alongside FoldRun, Sentinel and Model Garden. Fetching only what you need keeps
+alongside Protein Structure Prediction Agent, Sentinel and Model Garden. Fetching only what you need keeps
 this repo small and — more importantly — keeps you on upstream `main` rather than
 a fork that silently rots. The fixes are applied as small, visible patches so you
 can always see what this kit changed and why.

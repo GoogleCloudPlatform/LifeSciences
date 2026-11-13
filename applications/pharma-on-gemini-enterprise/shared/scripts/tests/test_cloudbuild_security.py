@@ -30,7 +30,9 @@ SHARED_CLOUDBUILD = (
     / "shared"
     / "cloudbuild.yaml"
 )
-FOLDRUN_CLOUDBUILD = REPO_ROOT / "applications" / "foldrun" / "cloudbuild.yaml"
+FOLDRUN_CLOUDBUILD = (
+    REPO_ROOT / "applications" / "protein-structure-prediction" / "cloudbuild.yaml"
+)
 
 # Matches a single unescaped $ followed by a variable name or brace,
 # ignoring $$(...) or $$VAR or $${VAR} which Cloud Build unescapes to literal $.
@@ -65,7 +67,7 @@ class TestCloudBuildSecurity(unittest.TestCase):
         self._check_no_inline_substitutions(SHARED_CLOUDBUILD)
 
     def test_foldrun_cloudbuild_no_inline_substitutions(self):
-        """Ensures foldrun/cloudbuild.yaml has no inline shell substitutions."""
+        """Ensures protein-structure-prediction/cloudbuild.yaml has no inline shell substitutions."""
         self._check_no_inline_substitutions(FOLDRUN_CLOUDBUILD)
 
     def test_tf_apply_prevents_argument_injection(self):

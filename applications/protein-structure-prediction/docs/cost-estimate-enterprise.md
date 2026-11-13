@@ -1,0 +1,230 @@
+# Protein Structure Prediction Agent: Enterprise Cost Estimate (12-Month Projection)
+
+This document provides estimated costs for a large pharmaceutical or biotech organization migrating protein structure prediction workloads to the Protein Structure Prediction Agent on Google Cloud.
+
+> **Live cost calculator**: The agent includes `estimate_job_cost`, `estimate_monthly_cost`, and `get_actual_job_costs` tools. Ask the agent: *"Estimate the cost of a 500-residue multimer prediction"* or *"How much did my last job actually cost?"*
+
+> **Important**: All figures in this document are **estimates based on Google Cloud public list pricing**, not actuals. Your organization's actual costs will depend on negotiated pricing agreements, committed-use discounts, sustained-use discounts, and real-world job runtimes. Always consult your billing console or Google Cloud contract for the rates that apply to your account.
+
+**Prices verified**: 2026-04-15 via Cloud Billing Catalog API (us-central1).
+
+## How the Cost Estimator Works
+
+The cost estimator models three factors that drive per-job cost:
+
+### 1. Sequence length (protein complexity)
+
+Predict and relax runtimes scale with sequence length. The estimator uses **piecewise-linear interpolation** across calibrated anchor points rather than coarse buckets, so a 300-residue protein gets a different (and more accurate) estimate than a 500-residue one.
+
+Example: AF2 monomer on L4 GPU (DWS FLEX_START)
+
+| Sequence Length | MSA | Predict/task | Relax/task | Est. Total |
+|---|---|---|---|---|
+| 50 residues | ~30 min | ~16 min | ~4 min | ~$0.80 |
+| 100 residues | ~33 min | ~17 min | ~4.5 min | ~$0.87 |
+| 300 residues | ~37 min | ~19 min | ~5 min | ~$0.97 |
+| 500 residues | ~42 min | ~22 min | ~6 min | ~$1.12 |
+| 1000 residues | ~55 min | ~35 min | ~10 min | ~$1.74 |
+| 1500 residues | ~65 min | ~45 min | ~13 min | ~$2.22 |
+
+Predict tasks have a **high baseline** (~16 min on L4 even for tiny proteins) due to model loading, feature preparation, and AMBER relaxation overhead. Runtime then scales roughly linearly with residue count.
+
+### 2. Prediction count (monomer vs multimer vs OF3 vs AF3)
+
+The total number of GPU-hours depends heavily on job type:
+
+| Job Type | Models | Seeds/model | Total Predict Tasks | Total Relax Tasks |
+|---|---|---|---|---|
+| **AF2 monomer** | 5 | 1 (fixed) | **5** | **5** |
+| **AF2 multimer** | 5 | 5 (default, configurable 1-25) | **25** | **25** |
+| **OF3** | 1 | 5 (default) | **5** (each runs 5 diffusion samples) | None |
+| **AF3 (Endpoint)** | 1 | 1-5 (configurable) | **1 unified call** (5 diffusion samples/seed + NVMe MSA) | None |
+
+A multimer prediction runs **5x more GPU tasks** than a monomer at the same sequence length, making it roughly 5-6x more expensive. The `num_predictions_per_model` parameter controls this for multimers (default 5, can be reduced for screening or increased for high-confidence work).
+
+Example: 400-residue protein on A100 (DWS FLEX_START)
+
+| Job Type | Predict Tasks | Est. Cost |
+|---|---|---|
+| AF2 monomer | 5 | ~$2.21 |
+| AF2 multimer (5 seeds/model) | 25 | ~$13.09 |
+| AF2 multimer (1 seed/model) | 5 | ~$2.93 |
+| AF2 multimer (10 seeds/model) | 50 | ~$27.68 |
+
+### 3. GPU tier (auto-selected or user-specified)
+
+The GPU is auto-selected based on sequence length, matching the submission tools:
+
+| Sequence Length | AF2 Monomer GPU | AF2 Multimer GPU | OF3 GPU | AF3 Dedicated Endpoint GPU |
+|---|---|---|---|---|
+| <500 residues | L4 | A100 | A100 | H100 80GB (`a3-highgpu-1g`) |
+| 500-1500 residues | A100 | A100 | A100 | H100 80GB (`a3-highgpu-1g`) |
+| >1500 residues | A100 80GB | A100 80GB | A100 80GB | H100 80GB (`a3-highgpu-1g`) |
+
+Larger GPUs cost more per hour but can be required for large proteins that would OOM on smaller GPUs.
+
+### Estimate vs Actual Accuracy
+
+The estimator was calibrated against production job data from Agent Platform. Use `get_actual_job_costs` to compare:
+
+| Metric (76-residue monomer, L4) | Estimated | Actual | Error |
+|---|---|---|---|
+| MSA duration | 31.6 min | 34.4 min | -8% |
+| Predict per task | 16.5 min | 17.0 min | -3% |
+| Relax per task | 4.3 min | 4.5 min | -4% |
+| Total cost (FLEX_START) | $0.83 | $0.86 | -3% |
+
+## Workload Assumptions
+
+**Organization profile:**
+- ~20-30 active drug programs (antibodies, proteins, peptides)
+- Each program screening ~50-200 variants/month
+- Mix of quick structure checks (AF2) and complex predictions (OF3, AF3 protein-ligand / DNA / RNA)
+- Ramp: lighter months 1-3 during migration, full scale months 4-12
+
+**Estimated monthly job volume at steady state:**
+
+| Job Type | Jobs/month | Predict Tasks/job | Rationale |
+|---|---|---|---|
+| AF2 monomer (L4 GPU) | ~800 | 5 | Variant screening, quick structure checks |
+| AF2 multimer (A100) | ~100 | 25 | Protein-protein complexes |
+| OF3 predictions (A100) | ~200 | 5 seeds x 5 samples | Apache-2.0 commercial protein-ligand complexes, multi-chain |
+| AF3 predictions (H100 Endpoint) | ~200 | 1 unified call (5 samples) | High-speed NVMe MSA + diffusion (monomers, multimers, ligands, DNA/RNA) |
+| Re-runs / parameter sweeps | ~200 | varies | Additional seeds, different MSA methods |
+
+## GCP List Pricing Reference (us-central1)
+
+### Machine hourly rates
+
+| Machine + GPU | On-Demand | DWS FLEX_START (spot) | Savings |
+|---|---|---|---|
+| n4-standard-8 (CPU, right-sized MSA pipeline; fallback: c2-standard-16) | $0.36/hr | $0.22/hr | 39% |
+| g2-standard-12 + 1x L4 | $1.00/hr | $0.40/hr | 60% |
+| a2-highgpu-1g + 1x A100 (40GB) | $3.67/hr | $1.80/hr | 51% |
+| g4-standard-48 + 1x RTX PRO 6000 (96GB) | $4.50/hr | $1.66/hr | 63% |
+| a3-highgpu-1g + 1x H100 (80GB, AF3 Endpoint) | $11.06/hr | N/A (Online Endpoint + 20m auto-undeploy to `$0.00/hr`) | Idle auto-drain |
+
+### Storage
+
+| Service | List Price |
+|---|---|
+| Filestore Basic SSD (default tier, 2.5 TiB minimum) | $0.30/GiB-month |
+| Filestore Zonal (opt-in, 1–9.75 TiB) | $0.25/GiB-month |
+| Filestore Regional (opt-in, multi-zone) | $0.45/GiB-month |
+| Cloud Storage Standard | $0.02/GiB-month |
+
+## Always-On Infrastructure (estimated)
+
+| Component | Est. Monthly | Est. 12-Month |
+|---|---|---|
+| Filestore (2.5TB BASIC_SSD) | $768 | $9,216 |
+| GCS (~1TB backups + growing results) | $25 | $300 |
+| Artifact Registry | $5 | $60 |
+| Agent Runtime | $50 | $600 |
+| Cloud Run (viewer) | $20 | $240 |
+| VPC / NAT | $45 | $540 |
+| **Infrastructure subtotal** | **~$913** | **~$10,956** |
+
+## Per-Job Cost Estimates
+
+### AF2 monomer — L4 GPU, ~300 residues (5 predict + 5 relax tasks)
+
+| Step | Machine | Duration | On-Demand | FLEX_START |
+|---|---|---|---|---|
+| MSA / Data Pipeline | n4-standard-8 | ~37 min | ~$0.22 | ~$0.13 |
+| Predict (5 models) | g2-standard-12 + 1x L4 | ~19 min each | ~$1.58 | ~$0.63 |
+| Relax (5 structures) | g2-standard-12 + 1x L4 | ~5 min each | ~$0.42 | ~$0.17 |
+| **Total** | | | **~$2.22** | **~$0.93** |
+
+### AF2 multimer — A100 GPU, ~500 residues total (25 predict + 25 relax tasks)
+
+| Step | Machine | Duration | On-Demand | FLEX_START |
+|---|---|---|---|---|
+| MSA / Data Pipeline | n4-standard-8 | ~38 min | ~$0.23 | ~$0.14 |
+| Predict (5 models x 5 seeds) | a2-highgpu-1g + 1x A100 | ~17 min each | ~$25.82 | ~$12.67 |
+| Relax (25 structures) | g2-standard-12 + 1x L4 | ~5.5 min each | ~$2.29 | ~$0.92 |
+| **Total** | | | **~$28.34** | **~$13.73** |
+
+### OF3 prediction — A100 GPU, ~300 tokens, 5 seeds x 5 samples
+
+| Step | Machine | Duration | On-Demand | FLEX_START |
+|---|---|---|---|---|
+| MSA Pipeline | n4-standard-8 | ~13 min | ~$0.08 | ~$0.05 |
+| Predict (5 seeds x 5 samples) | a2-highgpu-1g + 1x A100 | ~2.5 min/sample | ~$3.82 | ~$1.88 |
+| **Total** | | | **~$3.90** | **~$1.93** |
+
+### AF3 prediction — Dedicated H100 Endpoint (`a3-highgpu-1g`, 630 GB NVMe MSA)
+
+AlphaFold 3 runs on a dedicated Vertex AI Online Endpoint (`a3-highgpu-1g`, 80GB H100 at `~$11.06/hr` on-demand) with a 630 GB NVMe-backed local genetic database cache. Because the 4-stage KFP pipeline (`1. Provision & Queue` $\rightarrow$ `2. Run AF3 Inference` $\rightarrow$ `3. Report Endpoint Available` $\rightarrow$ `4. Process Results & Expert Analysis`) releases the H100 replica slot immediately upon inference completion and automatically undeploys the endpoint to **`$0.00/hr`** after 20 minutes of inactivity, warm-endpoint jobs incur only the active H100 wall-clock duration:
+
+| Modality (Calibrated Production Runs) | Tokens | H100 Runtime | Warm Endpoint Cost (`$11.06/hr`) | Notes |
+|---|---|---|---|---|
+| **Ubiquitin (`--msa-free`)** | 76 aa | **~1.0 min** (`58s`) | **~$0.18** | Fast screening mode (lower accuracy: pLDDT `63.7`) |
+| **Ubiquitin (Full-MSA, default)** | 76 aa | **~3.8 min** (`228s`) | **~$0.70** | Full 4-DB NVMe MSA (high accuracy: pLDDT `91.9`, pTM `0.85`) |
+| **Zinc Finger + dsDNA** | 108 tokens | **~4.2 min** (`255s`) | **~$0.78** | Protein + 9 bp dsDNA duplex (pLDDT `95.2`, ipTM `0.92`) |
+| **Insulin Heterodimer** | 51 aa (2 chains) | **~5.8 min** (`350s`) | **~$1.07** | Multi-chain MSA + cross-chain pairing (ipTM `0.79`, Rank `1.05`) |
+| **EGFR + Gefitinib (SMILES)** | ~343 tokens | **~6.1 min** (`365s`) | **~$1.12** | Kinase domain + covalent/non-covalent SMILES ligand (ipTM `0.96`) |
+| **Full-Length JAK2 / EGFR** | 1,132–1,210 aa | **~15.6–19.4 min** | **~$2.88–$3.58** | Large multi-domain monomers (4-DB NVMe JackHMMER + 5 diffusion samples) |
+
+> **Note on Cold Start & Idle Tail**: If the AF3 endpoint is dormant (`0` replicas), auto-provisioning `a3-highgpu-1g` and warming the 630 GB NVMe genetic database cache takes ~25–35 minutes before the first job runs, plus up to 20 minutes (`~$3.69`) of idle tail after the last job in a batch completes before the Cloud Build watchdog undeploys the model back to `$0.00/hr`. Submitting multiple AF3 jobs in a burst amortizes both warm-up and the 20-minute tail across the entire FIFO queue.
+
+## Monthly Compute Estimates (steady state)
+
+| Job Type | Jobs/mo | Tasks/job | On-Demand | FLEX_START |
+|---|---|---|---|---|
+| AF2 monomer, L4 (800/mo, ~300 res) | 800 | 5 | ~$1,792 | ~$696 |
+| AF2 multimer, A100 (100/mo, ~500 res) | 100 | 25 | ~$2,553 | ~$1,226 |
+| OF3, A100 (200/mo, ~300 tokens) | 200 | 5 | ~$802 | ~$388 |
+| **Compute subtotal** | | | **~$5,147** | **~$2,310** |
+
+## Other Costs (estimated)
+
+| Item | Est. Monthly | Est. 12-Month |
+|---|---|---|
+| Gemini API (analysis, ~1,300 calls/mo) | ~$50 | ~$600 |
+| Cloud Logging / Monitoring | ~$100 | ~$1,200 |
+| Egress (downloading results) | ~$40 | ~$480 |
+| Database re-downloads (quarterly refresh) | ~$17 | ~$200 |
+| **Other subtotal** | **~$207** | **~$2,480** |
+
+## 12-Month Summary
+
+| Category | On-Demand Monthly | On-Demand Annual | FLEX_START Monthly | FLEX_START Annual |
+|---|---|---|---|---|
+| Infrastructure (always-on) | $913 | $10,956 | $913 | $10,956 |
+| Compute (GPU predictions) | $5,147 | $61,764 | $2,310 | $27,720 |
+| Other | $207 | $2,480 | $207 | $2,480 |
+| **Total** | **~$6,267** | **~$75,200** | **~$3,430** | **~$41,156** |
+
+The agent uses DWS FLEX_START by default, saving ~45% vs on-demand list pricing.
+
+## Cost Optimization Levers
+
+| Lever | Potential Savings |
+|---|---|
+| **DWS FLEX_START** (spot/preemptible, enabled by default) | ~45-60% on compute (reflected in FLEX_START column above) |
+| **Fewer seeds per model** for multimer screening (1 instead of 5) | Up to 80% on multimer compute |
+| **CUD reservations** (1yr/3yr committed GPU usage) | Additional 20-40% beyond list pricing |
+| **Negotiated enterprise pricing** | Varies — check your Google Cloud contract |
+| **Filestore lifecycle** (delete when idle, restore from GCS) | Up to $768/mo during idle periods |
+| **Filestore tier** (opt-in `ZONAL` 1–2 TiB or `REGIONAL` 1 TiB instead of default `BASIC_SSD` 2.5 TiB) | ~$256–$512/mo (`ZONAL`) or ~$307/mo (`REGIONAL`) for lighter/cached workloads (see README Filestore Tier) |
+| **Reduced BFD** vs full BFD | Smaller Filestore, faster MSA |
+
+## Scaling Notes
+
+- Costs scale linearly with job volume — 2x jobs = 2x compute cost
+- Costs scale with protein size — a 1000-residue protein costs ~2x a 300-residue one
+- Multimer jobs cost ~5-6x monomer at the same sequence length (25 vs 5 predict tasks)
+- Infrastructure is mostly fixed regardless of job volume
+- Multi-region or HA deployments roughly double infrastructure costs
+- Additional models (Boltz) share most databases, adding minimal storage cost
+
+## Comparison: Self-Managed vs Protein Structure Prediction Agent
+
+Beyond infrastructure costs, the agentic orchestration layer reduces the operational burden of managing prediction pipelines. Self-managed alternatives typically require:
+- Custom pipeline orchestration and monitoring code
+- Manual GPU provisioning and job scheduling
+- Separate analysis and visualization tooling
+- 1-2 FTEs of engineer/scientist time for pipeline maintenance
+
+The Protein Structure Prediction Agent provides all of this through a conversational AI interface backed by 26 native tools, deployed as a managed agent on Agent Platform.

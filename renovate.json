@@ -10,9 +10,9 @@
   "ignorePaths": [
     "**/node_modules/**",
     "**/bower_components/**",
-    "applications/foldrun/src/alphafold-components/**",
-    "applications/foldrun/src/boltz2-components/**",
-    "applications/foldrun/src/openfold3-components/**"
+    "applications/protein-structure-prediction/src/alphafold-components/**",
+    "applications/protein-structure-prediction/src/boltz2-components/**",
+    "applications/protein-structure-prediction/src/openfold3-components/**"
   ],
   "prConcurrentLimit": 3,
   "packageRules": [

@@ -7,7 +7,7 @@ labels: ["bug"]
 
 ## Application
 
-<!-- Which application does this bug affect? (e.g., FoldRun, Pharma on Gemini Enterprise, Sentinel, General/Repo) -->
+<!-- Which application does this bug affect? (e.g., Protein Structure Prediction Agent, Pharma on Gemini Enterprise, Sentinel, General/Repo) -->
 - Application:
 
 ## Expected Behavior

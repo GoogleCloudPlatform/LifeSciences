@@ -4,7 +4,7 @@ Fixes #<issue_number_goes_here>
 
 ## Summary of Changes
 
-- **Application(s) affected:** <!-- e.g., FoldRun, Pharma on Gemini Enterprise, Sentinel, Docs -->
+- **Application(s) affected:** <!-- e.g., Protein Structure Prediction Agent, Pharma on Gemini Enterprise, Sentinel, Docs -->
 - **Description:**
 
 ## Contributor Checklist
