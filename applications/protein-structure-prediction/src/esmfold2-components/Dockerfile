@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Use NVIDIA CUDA 12.6 runtime on Ubuntu 24.04 (Python 3.12 native)
-FROM nvidia/cuda:12.6.3-runtime-ubuntu24.04
+FROM nvidia/cuda:13.5.0-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1
