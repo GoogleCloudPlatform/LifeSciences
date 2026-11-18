@@ -36,6 +36,7 @@ updates:
       timezone: "America/New_York"
     cooldown:
       default-days: 7
+    versioning-strategy: "lockfile-only"
     open-pull-requests-limit: 5
     groups:
       uv-security:
@@ -89,6 +90,7 @@ updates:
       timezone: "America/New_York"
     cooldown:
       default-days: 7
+    versioning-strategy: "lockfile-only"
     open-pull-requests-limit: 3
     groups:
       npm-security:
