@@ -34,7 +34,7 @@ dependencies = [
     "aiohttp>=3.13.4",
     "gcsfs>=2026.10.0",
     "google-cloud-agentplatform[agent-engines]>=2.2.0,<3.0.0",
-    "google-cloud-aiplatform[evaluation]>=2.2.0,<3.0.0",
+    "google-cloud-aiplatform[evaluation]>=2.8.0,<3.0.0",
     "google-cloud-logging>=3.12.0,<4.0.0",
     "opentelemetry-resourcedetector-gcp<=1.12.0a0",
     "protobuf>=6.31.1,<7.0.0",
@@ -51,7 +51,7 @@ dev = [
 [project.optional-dependencies]
 eval = [
     "google-adk[eval]>=2.12.0,<3.0.0",
-    "google-cloud-aiplatform[evaluation]>=2.2.0,<3.0.0",
+    "google-cloud-aiplatform[evaluation]>=2.8.0,<3.0.0",
 ]
 lint = [
     "ruff>=0.4.6,<1.0.0",
