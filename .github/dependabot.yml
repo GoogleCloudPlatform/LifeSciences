@@ -12,36 +12,147 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Dependabot configuration for lifesciences-oss-apps monorepo
-# Scans root and subdirectories by default, excluding vendored/upstream ML model runtimes.
+# Dependabot configuration for the GoogleCloudPlatform/LifeSciences monorepo.
+# Excludes pinned GPU structure-prediction model runtimes and vendored code.
 version: 2
 updates:
-  # Python / pip dependencies for all monorepo applications
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
+  # Python applications managed with uv (pyproject.toml + uv.lock)
+  - package-ecosystem: "uv"
+    directories:
+      - "/applications/**"
     exclude-paths:
       - "applications/protein-structure-prediction/src/alphafold-components/**"
       - "applications/protein-structure-prediction/src/boltz2-components/**"
+      - "applications/protein-structure-prediction/src/esmfold2-components/**"
       - "applications/protein-structure-prediction/src/openfold3-components/**"
+      - "applications/open-agentic-science-engine/tools/**"
+      - "applications/pharma-on-gemini-enterprise/ge-agent-hackathon/tools/video-clipper/**"
+      - "**/vendor/**"
+      - "**/third_party/**"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
     groups:
-      monorepo-python:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      uv-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
 
-  # Docker dependencies for all monorepo containerfiles
-  - package-ecosystem: "docker"
-    directory: "/"
+  # Python CLI tooling managed with hash-pinned pip requirements files
+  - package-ecosystem: "pip"
+    directory: "/applications/open-agentic-science-engine/tools"
+    exclude-paths:
+      - "applications/open-agentic-science-engine/tools/host-requirements.txt"
+      - "applications/open-agentic-science-engine/tools/pyproject.toml"
+      - "**/vendor/**"
+      - "**/third_party/**"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    groups:
+      pip-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      pip-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+
+  # Frontend Node.js dependencies (Sentinel web application)
+  - package-ecosystem: "npm"
+    directory: "/applications/sentinel/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      npm-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+
+  # Container base images (FROM instructions)
+  - package-ecosystem: "docker"
+    directories:
+      - "/applications/**"
     exclude-paths:
       - "applications/protein-structure-prediction/src/alphafold-components/**"
       - "applications/protein-structure-prediction/src/boltz2-components/**"
+      - "applications/protein-structure-prediction/src/esmfold2-components/**"
       - "applications/protein-structure-prediction/src/openfold3-components/**"
+      - "**/vendor/**"
+      - "**/third_party/**"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    ignore:
+      # Keep Python and Node base images on tested runtime major/minor lines
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "node"
+        update-types:
+          - "version-update:semver-major"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
 
   # GitHub Actions workflows
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    groups:
+      github-actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      github-actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
