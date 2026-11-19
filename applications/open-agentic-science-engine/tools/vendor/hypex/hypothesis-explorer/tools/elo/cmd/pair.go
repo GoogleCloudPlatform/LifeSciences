@@ -123,7 +123,19 @@ Strategies:
 						return fmt.Errorf("loading review scores: %w", err)
 					}
 
-					strategyPairs = pairing.StrategyB(ratings, history, flagEpoch, remaining, reviewScores, flagRematchWindow)
+					// StrategyB pairs only hypotheses that have a rating, so a fresh run
+					// got no pairs and new hypotheses were never placed. Seed unrated
+					// hypotheses at the default rating.
+					seeded := make(map[string]*rating.HypothesisRating, len(allHypotheses))
+					for id, r := range ratings {
+						seeded[id] = r
+					}
+					for _, id := range allHypotheses {
+						if seeded[id] == nil {
+							seeded[id] = &rating.HypothesisRating{Elo: rating.DefaultRating}
+						}
+					}
+					strategyPairs = pairing.StrategyB(seeded, history, flagEpoch, remaining, reviewScores, flagRematchWindow)
 
 				default:
 					return fmt.Errorf("unknown strategy: %q (valid: default, swiss)", flagStrategy)
