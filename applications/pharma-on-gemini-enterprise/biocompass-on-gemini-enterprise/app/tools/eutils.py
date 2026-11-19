@@ -112,9 +112,10 @@ def _parse_pubmed_xml(xml_text: str) -> list[dict[str, Any]]:
 
 def _parse_article(node: ET.Element) -> dict[str, Any] | None:
     pmid_node = node.find(".//PMID")
-    if pmid_node is None or not (pmid_node.text or "").strip():
+    pmid_text = (pmid_node.text or "").strip() if pmid_node is not None else ""
+    if not pmid_text:
         return None
-    article: dict[str, Any] = {"pmid": pmid_node.text.strip()}
+    article: dict[str, Any] = {"pmid": pmid_text}
 
     title_node = node.find(".//ArticleTitle")
     if title_node is not None:

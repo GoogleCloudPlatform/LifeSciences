@@ -74,8 +74,14 @@ _ALLOWED_PICKLE_GLOBALS: set[tuple[str, str]] = {
     ("ml_dtypes", "bfloat16"),
 }
 
+_numpy_core = getattr(np, "_core", None) or getattr(np, "core", None)
+_numpy_multiarray = (
+    getattr(_numpy_core, "multiarray", None) if _numpy_core is not None else None
+)
 _ALLOWED_NUMPY_RECONSTRUCTORS = {
-    getattr(getattr(np, "_core", np.core).multiarray, "_reconstruct", None),
+    getattr(_numpy_multiarray, "_reconstruct", None)
+    if _numpy_multiarray is not None
+    else None,
 } - {None}
 
 

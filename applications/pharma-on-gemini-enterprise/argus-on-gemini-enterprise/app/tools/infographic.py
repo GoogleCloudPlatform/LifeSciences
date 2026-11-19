@@ -102,10 +102,11 @@ async def _generate_image_bytes(
                     content = candidate.content
                     parts = content.parts if content and content.parts else []
                     for part in parts:
-                        if getattr(part, "inline_data", None) and part.inline_data.data:
+                        inline_data = getattr(part, "inline_data", None)
+                        if inline_data is not None and inline_data.data:
                             return {
                                 "status": "success",
-                                "data": part.inline_data.data,
+                                "data": inline_data.data,
                                 "model": model,
                             }
                 last_err = "no image part in response"

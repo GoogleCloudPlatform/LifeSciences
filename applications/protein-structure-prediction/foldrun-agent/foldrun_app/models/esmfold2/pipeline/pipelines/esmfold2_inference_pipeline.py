@@ -57,7 +57,7 @@ def create_esmfold2_inference_pipeline(strategy: str = "STANDARD", use_msa: bool
         base_seed: int = 42,
     ):
         """ESMFold2 Inference Pipeline."""
-        configure_seeds_task = ConfigureSeedsESMFold2(  # type: ignore
+        configure_seeds_task = ConfigureSeedsESMFold2(
             num_model_seeds=num_model_seeds,
             base_seed=base_seed,
         ).set_display_name("Configure ESMFold2 Seeds")

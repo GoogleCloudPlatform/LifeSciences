@@ -50,8 +50,6 @@ def aggregate_features(
     features.metadata["category"] = "features"
     features.metadata["data_format"] = "pkl"
     features.metadata["final_dedup_msa_size"] = int(model_features["num_alignments"][0])
-    features.metadata["total_num_templates"] = int(
-        model_features["template_domain_names"].shape[0]  # type: ignore
-    )
+    features.metadata["total_num_templates"] = int(model_features["template_domain_names"].shape[0])
     t1 = time.time()
     logging.info(f"Feature aggregation completed. Elapsed time: {t1 - t0}")

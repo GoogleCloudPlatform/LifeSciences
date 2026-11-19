@@ -39,10 +39,11 @@ for _attr in ("part_to_message_block", "_part_to_message_block"):
         def _wrapper(part, *args, **kwargs):
             blob = getattr(part, "inline_data", None)
             mime = getattr(blob, "mime_type", None) if blob else None
-            if mime and mime.startswith("text/"):
+            data = getattr(blob, "data", None) if blob else None
+            if mime and mime.startswith("text/") and data is not None:
                 return _anthropic_types.TextBlockParam(
                     type="text",
-                    text=blob.data.decode("utf-8", errors="replace"),
+                    text=data.decode("utf-8", errors="replace"),
                 )
             return orig(part, *args, **kwargs)
 

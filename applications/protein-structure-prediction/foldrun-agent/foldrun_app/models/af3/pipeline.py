@@ -1166,7 +1166,7 @@ def process_af3_results_task(
         elif bname.endswith("_confidences.json"):
             top_conf_b = b
 
-    valid_samples = {
+    valid_samples: dict[str, dict[str, Any]] = {
         k: v
         for k, v in sorted(sample_blobs.items())
         if v.get("cif") is not None and v.get("summary") is not None
@@ -1326,12 +1326,12 @@ def process_af3_results_task(
             )
 
             # Seed top-level CIF and summary_confidences so immediate get_results calls succeed while Cloud Run Job executes
-            first_files = top_cif_b, top_sum_b
-            if first_files[0] is None or first_files[1] is None:
+            first_cif, first_sum = top_cif_b, top_sum_b
+            if first_cif is None or first_sum is None:
                 first_sample = next(iter(valid_samples.values()))
-                first_files = first_sample["cif"], first_sample["summary"]
-            init_cif_text = first_files[0].download_as_text()
-            init_sum_conf = dict(json.loads(first_files[1].download_as_text()) or {})
+                first_cif, first_sum = first_sample["cif"], first_sample["summary"]
+            init_cif_text = first_cif.download_as_text()
+            init_sum_conf = dict(json.loads(first_sum.download_as_text()) or {})
             init_rank_score = float(
                 init_sum_conf.get("ranking_score") or init_sum_conf.get("ptm") or 0.0
             )
@@ -1956,13 +1956,14 @@ IMPORTANT: Begin your response directly with the markdown headings/analysis. Do 
                     contents=content_parts,
                     config=types.GenerateContentConfig(temperature=0.7),
                 )
-                if resp and getattr(resp, "text", None):
+                resp_text = getattr(resp, "text", None) if resp else None
+                if isinstance(resp_text, str) and resp_text.strip():
                     expert_analysis_obj = {
                         "status": "success",
                         "model": candidate_model,
                         "generated_at": now_ea_iso,
                         "ai_generated": True,
-                        "analysis": resp.text.strip() + disclaimer_text,
+                        "analysis": resp_text.strip() + disclaimer_text,
                     }
                     log.info(
                         f"[AF3 Stage 4] Generated Gemini Expert Analysis via {candidate_model} "

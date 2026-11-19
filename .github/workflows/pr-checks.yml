@@ -102,7 +102,7 @@ jobs:
               echo "Running ty check in $dir..."
               (
                 cd "$dir" || exit 1
-                uvx ty check --exit-zero-on-warning . || exit 1
+                uvx ty@0.0.106 check --exit-zero-on-warning . || exit 1
               ) || exit_code=1
             fi
           done

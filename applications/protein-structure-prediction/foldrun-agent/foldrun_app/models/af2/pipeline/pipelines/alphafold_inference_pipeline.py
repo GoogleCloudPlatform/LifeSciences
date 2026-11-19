@@ -71,7 +71,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         # Note: Environment variables will be validated at runtime by the components
 
         run_config_task = (
-            ConfigureRunOp(  # type: ignore
+            ConfigureRunOp(
                 sequence_path=sequence_path,
                 model_preset=model_preset,
                 num_multimer_predictions_per_model=num_multimer_predictions_per_model,

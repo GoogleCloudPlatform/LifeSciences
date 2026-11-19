@@ -305,14 +305,10 @@ async def edgar_recent_filings(
                 "filings": [],
                 "error": f"Unexpected response from SEC submissions API for CIK {cik}",
             }
-        filings_data = (
-            data.get("filings") if isinstance(data.get("filings"), dict) else {}
-        )
-        recent = (
-            filings_data.get("recent")
-            if isinstance(filings_data.get("recent"), dict)
-            else {}
-        )
+        raw_filings = data.get("filings")
+        filings_data = raw_filings if isinstance(raw_filings, dict) else {}
+        raw_recent = filings_data.get("recent")
+        recent = raw_recent if isinstance(raw_recent, dict) else {}
         filings = []
         try:
             cik_int = int(str(cik_clean).lstrip("0") or "0")
@@ -393,9 +389,8 @@ async def edgar_key_financials(cik: str) -> dict:
         facts = data.get("facts") if isinstance(data.get("facts"), dict) else {}
         for taxonomy, concepts in _KEY_CONCEPTS.items():
             for concept in concepts:
-                tax_dict = (
-                    facts.get(taxonomy) if isinstance(facts.get(taxonomy), dict) else {}
-                )
+                raw_tax = facts.get(taxonomy)
+                tax_dict = raw_tax if isinstance(raw_tax, dict) else {}
                 node = tax_dict.get(concept)
                 if not node or not isinstance(node, dict):
                     continue

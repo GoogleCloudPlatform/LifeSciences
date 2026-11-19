@@ -157,7 +157,7 @@ class SkillRegistry:
         def _get_skill_meta(name: str) -> tuple[str, str]:
             skill_obj = self._adk_skills.get(name)
             body = getattr(skill_obj, "instructions", None) if skill_obj is not None else None
-            if not body:
+            if skill_obj is None or not body:
                 raise RuntimeError(
                     f"Missing SKILL.md instruction body for built-in skill '{name}' under skills/packages/."
                 )

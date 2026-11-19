@@ -44,7 +44,7 @@ eval = [
 ]
 lint = [
     "ruff>=0.4.6,<1.0.0",
-    "ty>=0.0.1a0",
+    "ty>=0.0.106",
 ]
 
 [tool.ruff]
@@ -79,11 +79,12 @@ exclude = [".venv/**"]
 
 [tool.ty.rules]
 # Ignore common issues with third-party libraries and dynamic code patterns
-unresolved-import = "ignore"
-unresolved-attribute = "ignore"
+import-not-found = "ignore"
+missing-module-member = "ignore"
+missing-attribute = "ignore"
 invalid-argument-type = "ignore"
 invalid-assignment = "ignore"
-invalid-return-type = "ignore"
+invalid-explicit-return = "ignore"
 possibly-missing-attribute = "ignore"
 not-subscriptable = "ignore"
 deprecated = "warn"

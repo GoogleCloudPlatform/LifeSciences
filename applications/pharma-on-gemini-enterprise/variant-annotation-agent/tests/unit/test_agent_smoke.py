@@ -227,6 +227,8 @@ class TestAgentSmoke:
 
         assert len(events) == 1
         assert events[0].actions.escalate is True
+        assert events[0].content is not None and events[0].content.parts
+        assert isinstance(events[0].content.parts[0].text, str)
         assert "Failed importing AlphaGenome file" in events[0].content.parts[0].text
 
     @pytest.mark.asyncio
@@ -381,6 +383,8 @@ class TestAgentSmoke:
         assert len(events) == 1
         assert events[0].actions.escalate is True
         assert events[0].actions.route == "error"
+        assert events[0].content is not None and events[0].content.parts
+        assert isinstance(events[0].content.parts[0].text, str)
         assert "No resolvable genomic variants" in events[0].content.parts[0].text
 
     @pytest.mark.asyncio

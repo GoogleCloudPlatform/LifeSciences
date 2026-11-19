@@ -200,7 +200,7 @@ class _SilentLlmAgent(LlmAgent):
         async for event in super()._run_impl(ctx=ctx, node_input=node_input):
             content = getattr(event, "content", None)
             parts = getattr(content, "parts", None) if content is not None else None
-            if not parts:
+            if content is None or not parts:
                 yield event
                 continue
 

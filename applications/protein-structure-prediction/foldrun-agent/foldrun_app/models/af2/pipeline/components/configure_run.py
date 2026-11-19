@@ -42,8 +42,8 @@ def configure_run(
     import random
     import sys
 
-    from alphafold.data import parsers  # type: ignore
-    from alphafold.model import config as alphafold_config  # type: ignore
+    from alphafold.data import parsers
+    from alphafold.model import config as alphafold_config
     from google.cloud import storage
 
     run_multimer_system = "multimer" == model_preset

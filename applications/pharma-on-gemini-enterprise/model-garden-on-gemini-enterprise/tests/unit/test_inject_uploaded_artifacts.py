@@ -44,6 +44,7 @@ async def test_multi_turn_does_not_duplicate_attachments() -> None:
 
     # Turn 1
     await _inject_uploaded_artifacts(ctx, req)
+    assert turn1_user.parts is not None
     inline_parts = [p for p in turn1_user.parts if p.inline_data is not None]
     assert len(inline_parts) == 1
     assert ctx.load_artifact.await_count == 1
@@ -63,6 +64,7 @@ async def test_multi_turn_does_not_duplicate_attachments() -> None:
             )
         )
         await _inject_uploaded_artifacts(ctx, req)
+        assert turn1_user.parts is not None
         inline_parts = [p for p in turn1_user.parts if p.inline_data is not None]
         assert len(inline_parts) == 1, f"Duplicate attachment injected on turn {turn}"
 
@@ -89,6 +91,7 @@ async def test_existing_inline_data_prevents_duplication_even_with_marker() -> N
     req = LlmRequest(contents=[content])
 
     await _inject_uploaded_artifacts(ctx, req)
+    assert content.parts is not None
     inline_parts = [p for p in content.parts if p.inline_data is not None]
     assert len(inline_parts) == 1
 
@@ -111,5 +114,6 @@ async def test_unresolved_marker_is_preserved() -> None:
     req = LlmRequest(contents=[content])
 
     await _inject_uploaded_artifacts(ctx, req)
+    assert content.parts is not None
     assert content.parts[0].text == "Check <start_of_user_uploaded_file: missing.pdf>"
     assert len([p for p in content.parts if p.inline_data is not None]) == 0

@@ -23,6 +23,7 @@ import os
 import re
 import urllib.parse
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import google.auth
 import google.auth.exceptions
@@ -1006,7 +1007,7 @@ def trigger_analysis():
         pj_resp = authed.get(pj_url, timeout=15)
         prelim_model_type = _normalize_model_type(explicit_model_type) or "alphafold2"
         if pj_resp.status_code == 404 and prelim_model_type == "alphafold3":
-            pj = {"displayName": str(job_id)}
+            pj: dict[str, Any] = {"displayName": str(job_id)}
             gcs_output_dir = f"gs://{BUCKET_NAME}/af3_predictions/{job_id}/"
         else:
             pj_resp.raise_for_status()

@@ -105,20 +105,21 @@ class DeleteJobTool(BaseTool):
             elapsed = 0
             while elapsed < _CANCEL_TIMEOUT_SECONDS:
                 pipeline_job = vertex_ai.PipelineJob.get(resource_name=job.name)
-                current_state = pipeline_job.state.name
+                current_state = pipeline_job.state.name if pipeline_job.state else "UNKNOWN"
                 if current_state not in _ACTIVE_STATES:
                     logger.info(f"Job reached state {current_state}, proceeding with delete.")
                     break
                 time.sleep(_CANCEL_POLL_INTERVAL)
                 elapsed += _CANCEL_POLL_INTERVAL
             else:
+                state_name = pipeline_job.state.name if pipeline_job.state else "UNKNOWN"
                 return {
                     "status": "cancel_timeout",
                     "job": job_info,
                     "message": (
                         f"Job {job.display_name} was cancelled but did not reach a "
                         f"terminal state within {_CANCEL_TIMEOUT_SECONDS}s. "
-                        f"Current state: {pipeline_job.state.name}. "
+                        f"Current state: {state_name}. "
                         f"Try deleting again later."
                     ),
                 }

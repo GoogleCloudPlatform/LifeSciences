@@ -227,13 +227,14 @@ def generate_af3_gemini_expert_analysis(
                         contents=content_parts,
                         config=types.GenerateContentConfig(temperature=0.7),
                     )
-                    if resp and getattr(resp, "text", None):
+                    resp_text = getattr(resp, "text", None) if resp else None
+                    if isinstance(resp_text, str) and resp_text.strip():
                         return {
                             "status": "success",
                             "model": model_name,
                             "generated_at": now_iso,
                             "ai_generated": True,
-                            "analysis": resp.text.strip() + AF3_AI_DISCLAIMER,
+                            "analysis": resp_text.strip() + AF3_AI_DISCLAIMER,
                         }
                 except Exception as model_exc:
                     logger.warning(

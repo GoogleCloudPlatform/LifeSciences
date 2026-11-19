@@ -80,8 +80,9 @@ async def load_asset(
         )
     filename = artifact_filename(asset_id)
     part = await tool_context.load_artifact(filename=filename)
-    if part is not None and getattr(part, "inline_data", None) is not None:
-        return part.inline_data.data
+    inline_data = getattr(part, "inline_data", None) if part is not None else None
+    if inline_data is not None:
+        return inline_data.data
     return None
 
 

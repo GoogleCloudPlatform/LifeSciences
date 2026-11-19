@@ -81,14 +81,14 @@ class BaseTool:
             cfg_dict.get("description") or description or (self.__doc__ or "").strip()
         )
 
-        self.config = config
+        self.config: CoreConfig = config
 
         if self.config is not None:
             # Initialize shared clients (no-op after first call)
             _ensure_clients(self.config)
 
         # Use the shared GCS client
-        self.storage_client = _shared_storage_client
+        self.storage_client: storage.Client = _shared_storage_client
 
     @staticmethod
     def gcs_console_url(gs_uri: str) -> str:

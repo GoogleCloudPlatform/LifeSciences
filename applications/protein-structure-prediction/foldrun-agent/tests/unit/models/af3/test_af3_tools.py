@@ -1360,6 +1360,7 @@ class TestAF3Tools:
 
         script_path = Path(__file__).resolve().parents[4] / "scripts" / "setup_af3_endpoint.py"
         spec = importlib.util.spec_from_file_location("setup_af3_endpoint", script_path)
+        assert spec is not None and spec.loader is not None
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
 

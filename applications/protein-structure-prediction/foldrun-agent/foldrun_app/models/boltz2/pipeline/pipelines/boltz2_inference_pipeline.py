@@ -60,7 +60,7 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
         """
 
         # Step 1: Generate seed configs for ParallelFor
-        configure_seeds_task = ConfigureSeedsBOLTZ2(  # type: ignore
+        configure_seeds_task = ConfigureSeedsBOLTZ2(
             num_model_seeds=num_model_seeds,
             base_seed=base_seed,
         ).set_display_name("Configure BOLTZ2 Seeds")

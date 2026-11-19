@@ -390,6 +390,9 @@ class GeminiClient:
         folder = settings.gcs_media_folder
         filename = f"{folder}/{uuid.uuid4()}.jpg"
 
+        if self.storage_client is None:
+            raise RuntimeError("GCS storage client is not initialized")
+
         bucket = self.storage_client.bucket(bucket_name)
         blob = bucket.blob(filename)
         await asyncio.to_thread(

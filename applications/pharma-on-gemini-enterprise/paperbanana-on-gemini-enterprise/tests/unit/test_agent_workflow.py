@@ -83,6 +83,7 @@ def test_workflow_graph_structure() -> None:
     assert root_agent.name == "paperbanana"
     assert app.root_agent == root_agent
 
+    assert root_agent.graph is not None
     root_nodes = {node.name for node in root_agent.graph.nodes}
     assert {"__START__", "coordinator_agent", "paperbanana_pipeline"}.issubset(
         root_nodes
@@ -91,6 +92,7 @@ def test_workflow_graph_structure() -> None:
     assert isinstance(paperbanana_pipeline, Workflow)
     assert paperbanana_pipeline.name == "paperbanana_pipeline"
 
+    assert paperbanana_pipeline.graph is not None
     pipe_nodes = {node.name for node in paperbanana_pipeline.graph.nodes}
     expected_pipe_nodes = {
         "__START__",
@@ -153,7 +155,7 @@ def test_prep_inputs_staging() -> None:
         }
     )
     node_input = "A methodology overview diagram."
-    result = prep_inputs(ctx, node_input)  # ty: ignore[invalid-argument-type]
+    result = prep_inputs(ctx, node_input)
 
     assert result == node_input
     assert ctx.state.get("previous_turn_image") == "figure_tx1_v0.png"
@@ -204,7 +206,7 @@ def test_decide_refinement_loop_routes() -> None:
             ),
         }
     )
-    event = decide_refinement_loop(ctx, "in")  # ty: ignore[invalid-argument-type]
+    event = decide_refinement_loop(ctx, "in")
     assert isinstance(event, Event)
     assert event.actions.route == "refine"
     assert ctx.state.get("styled_description") == "New layout"
@@ -222,7 +224,7 @@ def test_decide_refinement_loop_routes() -> None:
             ),
         }
     )
-    event = decide_refinement_loop(ctx, "in")  # ty: ignore[invalid-argument-type]
+    event = decide_refinement_loop(ctx, "in")
     assert isinstance(event, Event)
     assert event.actions.route == "finalize"
 
@@ -236,7 +238,7 @@ def test_decide_refinement_loop_routes() -> None:
             ),
         }
     )
-    event = decide_refinement_loop(ctx, "in")  # ty: ignore[invalid-argument-type]
+    event = decide_refinement_loop(ctx, "in")
     assert isinstance(event, Event)
     assert event.actions.route == "finalize"
 
@@ -252,7 +254,7 @@ def test_decide_refinement_loop_routes() -> None:
             ),
         }
     )
-    event_no_img = decide_refinement_loop(ctx_no_img, "in")  # ty: ignore[invalid-argument-type]
+    event_no_img = decide_refinement_loop(ctx_no_img, "in")
     assert isinstance(event_no_img, Event)
     assert event_no_img.actions.route == "finalize_direct"
 
@@ -267,11 +269,12 @@ def test_finalize_node() -> None:
             _S_INTENT: "Overview diagram",
         }
     )
-    events_caption = list(finalize(ctx_caption, "in"))  # ty: ignore[invalid-argument-type]
+    events_caption = list(finalize(ctx_caption, "in"))
     assert len(events_caption) == 2
     img_event, cap_event = events_caption
     assert img_event.actions.artifact_delta == {"figure_abc123_v1.png": 0}
     assert img_event.content is None
+    assert isinstance(cap_event.output, str)
     assert "<start_of_user_uploaded_file" not in cap_event.output
     assert (
         cap_event.output
@@ -286,10 +289,11 @@ def test_finalize_node() -> None:
             "styled_description": "Massive 5000-word prompt description",
         }
     )
-    events_fallback = list(finalize(ctx_fallback, "in"))  # ty: ignore[invalid-argument-type]
+    events_fallback = list(finalize(ctx_fallback, "in"))
     assert len(events_fallback) == 2
     img_event_fb, cap_event_fb = events_fallback
     assert img_event_fb.actions.artifact_delta == {"figure_abc123_v1.png": 0}
+    assert isinstance(cap_event_fb.output, str)
     assert "<start_of_user_uploaded_file" not in cap_event_fb.output
     assert cap_event_fb.output == "**Figure**: Overview diagram"
     assert "Massive 5000-word prompt description" not in cap_event_fb.output
@@ -297,8 +301,9 @@ def test_finalize_node() -> None:
 
     # Without image
     ctx_empty = MockContext(state={})
-    events_empty = list(finalize(ctx_empty, "in"))  # ty: ignore[invalid-argument-type]
+    events_empty = list(finalize(ctx_empty, "in"))
     assert len(events_empty) == 1
+    assert isinstance(events_empty[0].output, str)
     assert "unable to render a figure" in events_empty[0].output
 
 
@@ -315,7 +320,7 @@ def test_generate_figure_tool() -> None:
             self.state = {}
 
     tool_ctx = MockToolContext()
-    result = generate_figure(intent="Transformer architecture", tool_context=tool_ctx)  # ty: ignore[invalid-argument-type]
+    result = generate_figure(intent="Transformer architecture", tool_context=tool_ctx)
     assert result["status"] == "launched"
     assert result["intent"] == "Transformer architecture"
     assert tool_ctx.actions.route == "generate_figure"
@@ -521,10 +526,13 @@ async def test_simulated_pipeline_refinement_loop() -> None:
         for e in events
         if e.content
         and e.content.role == "model"
+        and e.content.parts
         and any(getattr(p, "text", None) for p in e.content.parts)
     ]
     assert len(model_content_events) == 1
-    final_text = model_content_events[0].content.parts[0].text or ""
+    final_content = model_content_events[0].content
+    assert final_content is not None and final_content.parts is not None
+    final_text = final_content.parts[0].text or ""
     assert "<start_of_user_uploaded_file" not in final_text
     assert final_text.startswith("**Figure**:")
     assert "Description used:" not in final_text
@@ -985,7 +993,7 @@ def test_generate_figure_tool_cleans_intent_and_sets_launched() -> None:
 
     tool_ctx = MockToolContext()
     verbose_intent = "I have launched the generation of a publication-style AI co-scientist pipeline."
-    result = generate_figure(intent=verbose_intent, tool_context=tool_ctx)  # ty: ignore[invalid-argument-type]
+    result = generate_figure(intent=verbose_intent, tool_context=tool_ctx)
 
     assert result["status"] == "launched"
     assert result["intent"] == "AI co-scientist pipeline."
@@ -1045,16 +1053,17 @@ def test_finalize_attaches_single_artifact_delta() -> None:
             _S_INTENT: "Final publication figure",
         }
     )
-    events = list(finalize(ctx_with_image, "in"))  # ty: ignore[invalid-argument-type]
+    events = list(finalize(ctx_with_image, "in"))
     assert len(events) == 2
     img_event, cap_event = events
     assert img_event.actions is not None
     assert img_event.actions.artifact_delta == {"figure_turn42_v2.png": 3}
     assert img_event.content is None
+    assert isinstance(cap_event.output, str)
     assert "**Figure**: Final publication figure" in cap_event.output
 
     ctx_without_image = MockContext(state={})
-    events_no_image = list(finalize(ctx_without_image, "in"))  # ty: ignore[invalid-argument-type]
+    events_no_image = list(finalize(ctx_without_image, "in"))
     assert len(events_no_image) == 1
     assert events_no_image[0].actions.artifact_delta == {}
 
@@ -1229,9 +1238,11 @@ async def test_build_captioner_request() -> None:
 
     assert llm_req.contents is not None
     parts = llm_req.contents[0].parts
+    assert parts is not None
     # Should include image part and prompt text part
     assert any(getattr(p, "inline_data", None) for p in parts)
     text_part = next(p for p in parts if getattr(p, "text", None))
+    assert isinstance(text_part.text, str)
     assert "Target Diagram for Captioning" in text_part.text
     assert "AI co-scientist pipeline" in text_part.text
     assert "publication-grade figure caption" in text_part.text
@@ -1240,12 +1251,12 @@ async def test_build_captioner_request() -> None:
 def test_prep_inputs_with_null_input() -> None:
     """Verify prep_inputs handles None node_input, preserving existing intent or defaulting."""
     ctx_with_prior = MockContext(state={_S_INTENT: "Prior detailed intent"})
-    res1 = prep_inputs(ctx_with_prior, None)  # ty: ignore[invalid-argument-type]
+    res1 = prep_inputs(ctx_with_prior, None)
     assert res1 is None
     assert ctx_with_prior.state.get(_S_INTENT) == "Prior detailed intent"
 
     ctx_empty = MockContext(state={})
-    res2 = prep_inputs(ctx_empty, None)  # ty: ignore[invalid-argument-type]
+    res2 = prep_inputs(ctx_empty, None)
     assert res2 is None
     assert ctx_empty.state.get(_S_INTENT) == "A clear methodology overview diagram."
 
@@ -1259,7 +1270,7 @@ def test_prep_inputs_preserves_multiline_intent() -> None:
         "2. Transformer feature processing\n"
         "3. Output classification"
     )
-    prep_inputs(ctx, multiline)  # ty: ignore[invalid-argument-type]
+    prep_inputs(ctx, multiline)
     expected = (
         "Methodology diagram:\n"
         "1. Input data ingestion\n"
@@ -1288,7 +1299,7 @@ def test_generate_figure_preserves_multiline_intent() -> None:
         "* Core reasoning graph\n"
         "* Action execution layer"
     )
-    result = generate_figure(intent=multiline_intent, tool_context=tool_ctx)  # ty: ignore[invalid-argument-type]
+    result = generate_figure(intent=multiline_intent, tool_context=tool_ctx)
 
     # Returned dict for UI has concise single-line title
     assert result["status"] == "launched"
@@ -1529,7 +1540,7 @@ def test_prep_inputs_preserves_detailed_intent_from_generate_figure() -> None:
         "message": "Generating publication-style figure: Methodology diagram illustrating the workflow.",
     }
 
-    prep_inputs(ctx, truncated_tool_return)  # ty: ignore[invalid-argument-type]
+    prep_inputs(ctx, truncated_tool_return)
 
     # Full multiline intent in state must be preserved, not overwritten by truncated clean_title
     assert ctx.state[_S_INTENT] == detailed_intent
@@ -1721,7 +1732,7 @@ def test_finalize_falls_back_to_last_valid_image() -> None:
             _S_CAPTION: "**Figure**: Prior valid diagram.",
         }
     )
-    events = list(finalize(ctx, "in"))  # ty: ignore[invalid-argument-type]
+    events = list(finalize(ctx, "in"))
     assert len(events) == 2
     img_event, cap_event = events
     assert img_event.actions.artifact_delta == {"figure_turn1_v0.png": 1}

@@ -106,9 +106,9 @@ class SandboxedCodeExecutor(BaseCodeExecutor):
     3. Strict timeout enforcement with process-group termination and stdout/stderr capture.
     """
 
-    stateful: bool = Field(default=False, frozen=True, exclude=True)
-    optimize_data_file: bool = Field(default=False, frozen=True, exclude=True)
-    timeout_seconds: int = 120
+    stateful: bool = Field(default=False, frozen=True, exclude=True)  # ty: ignore[incompatible-mutable-override]
+    optimize_data_file: bool = Field(default=False, frozen=True, exclude=True)  # ty: ignore[incompatible-mutable-override]
+    timeout_seconds: int | None = 120
 
     def __init__(self, timeout_seconds: int = 120, **data):
         super().__init__(timeout_seconds=timeout_seconds, **data)

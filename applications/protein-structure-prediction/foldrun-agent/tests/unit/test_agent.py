@@ -365,6 +365,7 @@ class TestCreateAgent:
             skill_registry.register(custom_skill)
             try:
                 agent = agent_mod.create_alphafold_agent()
+                assert isinstance(agent.instruction, str)
                 assert "## Dynamic Test Skill Section" in agent.instruction
             finally:
                 skill_registry._skills.pop("dynamic_test_skill", None)

@@ -321,13 +321,14 @@ IMPORTANT: Begin your response directly with the markdown headings/analysis. Do 
                     contents=content_parts,
                     config=types.GenerateContentConfig(temperature=0.7),
                 )
-                if resp and getattr(resp, "text", None):
+                resp_text = getattr(resp, "text", None) if resp else None
+                if isinstance(resp_text, str) and resp_text.strip():
                     expert_analysis_obj = {
                         "status": "success",
                         "model": candidate_model,
                         "generated_at": now_ea_iso,
                         "ai_generated": True,
-                        "analysis": resp.text.strip() + disclaimer_text,
+                        "analysis": resp_text.strip() + disclaimer_text,
                     }
                     logger.info(
                         f"Generated AF3 Gemini Expert Analysis via {candidate_model} "

@@ -542,6 +542,7 @@ class TestGnomadTool:
             mock_post.return_value = mock_graphql_resp
 
             res = await query_gnomad_variant("CHR1", 109274968, "g", "t")
+            assert mock_post.await_args is not None
             sent_query = mock_post.await_args.kwargs["json_data"]["query"]
             joint_block = sent_query.split("joint {")[1].split("exome {")[0]
             assert "\n          af\n" not in joint_block
@@ -582,6 +583,7 @@ class TestGnomadTool:
             mock_post.return_value = mock_graphql_resp
 
             res = await query_gene_constraint("CELSR2")
+            assert mock_post.await_args is not None
             sent_query = mock_post.await_args.kwargs["json_data"]["query"]
             assert "mis_z" in sent_query
             assert "syn_z" in sent_query
@@ -919,6 +921,9 @@ class TestFormattingAndCharts:
             ),
         )
         pad_and_sanitize_llm_response(MagicMock(), partial_resp)
+        assert (
+            partial_resp.content is not None and partial_resp.content.parts is not None
+        )
         assert partial_resp.content.parts[0].text == "$SORT1$"
 
         # Final turn with thought + visible text
@@ -929,6 +934,7 @@ class TestFormattingAndCharts:
             content=types.Content(role="model", parts=[thought_part, visible_part]),
         )
         pad_and_sanitize_llm_response(MagicMock(), final_resp)
+        assert final_resp.content is not None and final_resp.content.parts is not None
         assert final_resp.content.parts[0].text == "Thinking about $SORT1$..."
         assert final_resp.content.parts[1].text == (
             "\n\nhepatic `CEBPA/CEBPB` at `H3K27ac`\n\n"

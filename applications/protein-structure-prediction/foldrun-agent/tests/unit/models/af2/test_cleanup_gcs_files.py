@@ -61,6 +61,7 @@ def _load_cleanup_tool_class():
         spec = importlib.util.spec_from_file_location(
             "foldrun_app.core.tools.cleanup_gcs_files", src_path
         )
+        assert spec is not None and spec.loader is not None
         mod = importlib.util.module_from_spec(spec)
         sys.modules["foldrun_app.core.tools.cleanup_gcs_files"] = mod
         spec.loader.exec_module(mod)
