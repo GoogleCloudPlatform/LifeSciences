@@ -13,49 +13,132 @@
 # limitations under the License.
 
 # Dependabot configuration for the GoogleCloudPlatform/LifeSciences monorepo.
-# Excludes pinned GPU structure-prediction model runtimes and vendored code.
+# Configured for grouped security updates only (`open-pull-requests-limit: 0` disables
+# scheduled routine version updates while keeping event-driven Dependabot security updates
+# active and grouped per target). Note: `schedule` is required by the dependabot.yml schema.
 version: 2
 updates:
-  # Python applications managed with uv (pyproject.toml + uv.lock)
+  # Python applications managed with uv (pyproject.toml + uv.lock).
+  # Listed as explicit per-directory entries (rather than a wildcard `directories` glob)
+  # so each application runs in its own Dependabot job without hitting runner timeouts
+  # or scanning non-uv pyproject.toml directories. Add an entry here when adding a new uv app.
   - package-ecosystem: "uv"
-    directories:
-      - "/applications/**/*"
-    exclude-paths:
-      - "applications/protein-structure-prediction/src/alphafold-components"
-      - "applications/protein-structure-prediction/src/alphafold-components/**/*"
-      - "applications/protein-structure-prediction/src/boltz2-components"
-      - "applications/protein-structure-prediction/src/boltz2-components/**/*"
-      - "applications/protein-structure-prediction/src/esmfold2-components"
-      - "applications/protein-structure-prediction/src/esmfold2-components/**/*"
-      - "applications/protein-structure-prediction/src/openfold3-components"
-      - "applications/protein-structure-prediction/src/openfold3-components/**/*"
-      - "applications/open-agentic-science-engine/tools"
-      - "applications/open-agentic-science-engine/tools/**/*"
-      - "applications/pharma-on-gemini-enterprise/ge-agent-hackathon/tools/video-clipper"
-      - "applications/pharma-on-gemini-enterprise/ge-agent-hackathon/tools/video-clipper/**/*"
-      - "**/vendor"
-      - "**/vendor/**/*"
-      - "**/third_party"
-      - "**/third_party/**/*"
+    directory: "/applications/pharma-on-gemini-enterprise/argus-on-gemini-enterprise"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "America/New_York"
-    cooldown:
-      default-days: 7
-    versioning-strategy: "lockfile-only"
-    open-pull-requests-limit: 5
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
     groups:
       uv-security:
         applies-to: security-updates
         patterns:
           - "*"
-      uv-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - "minor"
-          - "patch"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/pharma-on-gemini-enterprise/biocompass-on-gemini-enterprise"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/pharma-on-gemini-enterprise/model-garden-on-gemini-enterprise"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/pharma-on-gemini-enterprise/paperbanana-on-gemini-enterprise"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/pharma-on-gemini-enterprise/variant-annotation-agent"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/protein-structure-prediction/foldrun-agent"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/protein-structure-prediction/foldrun-agent/packages/foldrun-common"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/protein-structure-prediction/src/foldrun-analysis-job"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/protein-structure-prediction/src/foldrun-viewer"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/applications/sentinel"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
+    groups:
+      uv-security:
+        applies-to: security-updates
         patterns:
           - "*"
 
@@ -71,22 +154,10 @@ updates:
       - "**/third_party/**/*"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "America/New_York"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     groups:
       pip-security:
         applies-to: security-updates
-        patterns:
-          - "*"
-      pip-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - "minor"
-          - "patch"
         patterns:
           - "*"
 
@@ -95,62 +166,11 @@ updates:
     directory: "/applications/sentinel/frontend"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "America/New_York"
-    cooldown:
-      default-days: 7
-    versioning-strategy: "lockfile-only"
-    open-pull-requests-limit: 3
+    versioning-strategy: "increase-if-necessary"
+    open-pull-requests-limit: 0
     groups:
       npm-security:
         applies-to: security-updates
-        patterns:
-          - "*"
-      npm-minor-and-patch:
-        applies-to: version-updates
-        update-types:
-          - "minor"
-          - "patch"
-        patterns:
-          - "*"
-
-  # Container base images (FROM instructions)
-  - package-ecosystem: "docker"
-    directories:
-      - "/applications/**/*"
-    exclude-paths:
-      - "applications/protein-structure-prediction/src/alphafold-components"
-      - "applications/protein-structure-prediction/src/alphafold-components/**/*"
-      - "applications/protein-structure-prediction/src/boltz2-components"
-      - "applications/protein-structure-prediction/src/boltz2-components/**/*"
-      - "applications/protein-structure-prediction/src/esmfold2-components"
-      - "applications/protein-structure-prediction/src/esmfold2-components/**/*"
-      - "applications/protein-structure-prediction/src/openfold3-components"
-      - "applications/protein-structure-prediction/src/openfold3-components/**/*"
-      - "**/vendor"
-      - "**/vendor/**/*"
-      - "**/third_party"
-      - "**/third_party/**/*"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "America/New_York"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 2
-    ignore:
-      # Keep Python and Node base images on tested runtime major/minor lines
-      - dependency-name: "python"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
-      - dependency-name: "node"
-        update-types:
-          - "version-update:semver-major"
-    groups:
-      docker-images:
         patterns:
           - "*"
 
@@ -159,18 +179,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "America/New_York"
-    cooldown:
-      default-days: 7
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
     groups:
       github-actions-security:
         applies-to: security-updates
-        patterns:
-          - "*"
-      github-actions:
-        applies-to: version-updates
         patterns:
           - "*"
