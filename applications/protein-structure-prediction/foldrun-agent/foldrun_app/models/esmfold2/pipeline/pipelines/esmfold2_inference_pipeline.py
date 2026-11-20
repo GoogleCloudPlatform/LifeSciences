@@ -98,6 +98,8 @@ def create_esmfold2_inference_pipeline(strategy: str = "STANDARD", use_msa: bool
                 .set_display_name("Reference databases (ESMFold2)")
                 .output,
                 query_json=query_json_import.output,
+                model_format="esmfold2",
+                use_templates=False,
             ).set_retry(
                 num_retries=2,
                 backoff_duration="60s",

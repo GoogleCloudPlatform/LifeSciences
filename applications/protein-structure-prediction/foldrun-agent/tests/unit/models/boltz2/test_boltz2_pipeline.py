@@ -103,21 +103,18 @@ class TestBOLTZ2MSAPipelineSource:
             "..",
             "..",
             "foldrun_app",
-            "models",
-            "boltz2",
-            "pipeline",
-            "components",
+            "core",
             "msa_pipeline.py",
         )
         with open(path) as f:
             return f.read()
 
     def test_msa_writes_to_nfs_cache(self):
-        """MSA pipeline writes to NFS-shared cache directory, not local temp."""
+        """MSA pipeline writes to shared NFS cache directory, not local temp."""
         source = self._read_msa_source()
         assert "nfs_msa_cache_base" in source
-        assert "boltz2_msas_cache" in source
-        assert "boltz2_msas_tmp" in source
+        assert "shared_msas_cache" in source
+        assert "shared_msas_tmp" in source
 
     def test_msa_uses_sequence_hash_for_cache_key(self):
         """MSA pipeline uses SHA256 of sequence as cache key."""
@@ -162,13 +159,14 @@ class TestBOLTZ2MSAPipelineSource:
         assert "FileExistsError" in source
         assert "shutil.rmtree" in source
 
-    def test_msa_strips_intermediates_before_cache_promotion(self):
-        """Intermediates are deleted before rename so cache entry only contains combined.a3m."""
+    def test_msa_retains_canonical_sto_and_strips_query_fasta(self):
+        """Query FASTA is removed while canonical .sto + combined.a3m stay for cross-model reuse."""
         source = self._read_msa_source()
-        assert "os.remove(intermediate)" in source
-        # All five intermediates must be listed for removal
-        for name in ("tmp_fasta", "uniref90_sto", "uniref90_a3m", "mgnify_sto", "mgnify_a3m"):
-            assert name in source
+        assert "os.remove(tmp_fasta)" in source
+        assert "uniref90_hits.sto" in source
+        assert "mgnify_hits.sto" in source
+        assert "uniref90.a3m" not in source
+        assert "mgnify.a3m" not in source
 
 
 class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
@@ -176,6 +174,7 @@ class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
 
     @staticmethod
     def _get_msa_func(monkeypatch):
+        import functools
         import sys
 
         from foldrun_app.models.boltz2.pipeline import config as boltz2_config
@@ -185,7 +184,9 @@ class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
             msa_pipeline_boltz2,
         )
 
-        return msa_pipeline_boltz2.python_func
+        return functools.partial(
+            msa_pipeline_boltz2.python_func, model_format="boltz2", use_templates=False
+        )
 
     @staticmethod
     def _make_artifact(path: str, uri: str = "", metadata: dict | None = None):
@@ -247,8 +248,8 @@ class TestBOLTZ2MSAPipelineCoreAndCustomMSA:
         assert "msa" not in updated["sequences"][1]["ligand"]
         assert out_artifact.metadata["msa_sequences"] == 0
         # Temp dir should be cleaned up and cache should remain empty
-        assert list((nfs_mount / "boltz2_msas_tmp").iterdir()) == []
-        assert list((nfs_mount / "boltz2_msas_cache").iterdir()) == []
+        assert list((nfs_mount / "shared_msas_tmp").iterdir()) == []
+        assert list((nfs_mount / "shared_msas_cache").iterdir()) == []
 
     def test_preserves_custom_a3m_and_explicit_empty_msa_without_running_jackhmmer(
         self, tmp_path, monkeypatch

@@ -105,6 +105,8 @@ def create_boltz2_inference_pipeline(strategy: str = "STANDARD"):
             .set_display_name("Reference databases (BOLTZ2)")
             .output,
             query_json=query_json_import.output,
+            model_format="boltz2",
+            use_templates=False,
         ).set_retry(
             num_retries=2,
             backoff_duration="60s",

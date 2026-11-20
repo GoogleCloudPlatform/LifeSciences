@@ -202,9 +202,11 @@ databases:
     display_name: PDB SeqRes
     nfs_path: pdb_seqres
     script: |
-      aria2c --continue=true 'https://files.rcsb.org/pub/pdb/derived_data/pdb_seqres.txt' --dir={dest}
-      awk '/^>/ {p = ($0 ~ /mol:protein/)} p' {dest}/pdb_seqres.txt > {dest}/pdb_seqres_filtered.txt
+      rm -f {dest}/pdb_seqres_raw.txt {dest}/pdb_seqres_filtered.txt
+      aria2c --allow-overwrite=true 'https://files.rcsb.org/pub/pdb/derived_data/pdb_seqres.txt' --dir={dest} --out=pdb_seqres_raw.txt
+      awk '/^>/ {p = ($0 ~ /mol:protein/)} p' {dest}/pdb_seqres_raw.txt > {dest}/pdb_seqres_filtered.txt
       mv {dest}/pdb_seqres_filtered.txt {dest}/pdb_seqres.txt
+      rm -f {dest}/pdb_seqres_raw.txt
 
   uniprot:
     models: [af2, of3]

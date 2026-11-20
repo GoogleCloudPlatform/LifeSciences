@@ -129,6 +129,7 @@ def create_of3_inference_pipeline(strategy: str = "STANDARD"):
             .set_display_name("Reference databases (OF3)")
             .output,
             query_json=query_json_import.output,
+            model_format="of3",
             use_templates=use_templates,
         ).set_retry(
             num_retries=2,

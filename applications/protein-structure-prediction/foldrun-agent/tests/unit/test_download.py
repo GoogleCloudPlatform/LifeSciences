@@ -499,7 +499,7 @@ class TestDatabaseSetupScripts:
         filter_lines = [
             line.strip()
             for line in script.splitlines()
-            if "pdb_seqres_filtered.txt" in line and not line.strip().startswith("mv ")
+            if line.strip().startswith("awk ") and "pdb_seqres_filtered.txt" in line
         ]
         assert len(filter_lines) == 1, f"Expected 1 filter line, found: {filter_lines}"
         filter_cmd = filter_lines[0].replace("{dest}", str(tmp_path))
@@ -516,7 +516,7 @@ class TestDatabaseSetupScripts:
             ">2def_A mol:protein length:10  TEST PROTEIN 2\n"
             "ACDEFGHIKL\n"
         )
-        input_file = tmp_path / "pdb_seqres.txt"
+        input_file = tmp_path / "pdb_seqres_raw.txt"
         input_file.write_text(sample_fasta)
 
         subprocess.run(["bash", "-e", "-c", filter_cmd], check=True)
@@ -531,6 +531,17 @@ class TestDatabaseSetupScripts:
             "ACDEFGHIKL\n"
         )
         assert filtered_content == expected_content
+
+    def test_pdb_seqres_downloads_fresh_without_resuming_filtered_file(self):
+        """pdb_seqres downloads to a separate raw file without --continue=true so --force refreshes cannot corrupt FASTA records."""
+        manifest = load_manifest()
+        script = build_script(
+            "pdb_seqres", manifest["databases"]["pdb_seqres"], "/mnt/nfs/foldrun/pdb_seqres"
+        )
+        assert "--continue=true" not in script
+        assert "--allow-overwrite=true" in script
+        assert "--out=pdb_seqres_raw.txt" in script
+        assert "rm -f /mnt/nfs/foldrun/pdb_seqres/pdb_seqres_raw.txt" in script
 
     def test_pdb_mmcif_waits_for_background_rsync_exit_status(self):
         """pdb_mmcif setup waits on $RSYNC_PID after loop so non-zero exit fails under set -e."""

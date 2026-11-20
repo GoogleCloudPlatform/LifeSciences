@@ -566,7 +566,7 @@ FILESTORE_TIER=ZONAL FILESTORE_CAPACITY_GB=2048 \
 ./deploy-all.sh YOUR_PROJECT_ID us-central1 --steps data
 ```
 
-Cached MSAs and features (`af2_features_cache/`, `of3_msas_cache/`, `boltz2_msas_cache/`) are not backed up to GCS and are rebuilt on demand. Pipelines and Batch jobs discover the instance automatically in either location (`FILESTORE_LOCATION` if set, otherwise `GCP_REGION` then `GCP_ZONE`). If you pinned `FILESTORE_IP` / `FILESTORE_NETWORK` in `foldrun-agent/.env`, update or remove them after replacement.
+Cached MSAs and features (`af2_features_cache/`, `shared_msas_cache/`, `of3_msas_cache/`) are not backed up to GCS and are rebuilt on demand. Protein MSAs in `shared_msas_cache/protein_<sha256>/` are shared across OpenFold 3, Boltz-2, and ESMFold2 (legacy `boltz2_msas_cache/`, `esmfold2_msas_cache/`, and old `of3_msas_cache/protein_*` directories on existing Filestore instances can be safely deleted to reclaim space). Pipelines and Batch jobs discover the instance automatically in either location (`FILESTORE_LOCATION` if set, otherwise `GCP_REGION` then `GCP_ZONE`). If you pinned `FILESTORE_IP` / `FILESTORE_NETWORK` in `foldrun-agent/.env`, update or remove them after replacement.
 
 ## Project Structure
 
@@ -711,8 +711,8 @@ uv run python scripts/setup_data.py --list
 
 ```
 /mnt/nfs/foldrun/
-  uniref90/              # Shared (AF2, OF3, Boltz-2)
-  mgnify/                # Shared (AF2, OF3, Boltz-2)
+  uniref90/              # Shared (AF2, OF3, Boltz-2, ESMFold2)
+  mgnify/                # Shared (AF2, OF3, Boltz-2, ESMFold2)
   pdb_seqres/            # Shared (AF2, OF3) — also used for OF3 template search
   uniprot/               # Shared (AF2, OF3)
   pdb_mmcif/             # Shared (AF2, OF3) — CIF structures for OF3 template featurization
@@ -721,7 +721,8 @@ uv run python scripts/setup_data.py --list
   pdb70/                 # AF2 only
   of3/params/            # OF3 only (~2GB OpenBind v0 weights: of3-ob-2025-06-30-174k.pt)
   of3/ccd/               # OF3 only (~500MB Chemical Component Dictionary)
-  of3_msas/              # OF3 runtime — per-job MSA + template alignment files (auto-created)
+  shared_msas_cache/     # Shared protein MSA + template cache across OF3, Boltz-2, ESMFold2 (auto-created)
+  of3_msas_cache/        # OF3 runtime — RNA MSA and core-mode fallback cache (auto-created)
   rfam/                  # OF3 only (RNA MSA via nhmmer)
   rnacentral/            # OF3 only (RNA MSA via nhmmer)
   boltz2/cache/          # Boltz-2 only — boltz2_conf.ckpt, boltz2_aff.ckpt, mols/ (CCD)

@@ -65,9 +65,9 @@ class TestEsmfold2HardwareAndPipelineCompilation:
         fast_execs = set(fast_spec["deploymentSpec"]["executors"].keys())
         assert any("configure-seeds" in k for k in fast_execs)
         assert any("predict-esmfold2" in k for k in fast_execs)
-        assert not any("msa-pipeline-esmfold2" in k for k in fast_execs)
+        assert not any("msa-pipeline" in k for k in fast_execs)
 
-        # 2. Full ESMFold2 (use_msa=True): includes msa_pipeline_esmfold2 component
+        # 2. Full ESMFold2 (use_msa=True): includes shared msa_pipeline component
         full_pipeline_fn = load_vertex_pipeline(enable_flex_start=True, use_msa=True)
         full_yaml_path = tmp_path / "esmfold2_full.yaml"
         compiler.Compiler().compile(
@@ -77,7 +77,7 @@ class TestEsmfold2HardwareAndPipelineCompilation:
         full_spec = yaml.safe_load(full_raw)
         full_execs = set(full_spec["deploymentSpec"]["executors"].keys())
         assert any("configure-seeds" in k for k in full_execs)
-        assert any("msa-pipeline-esmfold2" in k for k in full_execs)
+        assert any("msa-pipeline" in k for k in full_execs)
         assert any("predict-esmfold2" in k for k in full_execs)
         assert "a2-highgpu-1g" in full_raw
         assert "NVIDIA_TESLA_A100" in full_raw

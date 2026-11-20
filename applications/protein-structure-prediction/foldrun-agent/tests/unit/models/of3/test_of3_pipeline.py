@@ -125,27 +125,27 @@ class TestOF3MSAPipelineSource:
             "..",
             "..",
             "foldrun_app",
-            "models",
-            "of3",
-            "pipeline",
-            "components",
+            "core",
             "msa_pipeline.py",
         )
         with open(path) as f:
             return f.read()
 
     def test_msa_iterates_queries_chains_format(self):
-        """MSA pipeline iterates over queries.*.chains (not old sequences list)."""
+        """OF3 branch of shared MSA pipeline iterates over queries.*.chains."""
         source = self._read_msa_source()
-        assert 'query_data.get("queries", {}).items()' in source
-        assert '.get("chains", [])' in source
-        # Should NOT use old sequences format
-        assert 'query_data.get("sequences", [])' not in source
+        of3_branch = source.split('if model_format == "of3":', 1)[1].split(
+            "# Boltz-2 (YAML) and ESMFold2 (JSON)", 1
+        )[0]
+        assert 'query_data.get("queries", {}).items()' in of3_branch
+        assert '.get("chains", [])' in of3_branch
+        assert 'query_data.get("sequences", [])' not in of3_branch
 
     def test_msa_writes_to_nfs(self):
-        """MSA pipeline writes MSA files to NFS-shared directory."""
+        """MSA pipeline writes protein MSAs to shared NFS cache and RNA/core to of3 cache."""
         source = self._read_msa_source()
         assert "nfs_msa_cache_base" in source
+        assert "shared_msas_cache" in source
         assert "of3_msas_cache" in source
         assert "uuid" in source
 
@@ -186,9 +186,9 @@ class TestOF3MSAPipelineSource:
         assert "rnacentral" in source
 
     def test_msa_pdb_seqres_existence_check(self):
-        """Template search skips gracefully if pdb_seqres not present on NFS."""
+        """Template search skips gracefully if pdb_seqres not present as a file on NFS."""
         source = self._read_msa_source()
-        assert "os.path.exists(pdb_seqres_path)" in source
+        assert "os.path.isfile(pdb_seqres_path)" in source
 
 
 class TestOF3PredictTemplateArgs:
@@ -376,6 +376,7 @@ class TestOF3MSAPipelineCacheBehavior:
 
     @staticmethod
     def _get_msa_func():
+        import functools
         import sys
 
         from foldrun_app.models.of3.pipeline import config as of3_config
@@ -383,7 +384,7 @@ class TestOF3MSAPipelineCacheBehavior:
         sys.modules["config"] = of3_config
         from foldrun_app.models.of3.pipeline.components.msa_pipeline import msa_pipeline_of3
 
-        return msa_pipeline_of3.python_func
+        return functools.partial(msa_pipeline_of3.python_func, model_format="of3")
 
     @staticmethod
     def _make_artifact(path: str, uri: str = "", metadata: dict | None = None):
@@ -525,7 +526,10 @@ class TestOF3MSAPipelineCacheBehavior:
         )
         query_artifact = self._make_artifact(path=str(query_input), uri=str(query_input))
 
+        invoked_cmds = []
+
         def _fake_run(cmd, check=True):
+            invoked_cmds.append(cmd)
             out_idx = cmd.index("-A") + 1
             with open(cmd[out_idx], "w") as f:
                 f.write("# STOCKHOLM 1.0\n//\n")
@@ -543,8 +547,10 @@ class TestOF3MSAPipelineCacheBehavior:
             updated_query_json=out_no_tpl_artifact,
             use_templates=False,
         )
+        assert len(invoked_cmds) == 2
 
-        # Second run: use_templates=True triggers cache miss and generates pdb_seqres.sto
+        # Second run: use_templates=True gets a partial cache hit and runs only pdb_seqres
+        invoked_cmds.clear()
         out_with_tpl_path = tmp_path / "out_with_tpl.json"
         out_with_tpl_artifact = self._make_artifact(
             path=str(out_with_tpl_path), uri=str(out_with_tpl_path)
@@ -555,6 +561,8 @@ class TestOF3MSAPipelineCacheBehavior:
             updated_query_json=out_with_tpl_artifact,
             use_templates=True,
         )
+        assert len(invoked_cmds) == 1
+        assert invoked_cmds[0][-1] == str(nfs_mount / "pdb_seqres.fasta")
 
         tpl_result = json.loads(out_with_tpl_path.read_text())
         tpl_chain = tpl_result["queries"]["test_q"]["chains"][0]
@@ -668,9 +676,12 @@ class TestOF3MSAPipelineCacheBehavior:
         )
 
         assert len(called_cmds) == 2
-        assert called_cmds[0][0] == "nhmmer"
-        assert str(nfs_mount / "rfam" / "rfam.fasta") in called_cmds[0]
-        assert str(nfs_mount / "rnacentral" / "rnacentral.fasta") in called_cmds[1]
+        assert all(cmd[0] == "nhmmer" for cmd in called_cmds)
+        called_dbs = {cmd[-1] for cmd in called_cmds}
+        assert called_dbs == {
+            str(nfs_mount / "rfam" / "rfam.fasta"),
+            str(nfs_mount / "rnacentral" / "rnacentral.fasta"),
+        }
         assert out_rna_artifact.metadata["msa_chains"] == 1
 
         rna_result = json.loads(out_rna_path.read_text())
@@ -860,8 +871,9 @@ class TestOF3MSAPipelineCacheBehavior:
         core_hit_chain = core_hit_result["queries"]["core_q"]["chains"][0]
         assert core_hit_chain["main_msa_file_paths"] == [sto_path]
         assert list((nfs_mount / "of3_msas_tmp").iterdir()) == []
+        assert list((nfs_mount / "shared_msas_cache").iterdir()) == []
 
-        # 2. Full databases later installed on NFS -> upgrades uniref90_hits.sto and adds mgnify_hits.sto
+        # 2. Full databases later installed on NFS -> upgrades into shared_msas_cache with mgnify + templates
         for db_name in ("uniref90.fasta", "mgnify.fasta", "pdb_seqres.fasta"):
             (nfs_mount / db_name).write_text(f">dummy\n{seq}\n")
 
@@ -878,11 +890,12 @@ class TestOF3MSAPipelineCacheBehavior:
         full_result = json.loads(out_full_path.read_text())
         full_chain = full_result["queries"]["core_q"]["chains"][0]
         assert len(full_chain["main_msa_file_paths"]) == 2
+        assert "shared_msas_cache" in full_chain["main_msa_file_paths"][0]
         with open(full_chain["main_msa_file_paths"][0]) as f:
             assert "homolog_full" in f.read()
         assert os.path.isfile(full_chain["template_alignment_file_path"])
-        # Ensure no leftover .tmp files in seq_cache_dir after atomic os.replace
-        cache_files = os.listdir(os.path.dirname(sto_path))
+        # Ensure no leftover .tmp files in seq_cache_dir after atomic promotion
+        cache_files = os.listdir(os.path.dirname(full_chain["main_msa_file_paths"][0]))
         assert not any(name.endswith(".tmp") for name in cache_files)
 
     def test_preserves_custom_msa_and_template_paths(self, tmp_path, monkeypatch):

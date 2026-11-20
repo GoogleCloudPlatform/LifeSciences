@@ -214,11 +214,23 @@ class TestBOLTZ2PipelineCompilation:
 
         os.remove(output_path)
         executors = pipeline_yaml.get("deploymentSpec", {}).get("executors", {})
-        for exec_name in ("exec-msa-pipeline-boltz2", "exec-predict-boltz2"):
+        components = pipeline_yaml.get("components", {})
+        for exec_name, comp_name in (
+            ("exec-msa-pipeline", "comp-msa-pipeline"),
+            ("exec-predict-boltz2", "comp-predict-boltz2"),
+        ):
             assert exec_name in executors, f"Missing executor {exec_name} in {list(executors)}"
             cmd_joined = " ".join(executors[exec_name]["container"]["command"])
             assert "pip install" not in cmd_joined, (
                 f"{exec_name} still runs runtime pip install: {cmd_joined}"
+            )
+            wps = components[comp_name]["inputDefinitions"]["parameters"]["worker_pool_specs"][
+                "defaultValue"
+            ]
+            inner_spec = wps[0]["container_spec"]
+            assert inner_spec["image_uri"] == "boltz2-image:stable"
+            assert "pip install" not in " ".join(inner_spec["command"]), (
+                f"{comp_name} inner container still runs runtime pip install"
             )
 
 
