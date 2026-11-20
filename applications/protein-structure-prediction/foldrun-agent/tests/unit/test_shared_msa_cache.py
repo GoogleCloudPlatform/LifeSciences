@@ -704,6 +704,36 @@ class TestConcurrencyRaceAndCoreIsolation:
         assert list((nfs_mount / "shared_msas_cache").iterdir()) == []
         assert list((nfs_mount / "shared_msas_tmp").iterdir()) == []
 
+    def test_of3_core_mode_with_pdb_seqres_runs_template_search(self, tmp_path, monkeypatch):
+        """OF3 core mode with pdb_seqres present invokes _run_hmmer_parallel with a 3-tuple."""
+        msa_of3, _, _ = _load_msa_funcs(monkeypatch)
+        nfs_mount, ref_db = _setup_nfs(tmp_path, include_dbs=False)
+        pdb_seqres_file = nfs_mount / ref_db.metadata["pdb_seqres"]
+        pdb_seqres_file.parent.mkdir(parents=True, exist_ok=True)
+        pdb_seqres_file.write_text(">1abc_A mol:protein\nACDEFGHIK\n")
+
+        seq = "ACDEFGHIK"
+        called: list[list[str]] = []
+
+        def fake_run(cmd, check=True):
+            called.append(list(cmd))
+            if "-A" in cmd:
+                out_file = cmd[cmd.index("-A") + 1]
+                with open(out_file, "w") as fout:
+                    fout.write("# STOCKHOLM 1.0\n//\n")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        of3_chain, _ = _run_of3(msa_of3, tmp_path, ref_db, seq, "core_tpl", use_templates=True)
+        assert len(called) == 1
+        assert called[0][0] == "jackhmmer"
+        assert str(pdb_seqres_file) in called[0]
+        assert "--cpu" in called[0]
+        assert "of3_msas_cache" in of3_chain["main_msa_file_paths"][0]
+        assert of3_chain["template_alignment_file_path"].endswith("pdb_seqres.sto")
+        assert "of3_msas_cache" in of3_chain["template_alignment_file_path"]
+        assert list((nfs_mount / "shared_msas_cache").iterdir()) == []
+
     def test_unknown_model_format_raises_value_error(self, tmp_path, monkeypatch):
         """Shared MSA component rejects unsupported model_format values."""
         msa_of3, _, _ = _load_msa_funcs(monkeypatch)

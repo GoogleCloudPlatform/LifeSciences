@@ -13,9 +13,25 @@
 # limitations under the License.
 
 steps:
-- name: 'docker:29-cli'
-  args: ['build', '-t', '${_IMAGE_PATH}', '-f', 'src/foldrun-analysis-job/Dockerfile', '.']
+- id: 'build-analysis'
+  name: 'docker:29-cli'
+  entrypoint: 'sh'
+  env:
+    - 'DOCKER_BUILDKIT=1'
+    - 'IMAGE_PATH=${_IMAGE_PATH}'
+  args:
+    - '-c'
+    - |
+      set -euo pipefail
+      docker pull "$$IMAGE_PATH" || true
+      docker build \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --cache-from "$$IMAGE_PATH" \
+        -t "$$IMAGE_PATH" \
+        -f src/foldrun-analysis-job/Dockerfile \
+        .
 images:
 - '${_IMAGE_PATH}'
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'

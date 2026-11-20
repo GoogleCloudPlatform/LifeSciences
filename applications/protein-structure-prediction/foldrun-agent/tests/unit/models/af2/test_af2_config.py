@@ -131,3 +131,46 @@ class TestAF2Config:
             in content
         )
         assert content.count("sha256sum -c -") >= 2
+
+    def test_dockerfile_uses_multistage_hhsuite_builder_and_slims_runtime(self):
+        """Ensure alphafold-components compiles HH-suite in a builder stage and keeps runtime slim."""
+        dockerfile_path = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "..",
+            "..",
+            "..",
+            "src",
+            "alphafold-components",
+            "Dockerfile",
+        )
+        with open(dockerfile_path, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "FROM ubuntu:22.04 AS hhsuite-builder" in content
+        assert 'make -j"$(nproc)"' in content
+
+        # Split into builder stage and runtime stage (ignoring comment lines)
+        runtime_raw = content.split("FROM nvidia/cuda:", 1)[1]
+        runtime_stage = "\n".join(
+            line for line in runtime_raw.splitlines() if not line.lstrip().startswith("#")
+        )
+        assert "build-essential" not in runtime_stage
+        assert "cmake" not in runtime_stage
+        assert "libgomp1" in runtime_stage
+        assert "rm -rf /app/alphafold/.git" in runtime_stage
+
+        # COPY --from=hhsuite-builder must appear AFTER pip3 install to preserve Python layer cache
+        pip_idx = runtime_stage.index("requirements_resolved.txt")
+        copy_idx = runtime_stage.index("COPY --from=hhsuite-builder /opt/hhsuite /opt/hhsuite")
+        assert copy_idx > pip_idx
+
+        # Build-time contract check verifies HH-suite shared libs and binaries without pipefail SIGPIPE hazard
+        assert (
+            'ldd_out="$(ldd /opt/hhsuite/bin/hhblits /opt/hhsuite/bin/hhsearch)"' in runtime_stage
+        )
+        assert '! grep -q "not found" <<< "$ldd_out"' in runtime_stage
+        assert "! ldd " not in runtime_stage
+        assert "hhblits -h" in runtime_stage
+        assert "hhsearch -h" in runtime_stage

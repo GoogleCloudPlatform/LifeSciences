@@ -196,16 +196,51 @@ def build_script(db_name: str, db_config: dict[str, Any], dest_path: str) -> str
 
     extract = db_config.get("extract", "none")
 
-    lines = [f"aria2c --continue=true '{source}' --dir={dest_path}"]
+    lines = [
+        f"aria2c --continue=true --max-connection-per-server=16 --split=16 '{source}' --dir={dest_path}"
+    ]
+
+    source_path = source.split("?", 1)[0].split("#", 1)[0]
+    source_lower = source_path.lower()
+    is_gzipped_tar = source_lower.endswith((".tar.gz", ".tgz"))
+    archive_name = source_path.rsplit("/", 1)[-1]
+    has_safe_archive_name = bool(
+        archive_name
+        and archive_name not in (".", "..")
+        and re.match(r"^[A-Za-z0-9._-]+$", archive_name)
+    )
+    if has_safe_archive_name and source_lower.endswith((".tar", ".tar.gz", ".tgz")):
+        tar_target = f"{dest_path}/{archive_name}"
+    elif source_lower.endswith(".tgz"):
+        tar_target = f"{dest_path}/*.tgz"
+    else:
+        tar_target = f"{dest_path}/*.tar*"
 
     if extract == "gunzip":
-        lines.append(f"gunzip -f {dest_path}/*.gz")
+        gz_target = (
+            f"{dest_path}/{archive_name}"
+            if (has_safe_archive_name and source_lower.endswith(".gz"))
+            else f"{dest_path}/*.gz"
+        )
+        lines.append(
+            f"(command -v unpigz >/dev/null 2>&1 && unpigz -f {gz_target} || gunzip -f {gz_target})"
+        )
     elif extract == "tar":
-        lines.append(f"tar xf {dest_path}/*.tar* -C {dest_path}")
-        lines.append(f"rm -f {dest_path}/*.tar.gz {dest_path}/*.tar")
+        if is_gzipped_tar:
+            lines.append(
+                f"(command -v pigz >/dev/null 2>&1 && tar --use-compress-program=pigz -xf {tar_target} -C {dest_path} || tar xf {tar_target} -C {dest_path})"
+            )
+        else:
+            lines.append(f"tar xf {tar_target} -C {dest_path}")
+        lines.append(f"rm -f {tar_target} {dest_path}/*.tar.gz {dest_path}/*.tgz {dest_path}/*.tar")
     elif extract == "tar_strip":
-        lines.append(f"tar xf {dest_path}/*.tar* --strip-components=1 -C {dest_path}")
-        lines.append(f"rm -f {dest_path}/*.tar.gz {dest_path}/*.tar")
+        if is_gzipped_tar:
+            lines.append(
+                f"(command -v pigz >/dev/null 2>&1 && tar --use-compress-program=pigz -xf {tar_target} --strip-components=1 -C {dest_path} || tar xf {tar_target} --strip-components=1 -C {dest_path})"
+            )
+        else:
+            lines.append(f"tar xf {tar_target} --strip-components=1 -C {dest_path}")
+        lines.append(f"rm -f {tar_target} {dest_path}/*.tar.gz {dest_path}/*.tgz {dest_path}/*.tar")
     elif extract != "none":
         raise ValueError(f"Unknown extract method '{extract}' for '{db_name}'")
 
@@ -289,7 +324,7 @@ def submit_download(
 
     full_script = (
         f"set -e\n"
-        f"apt-get update -qq && apt-get install -y -qq aria2 python3-crcmod 2>/dev/null || true\n"
+        f"apt-get update -qq && apt-get install -y -qq aria2 pigz python3-crcmod 2>/dev/null || true\n"
         f"echo {shlex.quote(f'=== {display_name} → NFS: {dest_path} (source: {data_source}) ===')}\n"
         f"mkdir -p {safe_dest_path}\n"
         f"{download_script}\n"

@@ -13,6 +13,30 @@
 # limitations under the License.
 
 ARG CUDA=12.2.2
+
+# Stage 1: Compile HH-suite on matching Ubuntu 22.04 (glibc 2.35) without pulling
+# CUDA runtime layers or leaking build-essential/cmake into the final GPU image.
+FROM ubuntu:22.04 AS hhsuite-builder
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update --quiet \
+    && apt-get install --no-install-recommends --yes --quiet \
+        build-essential \
+        ca-certificates \
+        cmake \
+        git \
+    && rm -rf /var/lib/apt/lists/* \
+    && git clone --depth 1 --branch v3.3.0 --single-branch https://github.com/soedinglab/hh-suite.git /tmp/hh-suite \
+    && mkdir /tmp/hh-suite/build \
+    && pushd /tmp/hh-suite/build \
+    && cmake -DCMAKE_INSTALL_PREFIX=/opt/hhsuite .. \
+    && make -j"$(nproc)" && make install \
+    && popd \
+    && rm -rf /tmp/hh-suite
+
+# Stage 2: Runtime GPU image (no build-essential or cmake).
 FROM nvidia/cuda:${CUDA}-cudnn8-runtime-ubuntu22.04
 # FROM directive resets ARGS, so we specify again (the value is retained if
 # previously set).
@@ -25,28 +49,17 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update --quiet \
     && apt-get install --no-install-recommends --yes --quiet \
-        build-essential \
         ca-certificates \
-        cmake \
         cuda-command-line-tools-$(cut -f1,2 -d- <<< ${CUDA//./-}) \
         git \
         hmmer \
         kalign \
+        libgomp1 \
         tzdata \
         wget \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get autoremove --yes \
     && apt-get clean
-
-# Compile HHsuite from source.
-RUN git clone --branch v3.3.0 --single-branch https://github.com/soedinglab/hh-suite.git /tmp/hh-suite \
-    && mkdir /tmp/hh-suite/build \
-    && pushd /tmp/hh-suite/build \
-    && cmake -DCMAKE_INSTALL_PREFIX=/opt/hhsuite .. \
-    && make -j && make install \
-    && ln -s /opt/hhsuite/bin/* /usr/bin \
-    && popd \
-    && rm -rf /tmp/hh-suite
 
 # Install MMseqs2 (GPU-accelerated sequence search, alternative to JackHMMER).
 ARG MMSEQS2_VERSION=18-8cc5c
@@ -91,8 +104,9 @@ ENV LD_LIBRARY_PATH="/opt/conda/lib:$LD_LIBRARY_PATH"
 COPY requirements-pip.txt .
 RUN pip3 install --no-cache-dir --require-hashes -r requirements-pip.txt
 
-RUN git clone https://github.com/deepmind/alphafold.git /app/alphafold
-RUN git -C /app/alphafold reset --hard $AF2_VERSION
+RUN git clone https://github.com/deepmind/alphafold.git /app/alphafold \
+    && git -C /app/alphafold reset --hard "$AF2_VERSION" \
+    && rm -rf /app/alphafold/.git
 
 # Fetch OpenStructure stereo_chemical_props.txt (commit 7102c636) via
 # content-addressed Software Heritage archive with GitHub/upstream fallbacks
@@ -114,6 +128,11 @@ RUN pip3 install --no-cache-dir --require-hashes \
     -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
     -r /app/alphafold/requirements_resolved.txt
 
+# Copy compiled HH-suite AFTER pip3 install so stateless builder recompilations
+# never invalidate the heavy Miniforge and Python package cache layers.
+COPY --from=hhsuite-builder /opt/hhsuite /opt/hhsuite
+RUN ln -s /opt/hhsuite/bin/* /usr/bin
+
 # Patch: skip unparseable template descriptions instead of crashing.
 # Some PDB entries (e.g. 5apu) have formats AF2's parser can't handle.
 # Placed after pip install to preserve Docker layer cache.
@@ -125,3 +144,12 @@ ADD src/components/alphafold_utils.py .
 
 ENV PYTHONPATH=/app/alphafold:/modules
 RUN ldconfig
+
+# Build-time contract check: verify HH-suite OpenMP/shared library linkage,
+# MSA/template binaries, and core Python dependencies.
+RUN ldd_out="$(ldd /opt/hhsuite/bin/hhblits /opt/hhsuite/bin/hhsearch)" \
+    && ! grep -q "not found" <<< "$ldd_out" \
+    && hhblits -h >/dev/null \
+    && hhsearch -h >/dev/null \
+    && command -v jackhmmer hmmsearch hmmbuild kalign mmseqs >/dev/null \
+    && python3 -c "import alphafold, certifi, jax, openmm, pdbfixer; assert tuple(int(x) for x in certifi.__version__.split('.')) >= (2026, 10, 19)"

@@ -74,6 +74,7 @@ usage() {
     echo "  ENABLE_VIEWER_IAP  Enable IAP for the viewer: true (default) or false"
     echo "  OF3_VERSION        OpenFold3 image tag[@digest] (default: 0.5-pixi pinned; requires OpenBind weights)"
     echo "  BOLTZ_VERSION      Boltz-2 pip package version to install (default: 2.2.1)"
+    echo "  CLOUDBUILD_MACHINE_TYPE  Cloud Build worker machine type (default: e2-highcpu-8; e.g. e2-highcpu-32)"
     echo "  GEMINI_ENTERPRISE_APP_ID  Gemini Enterprise App ID (optional)"
     echo ""
     echo "  The following override the auto-detected naming conventions for"
@@ -555,11 +556,12 @@ if $run_build; then
     echo "  _AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID}"
     echo "  _GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID}"
 
+    CLOUDBUILD_MACHINE_TYPE=${CLOUDBUILD_MACHINE_TYPE:-e2-highcpu-8}
     gcloud builds submit . \
         --config cloudbuild.yaml \
         --project "$PROJECT_ID" \
         --substitutions="^;^_REGION=${REGION};_ZONE=${ZONE};_BUCKET_NAME=${GCS_BUCKET};_FILESTORE_ID=${FILESTORE_ID};_FILESTORE_LOCATION=${FILESTORE_LOCATION};_AR_REPO=${AR_REPO};_AGENT_SA_EMAIL=${AGENT_SA_EMAIL};_PIPELINES_SA_EMAIL=${PIPELINES_SA_EMAIL};_DATABASES_BUCKET=${DATABASES_BUCKET};_NETWORK_ID=${NETWORK_ID};_SUBNET_ID=${SUBNET_ID:-};_NETWORK_PROJECT_NUMBER=${NETWORK_PROJECT_NUMBER};_AF2_VERSION=${AF2_VERSION};_OF3_VERSION=${OF3_VERSION};_BOLTZ_VERSION=${BOLTZ_VERSION};_BUILD_TARGET=${BUILD_TARGET};_MODEL_ENDPOINT_LOCATION=${MODEL_ENDPOINT_LOCATION};_AF3_ENDPOINT_LOCATION=${AF3_ENDPOINT_LOCATION};_FOLDRUN_VIEWER_URL=${FOLDRUN_VIEWER_URL};_AGENT_RUNTIME_ID=${AGENT_RUNTIME_ID};_GEMINI_ENTERPRISE_APP_ID=${GEMINI_ENTERPRISE_APP_ID};_AF3_ENDPOINT=${AF3_ENDPOINT:-auto};_AF3_MODEL_ID=${AF3_MODEL_ID:-auto}" \
-        --machine-type=e2-highcpu-8 \
+        --machine-type="${CLOUDBUILD_MACHINE_TYPE}" \
         --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA_EMAIL}"
 fi
 

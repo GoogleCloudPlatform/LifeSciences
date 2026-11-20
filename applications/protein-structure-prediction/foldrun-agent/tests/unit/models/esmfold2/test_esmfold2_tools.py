@@ -121,6 +121,29 @@ class TestEsmfold2HardwareAndPipelineCompilation:
         assert '"fp8"' in src
         assert '"bf16"' in src
 
+    def test_dockerfile_slims_toolchain_and_verifies_triton_cc_contract(self):
+        """Ensure esmfold2-components drops build-essential/pip/curl while keeping minimal Triton C compiler."""
+        from pathlib import Path
+
+        dockerfile_path = (
+            Path(__file__).resolve().parents[5] / "src" / "esmfold2-components" / "Dockerfile"
+        )
+        raw = dockerfile_path.read_text(encoding="utf-8")
+        content = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("#"))
+
+        assert "build-essential" not in content
+        assert "python3-pip" not in content
+        assert "\n    curl" not in content
+        # Minimal C compiler + Python.h required at runtime for vendored @triton.jit kernels
+        assert "\n    gcc" in content
+        assert "\n    libc6-dev" in content
+        assert "\n    python3-dev" in content
+        # Venv creation and python3-venv purge happen in the same RUN layer (no whiteout bloat)
+        assert "&& python3 -m venv /opt/venv" in content
+        assert "&& apt-get purge -y python3-venv" in content
+        assert "--require-hashes" in content
+        assert "#include <Python.h>" in content
+
 
 class TestEsmfold2SubmitPrediction:
     """Tests for ESMFOLD2SubmitPredictionTool and submit_esmfold2_prediction skill wrapper."""

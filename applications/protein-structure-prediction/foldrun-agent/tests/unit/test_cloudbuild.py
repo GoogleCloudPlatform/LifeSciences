@@ -102,3 +102,65 @@ def test_cloudbuild_agent_steps_use_python_313_uv_image():
     for step_id in ("deploy-agent-runtime", "register-agent"):
         assert step_id in steps_by_id, f"Missing expected Cloud Build step '{step_id}'"
         assert steps_by_id[step_id]["name"] == "ghcr.io/astral-sh/uv:python3.13-bookworm-slim"
+
+
+def test_cloudbuild_configures_high_cpu_and_disk_headroom():
+    """Verify root and standalone Cloud Build configs use E2_HIGHCPU_8 and sufficient disk."""
+    foldrun_root = CLOUDBUILD_YAML_PATH.parent
+    root_cfg = yaml.safe_load(CLOUDBUILD_YAML_PATH.read_text(encoding="utf-8"))
+    opts = root_cfg.get("options", {})
+    assert opts.get("machineType") == "E2_HIGHCPU_8"
+    assert int(opts.get("diskSizeGb", 0)) >= 200
+
+    for rel in ("src/foldrun-viewer/cloudbuild.yaml", "src/foldrun-analysis-job/cloudbuild.yaml"):
+        sub_cfg = yaml.safe_load((foldrun_root / rel).read_text(encoding="utf-8"))
+        assert sub_cfg.get("options", {}).get("machineType") == "E2_HIGHCPU_8"
+        step = sub_cfg["steps"][0]
+        assert "DOCKER_BUILDKIT=1" in (step.get("env") or [])
+        script = step["args"][1]
+        assert _first_effective_line(script) == "set -euo pipefail"
+        assert "docker pull" in script
+        assert "BUILDKIT_INLINE_CACHE=1" in script
+        assert "--cache-from" in script
+
+
+def test_cloudbuild_all_docker_steps_enable_buildkit_and_inline_cache():
+    """Verify every Docker build-push step in root cloudbuild.yaml uses BuildKit + registry cache."""
+    config = yaml.safe_load(CLOUDBUILD_YAML_PATH.read_text(encoding="utf-8"))
+    docker_steps = [
+        step for step in config.get("steps", []) if (step.get("id") or "").startswith("build-push-")
+    ]
+    expected_ids = {
+        "build-push-viewer",
+        "build-push-analysis",
+        "build-push-af2-components",
+        "build-push-of3-components",
+        "build-push-boltz2-components",
+        "build-push-esmfold2-components",
+    }
+    assert {step["id"] for step in docker_steps} == expected_ids
+
+    for step in docker_steps:
+        step_id = step["id"]
+        env_list = step.get("env") or []
+        script = step["args"][1]
+        assert "DOCKER_BUILDKIT=1" in env_list, f"{step_id} missing DOCKER_BUILDKIT=1"
+        assert "docker pull " in script and "|| true" in script, (
+            f"{step_id} missing cache warm pull"
+        )
+        assert "BUILDKIT_INLINE_CACHE=1" in script, f"{step_id} missing BUILDKIT_INLINE_CACHE=1"
+        assert "--cache-from " in script, f"{step_id} missing --cache-from"
+
+
+def test_cloud_run_dockerfiles_use_copy_chown_without_recursive_chown():
+    """Verify Cloud Run Dockerfiles avoid post-COPY `chown -R` layer duplication of /app/.venv."""
+    foldrun_root = CLOUDBUILD_YAML_PATH.parent
+    for rel in ("src/foldrun-viewer/Dockerfile", "src/foldrun-analysis-job/Dockerfile"):
+        raw = (foldrun_root / rel).read_text(encoding="utf-8")
+        effective = "\n".join(
+            line for line in raw.splitlines() if not line.lstrip().startswith("#")
+        )
+        assert "COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv" in effective, (
+            f"{rel} should set ownership during COPY --from=builder"
+        )
+        assert "chown -R" not in effective, f"{rel} should not duplicate layers via chown -R"

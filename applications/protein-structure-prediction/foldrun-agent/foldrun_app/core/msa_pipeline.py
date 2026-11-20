@@ -591,6 +591,7 @@ def create_msa_pipeline_component(
                                                         tmp_fasta,
                                                         pdb_seqres_path,
                                                     ],
+                                                    1.0,
                                                 )
                                             ]
                                         )

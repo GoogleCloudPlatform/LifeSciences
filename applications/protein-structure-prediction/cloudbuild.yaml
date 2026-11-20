@@ -19,11 +19,12 @@
 #   af2            - alphafold-components container
 #   of3            - openfold3-components container
 #   boltz2         - boltz2-components container
+#   esmfold2       - esmfold2-components container
 #   agent          - Agent Runtime only (no container rebuilds)
 #   analysis       - foldrun-analysis-job Cloud Run Job
 #
 # The agent is automatically included whenever viewer, af2, of3, boltz2,
-# or agent is in the target list (anything except analysis-only targets).
+# esmfold2, or agent is in the target list (anything except analysis-only targets).
 # Examples:
 #   _BUILD_TARGET=of3            # rebuild OF3 container + redeploy agent
 #   _BUILD_TARGET=agent          # redeploy agent only, no container rebuilds
@@ -38,6 +39,7 @@ steps:
     name: 'docker:29-cli'
     entrypoint: 'sh'
     env:
+      - 'DOCKER_BUILDKIT=1'
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
       - 'REGION=${_REGION}'
@@ -92,6 +94,7 @@ steps:
     name: 'docker:29-cli'
     entrypoint: 'sh'
     env:
+      - 'DOCKER_BUILDKIT=1'
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
       - 'REGION=${_REGION}'
@@ -149,6 +152,7 @@ steps:
     name: 'docker:29-cli'
     entrypoint: 'sh'
     env:
+      - 'DOCKER_BUILDKIT=1'
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
       - 'REGION=${_REGION}'
@@ -180,6 +184,7 @@ steps:
     name: 'docker:29-cli'
     entrypoint: 'sh'
     env:
+      - 'DOCKER_BUILDKIT=1'
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
       - 'REGION=${_REGION}'
@@ -191,8 +196,11 @@ steps:
         set -euo pipefail
         _t=",$$BUILD_TARGET,"
         if [[ "$$BUILD_TARGET" == "all" ]] || [[ "$$_t" == *",of3,"* ]]; then
+          docker pull "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest" || true
           docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
             --build-arg "OF3_VERSION=$$OF3_VERSION" \
+            --cache-from "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest" \
             -t "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest" \
             src/openfold3-components/
           docker push "$$REGION-docker.pkg.dev/$$PROJECT_ID/$$AR_REPO/openfold3-components:latest"
@@ -208,6 +216,7 @@ steps:
     name: 'docker:29-cli'
     entrypoint: 'sh'
     env:
+      - 'DOCKER_BUILDKIT=1'
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
       - 'REGION=${_REGION}'
@@ -239,6 +248,7 @@ steps:
     name: 'docker:29-cli'
     entrypoint: 'sh'
     env:
+      - 'DOCKER_BUILDKIT=1'
       - 'PROJECT_ID=$PROJECT_ID'
       - 'BUILD_TARGET=${_BUILD_TARGET}'
       - 'REGION=${_REGION}'
@@ -424,4 +434,6 @@ substitutions:
 timeout: 3600s
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 200
 

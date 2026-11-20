@@ -39,12 +39,14 @@ RUN uv sync --frozen --no-dev --no-editable
 # Stage 2: Runtime image
 FROM python:3.13-slim
 
+RUN useradd -m -u 1000 appuser
+
 WORKDIR /app
 
-COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+RUN chown appuser:appuser /app
 USER appuser
 
 ENV PYTHONUNBUFFERED=1

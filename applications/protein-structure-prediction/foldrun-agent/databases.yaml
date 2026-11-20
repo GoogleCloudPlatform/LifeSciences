@@ -168,7 +168,7 @@ databases:
         'https://ftp.ebi.ac.uk/pub/databases/uniprot/uniref/uniref90/uniref90.fasta.gz' --dir=/mnt/scratch --out=uniref90.fasta.gz
       # 3. Fast Parallel Decompression on SSD
       echo "Decompressing with pigz..."
-      apt-get update -qq && apt-get install -y -qq pigz
+      command -v unpigz >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq pigz)
       unpigz -c /mnt/scratch/uniref90.fasta.gz > /mnt/scratch/uniref90.fasta
       # 4. Sync to NFS
       echo "Moving to NFS..."
@@ -191,7 +191,7 @@ databases:
         'https://storage.googleapis.com/alphafold-databases/v2.3/mgy_clusters_2022_05.fa.gz' --dir=/mnt/scratch --out=mgy.fa.gz
       # 3. Fast Parallel Decompression on SSD
       echo "Decompressing with pigz..."
-      apt-get update -qq && apt-get install -y -qq pigz
+      command -v unpigz >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq pigz)
       unpigz -c /mnt/scratch/mgy.fa.gz > /mnt/scratch/mgy_clusters_2022_05.fa
       # 4. Sync to NFS
       echo "Moving to NFS..."
@@ -203,7 +203,8 @@ databases:
     nfs_path: pdb_seqres
     script: |
       rm -f {dest}/pdb_seqres_raw.txt {dest}/pdb_seqres_filtered.txt
-      aria2c --allow-overwrite=true 'https://files.rcsb.org/pub/pdb/derived_data/pdb_seqres.txt' --dir={dest} --out=pdb_seqres_raw.txt
+      aria2c --allow-overwrite=true --max-connection-per-server=16 --split=16 \
+        'https://files.rcsb.org/pub/pdb/derived_data/pdb_seqres.txt' --dir={dest} --out=pdb_seqres_raw.txt
       awk '/^>/ {p = ($0 ~ /mol:protein/)} p' {dest}/pdb_seqres_raw.txt > {dest}/pdb_seqres_filtered.txt
       mv {dest}/pdb_seqres_filtered.txt {dest}/pdb_seqres.txt
       rm -f {dest}/pdb_seqres_raw.txt
@@ -217,19 +218,22 @@ databases:
       if [ ! -d /mnt/scratch ]; then
         mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
       fi
-      apt-get update -qq && apt-get install -y -qq pigz
+      command -v unpigz >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq pigz)
       echo "Downloading UniProt components directly to SSD..."
-      aria2c --continue=true 'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz' --dir=/mnt/scratch || \
-      aria2c --continue=true 'https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz' --dir=/mnt/scratch
-      aria2c --continue=true 'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz' --dir=/mnt/scratch || \
-      aria2c --continue=true 'https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz' --dir=/mnt/scratch
-      echo "Decompressing with pigz..."
-      unpigz -f /mnt/scratch/uniprot_trembl.fasta.gz
-      unpigz -f /mnt/scratch/uniprot_sprot.fasta.gz
-      echo "Merging UniProt sequences..."
-      cat /mnt/scratch/uniprot_trembl.fasta /mnt/scratch/uniprot_sprot.fasta > /mnt/scratch/uniprot.fasta
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz' --dir=/mnt/scratch || \
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_trembl.fasta.gz' --dir=/mnt/scratch
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz' --dir=/mnt/scratch || \
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.fasta.gz' --dir=/mnt/scratch
+      echo "Decompressing and merging UniProt sequences with pigz..."
+      unpigz -c /mnt/scratch/uniprot_trembl.fasta.gz /mnt/scratch/uniprot_sprot.fasta.gz > /mnt/scratch/uniprot.fasta
+      rm -f /mnt/scratch/uniprot_trembl.fasta.gz /mnt/scratch/uniprot_sprot.fasta.gz
       echo "Syncing final artifact to NFS..."
       mv /mnt/scratch/uniprot.fasta {dest}/uniprot.fasta
+      rm -rf {dest}/scratch
 
   pdb_mmcif:
     models: [af2, of3]
@@ -308,10 +312,12 @@ databases:
       if [ ! -d /mnt/scratch ]; then
         mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
       fi
+      command -v pigz >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq pigz)
       echo "Downloading PDB70 to SSD..."
-      aria2c --continue=true 'https://wwwuser.gwdg.de/~compbiol/data/hhsuite/databases/hhsuite_dbs/old-releases/pdb70_from_mmcif_200401.tar.gz' --dir=/mnt/scratch --out=pdb70.tar.gz
-      echo "Extracting on SSD..."
-      tar -xf /mnt/scratch/pdb70.tar.gz -C /mnt/scratch
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://wwwuser.gwdg.de/~compbiol/data/hhsuite/databases/hhsuite_dbs/old-releases/pdb70_from_mmcif_200401.tar.gz' --dir=/mnt/scratch --out=pdb70.tar.gz
+      echo "Extracting on SSD with pigz..."
+      (command -v pigz >/dev/null 2>&1 && tar --use-compress-program=pigz -xf /mnt/scratch/pdb70.tar.gz -C /mnt/scratch || tar -xf /mnt/scratch/pdb70.tar.gz -C /mnt/scratch)
       rm /mnt/scratch/pdb70.tar.gz
       echo "Moving to NFS..."
       mv /mnt/scratch/* {dest}/
@@ -325,10 +331,12 @@ databases:
       if [ ! -d /mnt/scratch ]; then
         mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
       fi
+      command -v pigz >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq pigz)
       echo "Downloading UniRef30 to SSD..."
-      aria2c --continue=true 'https://storage.googleapis.com/alphafold-databases/v2.3/UniRef30_2021_03.tar.gz' --dir=/mnt/scratch --out=uniref30.tar.gz
-      echo "Extracting on SSD..."
-      tar -xf /mnt/scratch/uniref30.tar.gz -C /mnt/scratch
+      aria2c --continue=true --max-connection-per-server=16 --split=16 \
+        'https://storage.googleapis.com/alphafold-databases/v2.3/UniRef30_2021_03.tar.gz' --dir=/mnt/scratch --out=uniref30.tar.gz
+      echo "Extracting on SSD with pigz..."
+      (command -v pigz >/dev/null 2>&1 && tar --use-compress-program=pigz -xf /mnt/scratch/uniref30.tar.gz -C /mnt/scratch || tar -xf /mnt/scratch/uniref30.tar.gz -C /mnt/scratch)
       rm /mnt/scratch/uniref30.tar.gz
       echo "Moving to NFS..."
       mv /mnt/scratch/* {dest}/
@@ -342,7 +350,7 @@ databases:
     nfs_path: of3/params
     expected_file: of3-ob-2025-06-30-174k.pt
     script: |
-      apt-get install -y awscli
+      command -v aws >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq awscli)
       aws s3 cp --no-sign-request s3://openfold3-data/openfold3-parameters/of3-ob-2025-06-30-174k.pt {dest}/of3-ob-2025-06-30-174k.pt
 
   of3_ccd:
@@ -350,7 +358,7 @@ databases:
     display_name: OpenFold3 CCD (Chemical Component Dictionary)
     nfs_path: of3/ccd
     script: |
-      apt-get install -y awscli
+      command -v aws >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq awscli)
       aws s3 cp --no-sign-request s3://openfold3-data/components.bcif {dest}/components.bcif
 
   rfam:
@@ -358,18 +366,29 @@ databases:
     display_name: Rfam (RNA MSA)
     nfs_path: rfam
     script: |
-      apt-get install -y awscli
+      command -v aws >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq awscli)
+      command -v unpigz >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq pigz)
       aws s3 cp --no-sign-request s3://openfold/alignment_databases/rfam.fasta.gz {dest}/rfam.fasta.gz
-      gunzip -f {dest}/rfam.fasta.gz
+      (command -v unpigz >/dev/null 2>&1 && unpigz -f {dest}/rfam.fasta.gz || gunzip -f {dest}/rfam.fasta.gz)
 
   rnacentral:
     models: [of3]
     display_name: RNAcentral (RNA MSA)
     nfs_path: rnacentral
+    machine_type: c4-standard-4-lssd
     script: |
-      apt-get install -y awscli
-      aws s3 cp --no-sign-request s3://openfold/alignment_databases/rnacentral.fasta.gz {dest}/rnacentral.fasta.gz
-      gunzip -f {dest}/rnacentral.fasta.gz
+      if [ ! -d /mnt/scratch ]; then
+        mkdir -p {dest}/scratch && ln -s {dest}/scratch /mnt/scratch
+      fi
+      command -v aws >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq awscli)
+      command -v unpigz >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq pigz)
+      echo "Downloading RNAcentral to Local SSD..."
+      aws s3 cp --no-sign-request s3://openfold/alignment_databases/rnacentral.fasta.gz /mnt/scratch/rnacentral.fasta.gz
+      echo "Decompressing RNAcentral with pigz directly to NFS..."
+      (command -v unpigz >/dev/null 2>&1 && unpigz -c /mnt/scratch/rnacentral.fasta.gz > {dest}/rnacentral.fasta.tmp || gunzip -c /mnt/scratch/rnacentral.fasta.gz > {dest}/rnacentral.fasta.tmp)
+      mv {dest}/rnacentral.fasta.tmp {dest}/rnacentral.fasta
+      rm -f /mnt/scratch/rnacentral.fasta.gz
+      rm -rf {dest}/scratch
 
 # Download modes — which databases to download per model.
 # Use with: python scripts/setup_data.py --models af2 --mode reduced

@@ -146,21 +146,70 @@ class TestBuildScript:
     def test_source_with_gunzip(self):
         config = {"source": "https://example.com/data.gz", "extract": "gunzip"}
         script = build_script("test_db", config, "/mnt/nfs/test")
-        assert "aria2c" in script
+        assert "aria2c --continue=true --max-connection-per-server=16 --split=16" in script
         assert "https://example.com/data.gz" in script
-        assert "gunzip" in script
+        assert "unpigz -f" in script
+        assert "gunzip -f" in script
         assert "/mnt/nfs/test" in script
 
-    def test_source_with_tar(self):
+    def test_source_with_tar_gz_uses_pigz(self):
         config = {"source": "https://example.com/data.tar.gz", "extract": "tar"}
         script = build_script("test_db", config, "/mnt/nfs/test")
+        assert "aria2c --continue=true --max-connection-per-server=16 --split=16" in script
+        assert "tar --use-compress-program=pigz -xf" in script
         assert "tar xf" in script
         assert "rm -f" in script  # cleanup tar file
+
+    def test_source_with_uncompressed_tar_skips_pigz(self):
+        config = {"source": "https://example.com/params.tar", "extract": "tar"}
+        script = build_script("test_db", config, "/mnt/nfs/test")
+        assert "tar xf" in script
+        assert "--use-compress-program=pigz" not in script
 
     def test_source_with_tar_strip(self):
         config = {"source": "https://example.com/data.tar", "extract": "tar_strip"}
         script = build_script("test_db", config, "/mnt/nfs/test")
         assert "--strip-components=1" in script
+        assert "--use-compress-program=pigz" not in script
+
+    def test_source_with_tar_strip_gz_uses_pigz(self):
+        config = {"source": "https://example.com/data.tgz", "extract": "tar_strip"}
+        script = build_script("test_db", config, "/mnt/nfs/test")
+        assert "tar --use-compress-program=pigz -xf /mnt/nfs/test/data.tgz" in script
+        assert "--strip-components=1" in script
+
+    def test_tar_extraction_executes_for_tgz_and_uppercase_archives(self, tmp_path):
+        """Generated extract + cleanup commands actually extract .tgz and uppercase .TAR.GZ files."""
+        import io
+        import subprocess
+        import tarfile
+
+        cases = [
+            ("data.tgz", "tar_strip", True, "topdir/hello.txt"),
+            ("ARCHIVE.TAR.GZ", "tar", True, "hello.txt"),
+            ("PARAMS.TAR", "tar", False, "hello.txt"),
+        ]
+        for idx, (filename, extract_mode, is_gz, member_name) in enumerate(cases):
+            dest = tmp_path / f"case_{idx}"
+            dest.mkdir()
+            archive_path = dest / filename
+            tf_ctx = (
+                tarfile.open(archive_path, "w:gz") if is_gz else tarfile.open(archive_path, "w")
+            )
+            with tf_ctx as tf:
+                payload = b"ok\n"
+                info = tarfile.TarInfo(name=member_name)
+                info.size = len(payload)
+                tf.addfile(info, io.BytesIO(payload))
+
+            config = {"source": f"https://example.com/dl/{filename}?v=1", "extract": extract_mode}
+            script = build_script(f"db_{idx}", config, str(dest))
+            # Drop the aria2c download line and execute the generated extract + cleanup commands
+            extract_lines = "\n".join(script.splitlines()[1:])
+            subprocess.run(["bash", "-e", "-c", extract_lines], check=True)
+
+            assert (dest / "hello.txt").read_text() == "ok\n"
+            assert not archive_path.exists()
 
     def test_source_no_extract(self):
         config = {"source": "https://example.com/data.txt", "extract": "none"}
@@ -540,8 +589,85 @@ class TestDatabaseSetupScripts:
         )
         assert "--continue=true" not in script
         assert "--allow-overwrite=true" in script
+        assert "--max-connection-per-server=16 --split=16" in script
         assert "--out=pdb_seqres_raw.txt" in script
         assert "rm -f /mnt/nfs/foldrun/pdb_seqres/pdb_seqres_raw.txt" in script
+
+    def test_database_scripts_use_parallel_aria2c_and_pigz(self, tmp_path):
+        """uniprot, pdb70, uniref30, rfam, and rnacentral use 16-stream aria2c and pigz decompression."""
+        import gzip
+        import subprocess
+        from unittest.mock import patch
+
+        from foldrun_app.core.download import submit_download
+
+        manifest = load_manifest()
+        dbs = manifest["databases"]
+
+        for name in ("uniprot", "pdb70", "uniref30", "pdb_seqres"):
+            script = build_script(name, dbs[name], f"/mnt/nfs/{dbs[name]['nfs_path']}")
+            for line in script.splitlines():
+                if "aria2c " in line:
+                    assert "--max-connection-per-server=16 --split=16" in line, (
+                        f"{name} aria2c command missing 16-stream flags: {line}"
+                    )
+
+        for name in ("pdb70", "uniref30"):
+            script = build_script(name, dbs[name], f"/mnt/nfs/{dbs[name]['nfs_path']}")
+            assert "tar --use-compress-program=pigz -xf" in script
+
+        for name in ("rfam", "rnacentral"):
+            script = build_script(name, dbs[name], f"/mnt/nfs/{dbs[name]['nfs_path']}")
+            assert "unpigz" in script
+        assert dbs["rnacentral"].get("machine_type") == "c4-standard-4-lssd"
+        rnacentral_script = build_script("rnacentral", dbs["rnacentral"], "/mnt/nfs/rnacentral")
+        assert "> /mnt/nfs/rnacentral/rnacentral.fasta.tmp" in rnacentral_script
+        assert (
+            "mv /mnt/nfs/rnacentral/rnacentral.fasta.tmp /mnt/nfs/rnacentral/rnacentral.fasta"
+            in rnacentral_script
+        )
+
+        # Verify submit_download bootstraps pigz once up front
+        with patch("foldrun_app.core.batch.submit_batch_job") as mock_submit:
+            mock_submit.return_value = {"job_id": "ok", "job_name": "ok", "console_url": "http://x"}
+            submit_download(
+                db_name="small_bfd",
+                db_config=dbs["small_bfd"],
+                project_id="proj",
+                region="us-central1",
+                zone="us-central1-a",
+                filestore_ip="10.0.0.1",
+                filestore_network="default",
+                nfs_share="share",
+                nfs_mount="/mnt/nfs/foldrun",
+                gcs_bucket="my-bucket",
+            )
+            full_script = mock_submit.call_args[1]["script"]
+            assert "aria2 pigz python3-crcmod" in full_script
+
+        # Verify uniprot single-pass streaming merge logic produces exact concatenation
+        uniprot_script = dbs["uniprot"]["script"]
+        assert (
+            "unpigz -c /mnt/scratch/uniprot_trembl.fasta.gz /mnt/scratch/uniprot_sprot.fasta.gz"
+            " > /mnt/scratch/uniprot.fasta"
+        ) in uniprot_script
+        trembl = tmp_path / "uniprot_trembl.fasta.gz"
+        sprot = tmp_path / "uniprot_sprot.fasta.gz"
+        merged = tmp_path / "uniprot.fasta"
+        with gzip.open(trembl, "wb") as f:
+            f.write(b">tr1\nAAAA\n")
+        with gzip.open(sprot, "wb") as f:
+            f.write(b">sp1\nCCCC\n")
+        decompressor = (
+            "unpigz"
+            if subprocess.run(["which", "unpigz"], capture_output=True).returncode == 0
+            else "gunzip"
+        )
+        subprocess.run(
+            ["bash", "-e", "-c", f"{decompressor} -c '{trembl}' '{sprot}' > '{merged}'"],
+            check=True,
+        )
+        assert merged.read_text() == ">tr1\nAAAA\n>sp1\nCCCC\n"
 
     def test_pdb_mmcif_waits_for_background_rsync_exit_status(self):
         """pdb_mmcif setup waits on $RSYNC_PID after loop so non-zero exit fails under set -e."""

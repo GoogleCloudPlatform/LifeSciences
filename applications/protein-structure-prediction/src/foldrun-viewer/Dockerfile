@@ -34,19 +34,21 @@ RUN uv sync --frozen --no-install-project --no-dev --no-editable
 # Stage 2: Runtime image
 FROM python:3.13-slim
 
+RUN useradd -m -u 1000 appuser
+
 WORKDIR /app
 
-# Copy virtual environment from builder
-COPY --from=builder /app/.venv /app/.venv
+# Copy virtual environment from builder with final ownership (avoids chown -R layer duplication)
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application files
-COPY src/foldrun-viewer/app.py .
-COPY src/foldrun-viewer/templates/ templates/
-COPY src/foldrun-viewer/static/ static/
+COPY --chown=appuser:appuser src/foldrun-viewer/app.py .
+COPY --chown=appuser:appuser src/foldrun-viewer/templates/ templates/
+COPY --chown=appuser:appuser src/foldrun-viewer/static/ static/
 
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app && chmod o+w /app
+# Set ownership on /app directory itself without copying up /app/.venv
+RUN chown appuser:appuser /app && chmod o+w /app
 USER appuser
 
 ENV PORT=8080
