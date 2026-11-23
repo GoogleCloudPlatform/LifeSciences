@@ -128,6 +128,13 @@ RUN pip3 install --no-cache-dir --require-hashes \
     -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html \
     -r /app/alphafold/requirements_resolved.txt
 
+# Pre-warm matplotlib's font cache at image build time to eliminate the ~20-30s
+# "generated new fontManager" startup stall on every pipeline container launch.
+ENV MPLCONFIGDIR=/opt/matplotlib-cache
+RUN mkdir -p /opt/matplotlib-cache \
+    && python3 -c "import matplotlib.font_manager" \
+    && chmod -R a+rX /opt/matplotlib-cache
+
 # Copy compiled HH-suite AFTER pip3 install so stateless builder recompilations
 # never invalidate the heavy Miniforge and Python package cache layers.
 COPY --from=hhsuite-builder /opt/hhsuite /opt/hhsuite
@@ -146,10 +153,13 @@ ENV PYTHONPATH=/app/alphafold:/modules
 RUN ldconfig
 
 # Build-time contract check: verify HH-suite OpenMP/shared library linkage,
-# MSA/template binaries, and core Python dependencies.
+# MSA/template binaries, baked KFP executor, pre-warmed matplotlib cache, and
+# core Python dependencies.
 RUN ldd_out="$(ldd /opt/hhsuite/bin/hhblits /opt/hhsuite/bin/hhsearch)" \
     && ! grep -q "not found" <<< "$ldd_out" \
     && hhblits -h >/dev/null \
     && hhsearch -h >/dev/null \
     && command -v jackhmmer hmmsearch hmmbuild kalign mmseqs >/dev/null \
-    && python3 -c "import alphafold, certifi, jax, openmm, pdbfixer; assert tuple(int(x) for x in certifi.__version__.split('.')) >= (2026, 10, 19)"
+    && python3 -m kfp.dsl.executor_main --help >/dev/null \
+    && test -n "$(ls -A /opt/matplotlib-cache)" \
+    && JAX_PLATFORMS=cpu python3 -c "import alphafold, alphafold.model.tf.input_pipeline, alphafold_utils, certifi, jax, jax.numpy as jnp, kfp, openmm, pdbfixer, tensorflow as tf; assert int(jnp.ones(1)[0]) == 1; assert tuple(int(x) for x in certifi.__version__.split('.')) >= (2026, 10, 19)"

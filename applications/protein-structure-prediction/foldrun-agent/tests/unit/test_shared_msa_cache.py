@@ -1196,3 +1196,182 @@ class TestConcurrencyRaceAndCoreIsolation:
         assert not opened_mgnify_sto
         headers = [ln for ln in open(prot_out["msa"]).readlines() if ln.startswith(">")]
         assert len(headers) == 16384
+
+
+class TestAF2CrossModelSharedMSACache:
+    """Verify bidirectional shared_msas_cache reuse between AF2 and OF3/Boltz-2/ESMFold2."""
+
+    def test_of3_warms_shared_cache_for_af2_and_af2_warms_for_of3_boltz2_esmfold2(
+        self, tmp_path, monkeypatch
+    ):
+        """OF3 -> AF2 skips uniref90/mgnify; AF2 -> OF3/Boltz-2/ESMFold2 runs 0 jackhmmer calls."""
+        import importlib.util
+        from pathlib import Path
+        from unittest import mock
+
+        from tests.unit.models.af2.test_alphafold_utils import _build_fake_alphafold_modules
+
+        msa_of3, msa_boltz2, msa_esmfold2 = _load_msa_funcs(monkeypatch)
+        nfs_mount, ref_db = _setup_nfs(tmp_path)
+        (nfs_mount / "small_bfd.fasta").write_text(">dummy\nACDEFGHIK\n")
+        (nfs_mount / "pdb70_a3m.ffdata").write_text("idx")
+        (nfs_mount / "obsolete.dat").write_text("")
+
+        seq_of3_first = "ACDEFGHIK"
+        seq_af2_first = "MNPQRSTVW"
+
+        called_cmds: list[list[str]] = []
+
+        def _fake_subproc_run(cmd, check=True):
+            called_cmds.append(cmd)
+            target_seq = (
+                seq_of3_first if seq_of3_first in Path(cmd[-2]).read_text() else seq_af2_first
+            )
+            _write_sto_for_cmd(cmd, target_seq)
+
+        monkeypatch.setattr(subprocess, "run", _fake_subproc_run)
+
+        # Load AF2 alphafold_utils with fake alphafold runtime modules
+        fake_af_mods = _build_fake_alphafold_modules()
+        af_utils_path = (
+            Path(__file__).resolve().parents[3]
+            / "src"
+            / "alphafold-components"
+            / "src"
+            / "components"
+            / "alphafold_utils.py"
+        )
+
+        with mock.patch.dict(sys.modules, fake_af_mods):
+            spec = importlib.util.spec_from_file_location(
+                "af2_utils_cross_model_test", af_utils_path
+            )
+            assert spec is not None and spec.loader is not None
+            af_utils = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(af_utils)
+
+            af2_jh_calls: list[str] = []
+
+            def _make_af2_jh(binary_path=None, database_path="", n_cpu=8):
+                db_name = os.path.basename(database_path)
+
+                def _query(fasta_in):
+                    af2_jh_calls.append(db_name)
+                    lines = Path(fasta_in).read_text().splitlines()
+                    seq = lines[1].strip()
+                    seq_h = hashlib.sha256(seq.encode()).hexdigest()
+                    return [
+                        {
+                            "sto": (
+                                "# STOCKHOLM 1.0\n"
+                                f"protein_{seq_h} {seq}\n"
+                                f"{db_name}_hit {seq}\n"
+                                "#=GC RF xxxxxxxxx\n"
+                                "//\n"
+                            )
+                        }
+                    ]
+
+                inst = mock.MagicMock()
+                inst.query.side_effect = _query
+                return inst
+
+            fake_hh = mock.MagicMock()
+            fake_hh.query.return_value = "Hit1\n"
+            fake_hh.get_template_hits.return_value = []
+            fake_feat = mock.MagicMock()
+            fake_feat.get_templates.side_effect = lambda query_sequence, hits: (
+                types.SimpleNamespace(
+                    features=af_utils._make_empty_template_features(len(query_sequence))
+                )
+            )
+
+            with (
+                mock.patch.object(
+                    fake_af_mods["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                    side_effect=_make_af2_jh,
+                ),
+                mock.patch.object(
+                    fake_af_mods["alphafold.data.tools.hhsearch"],
+                    "HHSearch",
+                    return_value=fake_hh,
+                ),
+                mock.patch.object(
+                    fake_af_mods["alphafold.data.templates"],
+                    "HhsearchHitFeaturizer",
+                    return_value=fake_feat,
+                ),
+            ):
+                # Direction 1: OF3 runs cold -> AF2 reuses shared uniref90 + mgnify (runs ONLY small_bfd)
+                _run_of3(msa_of3, tmp_path, ref_db, seq_of3_first, "of3_cold", use_templates=False)
+                assert len(called_cmds) == 2
+
+                af2_fasta1 = tmp_path / "af2_warm.fasta"
+                af2_fasta1.write_text(f">from_of3\n{seq_of3_first}\n")
+                af_utils.run_data_pipeline(
+                    fasta_path=str(af2_fasta1),
+                    run_multimer_system=False,
+                    uniref90_database_path=str(nfs_mount / "uniref90.fasta"),
+                    mgnify_database_path=str(nfs_mount / "mgnify.fasta"),
+                    bfd_database_path="",
+                    small_bfd_database_path=str(nfs_mount / "small_bfd.fasta"),
+                    uniref30_database_path="",
+                    uniprot_database_path="",
+                    pdb70_database_path=str(nfs_mount / "pdb70"),
+                    obsolete_pdbs_path=str(nfs_mount / "obsolete.dat"),
+                    seqres_database_path=str(nfs_mount / "pdb_seqres.fasta"),
+                    mmcif_path=str(nfs_mount),
+                    max_template_date="2025-01-01",
+                    msa_output_path=str(tmp_path / "af2_warm_msas"),
+                    features_output_path=str(tmp_path / "af2_warm.pkl"),
+                    use_small_bfd=True,
+                    shared_msa_cache_dir=str(nfs_mount / "shared_msas_cache"),
+                    shared_msa_tmp_dir=str(nfs_mount / "shared_msas_tmp"),
+                )
+                assert af2_jh_calls == ["small_bfd.fasta"]
+
+                # Direction 2: AF2 runs cold -> OF3, Boltz-2, and ESMFold2 reuse with 0 jackhmmer calls!
+                af2_jh_calls.clear()
+                called_cmds.clear()
+                af2_fasta2 = tmp_path / "af2_cold.fasta"
+                af2_fasta2.write_text(f">af2_first\n{seq_af2_first}\n")
+                af_utils.run_data_pipeline(
+                    fasta_path=str(af2_fasta2),
+                    run_multimer_system=False,
+                    uniref90_database_path=str(nfs_mount / "uniref90.fasta"),
+                    mgnify_database_path=str(nfs_mount / "mgnify.fasta"),
+                    bfd_database_path="",
+                    small_bfd_database_path=str(nfs_mount / "small_bfd.fasta"),
+                    uniref30_database_path="",
+                    uniprot_database_path="",
+                    pdb70_database_path=str(nfs_mount / "pdb70"),
+                    obsolete_pdbs_path=str(nfs_mount / "obsolete.dat"),
+                    seqres_database_path=str(nfs_mount / "pdb_seqres.fasta"),
+                    mmcif_path=str(nfs_mount),
+                    max_template_date="2025-01-01",
+                    msa_output_path=str(tmp_path / "af2_cold_msas"),
+                    features_output_path=str(tmp_path / "af2_cold.pkl"),
+                    use_small_bfd=True,
+                    shared_msa_cache_dir=str(nfs_mount / "shared_msas_cache"),
+                    shared_msa_tmp_dir=str(nfs_mount / "shared_msas_tmp"),
+                )
+                assert set(af2_jh_calls) == {"mgnify.fasta", "uniref90.fasta", "small_bfd.fasta"}
+
+                of3_chain, _ = _run_of3(
+                    msa_of3, tmp_path, ref_db, seq_af2_first, "of3_warm", use_templates=False
+                )
+                boltz_prot, _ = _run_boltz2(msa_boltz2, tmp_path, ref_db, seq_af2_first, "b2_warm")
+                esm_prot, _ = _run_esmfold2(
+                    msa_esmfold2, tmp_path, ref_db, seq_af2_first, "esm_warm"
+                )
+
+                assert called_cmds == []
+                seq2_hash = hashlib.sha256(seq_af2_first.encode()).hexdigest()
+                cache_dir2 = nfs_mount / "shared_msas_cache" / f"protein_{seq2_hash}"
+                assert of3_chain["main_msa_file_paths"] == [
+                    str(cache_dir2 / "uniref90_hits.sto"),
+                    str(cache_dir2 / "mgnify_hits.sto"),
+                ]
+                assert boltz_prot["msa"] == str(cache_dir2 / "combined.a3m")
+                assert esm_prot["msa"] == str(cache_dir2 / "combined.a3m")

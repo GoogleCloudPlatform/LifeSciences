@@ -23,7 +23,7 @@ metadata:
 - **Check Job Status (`check_job_status`)**: Monitors progress of any AF2, OF3, Boltz-2, or AF3 pipeline job (running, failed, or succeeded). Use when the user asks *"what's the status"* or *"check progress"* (do NOT call `analyze_job` for simple status checks).
 - **List Jobs (`list_jobs`)**: Filters jobs by `state` (`"running"`, `"failed"`, `"succeeded"`, `"pending"`, `"cancelled"` — always simple lowercase words, never `PIPELINE_STATE_*`), `job_type`, `gpu_type`, `seq_name`, or sequence length.
   - **Display Analysis Column**: `list_jobs` includes `has_analysis` for succeeded jobs. Always include an **Analysis** column in job tables (`"✓"` if `True`, `"✗"` if `False`, `"-"` if non-succeeded).
-- **Inspect Job Details (`get_job_details`)**: Retrieves original FASTA/query input, submission parameters, timing, error details, and per-task `task_configurations` (showing actual `machine_type`, `accelerator_type`, and `strategy` for `data-pipeline`, `predict`, and `relax`).
+- **Inspect Job Details (`get_job_details`)**: Retrieves original FASTA/query input, submission parameters, timing, error details, and per-task `task_configurations` (showing actual `machine_type`, `accelerator_type`, and `strategy` for `data-pipeline`, `predict`, and—on legacy pre-fusion AF2 runs—separate `relax` tasks).
 - **Check GPU Quota (`check_gpu_quota`)**: Displays on-demand and preemptible/spot (`FLEX_START`) quota limits and usage for `L4`, `A100` (40GB), `A100_80GB`, `RTX_PRO_6000` (96GB), and `H100` (80GB). Call proactively before submitting multiple jobs or large batches.
 
 ## AlphaFold 3 Dedicated Endpoint Monitoring (`check_af3_endpoint`)
@@ -37,9 +37,9 @@ metadata:
 
 ## Retry Failed Jobs with Pipeline Caching
 - **Retry failed jobs**: When a pipeline job fails (e.g., transient GPU provisioning timeout):
-1. Call `get_job_details(job_id=...)` to retrieve the original sequence/query and parameters, and check which task (`data-pipeline`, `predict`, or `relax`) failed.
+1. Call `get_job_details(job_id=...)` to retrieve the original sequence/query and parameters, and check which task (`data-pipeline`, `predict` [incl. inline AMBER relax for AF2], or legacy `relax`) failed.
 2. Resubmit using the corresponding submission tool (`submit_af2_monomer_prediction`, `submit_af2_multimer_prediction`, `submit_of3_prediction`, or `submit_boltz2_prediction`) after user confirmation.
-3. Pipeline caching (`enable_caching=True`) automatically skips completed steps (e.g., skipping `data-pipeline` and `predict` if only `relax` failed).
+3. Pipeline caching (`enable_caching=True`) automatically skips completed steps (e.g., skipping `data-pipeline` and completed `predict` tasks when only a subset of model predictions failed; on legacy pre-fusion AF2 runs, `predict` is also skipped if only `relax` failed).
 - **AMBER Relaxation Fallback (`RELAX_FALLBACK`)**: If logs show `RELAX_FALLBACK`, AMBER minimization fell back to the unrelaxed structure due to disordered regions. The job succeeded and pLDDT/PAE scores are unaffected.
 
 ## Delete Jobs (`delete_job`) — Human-in-the-Loop (HITL) Confirmation Policy

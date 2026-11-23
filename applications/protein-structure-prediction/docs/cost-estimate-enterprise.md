@@ -14,29 +14,29 @@ The cost estimator models three factors that drive per-job cost:
 
 ### 1. Sequence length (protein complexity)
 
-Predict and relax runtimes scale with sequence length. The estimator uses **piecewise-linear interpolation** across calibrated anchor points rather than coarse buckets, so a 300-residue protein gets a different (and more accurate) estimate than a 500-residue one.
+Predict runtimes (including inline AMBER relaxation for AlphaFold2) scale with sequence length. The estimator uses **piecewise-linear interpolation** across calibrated anchor points rather than coarse buckets, so a 300-residue protein gets a different (and more accurate) estimate than a 500-residue one.
 
-Example: AF2 monomer on L4 GPU (DWS FLEX_START)
+Example: AF2 monomer on L4 GPU (DWS FLEX_START, fused predict + inline relax)
 
-| Sequence Length | MSA | Predict/task | Relax/task | Est. Total |
-|---|---|---|---|---|
-| 50 residues | ~30 min | ~16 min | ~4 min | ~$0.80 |
-| 100 residues | ~33 min | ~17 min | ~4.5 min | ~$0.87 |
-| 300 residues | ~37 min | ~19 min | ~5 min | ~$0.97 |
-| 500 residues | ~42 min | ~22 min | ~6 min | ~$1.12 |
-| 1000 residues | ~55 min | ~35 min | ~10 min | ~$1.74 |
-| 1500 residues | ~65 min | ~45 min | ~13 min | ~$2.22 |
+| Sequence Length | MSA (parallel) | Predict + Inline Relax/task | Est. Total |
+|---|---|---|---|
+| 50 residues | ~17 min | ~16.5 min | ~$0.61 |
+| 100 residues | ~19 min | ~17.5 min | ~$0.65 |
+| 300 residues | ~22 min | ~19.5 min | ~$0.73 |
+| 500 residues | ~25 min | ~23.0 min | ~$0.86 |
+| 1000 residues | ~33 min | ~36.5 min | ~$1.33 |
+| 1500 residues | ~39 min | ~47.0 min | ~$1.70 |
 
-Predict tasks have a **high baseline** (~16 min on L4 even for tiny proteins) due to model loading, feature preparation, and AMBER relaxation overhead. Runtime then scales roughly linearly with residue count.
+Predict tasks have a **high baseline** (~16.5 min on L4 even for tiny proteins) due to container startup, model compilation/loading, feature preparation, and inline AMBER relaxation. Runtime then scales roughly linearly with residue count.
 
 ### 2. Prediction count (monomer vs multimer vs OF3 vs AF3)
 
 The total number of GPU-hours depends heavily on job type:
 
-| Job Type | Models | Seeds/model | Total Predict Tasks | Total Relax Tasks |
+| Job Type | Models | Seeds/model | Total Predict Tasks | AMBER Relaxation |
 |---|---|---|---|---|
-| **AF2 monomer** | 5 | 1 (fixed) | **5** | **5** |
-| **AF2 multimer** | 5 | 5 (default, configurable 1-25) | **25** | **25** |
+| **AF2 monomer** | 5 | 1 (fixed) | **5** | Inline in `predict` |
+| **AF2 multimer** | 5 | 5 (default, configurable 1-25) | **25** | Inline in `predict` |
 | **OF3** | 1 | 5 (default) | **5** (each runs 5 diffusion samples) | None |
 | **AF3 (Endpoint)** | 1 | 1-5 (configurable) | **1 unified call** (5 diffusion samples/seed + NVMe MSA) | None |
 
@@ -46,10 +46,10 @@ Example: 400-residue protein on A100 (DWS FLEX_START)
 
 | Job Type | Predict Tasks | Est. Cost |
 |---|---|---|
-| AF2 monomer | 5 | ~$2.21 |
-| AF2 multimer (5 seeds/model) | 25 | ~$13.09 |
-| AF2 multimer (1 seed/model) | 5 | ~$2.93 |
-| AF2 multimer (10 seeds/model) | 50 | ~$27.68 |
+| AF2 monomer | 5 | ~$2.03 |
+| AF2 multimer (5 seeds/model) | 25 | ~$12.56 |
+| AF2 multimer (1 seed/model) | 5 | ~$2.58 |
+| AF2 multimer (10 seeds/model) | 50 | ~$25.03 |
 
 ### 3. GPU tier (auto-selected or user-specified)
 
@@ -67,7 +67,7 @@ Larger GPUs cost more per hour but can be required for large proteins that would
 
 The estimator was calibrated against production job data from Agent Platform. Use `get_actual_job_costs` to compare:
 
-| Metric (76-residue monomer, L4) | Estimated | Actual | Error |
+| Metric (76-residue monomer, L4 — pre-fusion baseline) | Estimated | Actual | Error |
 |---|---|---|---|
 | MSA duration | 31.6 min | 34.4 min | -8% |
 | Predict per task | 16.5 min | 17.0 min | -3% |
@@ -127,23 +127,21 @@ The estimator was calibrated against production job data from Agent Platform. Us
 
 ## Per-Job Cost Estimates
 
-### AF2 monomer — L4 GPU, ~300 residues (5 predict + 5 relax tasks)
+### AF2 monomer — L4 GPU, ~300 residues (5 fused predict + inline relax tasks)
 
 | Step | Machine | Duration | On-Demand | FLEX_START |
 |---|---|---|---|---|
-| MSA / Data Pipeline | n4-standard-8 | ~37 min | ~$0.22 | ~$0.13 |
-| Predict (5 models) | g2-standard-12 + 1x L4 | ~19 min each | ~$1.58 | ~$0.63 |
-| Relax (5 structures) | g2-standard-12 + 1x L4 | ~5 min each | ~$0.42 | ~$0.17 |
-| **Total** | | | **~$2.22** | **~$0.93** |
+| MSA / Data Pipeline (parallel) | n4-standard-8 | ~22 min | ~$0.13 | ~$0.08 |
+| Predict (5 models, incl. inline relax) | g2-standard-12 + 1x L4 | ~19.5 min each | ~$1.63 | ~$0.65 |
+| **Total** | | | **~$1.76** | **~$0.73** |
 
-### AF2 multimer — A100 GPU, ~500 residues total (25 predict + 25 relax tasks)
+### AF2 multimer — A100 GPU, ~500 residues total (25 fused predict + inline relax tasks)
 
 | Step | Machine | Duration | On-Demand | FLEX_START |
 |---|---|---|---|---|
-| MSA / Data Pipeline | n4-standard-8 | ~38 min | ~$0.23 | ~$0.14 |
-| Predict (5 models x 5 seeds) | a2-highgpu-1g + 1x A100 | ~17 min each | ~$25.82 | ~$12.67 |
-| Relax (25 structures) | g2-standard-12 + 1x L4 | ~5.5 min each | ~$2.29 | ~$0.92 |
-| **Total** | | | **~$28.34** | **~$13.73** |
+| MSA / Data Pipeline (parallel) | n4-standard-8 | ~23 min | ~$0.14 | ~$0.08 |
+| Predict (5 models x 5 seeds, incl. inline relax) | a2-highgpu-1g + 1x A100 | ~17.6 min each | ~$26.94 | ~$13.23 |
+| **Total** | | | **~$27.08** | **~$13.31** |
 
 ### OF3 prediction — A100 GPU, ~300 tokens, 5 seeds x 5 samples
 
@@ -172,10 +170,10 @@ AlphaFold 3 runs on a dedicated Vertex AI Online Endpoint (`a3-highgpu-1g`, 80GB
 
 | Job Type | Jobs/mo | Tasks/job | On-Demand | FLEX_START |
 |---|---|---|---|---|
-| AF2 monomer, L4 (800/mo, ~300 res) | 800 | 5 | ~$1,792 | ~$696 |
-| AF2 multimer, A100 (100/mo, ~500 res) | 100 | 25 | ~$2,553 | ~$1,226 |
-| OF3, A100 (200/mo, ~300 tokens) | 200 | 5 | ~$802 | ~$388 |
-| **Compute subtotal** | | | **~$5,147** | **~$2,310** |
+| AF2 monomer, L4 (800/mo, ~300 res) | 800 | 5 | ~$1,408 | ~$584 |
+| AF2 multimer, A100 (100/mo, ~500 res) | 100 | 25 | ~$2,708 | ~$1,331 |
+| OF3, A100 (200/mo, ~300 tokens) | 200 | 5 | ~$782 | ~$386 |
+| **Compute subtotal** | | | **~$4,898** | **~$2,301** |
 
 ## Other Costs (estimated)
 
@@ -192,9 +190,9 @@ AlphaFold 3 runs on a dedicated Vertex AI Online Endpoint (`a3-highgpu-1g`, 80GB
 | Category | On-Demand Monthly | On-Demand Annual | FLEX_START Monthly | FLEX_START Annual |
 |---|---|---|---|---|
 | Infrastructure (always-on) | $913 | $10,956 | $913 | $10,956 |
-| Compute (GPU predictions) | $5,147 | $61,764 | $2,310 | $27,720 |
+| Compute (GPU predictions) | $4,898 | $58,776 | $2,301 | $27,612 |
 | Other | $207 | $2,480 | $207 | $2,480 |
-| **Total** | **~$6,267** | **~$75,200** | **~$3,430** | **~$41,156** |
+| **Total** | **~$6,018** | **~$72,212** | **~$3,421** | **~$41,048** |
 
 The agent uses DWS FLEX_START by default, saving ~45% vs on-demand list pricing.
 

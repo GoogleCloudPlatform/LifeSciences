@@ -67,11 +67,11 @@ class TestPipelineRetryPolicies:
             return f.read()
 
     def test_pipeline_source_has_set_retry(self):
-        """Pipeline definition includes set_retry on all task types."""
+        """Pipeline definition includes set_retry on all active task types (config, data, fused predict+relax)."""
         source = self._read_pipeline_source()
         retry_count = source.count(".set_retry(")
-        assert retry_count == 4, (
-            f"Expected 4 set_retry() calls (config, data, predict, relax), found {retry_count}"
+        assert retry_count == 3, (
+            f"Expected 3 set_retry() calls (config, data, fused predict+relax), found {retry_count}"
         )
 
     def test_retry_on_configure_run(self):
@@ -84,20 +84,14 @@ class TestPipelineRetryPolicies:
             "ConfigureRunOp must have set_retry before DataPipelineOp"
         )
 
-    def test_retry_on_predict(self):
-        """PredictOp has retry policy."""
+    def test_retry_on_fused_predict_relax(self):
+        """Fused JobPredictOp passes inline is_run_relax and has retry policy (no separate JobRelaxOp)."""
         source = self._read_pipeline_source()
+        assert "JobRelaxOp" not in source
         predict_idx = source.index("model_predict_task = JobPredictOp")
-        relax_idx = source.index("relax_protein_task = JobRelaxOp")
         retry_after_predict = source.index("set_retry", predict_idx)
-        assert retry_after_predict < relax_idx, "PredictOp must have set_retry"
-
-    def test_retry_on_relax(self):
-        """RelaxOp has retry policy."""
-        source = self._read_pipeline_source()
-        relax_idx = source.index("relax_protein_task = JobRelaxOp")
-        retry_after_relax = source.index("set_retry", relax_idx)
-        assert retry_after_relax > relax_idx, "RelaxOp must have set_retry"
+        assert retry_after_predict > predict_idx, "JobPredictOp must have set_retry"
+        assert "is_run_relax=is_run_relax" in source[predict_idx:retry_after_predict]
 
 
 # ------------------------------------------------------------------ #

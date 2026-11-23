@@ -566,7 +566,7 @@ FILESTORE_TIER=ZONAL FILESTORE_CAPACITY_GB=2048 \
 ./deploy-all.sh YOUR_PROJECT_ID us-central1 --steps data
 ```
 
-Cached MSAs and features (`af2_features_cache/`, `shared_msas_cache/`, `of3_msas_cache/`) are not backed up to GCS and are rebuilt on demand. Protein MSAs in `shared_msas_cache/protein_<sha256>/` are shared across OpenFold 3, Boltz-2, and ESMFold2 (legacy `boltz2_msas_cache/`, `esmfold2_msas_cache/`, and old `of3_msas_cache/protein_*` directories on existing Filestore instances can be safely deleted to reclaim space). Pipelines and Batch jobs discover the instance automatically in either location (`FILESTORE_LOCATION` if set, otherwise `GCP_REGION` then `GCP_ZONE`). If you pinned `FILESTORE_IP` / `FILESTORE_NETWORK` in `foldrun-agent/.env`, update or remove them after replacement.
+Cached MSAs and features (`af2_features_cache/`, `shared_msas_cache/`, `of3_msas_cache/`) are not backed up to GCS and are rebuilt on demand. Protein MSAs in `shared_msas_cache/protein_<sha256>/` are shared across all four KFP models — AlphaFold2, OpenFold 3, Boltz-2, and ESMFold2 (legacy `boltz2_msas_cache/`, `esmfold2_msas_cache/`, and old `of3_msas_cache/protein_*` directories on existing Filestore instances can be safely deleted to reclaim space). Pipelines and Batch jobs discover the instance automatically in either location (`FILESTORE_LOCATION` if set, otherwise `GCP_REGION` then `GCP_ZONE`). If you pinned `FILESTORE_IP` / `FILESTORE_NETWORK` in `foldrun-agent/.env`, update or remove them after replacement.
 
 ## Project Structure
 
@@ -590,7 +590,7 @@ protein-structure-prediction/
 │   │   │   ├── af2/            # AlphaFold2 plugin
 │   │   │   │   ├── config.py   # AF2Config (image, viewer URL, parallelism)
 │   │   │   │   ├── base.py     # AF2Tool (GPU tiers: L4/A100/A100_80GB + relax)
-│   │   │   │   ├── pipeline/   # KFP: Configure → Data → ParallelFor[Predict → Relax]
+│   │   │   │   ├── pipeline/   # KFP: Configure || Data(parallel MSA) → ParallelFor[Predict+Relax]
 │   │   │   │   ├── tools/      # 8 AF2 tools: submit (monomer/multimer/batch), analysis, get_results, viewer
 │   │   │   │   └── utils/      # FASTA validation, pipeline utils
 │   │   │   ├── af3/            # AlphaFold 3 plugin (4-stage KFP + Managed H100 Endpoint)
@@ -721,7 +721,7 @@ uv run python scripts/setup_data.py --list
   pdb70/                 # AF2 only
   of3/params/            # OF3 only (~2GB OpenBind v0 weights: of3-ob-2025-06-30-174k.pt)
   of3/ccd/               # OF3 only (~500MB Chemical Component Dictionary)
-  shared_msas_cache/     # Shared protein MSA + template cache across OF3, Boltz-2, ESMFold2 (auto-created)
+  shared_msas_cache/     # Shared protein MSA + template cache across AF2, OF3, Boltz-2, ESMFold2 (auto-created)
   of3_msas_cache/        # OF3 runtime — RNA MSA and core-mode fallback cache (auto-created)
   rfam/                  # OF3 only (RNA MSA via nhmmer)
   rnacentral/            # OF3 only (RNA MSA via nhmmer)

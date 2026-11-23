@@ -18,22 +18,29 @@ from kfp import dsl
 from kfp.dsl import Artifact, Input, Output
 
 
-@dsl.component(base_image=config.ALPHAFOLD_COMPONENTS_IMAGE)
+@dsl.component(base_image=config.ALPHAFOLD_COMPONENTS_IMAGE, install_kfp_package=False)
 def data_pipeline(
     sequence: Input[Artifact],
     ref_databases: Input[Artifact],
-    run_multimer_system: bool,
     use_small_bfd: bool,
     max_template_date: str,
     msa_method: str,
     msas: Output[Artifact],
     features: Output[Artifact],
+    run_multimer_system: bool = False,
+    model_preset: str = "",
 ):
     """Configures and runs AlphaFold data pipelines.
 
     Args:
         msa_method: MSA search method - 'jackhmmer' (default CPU) or 'mmseqs2'
                     (GPU-accelerated, requires use_small_bfd=True).
+        run_multimer_system: Legacy boolean toggle for multimer mode (used when
+                    ``model_preset`` is omitted).
+        model_preset: Optional AF2 model preset ('monomer', 'monomer_ptm',
+                    'monomer_casp14', or 'multimer'). When provided, derives
+                    monomer vs. multimer directly so data_pipeline can run in
+                    parallel with configure_run.
     """
 
     import hashlib
@@ -46,7 +53,16 @@ def data_pipeline(
 
     from alphafold_utils import run_data_pipeline, run_mmseqs2_data_pipeline
 
-    preset = "multimer" if run_multimer_system else "monomer"
+    logging.basicConfig(level=logging.INFO)
+
+    if model_preset:
+        if model_preset not in ("monomer", "monomer_casp14", "monomer_ptm", "multimer"):
+            raise ValueError(f"Incorrect model preset: {model_preset}")
+        is_multimer = model_preset == "multimer"
+    else:
+        is_multimer = run_multimer_system
+
+    preset = "multimer" if is_multimer else "monomer"
     logging.info(f"Starting {preset} AlphaFold data pipeline (msa_method={msa_method})")
     t0 = time.time()
 
@@ -64,12 +80,48 @@ def data_pipeline(
     os.makedirs(msas.path, exist_ok=True)
 
     # --- NFS feature cache ---
-    # Cache key covers all inputs that affect the features.pkl content.
-    with open(sequence.path) as _f:
+    # Hash normalized uppercase amino-acid sequences (ignoring FASTA headers/whitespace)
+    # alongside parameters that affect features.pkl content.
+    def _parse_fasta_sequences(fasta_text: str) -> list[str]:
+        seqs: list[str] = []
+        cur: list[str] = []
+        in_record = False
+        for raw_line in fasta_text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if in_record:
+                    seq_str = "".join(cur).upper()
+                    if not seq_str:
+                        raise ValueError(f"Empty FASTA record found in {sequence.path}.")
+                    seqs.append(seq_str)
+                cur = []
+                in_record = True
+            else:
+                if not in_record:
+                    raise ValueError(f"FASTA input in {sequence.path} must start with '>' header.")
+                cur.append(line)
+        if in_record:
+            seq_str = "".join(cur).upper()
+            if not seq_str:
+                raise ValueError(f"Empty FASTA record found in {sequence.path}.")
+            seqs.append(seq_str)
+        return seqs
+
+    with open(sequence.path, encoding="utf-8") as _f:
         fasta_content = _f.read().strip()
+    normalized_seqs = _parse_fasta_sequences(fasta_content)
+    if not normalized_seqs:
+        raise ValueError(f"No valid sequences found in {sequence.path}")
+    if not is_multimer and len(normalized_seqs) != 1:
+        raise ValueError(
+            f"More than one sequence found in {sequence.path}. Unsupported for monomer predictions."
+        )
+
     cache_key_data = json.dumps(
         {
-            "sequence": fasta_content,
+            "sequences": normalized_seqs,
             "max_template_date": max_template_date,
             "preset": preset,
             "use_small_bfd": use_small_bfd,
@@ -111,7 +163,7 @@ def data_pipeline(
 
         features_dict, msas_metadata = run_mmseqs2_data_pipeline(
             fasta_path=sequence.path,
-            run_multimer_system=run_multimer_system,
+            run_multimer_system=is_multimer,
             uniref90_mmseqs_path=uniref90_mmseqs_path,
             mgnify_mmseqs_path=mgnify_mmseqs_path,
             small_bfd_mmseqs_path=small_bfd_mmseqs_path,
@@ -128,10 +180,12 @@ def data_pipeline(
             small_bfd_database_path=small_bfd_database_path,
         )
     else:
-        # Standard JackHMMER/HHblits pipeline (CPU)
+        # Standard JackHMMER/HHblits pipeline (CPU, parallel + shared_msas_cache)
+        shared_msa_cache_dir = os.path.join(mount_path, "shared_msas_cache")
+        shared_msa_tmp_dir = os.path.join(mount_path, "shared_msas_tmp")
         features_dict, msas_metadata = run_data_pipeline(
             fasta_path=sequence.path,
-            run_multimer_system=run_multimer_system,
+            run_multimer_system=is_multimer,
             use_small_bfd=use_small_bfd,
             uniref90_database_path=uniref90_database_path,
             mgnify_database_path=mgnify_database_path,
@@ -146,6 +200,8 @@ def data_pipeline(
             max_template_date=max_template_date,
             msa_output_path=msas.path,
             features_output_path=features.path,
+            shared_msa_cache_dir=shared_msa_cache_dir,
+            shared_msa_tmp_dir=shared_msa_tmp_dir,
         )
 
     is_fallback = bool(msas_metadata.pop("single_sequence_fallback", 0))
@@ -160,7 +216,7 @@ def data_pipeline(
     else:
         final_dedup_msa_size = int(num_alignments)
     features.metadata["final_dedup_msa_size"] = final_dedup_msa_size
-    if not run_multimer_system:
+    if not is_multimer:
         features.metadata["total_number_templates"] = int(
             features_dict["template_domain_names"].shape[0]
         )

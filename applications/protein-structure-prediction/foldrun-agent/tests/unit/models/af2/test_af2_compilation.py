@@ -179,6 +179,49 @@ class TestAF2PipelineCompilation:
         assert "pd-ssd" in content
         os.remove(out)
 
+    def test_compiled_pipeline_decouples_configure_fuses_relax_and_skips_pip_install(
+        self, tmp_path
+    ):
+        """Compiled AF2 DAG runs configure-run in parallel, fuses relax into predict, and bakes kfp."""
+        _clear_config_cache()
+        from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
+
+        pipeline = load_vertex_pipeline(enable_flex_start=True, msa_method="jackhmmer")
+        out = tmp_path / "af2_optimized_dag.yaml"
+        compiler.Compiler().compile(pipeline_func=pipeline, package_path=str(out))
+        spec = yaml.safe_load(out.read_text(encoding="utf-8"))
+
+        # 1. configure-run uses lightweight python:3.13-slim with no google-cloud-storage install
+        cfg_container = spec["deploymentSpec"]["executors"]["exec-configure-run"]["container"]
+        assert cfg_container["image"] == "python:3.13-slim"
+        cfg_cmd = " ".join(cfg_container.get("command", []) + cfg_container.get("args", []))
+        assert "google-cloud-storage" not in cfg_cmd
+
+        # 2. data-pipeline does NOT depend on configure-run (runs in parallel from Input FASTA importer)
+        root_tasks = spec["root"]["dag"]["tasks"]
+        dp_task = root_tasks["data-pipeline"]
+        assert "configure-run" not in dp_task.get("dependentTasks", [])
+        dp_inputs = dp_task.get("inputs", {})
+        seq_producer = dp_inputs["artifacts"]["sequence"]["taskOutputArtifact"]["producerTask"]
+        assert seq_producer != "configure-run"
+
+        # 3. data-pipeline and predict skip runtime `pip install kfp` (baked into image)
+        for comp_name in ("comp-data-pipeline", "comp-predict"):
+            wps = spec["components"][comp_name]["inputDefinitions"]["parameters"][
+                "worker_pool_specs"
+            ]["defaultValue"]
+            inner_cmd = " ".join(wps[0]["container_spec"]["command"])
+            assert "pip install" not in inner_cmd, f"Unexpected runtime pip install in {comp_name}"
+
+        # 4. No separate relax executor; predict emits relaxed_protein inline
+        assert "exec-relax" not in spec["deploymentSpec"]["executors"]
+        predict_outputs = spec["components"]["comp-predict"]["outputDefinitions"]["artifacts"]
+        assert {"raw_prediction", "unrelaxed_protein", "relaxed_protein"}.issubset(
+            predict_outputs.keys()
+        )
+
 
 class TestAF2ConfigModuleIsolation:
     """Verify AF2 config module doesn't collide with OF3 or Boltz-2."""

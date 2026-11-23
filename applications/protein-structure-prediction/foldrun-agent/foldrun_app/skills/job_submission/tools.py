@@ -79,7 +79,7 @@ def submit_af2_monomer_prediction(
     Args:
         sequence: FASTA string, raw amino-acid sequence, or GCS URI.
         gpu_type: "auto" (default), "L4", "A100", or "A100_80GB".
-        relax_gpu_type: Optional relax GPU ("L4", "A100", "A100_80GB").
+        relax_gpu_type: Deprecated (AMBER relaxation now runs inline on the prediction GPU).
         msa_method: "auto" (default), "mmseqs2" (requires use_small_bfd=True), or "jackhmmer".
     """
     validated_sequence = _validate_input_source(sequence, "sequence")
@@ -115,7 +115,7 @@ def submit_af2_multimer_prediction(
     Args:
         sequence: Multi-chain FASTA string or GCS URI.
         gpu_type: "auto" (default), "L4", "A100", or "A100_80GB".
-        relax_gpu_type: Optional relax GPU ("L4", "A100", "A100_80GB").
+        relax_gpu_type: Deprecated (AMBER relaxation now runs inline on the prediction GPU).
         msa_method: "auto" (default), "mmseqs2" (requires use_small_bfd=True), or "jackhmmer".
     """
     validated_sequence = _validate_input_source(sequence, "sequence")

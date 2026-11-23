@@ -116,7 +116,7 @@
           "role": "model",
           "parts": [
             {
-              "text": "Calls estimate_job_cost with job_type='af2_monomer' and sequence_length=350, then presents an itemized cost breakdown across CPU MSA, GPU inference, relaxation, and total estimated USD."
+              "text": "Calls estimate_job_cost with job_type='af2_monomer' and sequence_length=350, then presents an itemized cost breakdown across CPU MSA / Data Pipeline, GPU inference (including inline AMBER relaxation), and total estimated USD."
             }
           ]
         }

@@ -174,3 +174,30 @@ class TestAF2Config:
         assert "! ldd " not in runtime_stage
         assert "hhblits -h" in runtime_stage
         assert "hhsearch -h" in runtime_stage
+
+    def test_dockerfile_bakes_kfp_and_prewarms_matplotlib_font_cache(self):
+        """Ensure alphafold-components bakes kfp and pre-warms matplotlib font cache at build time."""
+        af2_src_dir = os.path.normpath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "..",
+                "..",
+                "..",
+                "src",
+                "alphafold-components",
+            )
+        )
+        with open(os.path.join(af2_src_dir, "Dockerfile"), encoding="utf-8") as f:
+            dockerfile = f.read()
+        with open(os.path.join(af2_src_dir, "requirements.in"), encoding="utf-8") as f:
+            req_in = f.read()
+
+        assert "kfp>=" in req_in
+        assert "ENV MPLCONFIGDIR=/opt/matplotlib-cache" in dockerfile
+        assert "import matplotlib.font_manager" in dockerfile
+        assert "python3 -m kfp.dsl.executor_main --help >/dev/null" in dockerfile
+        assert 'test -n "$(ls -A /opt/matplotlib-cache)"' in dockerfile
+        assert "alphafold_utils" in dockerfile
+        assert ", kfp," in dockerfile

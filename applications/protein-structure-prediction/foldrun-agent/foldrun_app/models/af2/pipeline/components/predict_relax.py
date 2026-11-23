@@ -18,7 +18,7 @@ from kfp import dsl
 from kfp.dsl import Artifact, Input, Output
 
 
-@dsl.component(base_image=config.ALPHAFOLD_COMPONENTS_IMAGE)
+@dsl.component(base_image=config.ALPHAFOLD_COMPONENTS_IMAGE, install_kfp_package=False)
 def predict_relax(
     model_features: Input[Artifact],
     model_params: Input[Artifact],

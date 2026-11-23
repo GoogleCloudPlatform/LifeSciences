@@ -810,20 +810,40 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
             Path(f"{pdb70_prefix}_a3m.ffdata").write_text("index")
             msa_full = os.path.join(tmp, "msa_full")
             os.makedirs(msa_full, exist_ok=True)
-            Path(os.path.join(msa_full, "uniref90_hits.sto")).write_text(
-                "# STOCKHOLM 1.0\nmono ACDEFGHIKLMN\n//\n"
-            )
             feat_full = os.path.join(tmp, "feat_full.pkl")
-            fake_dp_instance = mock.MagicMock()
-            fake_dp_instance.process.return_value = {"aatype": np.zeros((12, 21))}
+
+            def _make_fake_jh(**kwargs):
+                inst = mock.MagicMock()
+                inst.query.return_value = [{"sto": "# STOCKHOLM 1.0\nmono ACDEFGHIKLMN\n//\n"}]
+                return inst
+
+            fake_hh = mock.MagicMock()
+            fake_hh.query.return_value = "Hit1\n"
+            fake_hh.get_template_hits.return_value = ["hit1"]
+
+            fake_feat = mock.MagicMock()
+            fake_feat.get_templates.return_value = types.SimpleNamespace(
+                features=self.af_utils._make_empty_template_features(12)
+            )
+
             with (
                 mock.patch.object(
                     self.af_utils, "_run_single_sequence_fallback"
                 ) as spy_no_fallback,
                 mock.patch.object(
-                    self._fake_modules["alphafold.data.pipeline"],
-                    "DataPipeline",
-                    return_value=fake_dp_instance,
+                    self._fake_modules["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                    side_effect=_make_fake_jh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hhsearch"],
+                    "HHSearch",
+                    return_value=fake_hh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.templates"],
+                    "HhsearchHitFeaturizer",
+                    return_value=fake_feat,
                 ),
             ):
                 feats_full, meta_full = self.af_utils.run_data_pipeline(
@@ -845,9 +865,11 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
                     use_small_bfd=True,
                 )
                 spy_no_fallback.assert_not_called()
-                fake_dp_instance.process.assert_called_once()
                 self.assertIn("aatype", feats_full)
                 self.assertEqual(meta_full["msa_full/uniref90_hits.sto"], 1)
+                self.assertEqual(meta_full["msa_full/mgnify_hits.sto"], 1)
+                self.assertEqual(meta_full["msa_full/small_bfd_hits.sto"], 1)
+                self.assertEqual(meta_full["msa_full/pdb_hits.hhr"], 1)
                 self.assertNotIn("single_sequence_fallback", meta_full)
 
             # 3. Mixed per-model modes on shared NFS: uniref90, mgnify, seqres, uniprot, mmcif
@@ -918,6 +940,915 @@ class TestAlphaFoldUtilsC6(unittest.TestCase):
                     mmcif_path=tmp,
                 )
             )
+
+
+class TestParallelDataPipelineAndSharedCache(unittest.TestCase):
+    """Tests for parallel MSA/template execution, shared_msas_cache, and predict_in_subprocess."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._fake_modules = _build_fake_alphafold_modules()
+        cls._modules_patcher = mock.patch.dict(sys.modules, cls._fake_modules)
+        cls._modules_patcher.start()
+
+        spec = importlib.util.spec_from_file_location(
+            "foldrun_alphafold_utils_parallel_test", COMPONENT_FILE
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        cls.af_utils = mod
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._modules_patcher.stop()
+
+    def test_resolve_search_cpus_weighting_and_bounds(self) -> None:
+        self.assertEqual(self.af_utils._resolve_search_cpus([], 8), [])
+        self.assertEqual(self.af_utils._resolve_search_cpus([("only", 100, 1.0)], 8), [8])
+        self.assertEqual(
+            self.af_utils._resolve_search_cpus([("a", 0, 2.0), ("b", 0, 1.0), ("c", 0, 0.3)], 8),
+            [5, 3, 3],
+        )
+        # Real multi-GiB DB sizes split proportionally
+        self.assertEqual(
+            self.af_utils._resolve_search_cpus(
+                [("mgnify", 120_000_000_000, 2.0), ("uniref90", 60_000_000_000, 1.0)],
+                8,
+            ),
+            [5, 3],
+        )
+        self.assertEqual(
+            self.af_utils._resolve_search_cpus([("a", 0, 2.0), ("b", 0, 1.0)], 1),
+            [1, 1],
+        )
+
+    def test_truncate_stockholm_msa_handles_interleaved_blocks_and_gs_annotations(self) -> None:
+        sto = (
+            "# STOCKHOLM 1.0\n"
+            "#=GF ID test\n"
+            "#=GS q DE query\n"
+            "#=GS h1 DE hit1\n"
+            "#=GS h2 DE hit2\n"
+            "q   ACDE\n"
+            "h1  ACDE\n"
+            "h2  ACDF\n"
+            "#=GC RF xxxx\n"
+            "\n"
+            "q   FGHI\n"
+            "h1  FGHI\n"
+            "h2  FGHK\n"
+            "#=GC RF xxxx\n"
+            "//\n"
+        )
+        # Fast path when already within limit
+        self.assertIs(self.af_utils._truncate_stockholm_msa(sto, 3), sto)
+
+        # Truncate to 2 sequences -> keeps q & h1 across both blocks and drops h2 + its #=GS
+        trunc = self.af_utils._truncate_stockholm_msa(sto, 2)
+        self.assertIn("# STOCKHOLM 1.0", trunc)
+        self.assertIn("#=GS q DE query", trunc)
+        self.assertIn("#=GS h1 DE hit1", trunc)
+        self.assertNotIn("#=GS h2", trunc)
+        self.assertNotIn("h2 ", trunc)
+        self.assertEqual(trunc.count("#=GC RF xxxx"), 2)
+        self.assertEqual(trunc.count("h1  "), 2)
+        self.assertTrue(trunc.endswith("//\n"))
+
+    def _setup_fake_dbs(self, tmp: str) -> dict[str, str]:
+        paths = {
+            "uniref90": os.path.join(tmp, "uniref90.fasta"),
+            "mgnify": os.path.join(tmp, "mgy_clusters.fa"),
+            "small_bfd": os.path.join(tmp, "small_bfd.fasta"),
+            "uniprot": os.path.join(tmp, "uniprot.fasta"),
+            "seqres": os.path.join(tmp, "pdb_seqres.txt"),
+            "bfd": os.path.join(tmp, "bfd_prefix"),
+            "uniref30": os.path.join(tmp, "uniref30_prefix"),
+            "pdb70": os.path.join(tmp, "pdb70"),
+            "obsolete": os.path.join(tmp, "obsolete.dat"),
+        }
+        for key in ("uniref90", "mgnify", "small_bfd", "uniprot", "seqres", "obsolete"):
+            Path(paths[key]).write_text(">dummy\nACDEFGHIKL\n")
+        for prefix_key in ("bfd", "uniref30", "pdb70"):
+            Path(f"{paths[prefix_key]}_a3m.ffdata").write_text("idx")
+        return paths
+
+    def test_parallel_monomer_searches_concurrently_and_promotes_untruncated_shared_cache(
+        self,
+    ) -> None:
+        import hashlib
+        import threading
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dbs = self._setup_fake_dbs(tmp)
+            seq = "ACDEFGHIKL"
+            seq_hash = hashlib.sha256(seq.encode()).hexdigest()
+            fasta_path = os.path.join(tmp, "target.fasta")
+            Path(fasta_path).write_text(f">my_protein\n{seq}\n")
+            msa_out = os.path.join(tmp, "msas_cold")
+            feat_out = os.path.join(tmp, "feat_cold.pkl")
+            shared_cache = os.path.join(tmp, "shared_msas_cache")
+            shared_tmp = os.path.join(tmp, "shared_msas_tmp")
+
+            # Build >501 MGnify hits so we prove untruncated promotion vs AF2 in-memory truncation
+            mgnify_lines = ["# STOCKHOLM 1.0", f"protein_{seq_hash} {seq}"]
+            for i in range(600):
+                mgnify_lines.append(f"mgy_{i} {seq}")
+            mgnify_lines.append("//")
+            big_mgnify_sto = "\n".join(mgnify_lines) + "\n"
+            uniref_sto = f"# STOCKHOLM 1.0\nprotein_{seq_hash} {seq}\nu1 {seq}\n//\n"
+            small_bfd_sto = f"# STOCKHOLM 1.0\nprotein_{seq_hash} {seq}\nb1 {seq}\n//\n"
+
+            barrier = threading.Barrier(2, timeout=3.0)
+            called_dbs: list[tuple[str, int]] = []
+            lock = threading.Lock()
+
+            def _make_jh(binary_path=None, database_path="", n_cpu=8):
+                db_base = os.path.basename(database_path)
+
+                def _query(fasta_in):
+                    # Verify deterministic query header for shared_msas_cache parity
+                    self.assertTrue(Path(fasta_in).read_text().startswith(f">protein_{seq_hash}\n"))
+                    with lock:
+                        called_dbs.append((db_base, n_cpu))
+                    if db_base in ("mgy_clusters.fa", "uniref90.fasta"):
+                        barrier.wait()
+                    if db_base == "mgy_clusters.fa":
+                        return [{"sto": big_mgnify_sto}]
+                    if db_base == "uniref90.fasta":
+                        return [{"sto": uniref_sto}]
+                    return [{"sto": small_bfd_sto}]
+
+                inst = mock.MagicMock()
+                inst.query.side_effect = _query
+                return inst
+
+            fake_hh = mock.MagicMock()
+            fake_hh.query.return_value = "Hit1\n"
+            fake_hh.get_template_hits.return_value = ["h1"]
+            fake_feat = mock.MagicMock()
+            fake_feat.get_templates.return_value = types.SimpleNamespace(
+                features=self.af_utils._make_empty_template_features(len(seq))
+            )
+
+            with (
+                mock.patch.object(os, "cpu_count", return_value=8),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                    side_effect=_make_jh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hhsearch"],
+                    "HHSearch",
+                    return_value=fake_hh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.templates"],
+                    "HhsearchHitFeaturizer",
+                    return_value=fake_feat,
+                ),
+            ):
+                feats, meta = self.af_utils.run_data_pipeline(
+                    fasta_path=fasta_path,
+                    run_multimer_system=False,
+                    uniref90_database_path=dbs["uniref90"],
+                    mgnify_database_path=dbs["mgnify"],
+                    bfd_database_path=dbs["bfd"],
+                    small_bfd_database_path=dbs["small_bfd"],
+                    uniref30_database_path=dbs["uniref30"],
+                    uniprot_database_path=dbs["uniprot"],
+                    pdb70_database_path=dbs["pdb70"],
+                    obsolete_pdbs_path=dbs["obsolete"],
+                    seqres_database_path=dbs["seqres"],
+                    mmcif_path=tmp,
+                    max_template_date="2025-01-01",
+                    msa_output_path=msa_out,
+                    features_output_path=feat_out,
+                    use_small_bfd=True,
+                    shared_msa_cache_dir=shared_cache,
+                    shared_msa_tmp_dir=shared_tmp,
+                )
+
+            cpu_map = dict(called_dbs)
+            self.assertEqual(cpu_map["mgy_clusters.fa"], 5)
+            self.assertEqual(cpu_map["uniref90.fasta"], 3)
+            self.assertEqual(cpu_map["small_bfd.fasta"], 3)
+
+            # Shared cache has UNTRUNCATED mgnify_hits.sto (601 seqs), no query.fasta or tmp leftovers
+            cached_dir = Path(shared_cache) / f"protein_{seq_hash}"
+            self.assertTrue((cached_dir / "uniref90_hits.sto").is_file())
+            self.assertTrue((cached_dir / "mgnify_hits.sto").is_file())
+            self.assertFalse((cached_dir / "query.fasta").exists())
+            self.assertEqual(list(Path(shared_tmp).iterdir()), [])
+            cached_mgnify = self._fake_modules["alphafold.data.parsers"].parse_stockholm(
+                (cached_dir / "mgnify_hits.sto").read_text()
+            )
+            self.assertEqual(len(cached_mgnify), 601)
+
+            # AF2 in-memory / chain output truncated MGnify to MGNIFY_MAX_HITS (501)
+            self.assertEqual(meta["msas_cold/mgnify_hits.sto"], 501)
+            self.assertEqual(meta["msas_cold/uniref90_hits.sto"], 2)
+            self.assertEqual(meta["msas_cold/small_bfd_hits.sto"], 2)
+            self.assertEqual(meta["msas_cold/pdb_hits.hhr"], 1)
+            self.assertIn("aatype", feats)
+
+            # Warm hit: second run with different FASTA header skips uniref90 + mgnify completely!
+            called_dbs.clear()
+            fasta_warm = os.path.join(tmp, "renamed.fasta")
+            Path(fasta_warm).write_text(f">different_name\n{seq.lower()}\n")
+            msa_warm = os.path.join(tmp, "msas_warm")
+            feat_warm = os.path.join(tmp, "feat_warm.pkl")
+            with (
+                mock.patch.object(os, "cpu_count", return_value=8),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                    side_effect=_make_jh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hhsearch"],
+                    "HHSearch",
+                    return_value=fake_hh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.templates"],
+                    "HhsearchHitFeaturizer",
+                    return_value=fake_feat,
+                ),
+            ):
+                _, meta_warm = self.af_utils.run_data_pipeline(
+                    fasta_path=fasta_warm,
+                    run_multimer_system=False,
+                    uniref90_database_path=dbs["uniref90"],
+                    mgnify_database_path=dbs["mgnify"],
+                    bfd_database_path=dbs["bfd"],
+                    small_bfd_database_path=dbs["small_bfd"],
+                    uniref30_database_path=dbs["uniref30"],
+                    uniprot_database_path=dbs["uniprot"],
+                    pdb70_database_path=dbs["pdb70"],
+                    obsolete_pdbs_path=dbs["obsolete"],
+                    seqres_database_path=dbs["seqres"],
+                    mmcif_path=tmp,
+                    max_template_date="2025-01-01",
+                    msa_output_path=msa_warm,
+                    features_output_path=feat_warm,
+                    use_small_bfd=True,
+                    shared_msa_cache_dir=shared_cache,
+                    shared_msa_tmp_dir=shared_tmp,
+                )
+
+            # Only small_bfd ran (with all 8 vCPUs!)
+            self.assertEqual(called_dbs, [("small_bfd.fasta", 8)])
+            self.assertEqual(meta_warm["msas_warm/mgnify_hits.sto"], 501)
+            self.assertEqual(meta_warm["msas_warm/uniref90_hits.sto"], 2)
+
+    def test_multimer_homodimer_deduplicates_chains_and_heterodimer_runs_uniprot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dbs = self._setup_fake_dbs(tmp)
+            called_dbs: list[str] = []
+
+            def _make_jh(binary_path=None, database_path="", n_cpu=8):
+                db_base = os.path.basename(database_path)
+
+                def _query(fasta_in):
+                    called_dbs.append(db_base)
+                    lines = Path(fasta_in).read_text().splitlines()
+                    hdr = lines[0][1:]
+                    seq = lines[1]
+                    return [{"sto": f"# STOCKHOLM 1.0\n{hdr} {seq}\n//\n"}]
+
+                inst = mock.MagicMock()
+                inst.query.side_effect = _query
+                return inst
+
+            fake_hmm = mock.MagicMock()
+            fake_hmm.query.return_value = "# STOCKHOLM 1.0\ntpl ACDEFGHIKL\n//\n"
+            fake_hmm.get_template_hits.return_value = []
+            fake_feat = mock.MagicMock()
+            fake_feat.get_templates.side_effect = lambda query_sequence, hits: (
+                types.SimpleNamespace(
+                    features=self.af_utils._make_empty_template_features(len(query_sequence))
+                )
+            )
+
+            # 1. Homodimer -> searches unique chain ONCE and skips uniprot
+            homo_fasta = os.path.join(tmp, "homo.fasta")
+            Path(homo_fasta).write_text(">sub1\nACDEFGHIKL\n>sub2\nACDEFGHIKL\n")
+            with (
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                    side_effect=_make_jh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hmmsearch"],
+                    "Hmmsearch",
+                    return_value=fake_hmm,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.templates"],
+                    "HmmsearchHitFeaturizer",
+                    return_value=fake_feat,
+                ),
+            ):
+                homo_feats, homo_meta = self.af_utils.run_data_pipeline(
+                    fasta_path=homo_fasta,
+                    run_multimer_system=True,
+                    uniref90_database_path=dbs["uniref90"],
+                    mgnify_database_path=dbs["mgnify"],
+                    bfd_database_path=dbs["bfd"],
+                    small_bfd_database_path=dbs["small_bfd"],
+                    uniref30_database_path=dbs["uniref30"],
+                    uniprot_database_path=dbs["uniprot"],
+                    pdb70_database_path=dbs["pdb70"],
+                    obsolete_pdbs_path=dbs["obsolete"],
+                    seqres_database_path=dbs["seqres"],
+                    mmcif_path=tmp,
+                    max_template_date="2025-01-01",
+                    msa_output_path=os.path.join(tmp, "homo_msas"),
+                    features_output_path=os.path.join(tmp, "homo.pkl"),
+                    use_small_bfd=True,
+                )
+
+            self.assertEqual(homo_feats["chain_ids"], ["A", "B"])
+            self.assertEqual(homo_feats["aatype"].shape[0], 20)
+            self.assertNotIn("uniprot.fasta", called_dbs)
+            # Only 3 DB calls (1 unique chain), not 6!
+            self.assertEqual(len(called_dbs), 3)
+            self.assertIn("A/uniref90_hits.sto", homo_meta)
+
+            # 2. Heterodimer -> runs uniprot + pairs both chains
+            called_dbs.clear()
+            hetero_fasta = os.path.join(tmp, "hetero.fasta")
+            Path(hetero_fasta).write_text(">cA\nACDEFGHIKL\n>cB\nMNPQRSTVWYAA\n")
+            with (
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                    side_effect=_make_jh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hmmsearch"],
+                    "Hmmsearch",
+                    return_value=fake_hmm,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.templates"],
+                    "HmmsearchHitFeaturizer",
+                    return_value=fake_feat,
+                ),
+            ):
+                hetero_feats, hetero_meta = self.af_utils.run_data_pipeline(
+                    fasta_path=hetero_fasta,
+                    run_multimer_system=True,
+                    uniref90_database_path=dbs["uniref90"],
+                    mgnify_database_path=dbs["mgnify"],
+                    bfd_database_path=dbs["bfd"],
+                    small_bfd_database_path=dbs["small_bfd"],
+                    uniref30_database_path=dbs["uniref30"],
+                    uniprot_database_path=dbs["uniprot"],
+                    pdb70_database_path=dbs["pdb70"],
+                    obsolete_pdbs_path=dbs["obsolete"],
+                    seqres_database_path=dbs["seqres"],
+                    mmcif_path=tmp,
+                    max_template_date="2025-01-01",
+                    msa_output_path=os.path.join(tmp, "hetero_msas"),
+                    features_output_path=os.path.join(tmp, "hetero.pkl"),
+                    use_small_bfd=True,
+                )
+
+            self.assertEqual(hetero_feats["chain_ids"], ["A", "B"])
+            self.assertEqual(hetero_feats["aatype"].shape[0], 22)
+            self.assertEqual(called_dbs.count("uniprot.fasta"), 2)
+            self.assertIn("A/uniprot_hits.sto", hetero_meta)
+            self.assertIn("B/uniprot_hits.sto", hetero_meta)
+
+    def test_full_bfd_mode_runs_hhblits_and_core_mode_never_pollutes_shared_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dbs = self._setup_fake_dbs(tmp)
+            fasta_path = os.path.join(tmp, "mono.fasta")
+            Path(fasta_path).write_text(">mono\nACDEFGHIKL\n")
+
+            # 1. Core mode (missing pdb70) never touches shared_msas_cache
+            shared_cache = os.path.join(tmp, "shared_core")
+            self.af_utils.run_data_pipeline(
+                fasta_path=fasta_path,
+                run_multimer_system=False,
+                uniref90_database_path=dbs["uniref90"],
+                mgnify_database_path=dbs["mgnify"],
+                bfd_database_path=dbs["bfd"],
+                small_bfd_database_path=dbs["small_bfd"],
+                uniref30_database_path=dbs["uniref30"],
+                uniprot_database_path=dbs["uniprot"],
+                pdb70_database_path=os.path.join(tmp, "missing_pdb70"),
+                obsolete_pdbs_path=dbs["obsolete"],
+                seqres_database_path=dbs["seqres"],
+                mmcif_path=tmp,
+                max_template_date="2025-01-01",
+                msa_output_path=os.path.join(tmp, "core_msas"),
+                features_output_path=os.path.join(tmp, "core.pkl"),
+                use_small_bfd=True,
+                shared_msa_cache_dir=shared_cache,
+            )
+            self.assertFalse(os.path.exists(shared_cache))
+
+            # 2. Full BFD mode invokes HHBlits on [bfd, uniref30]
+            def _make_jh(**kwargs):
+                inst = mock.MagicMock()
+                inst.query.return_value = [{"sto": "# STOCKHOLM 1.0\nq ACDEFGHIKL\n//\n"}]
+                return inst
+
+            fake_hhblits = mock.MagicMock()
+            fake_hhblits.query.return_value = [{"a3m": ">q\nACDEFGHIKL\n>h1\nACDEFGHIKL\n"}]
+            fake_hhsearch = mock.MagicMock()
+            fake_hhsearch.query.return_value = "Hit1\n"
+            fake_hhsearch.get_template_hits.return_value = []
+            fake_feat = mock.MagicMock()
+            fake_feat.get_templates.return_value = types.SimpleNamespace(
+                features=self.af_utils._make_empty_template_features(10)
+            )
+
+            with (
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                    side_effect=_make_jh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hhblits"],
+                    "HHBlits",
+                    return_value=fake_hhblits,
+                ) as spy_hhblits,
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hhsearch"],
+                    "HHSearch",
+                    return_value=fake_hhsearch,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.templates"],
+                    "HhsearchHitFeaturizer",
+                    return_value=fake_feat,
+                ),
+            ):
+                _, meta_bfd = self.af_utils.run_data_pipeline(
+                    fasta_path=fasta_path,
+                    run_multimer_system=False,
+                    uniref90_database_path=dbs["uniref90"],
+                    mgnify_database_path=dbs["mgnify"],
+                    bfd_database_path=dbs["bfd"],
+                    small_bfd_database_path=dbs["small_bfd"],
+                    uniref30_database_path=dbs["uniref30"],
+                    uniprot_database_path=dbs["uniprot"],
+                    pdb70_database_path=dbs["pdb70"],
+                    obsolete_pdbs_path=dbs["obsolete"],
+                    seqres_database_path=dbs["seqres"],
+                    mmcif_path=tmp,
+                    max_template_date="2025-01-01",
+                    msa_output_path=os.path.join(tmp, "bfd_msas"),
+                    features_output_path=os.path.join(tmp, "bfd.pkl"),
+                    use_small_bfd=False,
+                )
+
+            spy_hhblits.assert_called_once()
+            self.assertEqual(meta_bfd["bfd_msas/bfd_uniref_hits.a3m"], 2)
+
+    def test_predict_worker_and_predict_in_subprocess(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            meta_file = os.path.join(tmp, "meta.json")
+            # 1. Direct _predict_worker happy path
+            with mock.patch.object(
+                self.af_utils,
+                "predict",
+                return_value={"ranking_confidence": np.float32(91.5)},
+            ):
+                self.af_utils._predict_worker(
+                    model_features_path="f.pkl",
+                    model_params_path="p",
+                    model_name="model_1",
+                    num_ensemble=1,
+                    run_multimer_system=False,
+                    random_seed=7,
+                    raw_prediction_path="raw.pkl",
+                    unrelaxed_protein_path="unrel.pdb",
+                    result_meta_path=meta_file,
+                )
+            import json
+
+            self.assertAlmostEqual(
+                json.loads(Path(meta_file).read_text())["ranking_confidence"], 91.5
+            )
+
+            # 2. predict_in_subprocess uses spawn context and returns ranking_confidence
+            class _FakeProc:
+                def __init__(self, target, kwargs, exitcode=0):
+                    self._target = target
+                    self._kwargs = kwargs
+                    self.exitcode = exitcode
+
+                def start(self):
+                    try:
+                        self._target(**self._kwargs)
+                    except RuntimeError:
+                        self.exitcode = 1
+
+                def join(self):
+                    pass
+
+            fake_ctx = mock.MagicMock()
+            fake_ctx.Process.side_effect = lambda target, kwargs: _FakeProc(target, kwargs)
+
+            with (
+                mock.patch.object(
+                    self.af_utils.multiprocessing, "get_context", return_value=fake_ctx
+                ) as spy_ctx,
+                mock.patch.object(
+                    self.af_utils,
+                    "predict",
+                    return_value={"ranking_confidence": 87.25},
+                ),
+            ):
+                res = self.af_utils.predict_in_subprocess(
+                    model_features_path="f.pkl",
+                    model_params_path="p",
+                    model_name="model_1",
+                    num_ensemble=1,
+                    run_multimer_system=False,
+                    random_seed=42,
+                    raw_prediction_path="raw.pkl",
+                    unrelaxed_protein_path="unrel.pdb",
+                )
+            spy_ctx.assert_called_once_with("spawn")
+            self.assertAlmostEqual(res["ranking_confidence"], 87.25)
+
+            # 3. Failure in child subprocess propagates RuntimeError with error detail
+            with (
+                mock.patch.object(
+                    self.af_utils.multiprocessing, "get_context", return_value=fake_ctx
+                ),
+                mock.patch.object(
+                    self.af_utils,
+                    "predict",
+                    side_effect=RuntimeError("CUDA OOM"),
+                ),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "CUDA OOM"):
+                    self.af_utils.predict_in_subprocess(
+                        model_features_path="f.pkl",
+                        model_params_path="p",
+                        model_name="model_1",
+                        num_ensemble=1,
+                        run_multimer_system=False,
+                        random_seed=42,
+                        raw_prediction_path="raw.pkl",
+                        unrelaxed_protein_path="unrel.pdb",
+                    )
+
+            # 4. Corrupt/truncated result_meta.json with non-zero exitcode reports exitcode
+            #    instead of masking with json.JSONDecodeError
+            class _KilledProc:
+                def __init__(self, target, kwargs):
+                    self._kwargs = kwargs
+                    self.exitcode = -9
+
+                def start(self):
+                    Path(self._kwargs["result_meta_path"]).write_text('{"error": "trunc')
+
+                def join(self):
+                    pass
+
+            killed_ctx = mock.MagicMock()
+            killed_ctx.Process.side_effect = lambda target, kwargs: _KilledProc(target, kwargs)
+            with mock.patch.object(
+                self.af_utils.multiprocessing, "get_context", return_value=killed_ctx
+            ):
+                with self.assertRaisesRegex(RuntimeError, "exit code -9"):
+                    self.af_utils.predict_in_subprocess(
+                        model_features_path="f.pkl",
+                        model_params_path="p",
+                        model_name="model_1",
+                        num_ensemble=1,
+                        run_multimer_system=False,
+                        random_seed=42,
+                        raw_prediction_path="raw.pkl",
+                        unrelaxed_protein_path="unrel.pdb",
+                    )
+
+            # 5. _predict_worker configures logging.basicConfig(level=INFO) in spawned child
+            with (
+                mock.patch.object(self.af_utils.logging, "basicConfig") as spy_log,
+                mock.patch.object(
+                    self.af_utils,
+                    "predict",
+                    return_value={"ranking_confidence": 90.0},
+                ),
+            ):
+                self.af_utils._predict_worker(
+                    model_features_path="f.pkl",
+                    model_params_path="p",
+                    model_name="model_1",
+                    num_ensemble=1,
+                    run_multimer_system=False,
+                    random_seed=1,
+                    raw_prediction_path="raw.pkl",
+                    unrelaxed_protein_path="unrel.pdb",
+                    result_meta_path=os.path.join(tmp, "meta_log.json"),
+                )
+            spy_log.assert_called_once_with(level=self.af_utils.logging.INFO)
+
+    def test_db_size_bytes_uses_hhsuite_cs219_and_escapes_globs(self) -> None:
+        """Full-BFD CPU weighting reads *_cs219.ffdata instead of ~1.7 TB a3m/hhm archives."""
+        with tempfile.TemporaryDirectory() as tmp:
+            # Put DB prefixes in a directory containing glob metacharacters (`dir[1]`)
+            weird_dir = Path(tmp) / "dir[1]"
+            weird_dir.mkdir()
+            bfd_prefix = str(weird_dir / "bfd")
+            Path(f"{bfd_prefix}_cs219.ffdata").write_bytes(b"x" * 100)
+            Path(f"{bfd_prefix}_a3m.ffdata").write_bytes(b"x" * 5000)
+            Path(f"{bfd_prefix}_hhm.ffdata").write_bytes(b"x" * 3000)
+            self.assertEqual(self.af_utils._db_size_bytes(bfd_prefix), 100)
+
+            # Fallback without cs219.ffdata ignores *_a3m.ffdata and *_hhm.ffdata
+            no_cs_prefix = str(weird_dir / "nocs")
+            Path(f"{no_cs_prefix}_a3m.ffdata").write_bytes(b"x" * 4000)
+            Path(f"{no_cs_prefix}_hhm.ffdata").write_bytes(b"x" * 2000)
+            Path(f"{no_cs_prefix}_cs219.ffindex").write_bytes(b"x" * 42)
+            self.assertEqual(self.af_utils._db_size_bytes(no_cs_prefix), 42)
+
+            # _has_af2_raw_databases finds prefixes inside bracketed paths
+            for suffix in ("_cs219.ffdata",):
+                Path(f"{weird_dir / 'uniref30'}{suffix}").write_bytes(b"u")
+                Path(f"{weird_dir / 'pdb70'}{suffix}").write_bytes(b"p")
+            for fname in ("uniref90.fa", "mgnify.fa"):
+                (weird_dir / fname).write_bytes(b"f")
+            self.assertTrue(
+                self.af_utils._has_af2_raw_databases(
+                    run_multimer_system=False,
+                    use_small_bfd=False,
+                    uniref90_database_path=str(weird_dir / "uniref90.fa"),
+                    mgnify_database_path=str(weird_dir / "mgnify.fa"),
+                    bfd_database_path=bfd_prefix,
+                    small_bfd_database_path="",
+                    uniref30_database_path=str(weird_dir / "uniref30"),
+                    uniprot_database_path="",
+                    pdb70_database_path=str(weird_dir / "pdb70"),
+                    seqres_database_path="",
+                    mmcif_path=str(weird_dir),
+                )
+            )
+
+        # Realistic full-BFD sizes (GB): mgnify=120, uniprot=108, bfd+uniref30 cs219=79, uniref90=67
+        gb = 1_000_000_000
+        mono_specs = [
+            ("mgnify", 120 * gb, 2.0),
+            ("bfd", (57 + 22) * gb, 4.0),
+            ("uniref90", 67 * gb, 1.0),
+        ]
+        self.assertEqual(self.af_utils._resolve_search_cpus(mono_specs, 8), [5, 3, 3])
+        self.assertEqual(self.af_utils._resolve_search_cpus(mono_specs, 16), [10, 6, 6])
+
+        hetero_specs = [
+            ("mgnify", 120 * gb, 2.0),
+            ("uniprot", 108 * gb, 1.8),
+            ("bfd", (57 + 22) * gb, 4.0),
+            ("uniref90", 67 * gb, 1.0),
+        ]
+        self.assertEqual(self.af_utils._resolve_search_cpus(hetero_specs, 8), [4, 4, 4, 4])
+        self.assertEqual(self.af_utils._resolve_search_cpus(hetero_specs, 16), [8, 8, 8, 8])
+
+    def test_promote_shared_msa_dir_heals_zero_byte_cache_files(self) -> None:
+        """_promote_shared_msa_dir overwrites pre-existing 0-byte files while preserving valid ones."""
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_dir = Path(tmp) / "protein_abc"
+            cache_dir.mkdir()
+            (cache_dir / "mgnify_hits.sto").write_text("")  # corrupted 0-byte file
+            (cache_dir / "uniref90_hits.sto").write_text("# STOCKHOLM 1.0\nvalid\n//\n")
+
+            staged_dir = Path(tmp) / "staged_run1"
+            staged_dir.mkdir()
+            (staged_dir / "mgnify_hits.sto").write_text("# STOCKHOLM 1.0\nfresh\n//\n")
+            (staged_dir / "uniref90_hits.sto").write_text("# STOCKHOLM 1.0\nother\n//\n")
+            (staged_dir / "empty_src.sto").write_text("")
+
+            self.af_utils._promote_shared_msa_dir(str(staged_dir), str(cache_dir), "run1")
+
+            self.assertEqual(
+                (cache_dir / "mgnify_hits.sto").read_text(),
+                "# STOCKHOLM 1.0\nfresh\n//\n",
+            )
+            self.assertEqual(
+                (cache_dir / "uniref90_hits.sto").read_text(),
+                "# STOCKHOLM 1.0\nvalid\n//\n",
+            )
+            self.assertFalse((cache_dir / "empty_src.sto").exists())
+            self.assertFalse(staged_dir.exists())
+
+            # Fresh os.rename() branch also drops 0-byte staged files prior to promotion
+            fresh_staged = Path(tmp) / "staged_fresh"
+            fresh_staged.mkdir()
+            (fresh_staged / "uniref90_hits.sto").write_text("# STOCKHOLM 1.0\nok\n//\n")
+            (fresh_staged / "empty_fresh.sto").write_text("")
+            fresh_cache = Path(tmp) / "protein_fresh"
+            self.af_utils._promote_shared_msa_dir(str(fresh_staged), str(fresh_cache), "run2")
+            self.assertTrue((fresh_cache / "uniref90_hits.sto").is_file())
+            self.assertFalse((fresh_cache / "empty_fresh.sto").exists())
+
+    def test_empty_fasta_record_rejected_in_data_pipeline_and_fallback(self) -> None:
+        """Both run_data_pipeline and _run_single_sequence_fallback reject empty FASTA records."""
+        with tempfile.TemporaryDirectory() as tmp:
+            dbs = self._setup_fake_dbs(tmp)
+            bad_fasta = os.path.join(tmp, "empty_rec.fasta")
+            Path(bad_fasta).write_text(">empty\n\n>real\nACDEFGHIKL\n")
+
+            with self.assertRaisesRegex(ValueError, "Empty FASTA record"):
+                self.af_utils._run_single_sequence_fallback(
+                    fasta_path=bad_fasta,
+                    run_multimer_system=True,
+                    msa_output_path=os.path.join(tmp, "fb_msas"),
+                    features_output_path=os.path.join(tmp, "fb.pkl"),
+                )
+
+            with self.assertRaisesRegex(ValueError, "Empty FASTA record"):
+                self.af_utils.run_data_pipeline(
+                    fasta_path=bad_fasta,
+                    run_multimer_system=True,
+                    uniref90_database_path=dbs["uniref90"],
+                    mgnify_database_path=dbs["mgnify"],
+                    bfd_database_path=dbs["bfd"],
+                    small_bfd_database_path=dbs["small_bfd"],
+                    uniref30_database_path=dbs["uniref30"],
+                    uniprot_database_path=dbs["uniprot"],
+                    pdb70_database_path=dbs["pdb70"],
+                    obsolete_pdbs_path=dbs["obsolete"],
+                    seqres_database_path=dbs["seqres"],
+                    mmcif_path=tmp,
+                    max_template_date="2025-01-01",
+                    msa_output_path=os.path.join(tmp, "msas"),
+                    features_output_path=os.path.join(tmp, "feat.pkl"),
+                    use_small_bfd=True,
+                )
+
+    def test_mmseqs2_normalizes_lowercase_sequences_and_rejects_empty_records(self) -> None:
+        """run_mmseqs2_data_pipeline uppercases FASTA input and guards empty/missing records."""
+        with tempfile.TemporaryDirectory() as tmp:
+            dbs = self._setup_fake_dbs(tmp)
+
+            # 1. Empty FASTA record and empty file rejected
+            bad_fasta = os.path.join(tmp, "empty_rec.fasta")
+            Path(bad_fasta).write_text(">empty\n\n>real\nACDEFGHIKL\n")
+            empty_fasta = os.path.join(tmp, "empty.fasta")
+            Path(empty_fasta).write_text("\n")
+
+            with mock.patch.object(self.af_utils, "_check_gpu_available", return_value=False):
+                with self.assertRaisesRegex(ValueError, "Empty FASTA record"):
+                    self.af_utils.run_mmseqs2_data_pipeline(
+                        fasta_path=bad_fasta,
+                        run_multimer_system=True,
+                        uniref90_mmseqs_path=os.path.join(tmp, "u_db"),
+                        mgnify_mmseqs_path=os.path.join(tmp, "m_db"),
+                        small_bfd_mmseqs_path=os.path.join(tmp, "s_db"),
+                        uniref90_database_path=dbs["uniref90"],
+                        mgnify_database_path=dbs["mgnify"],
+                        uniprot_database_path=dbs["uniprot"],
+                        pdb70_database_path=dbs["pdb70"],
+                        obsolete_pdbs_path=dbs["obsolete"],
+                        seqres_database_path=dbs["seqres"],
+                        mmcif_path=tmp,
+                        max_template_date="2025-01-01",
+                        msa_output_path=os.path.join(tmp, "bad_msas"),
+                        features_output_path=os.path.join(tmp, "bad.pkl"),
+                        small_bfd_database_path=dbs["small_bfd"],
+                    )
+
+                with self.assertRaisesRegex(ValueError, "No input sequences found"):
+                    self.af_utils.run_mmseqs2_data_pipeline(
+                        fasta_path=empty_fasta,
+                        run_multimer_system=False,
+                        uniref90_mmseqs_path=os.path.join(tmp, "u_db"),
+                        mgnify_mmseqs_path=os.path.join(tmp, "m_db"),
+                        small_bfd_mmseqs_path=os.path.join(tmp, "s_db"),
+                        uniref90_database_path=dbs["uniref90"],
+                        mgnify_database_path=dbs["mgnify"],
+                        uniprot_database_path=dbs["uniprot"],
+                        pdb70_database_path=dbs["pdb70"],
+                        obsolete_pdbs_path=dbs["obsolete"],
+                        seqres_database_path=dbs["seqres"],
+                        mmcif_path=tmp,
+                        max_template_date="2025-01-01",
+                        msa_output_path=os.path.join(tmp, "empty_msas"),
+                        features_output_path=os.path.join(tmp, "empty.pkl"),
+                        small_bfd_database_path=dbs["small_bfd"],
+                    )
+
+            # 2. Lowercase monomer FASTA emits uppercased query & sequence features
+            seen_queries: list[str] = []
+
+            def fake_mmseqs_search(query_fasta, target_db, output_a3m, tmp_dir, **kwargs):
+                content = Path(query_fasta).read_text(encoding="utf-8")
+                seen_queries.append(content)
+                Path(output_a3m).write_text(content, encoding="utf-8")
+                return 1
+
+            mono_fasta = os.path.join(tmp, "lower_mono.fasta")
+            Path(mono_fasta).write_text(">lower_target\nacdefghikl\n")
+            fake_hh = mock.MagicMock()
+            fake_hh.query.return_value = "Hit1\n"
+            fake_hh.get_template_hits.return_value = []
+            fake_hh_feat = mock.MagicMock()
+            fake_hh_feat.get_templates.return_value = types.SimpleNamespace(
+                features=self.af_utils._make_empty_template_features(10)
+            )
+            with (
+                mock.patch.object(
+                    self.af_utils, "run_mmseqs2_search", side_effect=fake_mmseqs_search
+                ),
+                mock.patch.object(self.af_utils, "_check_gpu_available", return_value=False),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hhsearch"],
+                    "HHSearch",
+                    return_value=fake_hh,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.templates"],
+                    "HhsearchHitFeaturizer",
+                    return_value=fake_hh_feat,
+                ),
+            ):
+                mono_feats, _ = self.af_utils.run_mmseqs2_data_pipeline(
+                    fasta_path=mono_fasta,
+                    run_multimer_system=False,
+                    uniref90_mmseqs_path=os.path.join(tmp, "u_db"),
+                    mgnify_mmseqs_path=os.path.join(tmp, "m_db"),
+                    small_bfd_mmseqs_path=os.path.join(tmp, "s_db"),
+                    uniref90_database_path=dbs["uniref90"],
+                    mgnify_database_path=dbs["mgnify"],
+                    uniprot_database_path=dbs["uniprot"],
+                    pdb70_database_path=dbs["pdb70"],
+                    obsolete_pdbs_path=dbs["obsolete"],
+                    seqres_database_path=dbs["seqres"],
+                    mmcif_path=tmp,
+                    max_template_date="2025-01-01",
+                    msa_output_path=os.path.join(tmp, "mono_msas"),
+                    features_output_path=os.path.join(tmp, "mono.pkl"),
+                    small_bfd_database_path=dbs["small_bfd"],
+                )
+            self.assertEqual(mono_feats["sequence"][0], b"ACDEFGHIKL")
+            self.assertTrue(all("ACDEFGHIKL" in q for q in seen_queries))
+            fake_hh.get_template_hits.assert_called_once_with(
+                output_string="Hit1\n", input_sequence="ACDEFGHIKL"
+            )
+            fake_hh_feat.get_templates.assert_called_once_with(query_sequence="ACDEFGHIKL", hits=[])
+
+            # 3. Mixed-case homodimer is treated as homomer (skips UniProt jackhmmer)
+            homo_fasta = os.path.join(tmp, "mixed_homo.fasta")
+            Path(homo_fasta).write_text(">cA\nacdefghikl\n>cB\nACDEFGHIKL\n")
+            fake_hmm = mock.MagicMock()
+            fake_hmm.query.return_value = "# STOCKHOLM 1.0\nhit1 ACDEFGHIKL\n//\n"
+            fake_hmm.get_template_hits.return_value = []
+            fake_hmm_feat = mock.MagicMock()
+            fake_hmm_feat.get_templates.return_value = types.SimpleNamespace(
+                features=self.af_utils._make_empty_template_features(10)
+            )
+            with (
+                mock.patch.object(
+                    self.af_utils, "run_mmseqs2_search", side_effect=fake_mmseqs_search
+                ),
+                mock.patch.object(self.af_utils, "_check_gpu_available", return_value=False),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.hmmsearch"],
+                    "Hmmsearch",
+                    return_value=fake_hmm,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.templates"],
+                    "HmmsearchHitFeaturizer",
+                    return_value=fake_hmm_feat,
+                ),
+                mock.patch.object(
+                    self._fake_modules["alphafold.data.tools.jackhmmer"],
+                    "Jackhmmer",
+                ) as spy_jackhmmer,
+            ):
+                homo_feats, _ = self.af_utils.run_mmseqs2_data_pipeline(
+                    fasta_path=homo_fasta,
+                    run_multimer_system=True,
+                    uniref90_mmseqs_path=os.path.join(tmp, "u_db"),
+                    mgnify_mmseqs_path=os.path.join(tmp, "m_db"),
+                    small_bfd_mmseqs_path=os.path.join(tmp, "s_db"),
+                    uniref90_database_path=dbs["uniref90"],
+                    mgnify_database_path=dbs["mgnify"],
+                    uniprot_database_path=dbs["uniprot"],
+                    pdb70_database_path=dbs["pdb70"],
+                    obsolete_pdbs_path=dbs["obsolete"],
+                    seqres_database_path=dbs["seqres"],
+                    mmcif_path=tmp,
+                    max_template_date="2025-01-01",
+                    msa_output_path=os.path.join(tmp, "homo_msas"),
+                    features_output_path=os.path.join(tmp, "homo.pkl"),
+                    small_bfd_database_path=dbs["small_bfd"],
+                )
+            self.assertEqual(homo_feats["chain_ids"], ["A", "B"])
+            spy_jackhmmer.assert_not_called()
 
 
 if __name__ == "__main__":

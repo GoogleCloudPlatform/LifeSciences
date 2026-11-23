@@ -25,7 +25,6 @@ from .. import config
 from ..components import configure_run as ConfigureRunOp
 from ..components import data_pipeline
 from ..components import predict as PredictOp
-from ..components import relax as RelaxOp
 
 
 def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: str = "jackhmmer"):
@@ -70,9 +69,15 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         """Universal Alphafold Inference Pipeline."""
         # Note: Environment variables will be validated at runtime by the components
 
+        sequence_import = dsl.importer(
+            artifact_uri=sequence_path,
+            artifact_class=dsl.Artifact,
+            reimport=True,
+        ).set_display_name("Input FASTA")
+
         run_config_task = (
             ConfigureRunOp(
-                sequence_path=sequence_path,
+                sequence=sequence_import.output,
                 model_preset=model_preset,
                 num_multimer_predictions_per_model=num_multimer_predictions_per_model,
             )
@@ -84,7 +89,9 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             )
         )
 
-        # Data pipeline: CPU-only for jackhmmer, GPU for mmseqs2
+        # Data pipeline: CPU-only for jackhmmer, GPU for mmseqs2.
+        # Consumes sequence_import + model_preset directly so MSA search launches
+        # immediately in parallel with ConfigureRunOp.
         DataPipelineOp = create_custom_training_job_from_component(
             data_pipeline,
             display_name="AF2 Data Pipeline",
@@ -132,9 +139,9 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             )
             .set_display_name("AF2 Reference Databases")
             .output,
-            sequence=run_config_task.outputs["sequence"],
+            sequence=sequence_import.output,
             max_template_date=max_template_date,
-            run_multimer_system=run_config_task.outputs["run_multimer_system"],
+            model_preset=model_preset,
             use_small_bfd=use_small_bfd,
             msa_method=msa_method,
         ).set_retry(
@@ -146,11 +153,11 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         # Per-task max wait for GPU provisioning via DWS.
         # Configurable via DWS_MAX_WAIT_HOURS env var (default: 168h / 7 days).
         # STANDARD strategy always uses 24h (minimum sensible timeout).
-        # NOTE: This timeout applies independently to each predict/relax task,
-        # not to the pipeline as a whole. A monomer pipeline has ~10 GPU tasks
-        # (5 predict + 5 relax), a multimer up to ~50. With parallelism=5,
-        # tasks batch sequentially. Consider reducing to 24-48h per task if
-        # sustained GPU shortages cause pipelines to hang silently.
+        # NOTE: This timeout applies independently to each fused predict+relax task,
+        # not to the pipeline as a whole. A monomer pipeline has 5 GPU tasks,
+        # a multimer up to 25 (5 models x 5 seeds). With parallelism=5, tasks
+        # batch sequentially. Consider reducing to 24-48h per task if sustained
+        # GPU shortages cause pipelines to hang silently.
         flex_wait_secs = config.DWS_MAX_WAIT_HOURS * 3600
         max_wait = f"{flex_wait_secs}s" if strategy == "FLEX_START" else "86400s"
 
@@ -166,18 +173,6 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
             max_wait_duration=max_wait,
         )
 
-        relax_machine_type = os.environ.get("RELAX_MACHINE_TYPE", "g2-standard-12")
-        JobRelaxOp = create_custom_training_job_from_component(
-            RelaxOp,
-            display_name="AF2 Relax",
-            machine_type=relax_machine_type,
-            boot_disk_type=resolve_boot_disk_type(relax_machine_type),
-            accelerator_type=os.environ.get("RELAX_ACCELERATOR_TYPE", "NVIDIA_L4"),
-            accelerator_count=int(os.environ.get("RELAX_ACCELERATOR_COUNT", "1")),
-            strategy=strategy,
-            max_wait_duration=max_wait,
-        )
-
         model_parameters = dsl.importer(
             artifact_uri=model_params_gcs_location, artifact_class=dsl.Artifact, reimport=True
         ).set_display_name("Model parameters")
@@ -185,7 +180,7 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
         with dsl.ParallelFor(
             items=run_config_task.outputs["model_runners"], name="model-predict"
         ) as model_runner:
-            model_predict_task = JobPredictOp(
+            model_predict_task = JobPredictOp(  # noqa: F841
                 project=project,
                 location=region,
                 model_features=data_pipeline_task.outputs["features"],
@@ -197,25 +192,13 @@ def create_alphafold_inference_pipeline(strategy: str = "STANDARD", msa_method: 
                 random_seed=model_runner.random_seed,  # type: ignore
                 tf_force_unified_memory=config.TF_FORCE_UNIFIED_MEMORY,
                 xla_python_client_mem_fraction=config.XLA_PYTHON_CLIENT_MEM_FRACTION,
+                is_run_relax=is_run_relax,
+                relax_use_gpu=True,
             ).set_retry(
                 num_retries=2,
                 backoff_duration="60s",
                 backoff_factor=2.0,
             )
-
-            with dsl.If(is_run_relax == "relax", name="relax-condition"):
-                relax_protein_task = JobRelaxOp(  # noqa: F841
-                    project=project,
-                    location=region,
-                    unrelaxed_protein=model_predict_task.outputs["unrelaxed_protein"],
-                    use_gpu=True,
-                    tf_force_unified_memory=config.TF_FORCE_UNIFIED_MEMORY,
-                    xla_python_client_mem_fraction=config.XLA_PYTHON_CLIENT_MEM_FRACTION,
-                ).set_retry(
-                    num_retries=2,
-                    backoff_duration="60s",
-                    backoff_factor=2.0,
-                )
 
     return alphafold_inference_pipeline
 

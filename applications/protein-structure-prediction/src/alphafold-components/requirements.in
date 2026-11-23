@@ -14,8 +14,13 @@ openmm-cuda-12==8.2.0
 pdbfixer==1.12.0
 pytest>=9.0.3
 setuptools>=84.1.0
-tensorflow-cpu==2.18.0
+# TF >=2.20 supports protobuf 6.x required by kfp>=2.16.1 (avoiding TF 2.18's protobuf<6 conflict)
+tensorflow-cpu>=2.20.0
 
 # JAX with CUDA support
 jax==0.4.26
 jaxlib==0.4.26+cuda12.cudnn89
+
+# Bake kfp into the container so Vertex AI Pipelines skip runtime `pip install kfp`
+# (`install_kfp_package=False`) and work cleanly in air-gapped Shared VPCs.
+kfp>=2.16.1

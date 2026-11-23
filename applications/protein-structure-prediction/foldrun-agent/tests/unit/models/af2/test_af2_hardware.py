@@ -144,14 +144,15 @@ class TestAF2HardwareConfig:
         assert config["relax_accel"] == "NVIDIA_TESLA_A100"
         assert config["relax_machine"] == "a2-highgpu-1g"
 
-    def test_relax_downgraded_to_a100_when_predict_is_a100_80gb(self):
-        """A100 80GB predict downgrades relax to A100 40GB for cost savings."""
+    def test_relax_matches_predict_gpu_for_inline_execution(self):
+        """AMBER relaxation runs inline on the predict GPU (even for A100_80GB)."""
         from foldrun_app.models.af2.base import AF2Tool
 
         tool = AF2Tool({"name": "test", "description": "test"})
         config = tool._get_hardware_config("A100_80GB")
-        assert config["relax_accel"] == "NVIDIA_TESLA_A100"
-        assert config["relax_machine"] == "a2-highgpu-1g"
+        assert config["relax_accel"] == "NVIDIA_A100_80GB"
+        assert config["relax_machine"] == "a2-ultragpu-1g"
+        assert config["relax_count"] == config["predict_count"]
 
     def test_multi_gpu_a100(self):
         """Multi-GPU A100 selects correct multi-GPU machine type."""
@@ -281,14 +282,42 @@ class TestAF2HardwareConfig:
         config = tool._get_hardware_config("A100", msa_method="auto")
         assert config["msa_method"] == "jackhmmer"
 
-    def test_relax_gpu_override(self):
-        """Explicit relax_gpu_type overrides the default relax config."""
+    def test_relax_gpu_override_deprecated_keeps_inline_predict_gpu(self, caplog):
+        """Passing a differing relax_gpu_type logs a deprecation warning and stays inline on predict GPU."""
+        import logging
+
         from foldrun_app.models.af2.base import AF2Tool
 
         tool = AF2Tool({"name": "test", "description": "test"})
-        config = tool._get_hardware_config("A100", relax_gpu_type="L4")
-        assert config["relax_accel"] == "NVIDIA_L4"
-        assert config["relax_machine"] == "g2-standard-12"
+        with caplog.at_level(logging.WARNING):
+            config = tool._get_hardware_config("A100", relax_gpu_type="L4")
+        assert config["relax_accel"] == "NVIDIA_TESLA_A100"
+        assert config["relax_machine"] == "a2-highgpu-1g"
+        assert "deprecated" in caplog.text.lower()
+
+    def test_relax_gpu_auto_does_not_emit_deprecation_warning(self, caplog):
+        """Passing relax_gpu_type='auto' should not trigger a spurious deprecation warning."""
+        import logging
+
+        from foldrun_app.models.af2.base import AF2Tool
+
+        tool = AF2Tool({"name": "test", "description": "test"})
+        with caplog.at_level(logging.WARNING):
+            config = tool._get_hardware_config("A100", relax_gpu_type="auto")
+        assert config["relax_accel"] == "NVIDIA_TESLA_A100"
+        assert "deprecated" not in caplog.text.lower()
+
+    def test_multimer_submit_rejects_non_positive_predictions_per_model(self):
+        """Multimer submit returns an error for num_predictions_per_model <= 0."""
+        from foldrun_app.models.af2.tools.submit_multimer import AF2SubmitMultimerTool
+
+        tool = AF2SubmitMultimerTool({"name": "submit_af2_multimer_prediction", "description": "t"})
+        for bad_val in (0, -2, False):
+            res = tool.run(
+                {"sequence": ">A\nACDEFG\n>B\nMNPQRS\n", "num_predictions_per_model": bad_val}
+            )
+            assert res["status"] == "error"
+            assert "num_predictions_per_model" in res["message"]
 
     def test_unsupported_gpu_upgrades(self):
         """Requesting an unsupported GPU auto-upgrades along the path L4→A100→A100_80GB."""

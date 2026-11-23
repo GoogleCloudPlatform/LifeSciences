@@ -18,7 +18,7 @@ from kfp import dsl
 from kfp.dsl import Artifact, Input, Output
 
 
-@dsl.component(base_image=config.ALPHAFOLD_COMPONENTS_IMAGE)
+@dsl.component(base_image=config.ALPHAFOLD_COMPONENTS_IMAGE, install_kfp_package=False)
 def relax(
     unrelaxed_protein: Input[Artifact],
     relaxed_protein: Output[Artifact],
@@ -50,6 +50,14 @@ def relax(
     relaxed_protein.metadata["category"] = "relaxed_protein"
     relaxed_protein.metadata["relax_failed"] = False
 
+    relax_errors: tuple[type[Exception], ...] = (ValueError, RuntimeError)
+    try:
+        from openmm import OpenMMException
+
+        relax_errors = (*relax_errors, OpenMMException)
+    except ImportError:
+        pass
+
     try:
         relax_protein(
             unrelaxed_protein_path=unrelaxed_protein.path,
@@ -64,13 +72,13 @@ def relax(
         t1 = time.time()
         logging.info(f"Model relaxation completed. Elapsed time: {t1 - t0}")
 
-    except (ValueError, RuntimeError) as e:
+    except relax_errors as e:
         # AMBER minimization can fail on highly disordered structures (ValueError:
         # Minimization failed after 100 attempts) or with OpenMM platform errors
-        # (RuntimeError). Fall back to the unrelaxed structure so the pipeline
-        # completes — unrelaxed PDB is still scientifically valid, pLDDT/PAE
-        # unaffected. Exiting 0 here prevents KFP from retrying a deterministic
-        # structural failure.
+        # (RuntimeError / openmm.OpenMMException). Fall back to the unrelaxed
+        # structure so the pipeline completes — unrelaxed PDB is still scientifically
+        # valid, pLDDT/PAE unaffected. Exiting 0 here prevents KFP from retrying a
+        # deterministic structural failure.
         t1 = time.time()
         warning = (
             f"AMBER relaxation failed after {t1 - t0:.1f}s "

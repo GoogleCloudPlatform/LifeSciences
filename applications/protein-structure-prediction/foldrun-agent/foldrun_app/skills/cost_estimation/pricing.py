@@ -238,50 +238,52 @@ _OF3_ANCHORS = {
 
 DURATION_ANCHORS = {
     "af2_monomer": {
-        # Predict/relax have a high baseline (~16-17 min on L4 even for tiny
-        # proteins) due to model loading, feature prep, and AMBER overhead.
-        # Anchors calibrated against production actuals (76 residues:
-        # MSA=34.4 min, predict=17.0 min, relax=4.5 min).
+        # Parallelized HMMER MSA (mgnify/uniref90/small_bfd + overlapped template search)
+        # cuts cold MSA wall-clock ~40-45%, and AMBER relaxation runs inline inside the
+        # predict GPU task (relax_per_task_min=0; marginal inline relax time folded into
+        # predict_per_task_min). Warm shared_msas_cache / af2_features_cache hits reduce
+        # MSA further to ~1-7 min.
         "L4": [
-            #  residues, msa, predict/task, relax/task
-            (50, 30, 16, 4),
-            (100, 33, 17, 4.5),
-            (300, 37, 19, 5),
-            (500, 42, 22, 6),
-            (750, 48, 28, 8),
-            (1000, 55, 35, 10),
-            (1500, 65, 45, 13),
+            #  residues, msa, predict+relax/task, separate_relax/task
+            (50, 17, 16.5, 0),
+            (100, 19, 17.5, 0),
+            (300, 22, 19.5, 0),
+            (500, 25, 23, 0),
+            (750, 29, 29, 0),
+            (1000, 33, 36.5, 0),
+            (1500, 39, 47, 0),
         ],
         "A100": [
-            (50, 30, 8, 3),
-            (100, 33, 9, 3.5),
-            (300, 37, 11, 4),
-            (500, 42, 14, 5),
-            (1000, 55, 20, 6),
-            (1500, 65, 28, 8),
+            (50, 17, 8.5, 0),
+            (100, 19, 9.5, 0),
+            (300, 22, 11.5, 0),
+            (500, 25, 14.5, 0),
+            (1000, 33, 21, 0),
+            (1500, 39, 29.5, 0),
         ],
         "A100_80GB": [
-            (50, 30, 6, 3),
-            (100, 33, 7, 3),
-            (300, 37, 9, 3.5),
-            (500, 42, 12, 4),
-            (1000, 55, 17, 5),
-            (2000, 70, 25, 6),
+            (50, 17, 6.5, 0),
+            (100, 19, 7.5, 0),
+            (300, 22, 9.5, 0),
+            (500, 25, 12.5, 0),
+            (1000, 33, 18, 0),
+            (2000, 42, 26.5, 0),
         ],
     },
     "af2_multimer": {
-        # predict_per_task is per individual prediction (of 25 total by default)
+        # predict_per_task is per individual prediction (of 25 total by default),
+        # including inline AMBER relaxation on the same GPU (relax_per_task_min=0).
         "A100": [
-            (300, 35, 15, 5),
-            (1000, 45, 22, 8),
-            (2000, 55, 35, 12),
-            (3000, 70, 50, 18),
+            (300, 21, 15.5, 0),
+            (1000, 27, 23, 0),
+            (2000, 33, 36.5, 0),
+            (3000, 42, 52, 0),
         ],
         "A100_80GB": [
-            (300, 35, 12, 4),
-            (1000, 45, 18, 6),
-            (2000, 55, 28, 8),
-            (3000, 70, 40, 12),
+            (300, 21, 12.5, 0),
+            (1000, 27, 19, 0),
+            (2000, 33, 29.5, 0),
+            (3000, 42, 42, 0),
         ],
     },
     "of3": _OF3_ANCHORS,
@@ -772,10 +774,13 @@ def _estimate_phases(
         predict_desc = f"{num_predictions} seeds x {num_diffusion_samples} samples"
     elif job_type == "af2_multimer":
         predict_total_min = predict_per_task_min * num_predictions
-        predict_desc = f"5 models x {num_predictions // 5} seeds = {num_predictions} predictions"
+        predict_desc = (
+            f"5 models x {num_predictions // 5} seeds = {num_predictions} predictions "
+            "(incl. inline relax)"
+        )
     else:
         predict_total_min = predict_per_task_min * num_predictions
-        predict_desc = f"{num_predictions} models"
+        predict_desc = f"{num_predictions} models (incl. inline relax)"
 
     predict_cost = (predict_total_min / 60) * predict_rate
     phases.append(

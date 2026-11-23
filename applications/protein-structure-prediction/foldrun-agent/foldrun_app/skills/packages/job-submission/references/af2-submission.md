@@ -8,16 +8,16 @@
 - The system automatically validates sequences before submission and strips internal whitespace.
 
 ## Hardware & Pipeline Parameters
-- **`gpu_type='auto'` (default)**: Selects GPU by sequence length (A100 provisions faster than L4 under DWS `FLEX_START`):
-  - Monomer <=1,500 residues → `A100` 40GB (`a2-highgpu-1g`, relax: `A100` 40GB)
-  - Monomer >1,500 residues → `A100_80GB` (`a2-ultragpu-1g`, relax: `A100` 40GB)
-  - Multimer <1,000 total residues → `A100` 40GB (relax: `A100` 40GB)
-  - Multimer >=1,000 total residues → `A100_80GB` (relax: `A100` 40GB)
-- **Explicit override**: `gpu_type` accepts `'L4'`, `'A100'`, or `'A100_80GB'`. Override AMBER relax GPU via `relax_gpu_type`.
+- **`gpu_type='auto'` (default)**: Selects GPU by sequence length (A100 provisions faster than L4 under DWS `FLEX_START`; AMBER relaxation runs inline on the prediction GPU):
+  - Monomer <=1,500 residues → `A100` 40GB (`a2-highgpu-1g`)
+  - Monomer >1,500 residues → `A100_80GB` (`a2-ultragpu-1g`)
+  - Multimer <1,000 total residues → `A100` 40GB (`a2-highgpu-1g`)
+  - Multimer >=1,000 total residues → `A100_80GB` (`a2-ultragpu-1g`)
+- **Explicit override**: `gpu_type` accepts `'L4'`, `'A100'`, or `'A100_80GB'`. (`relax_gpu_type` is deprecated and ignored — AMBER relaxation runs inline on the prediction GPU.)
 - **MSA Method (`msa_method`)**:
-  - `'auto'` (default) / `'jackhmmer'`: CPU-based search (`n4-standard-8`, with automatic fallback to `c3-standard-8` or `c2-standard-16`) using Jackhmmer (UniRef90, MGnify) and HHblits (UniRef30, BFD).
+  - `'auto'` (default) / `'jackhmmer'`: CPU-based parallel search (`n4-standard-8`, with automatic fallback to `c3-standard-8` or `c2-standard-16`) using Jackhmmer (UniRef90, MGnify, small_bfd) and HHblits (UniRef30, BFD), sharing UniRef90/MGnify hits via `shared_msas_cache` with OpenFold 3, Boltz-2, and ESMFold2.
   - `'mmseqs2'`: GPU-accelerated search (monomers with `use_small_bfd=True`; requires pre-built MMseqs2 indexes on Filestore via `./deploy-all.sh <PROJECT_ID> <REGION> --steps convert`).
-- **Database (`use_small_bfd`)**: `True` (default, faster ~15–30 min) or `False` (Full BFD, ~30–60+ min, compatible with `jackhmmer` only).
+- **Database (`use_small_bfd`)**: `True` (default, faster ~12–20 min cold / ~1–3 min warm) or `False` (Full BFD, ~25–50+ min, compatible with `jackhmmer` only).
 - **Templates (`max_template_date`)**: Default `'2030-01-01'` (all PDB templates enabled). Set an earlier date to restrict templates.
 - **Scheduling (`enable_flex_start`)**: `True` (default, DWS `FLEX_START` spot/preemptible queueing) or `False` (`ON_DEMAND`).
 
@@ -29,15 +29,14 @@ Present the resolved hardware and parameters before calling `submit_af2_*`:
 
 | Pipeline Phase | Machine Type | GPU | Count | Strategy |
 |----------------|-------------|-----|-------|----------|
-| Data Pipeline | n4-standard-8 | None (CPU, Jackhmmer) | - | DWS FLEX_START |
-| Predict | a2-highgpu-1g | A100 40GB | 1 | DWS FLEX_START |
-| Relax | a2-highgpu-1g | A100 40GB | 1 | DWS FLEX_START |
+| Data Pipeline | n4-standard-8 | None (CPU, parallel Jackhmmer) | - | STANDARD |
+| Predict + Inline Relax | a2-highgpu-1g | A100 40GB | 1 | DWS FLEX_START |
 
 - GPU: A100 40GB (auto-selected)
 - MSA Method: Jackhmmer (default, CPU) — set `msa_method='mmseqs2'` for GPU search
 - Database: Small BFD (`use_small_bfd=True`)
 - Templates: enabled (`max_template_date=2030-01-01`)
-- Relaxation: Enabled (`run_relaxation=True`)
+- Relaxation: Enabled inline on prediction GPU (`run_relaxation=True`)
 
 Shall I submit this job?
 ```

@@ -51,6 +51,18 @@ class AF2SubmitBaseTool(AF2Tool):
         num_predictions_per_model = (
             arguments.get("num_predictions_per_model", 5) if self.is_multimer else 1
         )
+        if self.is_multimer and (
+            isinstance(num_predictions_per_model, bool)
+            or not isinstance(num_predictions_per_model, int)
+            or num_predictions_per_model < 1
+        ):
+            return {
+                "status": "error",
+                "message": (
+                    "num_predictions_per_model must be a positive integer >= 1 "
+                    f"(got {num_predictions_per_model!r})."
+                ),
+            }
         enable_flex_start = arguments.get("enable_flex_start", True)
         msa_method = arguments.get("msa_method", "auto")
 
@@ -220,8 +232,8 @@ class AF2SubmitBaseTool(AF2Tool):
                     f"({hardware_config['predict_accel']} x{hardware_config['predict_count']})"
                 ),
                 "relaxation": (
-                    f"{hardware_config['relax_machine']} "
-                    f"({hardware_config['relax_accel']} x{hardware_config['relax_count']})"
+                    f"inline on {hardware_config['predict_machine']} "
+                    f"({hardware_config['predict_accel']} x{hardware_config['predict_count']})"
                     if run_relaxation
                     else "skipped"
                 ),

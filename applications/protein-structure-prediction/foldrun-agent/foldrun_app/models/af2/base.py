@@ -166,21 +166,26 @@ class AF2Tool(KFPModelTool):
             ),
         )
 
-        default_relax_gpu = self.RELAX_GPU_MAP.get(resolved_gpu, "A100")
         config = {
             **self.predict_spec_for_gpu(resolved_gpu),
-            **self.relax_spec_for_gpu(default_relax_gpu),
         }
 
         self._scale_multi_gpu_machine(config, resolved_gpu, num_gpus)
 
+        # AMBER relaxation runs inline on the predict GPU (via spawn-isolated VRAM release),
+        # so relax_* matches the resolved predict GPU hardware.
+        config["relax_machine"] = config["predict_machine"]
+        config["relax_accel"] = config["predict_accel"]
+        config["relax_count"] = config["predict_count"]
+
         if relax_gpu_type:
             norm_relax_gpu = self._normalize_gpu_type(relax_gpu_type)
-            if norm_relax_gpu in allowed_af2_gpus:
-                config.update(self.relax_spec_for_gpu(norm_relax_gpu))
-                logger.info(f"Relax GPU overridden to {norm_relax_gpu}")
-            else:
-                logger.warning(f"Unknown relax_gpu_type '{relax_gpu_type}', using default")
+            if norm_relax_gpu not in ("auto", resolved_gpu):
+                logger.warning(
+                    f"relax_gpu_type='{relax_gpu_type}' is deprecated: AMBER relaxation now runs "
+                    f"inline on the prediction GPU ({resolved_gpu}) to eliminate separate GPU "
+                    "provisioning overhead."
+                )
 
         config["data_pipeline"] = self._resolve_msa_machine("DATA_PIPELINE_MACHINE_TYPE")
         config["parallelism"] = self.config.parallelism

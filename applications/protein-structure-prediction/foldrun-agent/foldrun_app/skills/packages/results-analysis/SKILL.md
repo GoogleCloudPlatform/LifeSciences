@@ -47,4 +47,4 @@ When `analyze_job(detail_level='detailed')` reveals a task failure, recommend th
 - **Database not found**: NFS dataset download still running → check database status and wait before resubmitting.
 - **Predict GPU OOM (`CUDA out of memory`)**: Sequence too large for GPU VRAM → upgrade `gpu_type` (`L4` → `A100` → `A100_80GB`).
 - **GPU provisioning timeout (`max wait duration reached`)**: Regional GPU contention → check `check_gpu_quota` and resubmit or switch GPU tier.
-- **Relax OOM or timeout**: Resubmit with `relax_gpu_type='A100'` or `run_relaxation=False`.
+- **Relax OOM or timeout**: Upgrade `gpu_type` (relaxation runs inline on the prediction GPU) or resubmit with `run_relaxation=False`.

@@ -452,12 +452,12 @@ class TestAutoSelection:
         config = tool._get_hardware_config("L4", msa_method="jackhmmer", use_small_bfd=True)
         assert config["msa_method"] == "jackhmmer"
 
-    def test_auto_relax_gpu_downgraded(self, mock_env_vars):
-        """Auto-selected A100_80GB has A100 relax GPU (downgraded)."""
+    def test_auto_relax_gpu_runs_inline_on_predict_gpu(self, mock_env_vars):
+        """Auto-selected A100_80GB runs AMBER relaxation inline on the same predict GPU."""
         tool = self._make_tool(mock_env_vars)
         config = tool._get_hardware_config("auto", seq_length=2000, is_multimer=False)
         assert config["predict_accel"] == "NVIDIA_A100_80GB"
-        assert config["relax_accel"] == "NVIDIA_TESLA_A100"
+        assert config["relax_accel"] == "NVIDIA_A100_80GB"
 
     def test_config_includes_dws_max_wait(self, mock_env_vars):
         """Hardware config includes dws_max_wait_hours from Config."""

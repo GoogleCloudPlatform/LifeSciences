@@ -28,19 +28,25 @@ test_alphafold_utils_copies_remain_identical).
 """
 
 import glob
+import hashlib
+import json
 import logging
+import multiprocessing
 import os
 import pickle
 import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
+import uuid
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 from alphafold.common import protein, residue_constants
-from alphafold.data import parsers, pipeline, pipeline_multimer, templates
+from alphafold.data import parsers, pipeline_multimer, templates
 from alphafold.data.pipeline import make_msa_features, make_sequence_features
 from alphafold.data.tools import hhblits, hhsearch, hmmsearch, jackhmmer
 from alphafold.model import config, data, model
@@ -55,6 +61,9 @@ HMMBUILD_BINARY_PATH = shutil.which("hmmbuild")
 MMSEQS2_BINARY_PATH: str = shutil.which("mmseqs") or "mmseqs"
 
 MAX_TEMPLATE_HITS = 20
+UNIREF_MAX_HITS = 10000
+MGNIFY_MAX_HITS = 501
+UNIPROT_MAX_HITS = 50000
 
 logger = logging.getLogger(__name__)
 
@@ -250,11 +259,14 @@ def _run_single_sequence_fallback(
         "template-free feature generation (core mode)."
     )
     os.makedirs(msa_output_path, exist_ok=True)
-    with open(fasta_path) as f:
+    with open(fasta_path, encoding="utf-8") as f:
         fasta_str = f.read()
     sequences, sequence_descs = parsers.parse_fasta(fasta_str)
+    sequences = [s.strip().upper() for s in sequences]
     if not sequences:
         raise ValueError(f"No input sequences found in {fasta_path}.")
+    if any(not s for s in sequences):
+        raise ValueError(f"Empty FASTA record found in {fasta_path}.")
     if not run_multimer_system and len(sequences) != 1:
         raise ValueError(f"Expected 1 sequence for monomer in {fasta_path}, got {len(sequences)}.")
 
@@ -364,11 +376,525 @@ def _has_af2_raw_databases(
     if use_small_bfd:
         if not os.path.exists(small_bfd_database_path):
             return False
-    elif not (glob.glob(f"{bfd_database_path}_*") and glob.glob(f"{uniref30_database_path}_*")):
+    elif not (
+        glob.glob(f"{glob.escape(bfd_database_path)}_*")
+        and glob.glob(f"{glob.escape(uniref30_database_path)}_*")
+    ):
         return False
     if run_multimer_system:
         return os.path.exists(seqres_database_path) and os.path.exists(uniprot_database_path)
-    return bool(glob.glob(f"{pdb70_database_path}_*"))
+    return bool(glob.glob(f"{glob.escape(pdb70_database_path)}_*"))
+
+
+def _db_size_bytes(path_or_paths: str | list[str]) -> int:
+    """Return effective linear-scan size in bytes for database paths or HH-suite prefixes.
+
+    For HH-suite database prefixes (BFD / UniRef30), ``hhblits`` linearly prefilters against
+    ``*_cs219.ffdata`` (~20-60 GB) rather than scanning the full ``*_a3m.ffdata`` /
+    ``*_hhm.ffdata`` archives (~1.7 TB). Measuring ``cs219.ffdata`` avoids starving concurrent
+    ``jackhmmer`` searches to ``--cpu 1`` under ``use_small_bfd=False``.
+    """
+    paths = [path_or_paths] if isinstance(path_or_paths, str) else list(path_or_paths)
+    total = 0
+    for path in paths:
+        if not path:
+            continue
+        try:
+            if os.path.isfile(path):
+                total += os.path.getsize(path)
+            else:
+                cs219 = f"{path}_cs219.ffdata"
+                if os.path.isfile(cs219):
+                    total += os.path.getsize(cs219)
+                else:
+                    escaped = glob.escape(path)
+                    for matched in glob.glob(f"{escaped}_*"):
+                        if matched.endswith(("_a3m.ffdata", "_hhm.ffdata")):
+                            continue
+                        if os.path.isfile(matched):
+                            total += os.path.getsize(matched)
+        except OSError:
+            continue
+    return total
+
+
+def _resolve_search_cpus(
+    jobs: list[tuple[str, int, float]],
+    total_cpus: int,
+) -> list[int]:
+    """Allocate vCPUs across concurrent MSA search jobs proportional to database size.
+
+    Jobs are expected to be ordered largest-first and run with ``max_workers = min(2, len(jobs))``.
+    A single job receives all ``total_cpus``; two or more jobs split ``total_cpus`` across the
+    initial concurrent pair proportional to on-disk database bytes (falling back to nominal weights
+    when files are smaller than 1 MiB, e.g. unit-test stubs), guaranteeing ``>= 1`` vCPU per job
+    and ``cpu0 + cpu1 == total_cpus``. Any queued trailing job inherits ``min(cpu0, cpu1)`` so
+    peak active threads never exceed ``total_cpus`` while ``jobs[0]`` is still running.
+    """
+    if not jobs:
+        return []
+    if len(jobs) == 1:
+        return [max(1, total_cpus)]
+    if total_cpus <= 1:
+        return [1] * len(jobs)
+
+    min_real_db_bytes = 1_048_576  # 1 MiB threshold vs tiny unit-test stubs
+    size0, size1 = jobs[0][1], jobs[1][1]
+    if size0 >= min_real_db_bytes and size1 >= min_real_db_bytes:
+        w0, w1 = float(size0), float(size1)
+    else:
+        w0 = max(0.01, float(jobs[0][2]))
+        w1 = max(0.01, float(jobs[1][2]))
+
+    cpu0 = round(total_cpus * w0 / (w0 + w1))
+    cpu0 = max(1, min(total_cpus - 1, cpu0))
+    cpu1 = total_cpus - cpu0
+    trailing_cpus = min(cpu0, cpu1)
+    return [cpu0, cpu1] + [trailing_cpus] * (len(jobs) - 2)
+
+
+def _truncate_stockholm_msa(sto_str: str, max_sequences: int) -> str:
+    """Truncate a Stockholm alignment string to at most ``max_sequences`` unique sequences.
+
+    Preserves header/footer lines (``# STOCKHOLM 1.0``, ``#=GF``, ``#=GC``, ``//``) and
+    interleaved blocks for the first ``max_sequences`` sequence identifiers while filtering
+    ``#=GS``/``#=GR`` annotations and alignment rows for dropped sequences. Returns ``sto_str``
+    untouched when it already has ``<= max_sequences`` unique sequences.
+    """
+    if max_sequences <= 0 or not sto_str:
+        return sto_str
+
+    lines = sto_str.splitlines()
+    kept_names: set[str] = set()
+    exceeded = False
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#") or stripped == "//":
+            continue
+        seq_name = stripped.split(None, 1)[0]
+        if seq_name not in kept_names:
+            if len(kept_names) >= max_sequences:
+                exceeded = True
+                break
+            kept_names.add(seq_name)
+
+    if not exceeded:
+        return sto_str
+
+    out_lines: list[str] = []
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if not stripped or stripped == "//":
+            out_lines.append(raw_line)
+        elif stripped.startswith(("#=GS", "#=GR")):
+            parts = stripped.split(None, 2)
+            if len(parts) >= 2 and parts[1] in kept_names:
+                out_lines.append(raw_line)
+        elif stripped.startswith("#"):
+            out_lines.append(raw_line)
+        else:
+            seq_name = stripped.split(None, 1)[0]
+            if seq_name in kept_names:
+                out_lines.append(raw_line)
+
+    suffix = "\n" if sto_str.endswith("\n") else ""
+    return "\n".join(out_lines) + suffix
+
+
+def _promote_shared_msa_dir(seq_dir: str, seq_cache_dir: str, run_id: str) -> None:
+    """Atomically promote a staged MSA directory into ``shared_msas_cache``.
+
+    Attempts an atomic ``os.rename`` first; if ``seq_cache_dir`` already exists (e.g. populated by
+    another model or concurrent run), atomically merges only missing files via per-file
+    ``{dst}.{run_id}.tmp`` staging and ``os.replace``, then cleans up ``seq_dir``.
+    """
+    # Drop any 0-byte staged files prior to promotion so os.rename never exposes empty files.
+    for fname in os.listdir(seq_dir):
+        src_file = os.path.join(seq_dir, fname)
+        if os.path.isfile(src_file) and os.path.getsize(src_file) == 0:
+            os.remove(src_file)
+
+    try:
+        os.rename(seq_dir, seq_cache_dir)
+        logger.info("Promoted shared protein MSAs to %s", seq_cache_dir)
+    except (FileExistsError, OSError):
+        logger.info(
+            "Shared MSA cache directory already exists at %s; atomically merging missing files.",
+            seq_cache_dir,
+        )
+        os.makedirs(seq_cache_dir, exist_ok=True)
+        try:
+            for fname in os.listdir(seq_dir):
+                src_file = os.path.join(seq_dir, fname)
+                dst_file = os.path.join(seq_cache_dir, fname)
+                dst_missing_or_empty = not os.path.exists(dst_file) or (
+                    os.path.isfile(dst_file) and os.path.getsize(dst_file) == 0
+                )
+                if (
+                    os.path.isfile(src_file)
+                    and os.path.getsize(src_file) > 0
+                    and dst_missing_or_empty
+                ):
+                    tmp_dst = f"{dst_file}.{run_id}.tmp"
+                    try:
+                        shutil.copy2(src_file, tmp_dst)
+                        os.replace(tmp_dst, dst_file)
+                    except BaseException:
+                        if os.path.exists(tmp_dst):
+                            os.remove(tmp_dst)
+                        raise
+        finally:
+            shutil.rmtree(seq_dir, ignore_errors=True)
+
+
+def _run_template_search_for_chain(
+    *,
+    sequence: str,
+    uniref90_sto_truncated: str,
+    run_multimer_system: bool,
+    template_searcher,
+    template_featurizer,
+    chain_msa_dir: str,
+) -> tuple[str, int, dict[str, np.ndarray]]:
+    """Run HHsearch (monomer) or Hmmsearch (multimer) template search and featurization."""
+    t0 = time.time()
+    msa_for_templates = parsers.deduplicate_stockholm_msa(uniref90_sto_truncated)
+    msa_for_templates = parsers.remove_empty_columns_from_stockholm_msa(msa_for_templates)
+
+    if run_multimer_system:
+        hits_str = template_searcher.query(msa_for_templates)
+        hits_filename = "pdb_hits.sto"
+        hits_count = len(parsers.parse_stockholm(hits_str))
+    else:
+        msa_for_templates = parsers.convert_stockholm_to_a3m(msa_for_templates)
+        hits_str = template_searcher.query(msa_for_templates)
+        hits_filename = "pdb_hits.hhr"
+        hits_count = len(parsers.parse_hhr(hits_str))
+
+    hits_path = os.path.join(chain_msa_dir, hits_filename)
+    with open(hits_path, "w") as f:
+        f.write(hits_str)
+
+    template_hits = template_searcher.get_template_hits(
+        output_string=hits_str, input_sequence=sequence
+    )
+    templates_result = template_featurizer.get_templates(
+        query_sequence=sequence, hits=template_hits
+    )
+    normalized_templates = _normalize_template_features(
+        templates_result.features, num_res=len(sequence)
+    )
+    logger.info(
+        "Completed template search (%s): %d hits in %.1fs",
+        hits_filename,
+        len(template_hits),
+        time.time() - t0,
+    )
+    return hits_filename, hits_count, normalized_templates
+
+
+def _run_parallel_single_chain(
+    *,
+    sequence: str,
+    description: str,
+    chain_msa_dir: str,
+    run_multimer_system: bool,
+    run_uniprot: bool,
+    use_small_bfd: bool,
+    uniref90_database_path: str,
+    mgnify_database_path: str,
+    bfd_database_path: str,
+    small_bfd_database_path: str,
+    uniref30_database_path: str,
+    uniprot_database_path: str,
+    template_searcher,
+    template_featurizer,
+    shared_msa_cache_dir: str | None = None,
+    shared_msa_tmp_dir: str | None = None,
+    total_cpus: int | None = None,
+) -> tuple[dict, dict[str, int]]:
+    """Run AF2 MSA + template searches concurrently for one chain with shared NFS cache reuse."""
+    os.makedirs(chain_msa_dir, exist_ok=True)
+    sequence = sequence.strip().upper()
+    num_res = len(sequence)
+    seq_hash = hashlib.sha256(sequence.encode()).hexdigest()
+    cpus = total_cpus if total_cpus is not None else (os.cpu_count() or 8)
+    run_id = str(uuid.uuid4())[:12]
+
+    # Check unified cross-model shared protein MSA cache (uniref90 + mgnify Stockholm files)
+    uniref90_sto: str | None = None
+    mgnify_sto: str | None = None
+    has_cached_uniref90 = False
+    has_cached_mgnify = False
+
+    if shared_msa_cache_dir:
+        seq_cache_dir = os.path.join(shared_msa_cache_dir, f"protein_{seq_hash}")
+        cached_uniref90 = os.path.join(seq_cache_dir, "uniref90_hits.sto")
+        cached_mgnify = os.path.join(seq_cache_dir, "mgnify_hits.sto")
+        if os.path.isfile(cached_uniref90) and os.path.getsize(cached_uniref90) > 0:
+            with open(cached_uniref90) as f:
+                uniref90_sto = f.read()
+            has_cached_uniref90 = True
+            logger.info("Shared MSA cache hit for uniref90 (protein_%s)", seq_hash)
+        if os.path.isfile(cached_mgnify) and os.path.getsize(cached_mgnify) > 0:
+            with open(cached_mgnify) as f:
+                mgnify_sto = f.read()
+            has_cached_mgnify = True
+            logger.info("Shared MSA cache hit for mgnify (protein_%s)", seq_hash)
+
+    # Build independent MSA search specs, ordered largest DB first so max_workers=2 keeps all
+    # vCPUs busy and overlaps smaller searches + template search behind the largest DB.
+    msa_specs: list[tuple[str, int, float]] = []
+    if not has_cached_mgnify:
+        msa_specs.append(("mgnify", _db_size_bytes(mgnify_database_path), 2.0))
+    if not has_cached_uniref90:
+        msa_specs.append(("uniref90", _db_size_bytes(uniref90_database_path), 1.0))
+    if use_small_bfd:
+        msa_specs.append(("small_bfd", _db_size_bytes(small_bfd_database_path), 0.3))
+    else:
+        msa_specs.append(("bfd", _db_size_bytes([bfd_database_path, uniref30_database_path]), 4.0))
+    if run_uniprot:
+        msa_specs.append(("uniprot", _db_size_bytes(uniprot_database_path), 1.8))
+
+    min_real_db_bytes = 1_048_576
+    msa_specs.sort(
+        key=lambda spec: (spec[1] if spec[1] >= min_real_db_bytes else 0, spec[2]),
+        reverse=True,
+    )
+    alloc_cpus = _resolve_search_cpus(msa_specs, cpus)
+
+    results_lock = threading.Lock()
+    search_outputs: dict[str, str] = {}
+    template_result_holder: list[tuple[str, int, dict[str, np.ndarray]]] = []
+    uniref90_trunc_holder: list[str] = []
+
+    if has_cached_uniref90 and uniref90_sto is not None:
+        uniref90_trunc_holder.append(_truncate_stockholm_msa(uniref90_sto, UNIREF_MAX_HITS))
+
+    with tempfile.TemporaryDirectory(prefix="af2_query_") as query_tmp_dir:
+        query_fasta = os.path.join(query_tmp_dir, "query.fasta")
+        with open(query_fasta, "w") as f:
+            f.write(f">protein_{seq_hash}\n{sequence}\n")
+
+        failed = threading.Event()
+
+        def _exec_msa_job(db_name: str, job_cpus: int) -> None:
+            if failed.is_set():
+                return
+            try:
+                logger.info("Running %s search (--cpu %d)", db_name, job_cpus)
+                job_t0 = time.time()
+                if db_name == "uniref90":
+                    runner = jackhmmer.Jackhmmer(
+                        binary_path=JACKHMMER_BINARY_PATH,
+                        database_path=uniref90_database_path,
+                        n_cpu=job_cpus,
+                    )
+                    sto_str = runner.query(query_fasta)[0]["sto"]
+                    logger.info(
+                        "Completed uniref90 (--cpu %d) in %.1fs", job_cpus, time.time() - job_t0
+                    )
+                    sto_trunc = _truncate_stockholm_msa(sto_str, UNIREF_MAX_HITS)
+                    with results_lock:
+                        search_outputs["uniref90"] = sto_str
+                        uniref90_trunc_holder.append(sto_trunc)
+                    if not failed.is_set():
+                        tpl_res = _run_template_search_for_chain(
+                            sequence=sequence,
+                            uniref90_sto_truncated=sto_trunc,
+                            run_multimer_system=run_multimer_system,
+                            template_searcher=template_searcher,
+                            template_featurizer=template_featurizer,
+                            chain_msa_dir=chain_msa_dir,
+                        )
+                        with results_lock:
+                            template_result_holder.append(tpl_res)
+                elif db_name == "mgnify":
+                    runner = jackhmmer.Jackhmmer(
+                        binary_path=JACKHMMER_BINARY_PATH,
+                        database_path=mgnify_database_path,
+                        n_cpu=job_cpus,
+                    )
+                    sto_str = runner.query(query_fasta)[0]["sto"]
+                    logger.info(
+                        "Completed mgnify (--cpu %d) in %.1fs", job_cpus, time.time() - job_t0
+                    )
+                    with results_lock:
+                        search_outputs["mgnify"] = sto_str
+                elif db_name == "small_bfd":
+                    runner = jackhmmer.Jackhmmer(
+                        binary_path=JACKHMMER_BINARY_PATH,
+                        database_path=small_bfd_database_path,
+                        n_cpu=job_cpus,
+                    )
+                    sto_str = runner.query(query_fasta)[0]["sto"]
+                    logger.info(
+                        "Completed small_bfd (--cpu %d) in %.1fs", job_cpus, time.time() - job_t0
+                    )
+                    with results_lock:
+                        search_outputs["small_bfd"] = sto_str
+                elif db_name == "bfd":
+                    runner = hhblits.HHBlits(
+                        binary_path=HHBLITS_BINARY_PATH,
+                        databases=[bfd_database_path, uniref30_database_path],
+                        n_cpu=job_cpus,
+                    )
+                    a3m_str = runner.query(query_fasta)[0]["a3m"]
+                    logger.info(
+                        "Completed bfd+uniref30 (--cpu %d) in %.1fs",
+                        job_cpus,
+                        time.time() - job_t0,
+                    )
+                    with results_lock:
+                        search_outputs["bfd"] = a3m_str
+                elif db_name == "uniprot":
+                    runner = jackhmmer.Jackhmmer(
+                        binary_path=JACKHMMER_BINARY_PATH,
+                        database_path=uniprot_database_path,
+                        n_cpu=job_cpus,
+                    )
+                    sto_str = runner.query(query_fasta)[0]["sto"]
+                    logger.info(
+                        "Completed uniprot (--cpu %d) in %.1fs", job_cpus, time.time() - job_t0
+                    )
+                    with results_lock:
+                        search_outputs["uniprot"] = sto_str
+                else:
+                    raise ValueError(f"Unknown MSA database job: {db_name}")
+            except BaseException:
+                failed.set()
+                raise
+
+        def _exec_cached_template_search() -> None:
+            if failed.is_set():
+                return
+            try:
+                tpl_res = _run_template_search_for_chain(
+                    sequence=sequence,
+                    uniref90_sto_truncated=uniref90_trunc_holder[0],
+                    run_multimer_system=run_multimer_system,
+                    template_searcher=template_searcher,
+                    template_featurizer=template_featurizer,
+                    chain_msa_dir=chain_msa_dir,
+                )
+                with results_lock:
+                    template_result_holder.append(tpl_res)
+            except BaseException:
+                failed.set()
+                raise
+
+        total_tasks = len(msa_specs) + (1 if has_cached_uniref90 else 0)
+        max_workers = min(2, total_tasks)
+        if max_workers <= 1:
+            for (db_name, _, _), job_cpus in zip(msa_specs, alloc_cpus, strict=True):
+                _exec_msa_job(db_name, job_cpus)
+            if has_cached_uniref90:
+                _exec_cached_template_search()
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = [
+                    pool.submit(_exec_msa_job, db_name, job_cpus)
+                    for (db_name, _, _), job_cpus in zip(msa_specs, alloc_cpus, strict=True)
+                ]
+                if has_cached_uniref90:
+                    futures.append(pool.submit(_exec_cached_template_search))
+                try:
+                    for fut in as_completed(futures):
+                        fut.result()
+                except BaseException:
+                    failed.set()
+                    for f in futures:
+                        f.cancel()
+                    raise
+
+    if not has_cached_uniref90:
+        uniref90_sto = search_outputs["uniref90"]
+    if not has_cached_mgnify:
+        mgnify_sto = search_outputs["mgnify"]
+
+    assert uniref90_sto is not None and mgnify_sto is not None
+
+    # Promote untruncated uniref90/mgnify Stockholm alignments to shared_msas_cache
+    if shared_msa_cache_dir and (not has_cached_uniref90 or not has_cached_mgnify):
+        normalized_cache_dir = os.path.normpath(shared_msa_cache_dir)
+        tmp_base = shared_msa_tmp_dir or os.path.join(
+            os.path.dirname(normalized_cache_dir), "shared_msas_tmp"
+        )
+        os.makedirs(shared_msa_cache_dir, exist_ok=True)
+        os.makedirs(tmp_base, exist_ok=True)
+        seq_dir = os.path.join(tmp_base, f"protein_{seq_hash}_{run_id}")
+        seq_cache_dir = os.path.join(shared_msa_cache_dir, f"protein_{seq_hash}")
+        try:
+            os.makedirs(seq_dir, exist_ok=True)
+            if uniref90_sto:
+                with open(os.path.join(seq_dir, "uniref90_hits.sto"), "w") as f:
+                    f.write(uniref90_sto)
+            if mgnify_sto:
+                with open(os.path.join(seq_dir, "mgnify_hits.sto"), "w") as f:
+                    f.write(mgnify_sto)
+            _promote_shared_msa_dir(seq_dir, seq_cache_dir, run_id)
+        except BaseException:
+            shutil.rmtree(seq_dir, ignore_errors=True)
+            raise
+
+    # Truncate in-memory to AF2 limits and persist chain MSA artifacts
+    uniref90_sto_trunc = (
+        uniref90_trunc_holder[0]
+        if uniref90_trunc_holder
+        else _truncate_stockholm_msa(uniref90_sto, UNIREF_MAX_HITS)
+    )
+    mgnify_sto_trunc = _truncate_stockholm_msa(mgnify_sto, MGNIFY_MAX_HITS)
+
+    with open(os.path.join(chain_msa_dir, "uniref90_hits.sto"), "w") as f:
+        f.write(uniref90_sto_trunc)
+    with open(os.path.join(chain_msa_dir, "mgnify_hits.sto"), "w") as f:
+        f.write(mgnify_sto_trunc)
+
+    uniref90_msa = parsers.parse_stockholm(uniref90_sto_trunc)
+    mgnify_msa = parsers.parse_stockholm(mgnify_sto_trunc)
+
+    if use_small_bfd:
+        bfd_filename = "small_bfd_hits.sto"
+        bfd_sto = search_outputs["small_bfd"]
+        with open(os.path.join(chain_msa_dir, bfd_filename), "w") as f:
+            f.write(bfd_sto)
+        bfd_msa = parsers.parse_stockholm(bfd_sto)
+    else:
+        bfd_filename = "bfd_uniref_hits.a3m"
+        bfd_a3m = search_outputs["bfd"]
+        with open(os.path.join(chain_msa_dir, bfd_filename), "w") as f:
+            f.write(bfd_a3m)
+        bfd_msa = parsers.parse_a3m(bfd_a3m)
+
+    hits_filename, hits_count, template_features = template_result_holder[0]
+
+    sequence_features = make_sequence_features(
+        sequence=sequence, description=description, num_res=num_res
+    )
+    msa_features = make_msa_features((uniref90_msa, bfd_msa, mgnify_msa))
+    chain_features = {
+        **sequence_features,
+        **msa_features,
+        **template_features,
+    }
+
+    dir_name = os.path.basename(os.path.normpath(chain_msa_dir))
+    chain_msas_metadata: dict[str, int] = {
+        os.path.join(dir_name, "uniref90_hits.sto"): len(uniref90_msa),
+        os.path.join(dir_name, "mgnify_hits.sto"): len(mgnify_msa),
+        os.path.join(dir_name, bfd_filename): len(bfd_msa),
+        os.path.join(dir_name, hits_filename): hits_count,
+    }
+
+    if run_uniprot:
+        uniprot_sto_trunc = _truncate_stockholm_msa(search_outputs["uniprot"], UNIPROT_MAX_HITS)
+        with open(os.path.join(chain_msa_dir, "uniprot_hits.sto"), "w") as f:
+            f.write(uniprot_sto_trunc)
+        uniprot_msa = parsers.parse_stockholm(uniprot_sto_trunc)
+        chain_features.update(_make_all_seq_msa_features(uniprot_msa))
+        chain_msas_metadata[os.path.join(dir_name, "uniprot_hits.sto")] = len(uniprot_msa)
+
+    return chain_features, chain_msas_metadata
 
 
 def run_data_pipeline(
@@ -388,8 +914,10 @@ def run_data_pipeline(
     msa_output_path: str,
     features_output_path: str,
     use_small_bfd: bool,
+    shared_msa_cache_dir: str | None = None,
+    shared_msa_tmp_dir: str | None = None,
 ) -> tuple[dict, dict[str, int]]:
-    """Runs AlphaFold data pipeline."""
+    """Runs AlphaFold data pipeline with parallel MSA searches and shared NFS cache reuse."""
     if not _has_af2_raw_databases(
         run_multimer_system=run_multimer_system,
         use_small_bfd=use_small_bfd,
@@ -409,6 +937,18 @@ def run_data_pipeline(
             msa_output_path=msa_output_path,
             features_output_path=features_output_path,
         )
+
+    os.makedirs(msa_output_path, exist_ok=True)
+    with open(fasta_path, encoding="utf-8") as f:
+        fasta_str = f.read()
+    raw_sequences, sequence_descs = parsers.parse_fasta(fasta_str)
+    sequences = [s.strip().upper() for s in raw_sequences]
+    if not sequences:
+        raise ValueError(f"No input sequences found in {fasta_path}.")
+    if any(not s for s in sequences):
+        raise ValueError(f"Empty FASTA record found in {fasta_path}.")
+    if not run_multimer_system and len(sequences) != 1:
+        raise ValueError(f"Expected 1 sequence for monomer in {fasta_path}, got {len(sequences)}.")
 
     if run_multimer_system:
         template_searcher = hmmsearch.Hmmsearch(
@@ -437,63 +977,79 @@ def run_data_pipeline(
             obsolete_pdbs_path=obsolete_pdbs_path,
         )
 
-    monomer_data_pipeline = pipeline.DataPipeline(
-        jackhmmer_binary_path=JACKHMMER_BINARY_PATH,
-        hhblits_binary_path=HHBLITS_BINARY_PATH,
-        uniref90_database_path=uniref90_database_path,
-        mgnify_database_path=mgnify_database_path,
-        bfd_database_path=bfd_database_path,
-        uniref30_database_path=uniref30_database_path,
-        small_bfd_database_path=small_bfd_database_path,
-        template_searcher=template_searcher,
-        template_featurizer=template_featurizer,
-        use_small_bfd=use_small_bfd,
-    )
-
-    if run_multimer_system:
-        data_pipeline = pipeline_multimer.DataPipeline(
-            monomer_data_pipeline=monomer_data_pipeline,
-            jackhmmer_binary_path=JACKHMMER_BINARY_PATH,
+    msas_metadata: dict[str, int] = {}
+    if not run_multimer_system:
+        feature_dict, msas_metadata = _run_parallel_single_chain(
+            sequence=sequences[0],
+            description=sequence_descs[0],
+            chain_msa_dir=msa_output_path,
+            run_multimer_system=False,
+            run_uniprot=False,
+            use_small_bfd=use_small_bfd,
+            uniref90_database_path=uniref90_database_path,
+            mgnify_database_path=mgnify_database_path,
+            bfd_database_path=bfd_database_path,
+            small_bfd_database_path=small_bfd_database_path,
+            uniref30_database_path=uniref30_database_path,
             uniprot_database_path=uniprot_database_path,
+            template_searcher=template_searcher,
+            template_featurizer=template_featurizer,
+            shared_msa_cache_dir=shared_msa_cache_dir,
+            shared_msa_tmp_dir=shared_msa_tmp_dir,
         )
     else:
-        data_pipeline = monomer_data_pipeline
+        pdb_chain_ids = _get_pdb_chain_ids()
+        if len(sequences) > len(pdb_chain_ids):
+            raise ValueError(
+                f"Cannot process more chains ({len(sequences)}) than PDB_CHAIN_IDS ({len(pdb_chain_ids)})."
+            )
 
-    feature_dict = data_pipeline.process(
-        input_fasta_path=fasta_path, msa_output_dir=msa_output_path
-    )
+        is_homomer_or_monomer = len(set(sequences)) == 1
+        processed_chains: dict[str, dict] = {}
+        per_chain_features: list[tuple[str, dict]] = []
+
+        for chain_idx, (seq, desc) in enumerate(zip(sequences, sequence_descs, strict=True)):
+            chain_id = pdb_chain_ids[chain_idx]
+            if seq in processed_chains:
+                logger.info(
+                    "Reusing in-memory MSA and template features for duplicate chain %s",
+                    chain_id,
+                )
+                chain_feat = {
+                    k: v.copy() if isinstance(v, np.ndarray) else v
+                    for k, v in processed_chains[seq].items()
+                }
+                chain_feat["domain_name"] = np.array([desc.encode("utf-8")], dtype=np.object_)
+                per_chain_features.append((chain_id, chain_feat))
+                continue
+
+            chain_msa_dir = _resolve_chain_msa_dir(msa_output_path, chain_id, chain_idx)
+            chain_feat, chain_meta = _run_parallel_single_chain(
+                sequence=seq,
+                description=desc,
+                chain_msa_dir=chain_msa_dir,
+                run_multimer_system=True,
+                run_uniprot=not is_homomer_or_monomer,
+                use_small_bfd=use_small_bfd,
+                uniref90_database_path=uniref90_database_path,
+                mgnify_database_path=mgnify_database_path,
+                bfd_database_path=bfd_database_path,
+                small_bfd_database_path=small_bfd_database_path,
+                uniref30_database_path=uniref30_database_path,
+                uniprot_database_path=uniprot_database_path,
+                template_searcher=template_searcher,
+                template_featurizer=template_featurizer,
+                shared_msa_cache_dir=shared_msa_cache_dir,
+                shared_msa_tmp_dir=shared_msa_tmp_dir,
+            )
+            processed_chains[seq] = chain_feat
+            msas_metadata.update(chain_meta)
+            per_chain_features.append((chain_id, chain_feat))
+
+        feature_dict = _assemble_multimer_features(per_chain_features)
 
     with open(features_output_path, "wb") as f:
         pickle.dump(feature_dict, f, protocol=4)
-
-    msas_metadata = {}
-    paths = glob.glob(os.path.join(msa_output_path, "**"), recursive=True)
-    paths = [path for path in paths if os.path.isfile(path)]
-
-    if run_multimer_system:
-        folders = [
-            os.path.join(msa_output_path, folder)
-            for folder in os.listdir(msa_output_path)
-            if os.path.isdir(os.path.join(msa_output_path, folder))
-        ]
-        paths = []
-        for folder in folders:
-            paths += [os.path.join(folder, file) for file in os.listdir(folder)]
-    else:
-        paths = [os.path.join(msa_output_path, file) for file in os.listdir(msa_output_path)]
-    for file in paths:
-        with open(file) as f:
-            artifact = f.read()
-        file_format = file.split(".")[-1]
-        if file_format == "sto":
-            artifact = parsers.parse_stockholm(artifact)
-        elif file_format == "a3m":
-            artifact = parsers.parse_a3m(artifact)
-        elif file_format == "hhr":
-            artifact = parsers.parse_hhr(artifact)
-        else:
-            raise ValueError("Unknown artifact type")
-        msas_metadata[os.path.join(file.split(os.sep)[-2], file.split(os.sep)[-1])] = len(artifact)
 
     return feature_dict, msas_metadata
 
@@ -548,6 +1104,107 @@ def predict(
         f.write(unrelaxed_pdbs)
 
     return prediction_result
+
+
+def _write_json_atomic(path: str, payload: dict) -> None:
+    """Write a JSON payload atomically via sibling temp file + ``os.replace``."""
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+    os.replace(tmp_path, path)
+
+
+def _predict_worker(
+    model_features_path: str,
+    model_params_path: str,
+    model_name: str,
+    num_ensemble: int,
+    run_multimer_system: bool,
+    random_seed: int,
+    raw_prediction_path: str,
+    unrelaxed_protein_path: str,
+    result_meta_path: str,
+) -> None:
+    """Spawned subprocess entrypoint that runs predict() and persists scalar metadata."""
+    logging.basicConfig(level=logging.INFO)
+    try:
+        prediction_result = predict(
+            model_features_path=model_features_path,
+            model_params_path=model_params_path,
+            model_name=model_name,
+            num_ensemble=num_ensemble,
+            run_multimer_system=run_multimer_system,
+            random_seed=random_seed,
+            raw_prediction_path=raw_prediction_path,
+            unrelaxed_protein_path=unrelaxed_protein_path,
+        )
+        _write_json_atomic(
+            result_meta_path,
+            {"ranking_confidence": float(prediction_result["ranking_confidence"])},
+        )
+    except BaseException as exc:
+        try:
+            _write_json_atomic(result_meta_path, {"error": f"{type(exc).__name__}: {exc}"})
+        except OSError:
+            pass
+        raise
+
+
+def predict_in_subprocess(
+    model_features_path: str,
+    model_params_path: str,
+    model_name: str,
+    num_ensemble: int,
+    run_multimer_system: bool,
+    random_seed: int,
+    raw_prediction_path: str,
+    unrelaxed_protein_path: str,
+) -> dict[str, float]:
+    """Run AlphaFold inference in a spawned child process so GPU VRAM is released on exit.
+
+    Used by fused predict+relax tasks so JAX/XLA releases its entire CUDA context and
+    memory pool before OpenMM initializes CUDA for AMBER relaxation on the same GPU.
+    """
+    ctx = multiprocessing.get_context("spawn")
+    with tempfile.TemporaryDirectory(prefix="af2_predict_subproc_") as tmp_dir:
+        result_meta_path = os.path.join(tmp_dir, "result_meta.json")
+        proc = ctx.Process(
+            target=_predict_worker,
+            kwargs={
+                "model_features_path": model_features_path,
+                "model_params_path": model_params_path,
+                "model_name": model_name,
+                "num_ensemble": num_ensemble,
+                "run_multimer_system": run_multimer_system,
+                "random_seed": int(random_seed),
+                "raw_prediction_path": raw_prediction_path,
+                "unrelaxed_protein_path": unrelaxed_protein_path,
+                "result_meta_path": result_meta_path,
+            },
+        )
+        proc.start()
+        proc.join()
+
+        meta: dict = {}
+        if os.path.isfile(result_meta_path):
+            try:
+                with open(result_meta_path, encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    meta = loaded
+            except (OSError, json.JSONDecodeError, ValueError) as read_exc:
+                logger.warning("Could not read predict subprocess metadata: %s", read_exc)
+
+        if proc.exitcode != 0:
+            detail = meta.get("error") or f"exit code {proc.exitcode}"
+            raise RuntimeError(
+                f"AlphaFold predict subprocess failed (exit code {proc.exitcode}): {detail}"
+            )
+        if "ranking_confidence" not in meta:
+            raise RuntimeError(
+                "AlphaFold predict subprocess completed without writing result metadata."
+            )
+        return {"ranking_confidence": float(meta["ranking_confidence"])}
 
 
 def relax_protein(
@@ -1031,9 +1688,14 @@ def run_mmseqs2_data_pipeline(
     logger.info(f"GPU available for MMseqs2: {gpu_available}")
 
     # Parse input sequences (handles both monomer and multimer FASTA)
-    with open(fasta_path) as f:
+    with open(fasta_path, encoding="utf-8") as f:
         fasta_str = f.read()
-    sequences, descriptions = parsers.parse_fasta(fasta_str)
+    raw_sequences, descriptions = parsers.parse_fasta(fasta_str)
+    sequences = [s.strip().upper() for s in raw_sequences]
+    if not sequences:
+        raise ValueError(f"No input sequences found in {fasta_path}.")
+    if any(not s for s in sequences):
+        raise ValueError(f"Empty FASTA record found in {fasta_path}.")
 
     if run_multimer_system:
         pdb_chain_ids = _get_pdb_chain_ids()
@@ -1047,7 +1709,7 @@ def run_mmseqs2_data_pipeline(
         for chain_idx, (seq, desc) in enumerate(zip(sequences, descriptions)):
             chain_id = pdb_chain_ids[chain_idx]
             chain_fasta = os.path.join(msa_output_path, f"chain_{chain_id}.fasta")
-            with open(chain_fasta, "w") as f:
+            with open(chain_fasta, "w", encoding="utf-8") as f:
                 f.write(f">{desc}\n{seq}\n")
 
             dir_label = f"{chain_id}_{desc}" if descriptions.count(desc) > 1 else desc
@@ -1101,22 +1763,29 @@ def run_mmseqs2_data_pipeline(
         if len(sequences) != 1:
             raise ValueError(f"Expected 1 sequence for monomer, got {len(sequences)}")
 
-        feature_dict = _run_mmseqs2_single_chain(
-            fasta_path=fasta_path,
-            sequence=sequences[0],
-            description=descriptions[0],
-            msa_output_dir=msa_output_path,
-            uniref90_mmseqs_path=uniref90_mmseqs_path,
-            mgnify_mmseqs_path=mgnify_mmseqs_path,
-            small_bfd_mmseqs_path=small_bfd_mmseqs_path,
-            pdb70_database_path=pdb70_database_path,
-            seqres_database_path=seqres_database_path,
-            mmcif_path=mmcif_path,
-            obsolete_pdbs_path=obsolete_pdbs_path,
-            max_template_date=max_template_date,
-            run_multimer_system=False,
-            gpu=gpu_available,
-        )
+        with tempfile.TemporaryDirectory(prefix="af2_mmseqs_query_") as query_tmp_dir:
+            query_fasta = fasta_path
+            if raw_sequences[0] != sequences[0]:
+                query_fasta = os.path.join(query_tmp_dir, "query.fasta")
+                with open(query_fasta, "w", encoding="utf-8") as qf:
+                    qf.write(f">{descriptions[0]}\n{sequences[0]}\n")
+
+            feature_dict = _run_mmseqs2_single_chain(
+                fasta_path=query_fasta,
+                sequence=sequences[0],
+                description=descriptions[0],
+                msa_output_dir=msa_output_path,
+                uniref90_mmseqs_path=uniref90_mmseqs_path,
+                mgnify_mmseqs_path=mgnify_mmseqs_path,
+                small_bfd_mmseqs_path=small_bfd_mmseqs_path,
+                pdb70_database_path=pdb70_database_path,
+                seqres_database_path=seqres_database_path,
+                mmcif_path=mmcif_path,
+                obsolete_pdbs_path=obsolete_pdbs_path,
+                max_template_date=max_template_date,
+                run_multimer_system=False,
+                gpu=gpu_available,
+            )
 
     # Save features
     with open(features_output_path, "wb") as f:

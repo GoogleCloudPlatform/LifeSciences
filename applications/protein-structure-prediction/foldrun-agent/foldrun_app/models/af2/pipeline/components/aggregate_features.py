@@ -18,7 +18,7 @@ from kfp import dsl
 from kfp.dsl import Artifact, Input, Output
 
 
-@dsl.component(base_image=config.ALPHAFOLD_COMPONENTS_IMAGE)
+@dsl.component(base_image=config.ALPHAFOLD_COMPONENTS_IMAGE, install_kfp_package=False)
 def aggregate_features(
     sequence: Input[Artifact],
     msa1: Input[Artifact],
