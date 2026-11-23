@@ -233,6 +233,33 @@ class TestBOLTZ2PipelineCompilation:
                 f"{comp_name} inner container still runs runtime pip install"
             )
 
+    def test_compiled_pipeline_sets_explicit_network_on_nfs_tasks(self, tmp_path):
+        """Both Boltz-2 MSA and predict CustomTrainingJobOps embed the VPC peering network URI."""
+        for key in list(sys.modules.keys()):
+            if key == "config":
+                del sys.modules[key]
+
+        from kfp import compiler
+
+        from foldrun_app.models.boltz2.utils.pipeline_utils import load_vertex_pipeline
+
+        pipeline = load_vertex_pipeline(enable_flex_start=False)
+        out = tmp_path / "boltz2_net.yaml"
+        compiler.Compiler().compile(pipeline_func=pipeline, package_path=str(out))
+        spec = yaml.safe_load(out.read_text(encoding="utf-8"))
+
+        components = spec["components"]
+        custom_job_comps = [
+            name
+            for name, comp in components.items()
+            if "worker_pool_specs" in comp.get("inputDefinitions", {}).get("parameters", {})
+        ]
+        assert sorted(custom_job_comps) == ["comp-msa-pipeline", "comp-predict-boltz2"]
+        for comp_name in custom_job_comps:
+            params = components[comp_name]["inputDefinitions"]["parameters"]
+            assert params["network"]["defaultValue"] == "projects/123/global/networks/test-net"
+            assert params["worker_pool_specs"]["defaultValue"][0]["nfs_mounts"]
+
 
 class TestBOLTZ2PredictComponentArgs:
     """Verify predict component has correct CLI args for run_openfold."""

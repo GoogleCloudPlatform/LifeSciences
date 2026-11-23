@@ -182,6 +182,8 @@ class TestEsmfold2SubmitPrediction:
 
             fast_params = mock_pj_cls.call_args.kwargs["parameter_values"]
             assert fast_params["nfs_cache_path"] == f"{cfg.nfs_mount_point}/{cfg.fast_cache_path}"
+            assert "network" not in mock_pj.submit.call_args.kwargs
+            assert mock_pj.submit.call_args.kwargs["service_account"] == cfg.pipelines_sa_email
 
             # Full variant: defaults use_msa=True and uses full_cache_path
             res_full = tool.run(
@@ -195,6 +197,41 @@ class TestEsmfold2SubmitPrediction:
 
             full_params = mock_pj_cls.call_args.kwargs["parameter_values"]
             assert full_params["nfs_cache_path"] == f"{cfg.nfs_mount_point}/{cfg.full_cache_path}"
+            assert "network" not in mock_pj.submit.call_args.kwargs
+            assert mock_pj.submit.call_args.kwargs["service_account"] == cfg.pipelines_sa_email
+
+    @pytest.mark.parametrize("use_msa,expected_count", [(False, 1), (True, 2)])
+    def test_compiled_pipeline_sets_explicit_network_on_nfs_tasks(
+        self, mock_env_vars, tmp_path, use_msa, expected_count
+    ):
+        """ESMFold2 CustomTrainingJobOps embed the VPC peering network URI and NFS mounts."""
+        import os
+
+        expected_net = "projects/123/global/networks/test-net"
+        env_overrides = {
+            "NFS_SERVER": "10.1.0.2",
+            "NFS_PATH": "/datasets",
+            "NFS_MOUNT_POINT": "/mnt/nfs/foldrun",
+            "NETWORK": expected_net,
+            "ESMFOLD2_COMPONENTS_IMAGE": "esmfold2-image:latest",
+        }
+        with patch.dict(os.environ, env_overrides, clear=False):
+            pipeline = load_vertex_pipeline(enable_flex_start=False, use_msa=use_msa)
+            out = tmp_path / f"esmfold2_net_{use_msa}.yaml"
+            compiler.Compiler().compile(pipeline_func=pipeline, package_path=str(out))
+
+        spec = yaml.safe_load(out.read_text(encoding="utf-8"))
+        components = spec["components"]
+        custom_job_comps = [
+            name
+            for name, comp in components.items()
+            if "worker_pool_specs" in comp.get("inputDefinitions", {}).get("parameters", {})
+        ]
+        assert len(custom_job_comps) == expected_count
+        for comp_name in custom_job_comps:
+            params = components[comp_name]["inputDefinitions"]["parameters"]
+            assert params["network"]["defaultValue"] == expected_net
+            assert params["worker_pool_specs"]["defaultValue"][0]["nfs_mounts"]
 
     def test_skill_wrapper_forwards_to_esmfold2_submit_prediction(self):
         mock_backend = MagicMock()

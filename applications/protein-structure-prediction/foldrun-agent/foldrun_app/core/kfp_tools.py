@@ -132,9 +132,11 @@ class KFPModelTool(BaseTool):
 
     def _ensure_filestore_config(self) -> tuple[str, str]:
         """Return ``(filestore_ip, filestore_network)``, looking up Filestore if not yet cached."""
-        if not self.config.filestore_ip:
+        filestore_ip = self.config.filestore_ip
+        filestore_network = self.config.filestore_network
+        if not filestore_ip or not filestore_network:
             return self._get_filestore_info()
-        return self.config.filestore_ip, self.config.filestore_network
+        return filestore_ip, filestore_network
 
     def _compile_and_submit_kfp_pipeline(
         self,
@@ -162,8 +164,13 @@ class KFPModelTool(BaseTool):
 
             vertex_ai_mod = self._resolve_module_attr("vertex_ai", vertex_ai)
             pipeline_job = vertex_ai_mod.PipelineJob(**job_kwargs)
+            # Omit network= at the PipelineJob level: each NFS-mounted
+            # CustomTrainingJobOp already specifies its VPC peering network URI
+            # from NETWORK at compile time. Setting network= here also attaches
+            # lightweight @dsl.component steps (e.g. configure_run / configure_seeds)
+            # to the peered VPC, causing concurrent subnet-provisioning contention
+            # with the MSA job during cold starts.
             pipeline_job.submit(
-                network=filestore_network,
                 service_account=service_account or self.config.pipelines_sa_email,
             )
             return pipeline_job

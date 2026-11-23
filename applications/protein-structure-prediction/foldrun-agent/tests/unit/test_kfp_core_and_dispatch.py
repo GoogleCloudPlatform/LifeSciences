@@ -372,3 +372,109 @@ class TestPolymorphicDispatch:
         mock_bucket.list_blobs.assert_called_once_with(
             prefix="af3_predictions/kras_sync_run/", max_results=1
         )
+
+
+class TestKFPSubmissionAndFilestoreNetwork:
+    """Verify PipelineJob submission omits VPC network peering and validates Filestore info."""
+
+    def test_compile_and_submit_omits_pipeline_job_network(self, isolated_env, tmp_path):
+        """PipelineJob.submit omits network= so lightweight pods are not peered to the VPC."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        cfg = OF3Config()
+        tool = OF3Tool({"name": "of3_test"}, cfg)
+        expected_net = "projects/123456/global/networks/foldrun-network"
+        pkg_path = str(tmp_path / "test_pipeline.yaml")
+        observed_env: dict[str, str | None] = {}
+
+        def _fake_compile(_self, pipeline_func, package_path):
+            observed_env["NETWORK"] = os.environ.get("NETWORK")
+            observed_env["NFS_SERVER"] = os.environ.get("NFS_SERVER")
+            with open(package_path, "w", encoding="utf-8") as f:
+                f.write("{}")
+
+        mock_pipeline_job = MagicMock()
+        mock_pipeline_job.resource_name = (
+            "projects/test-project/locations/us-central1/pipelineJobs/run-1"
+        )
+
+        with (
+            patch("kfp.compiler.Compiler.compile", new=_fake_compile),
+            patch(
+                "foldrun_app.core.kfp_tools.vertex_ai.PipelineJob",
+                return_value=mock_pipeline_job,
+            ) as mock_pj_cls,
+        ):
+            result = tool._compile_and_submit_kfp_pipeline(
+                pipeline_loader=lambda: MagicMock(),
+                package_path=pkg_path,
+                hardware_config={"predict_machine": "a2-highgpu-1g"},
+                filestore_ip="10.1.0.2",
+                filestore_network=expected_net,
+                job_kwargs={
+                    "display_name": "test-run",
+                    "template_path": pkg_path,
+                    "pipeline_root": "gs://test-bucket/runs/1",
+                },
+                service_account="pipelines@test-project.iam.gserviceaccount.com",
+            )
+
+        assert result is mock_pipeline_job
+        assert observed_env == {"NETWORK": expected_net, "NFS_SERVER": "10.1.0.2"}
+        mock_pj_cls.assert_called_once()
+        mock_pipeline_job.submit.assert_called_once_with(
+            service_account="pipelines@test-project.iam.gserviceaccount.com"
+        )
+        assert "network" not in mock_pipeline_job.submit.call_args.kwargs
+
+    @pytest.mark.parametrize(
+        ("filestore_ip", "filestore_network"),
+        [
+            (None, None),
+            ("10.1.0.2", None),
+            ("10.1.0.2", ""),
+            (None, "projects/123456/global/networks/foldrun-network"),
+            ("", "projects/123456/global/networks/foldrun-network"),
+        ],
+    )
+    def test_ensure_filestore_config_queries_api_when_incomplete(
+        self, isolated_env, monkeypatch, filestore_ip, filestore_network
+    ):
+        """When either FILESTORE_IP or FILESTORE_NETWORK is missing/empty, query _get_filestore_info."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        if filestore_ip is None:
+            monkeypatch.delenv("FILESTORE_IP", raising=False)
+        else:
+            monkeypatch.setenv("FILESTORE_IP", filestore_ip)
+        if filestore_network is None:
+            monkeypatch.delenv("FILESTORE_NETWORK", raising=False)
+        else:
+            monkeypatch.setenv("FILESTORE_NETWORK", filestore_network)
+
+        tool = OF3Tool({"name": "of3_test"}, OF3Config())
+        with patch.object(
+            tool,
+            "_get_filestore_info",
+            return_value=("10.1.0.2", "projects/123456/global/networks/foldrun-network"),
+        ) as mock_info:
+            ip, net = tool._ensure_filestore_config()
+
+        mock_info.assert_called_once_with()
+        assert (ip, net) == ("10.1.0.2", "projects/123456/global/networks/foldrun-network")
+
+    def test_ensure_filestore_config_uses_cached_values_when_both_present(
+        self, isolated_env, monkeypatch
+    ):
+        """When both FILESTORE_IP and FILESTORE_NETWORK are set, skip the Filestore API call."""
+        from foldrun_app.models.of3.base import OF3Tool
+
+        monkeypatch.setenv("FILESTORE_IP", "10.1.0.2")
+        monkeypatch.setenv("FILESTORE_NETWORK", "projects/123456/global/networks/foldrun-network")
+
+        tool = OF3Tool({"name": "of3_test"}, OF3Config())
+        with patch.object(tool, "_get_filestore_info") as mock_info:
+            ip, net = tool._ensure_filestore_config()
+
+        mock_info.assert_not_called()
+        assert (ip, net) == ("10.1.0.2", "projects/123456/global/networks/foldrun-network")

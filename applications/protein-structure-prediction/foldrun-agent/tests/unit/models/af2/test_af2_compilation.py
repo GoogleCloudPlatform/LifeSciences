@@ -222,6 +222,29 @@ class TestAF2PipelineCompilation:
             predict_outputs.keys()
         )
 
+    @pytest.mark.parametrize("msa_method", ["jackhmmer", "mmseqs2"])
+    def test_compiled_pipeline_sets_network_only_on_nfs_tasks(self, tmp_path, msa_method):
+        """Data pipeline embeds explicit VPC peering network and NFS mounts; predict does not."""
+        _clear_config_cache()
+        from kfp import compiler
+
+        from foldrun_app.models.af2.utils.pipeline_utils import load_vertex_pipeline
+
+        pipeline = load_vertex_pipeline(enable_flex_start=False, msa_method=msa_method)
+        out = tmp_path / f"af2_net_{msa_method}.yaml"
+        compiler.Compiler().compile(pipeline_func=pipeline, package_path=str(out))
+        spec = yaml.safe_load(out.read_text(encoding="utf-8"))
+
+        dp_params = spec["components"]["comp-data-pipeline"]["inputDefinitions"]["parameters"]
+        assert dp_params["network"]["defaultValue"] == "projects/123/global/networks/test-net"
+        dp_wps = dp_params["worker_pool_specs"]["defaultValue"]
+        assert dp_wps[0]["nfs_mounts"]
+
+        predict_params = spec["components"]["comp-predict"]["inputDefinitions"]["parameters"]
+        assert not predict_params.get("network", {}).get("defaultValue")
+        predict_wps = predict_params["worker_pool_specs"]["defaultValue"]
+        assert not predict_wps[0].get("nfs_mounts")
+
 
 class TestAF2ConfigModuleIsolation:
     """Verify AF2 config module doesn't collide with OF3 or Boltz-2."""
