@@ -22,5 +22,6 @@ pip==26.2.2 \
 # To update: change the version, download the new wheel, and replace the hash:
 #   pip download setuptools==<new-version> --no-deps -d /tmp/st-dl
 #   pip hash /tmp/st-dl/setuptools-<new-version>-py3-none-any.whl
-setuptools==84.0.0 \
-    --hash=sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670
+setuptools==84.1.0 \
+    --hash=sha256:23657205b63d4d31395ab917815247f694aafad28cd21316bf5fd45a51048ea0 \
+    --hash=sha256:5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9
